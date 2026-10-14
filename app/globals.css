@@ -45,6 +45,7 @@ svg{display:block}
 [data-g="learn"]{--g:var(--sun);--gs:var(--sun-soft)}
 [data-c="believer"]{--c:var(--coral);--cs:var(--coral-soft)}
 [data-c="purity"]{--c:var(--teal);--cs:var(--teal-soft)}
+[data-c="autistik"]{--c:var(--violet);--cs:var(--violet-soft)}
 
 /* shell */
 .app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100%}
@@ -270,6 +271,7 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 .fade{animation:fade .25s ease-out}
 @keyframes fade{from{opacity:.5}to{opacity:1}}
 
+@media (min-width:861px){ .kai.lp{grid-template-columns:minmax(0,1fr) 340px} }
 @media (max-width:1020px){ .groups-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .gallery{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media (max-width:860px){
   .app{grid-template-columns:minmax(0,1fr)}

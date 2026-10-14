@@ -10,14 +10,14 @@ export function anthropic() {
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 
 /** Checks the visitor is signed in and under today's AI limit. Returns an error Response or the user id. */
-export async function guardAI(): Promise<{ uid: string } | { error: Response }> {
-  if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: "Believer and Purity are coming soon. Check back shortly!" }, 503) };
+export async function guardAI(who = "Believer and Purity"): Promise<{ uid: string } | { error: Response }> {
+  if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: `${who} ${who.includes(" and ") ? "are" : "is"} coming soon. Check back shortly!` }, 503) };
   const { data: { user } } = await supabaseServer().auth.getUser();
-  if (!user) return { error: json({ error: "Please sign in to talk with Believer and Purity." }, 401) };
+  if (!user) return { error: json({ error: `Please sign in to talk with ${who}.` }, 401) };
   const limit = Number(process.env.AI_DAILY_LIMIT || 60);
   const { data, error } = await supabaseService().rpc("bump_ai_usage", { p_user: user.id, p_limit: limit });
   if (error) return { error: json({ error: "The companions are unavailable right now. Try again soon." }, 503) };
-  if (data === -1) return { error: json({ error: `You've reached today's limit of ${limit} messages. Believer and Purity will be back tomorrow.` }, 429) };
+  if (data === -1) return { error: json({ error: `You've reached today's limit of ${limit} messages. ${who} will be back tomorrow.` }, 429) };
   return { uid: user.id };
 }
 
