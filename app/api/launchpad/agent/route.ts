@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, MODEL, guardAI, cleanTurns, json } from "@/lib/ai";
-import { CHAINS, MAX_CREATOR_PERCENT, checkPlan, liveChains } from "@/lib/launchpad";
+import { CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains } from "@/lib/launchpad";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,7 +12,7 @@ const PREPARE_LAUNCH: Anthropic.Tool = {
   input_schema: {
     type: "object",
     additionalProperties: false,
-    required: ["chain", "name", "symbol", "supply", "creatorPercent", "liquidity", "description", "website", "x", "telegram"],
+    required: ["chain", "name", "symbol", "supply", "creatorPercent", "liquidity", "lock", "description", "website", "x", "telegram"],
     properties: {
       chain: { type: "string", enum: ["bsc", "ethereum", "robinhood"], description: "bsc = BNB Chain (PancakeSwap), ethereum = Ethereum (Uniswap), robinhood = Robinhood Chain" },
       name: { type: "string", description: "Token name, 1-32 characters" },
@@ -20,6 +20,7 @@ const PREPARE_LAUNCH: Anthropic.Tool = {
       supply: { type: "string", description: "Total supply in whole tokens, digits only, e.g. 1000000000" },
       creatorPercent: { type: "number", description: `Share of supply sent to the creator's wallet, 0-${MAX_CREATOR_PERCENT}` },
       liquidity: { type: "string", description: "Amount of the chain's coin (BNB or ETH) to add to the pool, e.g. 0.5" },
+      lock: { type: "string", enum: ["6m", "1y", "burn"], description: "What happens to the LP tokens: 6m = locked 6 months, 1y = locked 1 year, burn = sent to the dead address forever" },
       description: { type: "string", description: "Short description, or empty string" },
       website: { type: "string", description: "https link, or empty string" },
       x: { type: "string", description: "https link to the X profile, or empty string" },
@@ -34,15 +35,21 @@ function systemPrompt() {
     .map((c) => `- ${c.name} (${c.key}): pairs with ${c.coin} on ${c.dex}. ${live.includes(c) ? "OPEN for launches." : "NOT open yet - tell the creator it's coming soon and offer an open chain."}`)
     .join("\n");
   return `You are Autistik, the launch agent of AUTISTIK Launch Pad, part of AUTISTIK Hub, a community for autistic adults.
-You help people launch their own token. You talk in plain, literal, friendly language. Short messages. Ask one or two questions at a time. No idioms or hype.
+You help people launch their own token. You talk in plain, literal, friendly language. Short messages. Ask one question at a time. No idioms or hype.
+Your replies may be read out loud by the site's voice, so write the way you would speak: no markdown, no bullet symbols, no tables, no emoji. Say numbers plainly.
 
 How a launch works (explain when useful, don't lecture):
 - The creator answers your questions, you show them a launch plan, and they press Launch and sign ONE transaction in their own wallet. You never hold their money and you can't sign for them.
 - The AutistikLaunchpad smart contract creates a simple token with a fixed supply: no tax, no minting, no owner, no blacklist.
 - The creator can keep 0-${MAX_CREATOR_PERCENT}% of the supply. All the rest goes into the liquidity pool with the coin they add.
-- The pool's LP tokens are sent to the dead address, so the liquidity is locked forever. Nobody can remove it: not the creator, not Autistik, not the AUTISTIK team. Make sure the creator understands they will not get that coin back.
+- The creator chooses what happens to the pool's LP tokens. There are three options:
+  1. ${LOCKS["6m"].label}: ${LOCKS["6m"].explain}
+  2. ${LOCKS["1y"].label}: ${LOCKS["1y"].explain}
+  3. ${LOCKS.burn.label}: ${LOCKS.burn.explain}
+  Longer locks and burning usually make buyers trust a token more. With burn, make sure the creator understands they will never get that coin back.
+- To launch, the wallet they launch from must hold at least $${MIN_HOLD_USD} worth of AUTISTIK on BNB Chain, and keep it there until the launch is done. The Hub checks this automatically when they press Launch. If they don't hold enough, they can buy AUTISTIK on PancakeSwap into the same wallet first. AUTISTIK is not spent or taken; it just has to be in the wallet.
 - Trading opens straight away on the DEX. DexScreener shows the pair automatically once it has liquidity and trades. Afterwards they can add a logo and links on DexScreener themselves.
-- A small launch fee may apply. The exact fee shows on the Launch button before they sign.
+- A small launch fee is paid in the same transaction and goes to the AUTISTIK deployer wallet. The exact fee shows on the Launch button before they sign.
 - After launch, the token gets its own page on the Launch Pad with a chart and a Watch button. Anyone can pay to make it trend: $30 for 5 hours or $200 for 24 hours, paid in USDT. Trending tokens show at the top of the board and in the "Ad" slot across the Launch Pad, labelled as paid. Don't pressure anyone to buy it.
 
 Chains:
@@ -55,7 +62,8 @@ Collect, in this order:
 4. Total supply (whole tokens; suggest 1,000,000,000 if they don't mind)
 5. How much of the supply they want to keep (0-${MAX_CREATOR_PERCENT}%; less looks fairer to buyers)
 6. How much BNB or ETH to put in the pool (suggest around 0.5; more liquidity means steadier prices)
-7. Optional: a one-line description, website, X and Telegram links (https links only)
+7. What to do with the liquidity: lock 6 months, lock 1 year, or burn
+8. Optional: a one-line description, website, X and Telegram links (https links only)
 
 Then show a short summary and ask them to confirm. Only when they confirm, call prepare_launch. After that, tell them to check the plan card, tick the box and press Launch. If they want to change something, ask, then call prepare_launch again with the new plan.
 

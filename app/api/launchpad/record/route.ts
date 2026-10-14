@@ -29,6 +29,12 @@ export async function POST(req: Request) {
   );
   if (!event) return json({ error: "That transaction isn't an AUTISTIK Launch Pad launch." }, 400);
   const { token, pair, creator, supply } = event.args;
+  const locked = parseEventLogs({ abi: LAUNCHPAD_ABI, logs: receipt.logs, eventName: "LiquidityLocked" }).find(
+    (l) => getAddress(l.address) === getAddress(chain.launchpad!) && getAddress(l.args.token) === getAddress(token)
+  );
+  const unlockAt = locked ? Number(locked.args.unlockAt) : 0;
+  // The contract only allows 182 or 365 days, so the length tells us which option was picked.
+  const lockDays = locked ? Math.round((unlockAt - Number((await client.getBlock({ blockNumber: receipt.blockNumber })).timestamp)) / 86400) : 0;
 
   // Cast: viem's types misread optional fields when the project has `strict: false`.
   const read = (functionName: "name" | "symbol") => client.readContract({ address: token, abi: ERC20_META_ABI, functionName } as any) as Promise<string>;
@@ -44,6 +50,8 @@ export async function POST(req: Request) {
     symbol: String(symbol).slice(0, 24),
     supply: (supply / 10n ** 18n).toString(),
     tx_hash: txHash.toLowerCase(),
+    lp_lock: !locked ? "burn" : lockDays > 200 ? "1y" : "6m",
+    lp_unlock_at: locked ? new Date(unlockAt * 1000).toISOString() : null,
     user_id: user?.id ?? null,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });

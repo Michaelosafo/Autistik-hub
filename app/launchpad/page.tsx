@@ -16,7 +16,7 @@ export default async function LaunchpadPage() {
         <div className="page-head">
           <div className="label">AUTISTIK Launch Pad</div>
           <h1>Tokens launched by the community</h1>
-          <p className="muted">Every token here launched with its liquidity locked forever. See what&apos;s trending, what people are watching, and what&apos;s new.</p>
+          <p className="muted">Every token here launched with its liquidity locked or burned, so it can&apos;t be pulled early. See what&apos;s trending, what people are watching, and what&apos;s new.</p>
         </div>
         <Link className="btn primary" href="/launchpad/new">🚀 Launch a token</Link>
       </div>
