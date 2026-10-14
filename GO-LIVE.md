@@ -3,7 +3,7 @@
 Tick these off in order. Every step happens in a website (Vercel, Supabase, GitHub, Remix, MetaMask, your domain company). Nothing needs installing on your computer. The full details for each step are in `README.md`.
 
 ## 1. Basics
-- [ ] Use **one** Vercel project for the Hub (`autistik-hub-h6td`). Remove autistikk.com from any other project.
+- [ ] Use **one** Vercel project for the Hub: **`autistiklatestwork`** (it has your settings). Remove autistikk.com from any other project. Check settings any time at `/api/health`.
 - [ ] Vercel → Settings → Environment Variables has: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_TOKEN_ADDRESS`.
 - [ ] Email sign-up works: follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) (Resend + Supabase settings + email templates).
 - [ ] You can create an account, confirm the email, and Believer and Autistik both reply.
