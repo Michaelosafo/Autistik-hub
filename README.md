@@ -117,9 +117,11 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 
 ### Money: where fees go
 - **Launch fee:** paid in BNB/ETH with every launch and sent straight to the `treasury_` wallet (your deployer wallet) you set when deploying.
-- **Trending:** anyone can pay **$30 for 5 hours** or **$200 for 24 hours** in USDT to put a Launch Pad token at the top of Trending and in the rotating **Ad** slot on the home page and Launch Pad pages. The USDT goes straight to the same `treasury_` wallet. Buying again adds time. When the time is up the token drops out of the ad slot and the Promoted spot by itself.
-- Only tokens launched through your launchpad can be promoted, and the contract records which token each payment was for, so payments can't be reused or claimed for another token.
-- Change prices or add plans any time from Remix or BscScan → **Write Contract** → `setPlan(planId, price, duration)` (price in USDT units: USDT has 18 decimals on BNB Chain and 6 on Ethereum; duration in seconds; duration `0` switches a plan off). Plan `0` and `1` are shown on the site.
+- **Trending & listing:** anyone can pay **$20 worth of BNB** on BNB Chain to put a token at the top of Trending and in the rotating **Ad** slot for **24 hours** (paying again adds time). The box is under the launch chat, under the token board, and on every token page. It shows the wallet the BNB goes to: set it with `NEXT_PUBLIC_TREASURY_WALLET` (use your deployer/treasury wallet).
+  - Tokens launched **somewhere else** can be listed this way too, as long as they have a trading pool on DexScreener. They show a **Listed** badge and a warning that the AUTISTIK team didn't check them.
+  - The site converts $20 to BNB with the live BNB price. The server checks the payment on BNB Chain before anything shows: it must go to your wallet, be worth at least $20 (5% leeway for price moves), be under 2 days old, and each payment counts only once. Payments made with the Pay button carry the token address, so they can only count for that token.
+  - Change the price or length with `NEXT_PUBLIC_TRENDING_USD` and `NEXT_PUBLIC_TRENDING_HOURS`, then redeploy.
+- The contract's old USDT `promote` plans still work on-chain but the site no longer uses them.
 
 ### Turn it on for a chain
 1. Run `supabase/launchpad.sql` in Supabase **SQL Editor** (only needed if you set up the database before the Launch Pad existed).

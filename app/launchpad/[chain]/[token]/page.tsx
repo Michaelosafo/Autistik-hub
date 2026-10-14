@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAddress, isAddress } from "viem";
 import AdBar from "@/components/AdBar";
-import PromoteCard from "@/components/PromoteCard";
+import TrendingPay from "@/components/TrendingPay";
 import TokenLogo from "@/components/TokenLogo";
 import UnlockButton from "@/components/UnlockButton";
 import WatchButton from "@/components/WatchButton";
@@ -36,8 +36,9 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   const m = markets[token.toLowerCase()];
   const promotedUntil = promo?.ends_at ?? null;
   const swap = c.swapUrl(token);
+  const listed = launch.source === "listed";
   const lock = isLock(launch.lp_lock) ? launch.lp_lock : "burn";
-  const lockNote = lock === "burn" ? "🔥 burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `🔒 locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "🔓 lock ended";
+  const lockNote = listed ? "" : lock === "burn" ? "🔥 burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `🔒 locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "🔓 lock ended";
 
   return (
     <div className="stack">
@@ -75,13 +76,15 @@ export default async function TokenPage({ params }: { params: { chain: string; t
               <a className="btn small" href={dexscreenerUrl(c, launch.pair, token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>
-            <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No tax, no minting, no owner. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the Launch Pad contract.`}</p>
+            {listed ? (
+              <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock. Check the contract on the explorer before buying.</p>
+            ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No tax, no minting, no owner. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the Launch Pad contract.`}</p>}
           </div>
         </div>
         <div className="stack">
-          <PromoteCard chain={c.key} token={token} promotedUntil={promotedUntil} />
-          {lock !== "burn" && launch.lp_unlock_at && <UnlockButton chain={c.key} token={token} creator={launch.creator} unlockAt={launch.lp_unlock_at} />}
-          <div className="notice warn" style={{ fontSize: ".86em" }}>Made by a community member, not the AUTISTIK team. Token prices can go to zero. Nothing here is financial advice.</div>
+          <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
+          {!listed && lock !== "burn" && launch.lp_unlock_at && <UnlockButton chain={c.key} token={token} creator={launch.creator} unlockAt={launch.lp_unlock_at} />}
+          <div className="notice warn" style={{ fontSize: ".86em" }}>{listed ? "Listed by a paid promotion, not checked by the AUTISTIK team." : "Made by a community member, not the AUTISTIK team."} Token prices can go to zero. Nothing here is financial advice.</div>
         </div>
       </div>
     </div>

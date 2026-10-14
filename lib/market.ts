@@ -66,3 +66,20 @@ export function usd(n: number | null | undefined) {
   if (n < 1000) return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   return "$" + Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 }
+
+/** Finds a token's deepest DexScreener pool, to list a token that wasn't launched on the Launch Pad. */
+export async function lookupToken(chain: ChainKey, token: string): Promise<{ pair: string; name: string; symbol: string } | null> {
+  const slug = CHAINS[chain]?.dexscreener;
+  if (!slug) return null;
+  try {
+    const r = await fetch(`${API}/tokens/v1/${slug}/${token}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const pairs: any[] = r.ok ? await r.json() : [];
+    const mine = (Array.isArray(pairs) ? pairs : []).filter((p) => String(p?.baseToken?.address || "").toLowerCase() === token.toLowerCase());
+    mine.sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0));
+    const p = mine[0];
+    if (!p?.pairAddress) return null;
+    return { pair: String(p.pairAddress), name: String(p.baseToken.name || "").slice(0, 64), symbol: String(p.baseToken.symbol || "").slice(0, 24) };
+  } catch {
+    return null;
+  }
+}

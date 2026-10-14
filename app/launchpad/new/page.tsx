@@ -1,6 +1,8 @@
 import AdBar from "@/components/AdBar";
 import Launchpad from "@/components/Launchpad";
-import { ads, getBoard } from "@/lib/board";
+import TrendingNow from "@/components/TrendingNow";
+import TrendingPay from "@/components/TrendingPay";
+import { ads, getBoard, trending } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { currentUser } from "@/lib/supabase/server";
 
@@ -18,6 +20,10 @@ export default async function NewLaunchPage() {
         <p className="muted">Tell Autistik about your token and sign one transaction. It goes live on PancakeSwap, Uniswap or Robinhood Chain with its liquidity locked for 6 months, 1 year, or burned forever, then shows up on DexScreener. You need at least $20 of AUTISTIK in your wallet to launch.</p>
       </div>
       <Launchpad signedIn={!!user} />
+      <div className="grid2" style={{ alignItems: "start" }}>
+        <TrendingNow list={trending(board)} />
+        <TrendingPay />
+      </div>
     </div>
   );
 }
