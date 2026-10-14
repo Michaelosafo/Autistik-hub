@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AdBar from "@/components/AdBar";
 import Art from "@/components/Art";
 import Battery from "@/components/Battery";
 import SessionCard from "@/components/SessionCard";
@@ -6,6 +7,8 @@ import { GROUPS, CHANNELS } from "@/lib/groups";
 import { COMPANIONS } from "@/lib/companions";
 import { PHOTOS } from "@/lib/site";
 import { supabaseServer } from "@/lib/supabase/server";
+import { ads, getBoard } from "@/lib/board";
+import { toAds } from "@/lib/ads";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +31,11 @@ export default async function Home() {
     for (const r of gm || []) counts[r.group_id] = (counts[r.group_id] || 0) + 1;
   }
   const ticker = [...TICKER, ...TICKER];
+  const trendingAds = toAds(ads(await getBoard(60)));
 
   return (
     <div className="stack" style={{ gap: 22 }}>
+      <AdBar ads={trendingAds} />
       <div>
         <div className="hero">
           <div className="hero-copy">

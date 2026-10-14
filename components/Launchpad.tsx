@@ -6,7 +6,6 @@ import { CHAINS, LAUNCHPAD_ABI, dexscreenerUrl, isLive, readLimits, viemChain, t
 
 type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean };
 type Turn = { role: "user" | "assistant"; content: string };
-export type LaunchRow = { chain: keyof typeof CHAINS; token: string; pair: string; name: string; symbol: string; created_at?: string };
 type Done = { token: string; pair: string; hash: string; listed: boolean };
 
 const HELLO = "Hi, I'm Autistik. I'll help you launch your own token in a few steps. First question: which chain do you want, BNB Chain (PancakeSwap), Ethereum (Uniswap) or Robinhood Chain?";
@@ -15,10 +14,9 @@ const STARTERS = ["Launch on BNB Chain", "Launch on Ethereum", "How does the liq
 function Avatar() {
   return <svg className="av" viewBox="0 0 48 24" aria-hidden="true"><use href="#i-inf" /></svg>;
 }
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const fmt = (n: string) => BigInt(n).toLocaleString("en-US");
 
-export default function Launchpad({ signedIn, recent }: { signedIn: boolean; recent: LaunchRow[] }) {
+export default function Launchpad({ signedIn }: { signedIn: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const turns = useRef<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -30,7 +28,6 @@ export default function Launchpad({ signedIn, recent }: { signedIn: boolean; rec
   const [status, setStatus] = useState("");
   const [launching, setLaunching] = useState(false);
   const [done, setDone] = useState<Done | null>(null);
-  const [list, setList] = useState(recent);
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs]);
@@ -110,7 +107,6 @@ export default function Launchpad({ signedIn, recent }: { signedIn: boolean; rec
       const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, txHash: hash }) });
       const data = await res.json().catch(() => ({}));
       setDone({ token, pair, hash, listed: res.ok });
-      if (res.ok && data.launch) setList((l) => [data.launch, ...l.filter((x) => x.token !== token)]);
       setStatus("");
     } catch (e: any) {
       setStatus(e?.shortMessage || "You cancelled in your wallet. Nothing was launched.");
@@ -159,7 +155,9 @@ export default function Launchpad({ signedIn, recent }: { signedIn: boolean; rec
                 <a className="btn small" href={`${c.explorer}/tx/${done.hash}`} target="_blank" rel="noopener noreferrer">Transaction</a>
               </div>
               <a className="btn small" href="https://marketplace.dexscreener.com/product/token-info" target="_blank" rel="noopener noreferrer">Add logo &amp; links on DexScreener</a>
-              {!done.listed && <span className="muted" style={{ fontSize: ".85em" }}>Your token is live, but we couldn&apos;t add it to the Hub list.</span>}
+              {done.listed
+                ? <Link className="btn primary" href={`/launchpad/${c.key}/${done.token}`}>Open token page &amp; make it trend 🔥</Link>
+                : <span className="muted" style={{ fontSize: ".85em" }}>Your token is live, but we couldn&apos;t add it to the Hub list.</span>}
             </div>
           ) : plan && c ? (
             <div className="card stack">
@@ -194,26 +192,6 @@ export default function Launchpad({ signedIn, recent }: { signedIn: boolean; rec
           )}
           <div className="notice alert" style={{ fontSize: ".86em" }}><b>Never</b> share your seed phrase or private key. Autistik will never ask for it.</div>
         </div>
-      </div>
-
-      <div className="card stack">
-        <h2>Recent launches</h2>
-        {!list.length ? <div className="empty">No launches yet. Be the first!</div> : (
-          <table><thead><tr><th>Token</th><th>Chain</th><th>Address</th><th></th></tr></thead><tbody>
-            {list.map((l) => {
-              const lc = CHAINS[l.chain];
-              return (
-                <tr key={l.token}>
-                  <td><b>{l.name}</b> <span className="muted">${l.symbol}</span></td>
-                  <td>{lc?.name}</td>
-                  <td className="mono"><a href={`${lc?.explorer}/token/${l.token}`} target="_blank" rel="noopener noreferrer">{short(l.token)}</a></td>
-                  <td>{lc && <a href={dexscreenerUrl(lc, l.pair, l.token)} target="_blank" rel="noopener noreferrer">DexScreener</a>}</td>
-                </tr>
-              );
-            })}
-          </tbody></table>
-        )}
-        <p className="muted" style={{ fontSize: ".82em" }}>Tokens here are made by community members, not the AUTISTIK team. Listing is not an endorsement. Do your own research.</p>
       </div>
     </div>
   );

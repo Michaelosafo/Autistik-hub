@@ -267,6 +267,29 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 [data-calm="on"] .inf-path{stroke-dashoffset:0}
 [data-calm="on"] .ticker div{transform:none}
 [data-calm="on"] .avatar,[data-calm="on"] .banner,[data-calm="on"] .art,[data-calm="on"] .msg.me,[data-calm="on"] .av{filter:saturate(.5)}
+/* ---------- Launch Pad board ---------- */
+.adbar{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r);background:var(--violet-soft);border:1px solid var(--line);min-width:0}
+.adbar a{display:flex;align-items:center;gap:10px;min-width:0;flex:1;text-decoration:none;color:var(--ink)}
+.adbar .ad-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adbar .dots{display:flex;gap:4px;flex:none}
+.adbar .dots i{width:6px;height:6px;border-radius:50%;background:var(--line)}
+.adbar .dots i[data-on="1"]{background:var(--violet)}
+.badge{display:inline-block;font-size:.66em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:var(--sun-soft);color:var(--ink);vertical-align:middle}
+.tlogo{width:34px;height:34px;border-radius:50%;flex:none;object-fit:cover;background:var(--violet-soft);color:var(--violet);display:inline-grid;place-items:center;font-weight:700;font-size:.8em}
+.tlogo.big{width:56px;height:56px;font-size:1.1em}
+.up{color:var(--teal)} .down{color:var(--alert)}
+.board-row{display:grid;grid-template-columns:minmax(0,2.2fr) repeat(4,minmax(0,1fr)) 64px;gap:10px;align-items:center;padding:10px 6px;border-bottom:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.board-row:hover{background:var(--surface-2)}
+.board-row.head{font-size:.7em;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.board-row.head:hover{background:none}
+.board-row .tname{display:flex;align-items:center;gap:10px;min-width:0}
+.board-row .tname div{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board-row .n{text-align:right;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stats div{background:var(--surface-2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.stats b{font-variant-numeric:tabular-nums}
+.chart{width:100%;height:440px;border:0;border-radius:var(--r);background:var(--surface-2)}
+@media (max-width:700px){ .board-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px} .board-row .hide-sm{display:none} .chart{height:360px} }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.inf-path{stroke-dashoffset:0}}
 .fade{animation:fade .25s ease-out}
 @keyframes fade{from{opacity:.5}to{opacity:1}}

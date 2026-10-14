@@ -101,7 +101,7 @@ Get the contract reviewed by someone experienced before putting large amounts in
 
 ## Launch Pad
 
-**AUTISTIK Launch Pad** (`/launchpad`) lets members launch their own token. **Autistik**, the launch agent, asks the questions (chain, name, ticker, supply, their share, liquidity) and prepares a launch plan. The member then signs **one transaction in their own wallet**. The site never holds anyone's keys or money.
+**AUTISTIK Launch Pad** has a token board (`/launchpad`: Trending, Most watched, New, with live prices from DexScreener), a page for every token (chart, Watch button, "Make it trend"), and the launch chat (`/launchpad/new`). Members launch their own token there. **Autistik**, the launch agent, asks the questions (chain, name, ticker, supply, their share, liquidity) and prepares a launch plan. The member then signs **one transaction in their own wallet**. The site never holds anyone's keys or money.
 
 That transaction calls the `AutistikLaunchpad` contract (`contracts/AutistikLaunchpad.sol`), which:
 1. creates a plain token with a fixed supply (no tax, no minting, no owner, no blacklist),
@@ -109,7 +109,13 @@ That transaction calls the `AutistikLaunchpad` contract (`contracts/AutistikLaun
 3. adds the rest as liquidity on PancakeSwap (BNB Chain), Uniswap (Ethereum) or a Uniswap V2 style DEX on Robinhood Chain,
 4. sends the LP tokens to the dead address `0x…dEaD`, so **the liquidity is locked forever**. Nobody can remove it, not the creator and not the AUTISTIK team.
 
-DexScreener picks up the pair automatically once it trades. Creators can add a logo and links at marketplace.dexscreener.com.
+DexScreener picks up the pair automatically once it trades. Creators can add a logo and links at marketplace.dexscreener.com; the board then shows that logo too.
+
+### Money: where fees go
+- **Launch fee:** paid in BNB/ETH with every launch and sent straight to the `treasury_` wallet you set when deploying.
+- **Trending:** anyone can pay **$30 for 5 hours** or **$200 for 24 hours** in USDT to put a Launch Pad token at the top of Trending and in the rotating **Ad** slot on the home page and Launch Pad pages. The USDT goes straight to the same `treasury_` wallet. Buying again adds time. When the time is up the token drops out of the ad slot and the Promoted spot by itself.
+- Only tokens launched through your launchpad can be promoted, and the contract records which token each payment was for, so payments can't be reused or claimed for another token.
+- Change prices or add plans any time from Remix or BscScan → **Write Contract** → `setPlan(planId, price, duration)` (price in USDT units: USDT has 18 decimals on BNB Chain and 6 on Ethereum; duration in seconds; duration `0` switches a plan off). Plan `0` and `1` are shown on the site.
 
 ### Turn it on for a chain
 1. Run `supabase/launchpad.sql` in Supabase **SQL Editor** (only needed if you set up the database before the Launch Pad existed).
@@ -119,12 +125,13 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
    | Field | BNB Chain | Ethereum |
    |---|---|---|
    | `router_` | `0x10ED43C718714eb63d5aA57B78B54704E256024E` (PancakeSwap V2) | `0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D` (Uniswap V2) |
-   | `treasury_` | wallet that receives launch fees | same |
+   | `treasury_` | **your wallet**: receives launch fees and trending payments | same |
    | `launchFee_` | fee in wei, e.g. `10000000000000000` = 0.01 BNB (`0` = free) | e.g. `2000000000000000` = 0.002 ETH |
    | `maxFee_` | highest fee you can ever set, e.g. `100000000000000000` = 0.1 | e.g. `20000000000000000` = 0.02 |
    | `minLiquidity_` | smallest pool allowed, e.g. `100000000000000000` = 0.1 BNB | e.g. `50000000000000000` = 0.05 ETH |
+   | `stablecoin_` | `0x55d398326f99059fF775485246999027B3197955` (USDT) | `0xdAC17F958D2ee523a2206206994597C13D1ec7` (USDT) |
 
-   For **Robinhood Chain**, use the Uniswap V2 compatible router address from Robinhood's official docs, and also set the `NEXT_PUBLIC_ROBINHOOD_*` values in Vercel.
+   For **Robinhood Chain**, use the Uniswap V2 compatible router and stablecoin addresses from Robinhood's official docs, and also set the `NEXT_PUBLIC_ROBINHOOD_*` values in Vercel.
 4. Copy the deployed address into Vercel as `NEXT_PUBLIC_LAUNCHPAD_BSC`, `NEXT_PUBLIC_LAUNCHPAD_ETHEREUM` or `NEXT_PUBLIC_LAUNCHPAD_ROBINHOOD`, then redeploy. Chains without an address show as "coming soon".
 5. Use a multisig (such as Safe) as the owner and treasury, and get the contract reviewed by an auditor before promoting it. The owner can only change the fee (up to `maxFee_`) and the treasury, never anyone's tokens or liquidity.
 
@@ -149,7 +156,7 @@ app/
   community/             4 groups × 3 channels, live feed
   sessions/              Live sessions, RSVPs, practitioner applications
   rewards/               Points, leaderboard, wallet link, claim
-  launchpad/             AUTISTIK Launch Pad with the Autistik agent
+  launchpad/             Launch Pad board (trending, watched, new), token pages, launch chat with Autistik
   admin/                 Admin dashboard
   safety/                Promises, guidelines, crisis help
   login/, auth/callback  Email sign-in (magic link) with 18+ confirmation
@@ -159,6 +166,7 @@ app/
   api/admin/airdrop      CSV of eligible wallets
   api/launchpad/agent    Autistik, the launch agent (Claude API)
   api/launchpad/record   Checks a launch on-chain and adds it to the public list
+  api/launchpad/promote  Checks a trending payment on-chain and starts the trending slot
 components/              UI pieces (Shell, Community, CompanionChat, …)
 lib/                     Groups, companion personalities, illustrations, Supabase & AI helpers
 supabase/schema.sql      Tables + Row Level Security (who can read/write what)
