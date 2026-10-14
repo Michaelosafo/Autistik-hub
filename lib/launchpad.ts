@@ -2,13 +2,24 @@ import { defineChain, parseAbi, parseEther, type PublicClient } from "viem";
 
 /** Matches contracts/AutistikLaunchpad.sol. */
 export const LAUNCHPAD_ABI = parseAbi([
-  "function launch(string name_, string symbol_, uint256 supply, uint256 creatorBps) payable returns (address token, address pair)",
+  "function launch(string name_, string symbol_, uint256 supply, uint256 creatorBps, uint8 lockOption, uint256 permitDeadline, bytes permitSig) payable returns (address token, address pair)",
+  "function unlockLiquidity(address token)",
+  "function locks(address) view returns (address pair, address creator, uint256 amount, uint256 unlockAt)",
+  "function eligibilitySigner() view returns (address)",
   "function launchFee() view returns (uint256)",
   "function minLiquidity() view returns (uint256)",
   "function stablecoin() view returns (address)",
   "function plans(uint256) view returns (uint256 price, uint256 duration)",
   "function promote(address token, uint256 planId)",
-  "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 supply, uint256 creatorTokens, uint256 liquidityTokens, uint256 liquidityNative, uint256 lpBurned)",
+  "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 supply, uint256 creatorTokens, uint256 liquidityTokens, uint256 liquidityNative, uint256 lp)",
+  "event LiquidityLocked(address indexed token, address indexed pair, address indexed creator, uint256 amount, uint256 unlockAt)",
+  "event LiquidityUnlocked(address indexed token, address indexed creator, uint256 amount)",
+  "error InvalidLock()",
+  "error NotEligible()",
+  "error PermitExpired()",
+  "error NotCreator()",
+  "error StillLocked()",
+  "error NothingLocked()",
   "error InvalidName()",
   "error InvalidSymbol()",
   "error InvalidSupply()",
@@ -136,6 +147,8 @@ export type LaunchPlan = {
   creatorPercent: number;
   /** Native coin (BNB/ETH) to put in the pool, decimal string. */
   liquidity: string;
+  /** Burn the LP tokens, or lock them for 6 months or 1 year. */
+  lock: LiquidityLock;
   description: string;
   website: string;
   x: string;
@@ -143,6 +156,18 @@ export type LaunchPlan = {
 };
 
 export const MAX_CREATOR_PERCENT = 20;
+
+/** What happens to the pool's LP tokens. The number is the contract's lockOption. */
+export type LiquidityLock = "burn" | "6m" | "1y";
+export const LOCKS: Record<LiquidityLock, { option: number; label: string; short: string; explain: string }> = {
+  burn: { option: 0, label: "Burn", short: "Burned forever", explain: "The LP tokens are sent to the dead address at launch. The liquidity stays in the pool forever and nobody can take it out, including you." },
+  "6m": { option: 1, label: "Lock 6 months", short: "Locked 6 months", explain: "The LP tokens are locked in the Launch Pad contract for 6 months. After that only you can take them back. Nobody can touch them before then, including you and the AUTISTIK team." },
+  "1y": { option: 2, label: "Lock 1 year", short: "Locked 1 year", explain: "The LP tokens are locked in the Launch Pad contract for 1 year. After that only you can take them back. Nobody can touch them before then, including you and the AUTISTIK team." },
+};
+export const isLock = (v: unknown): v is LiquidityLock => typeof v === "string" && v in LOCKS;
+
+/** Creators must hold at least this much AUTISTIK (in US dollars), on BNB Chain, in the wallet they launch from. */
+export const MIN_HOLD_USD = Number(process.env.NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD || 20);
 
 /** Same limits as the contract, so problems show up before anyone opens their wallet. */
 export function checkPlan(p: Partial<LaunchPlan> | null | undefined): { plan: LaunchPlan } | { error: string } {
@@ -162,6 +187,7 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined): { plan: La
   let wei = 0n;
   try { wei = parseEther(liquidity); } catch {}
   if (wei <= 0n) return { error: `Liquidity must be an amount of ${chain.coin}, like ${chain.suggestedLiquidity}.` };
+  if (!isLock(p.lock)) return { error: "Choose what happens to the liquidity: lock 6 months, lock 1 year, or burn." };
   const link = (v: unknown) => {
     const s = String(v || "").trim();
     return /^https:\/\/[^\s"'<>]{3,200}$/.test(s) ? s : "";
@@ -174,6 +200,7 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined): { plan: La
       supply,
       creatorPercent: Math.round(creatorPercent * 100) / 100,
       liquidity,
+      lock: p.lock,
       description: String(p.description || "").trim().slice(0, 500),
       website: link(p.website),
       x: link(p.x),

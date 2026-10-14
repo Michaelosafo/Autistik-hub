@@ -5,6 +5,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 interface IUniswapV2Router02 {
     function factory() external view returns (address);
@@ -32,8 +34,12 @@ contract AutistikLaunchToken is ERC20 {
 
 /// @title AUTISTIK Launch Pad
 /// @notice One transaction: create a token, give the creator their share, add the rest as liquidity on a
-///         Uniswap V2 style DEX (PancakeSwap on BNB Chain, Uniswap on Ethereum, ...) and send the LP tokens to
-///         the dead address so the liquidity can never be removed by anyone, including the launchpad owner.
+///         Uniswap V2 style DEX (PancakeSwap on BNB Chain, Uniswap on Ethereum, ...) and then either burn the
+///         LP tokens (sent to the dead address, liquidity stays forever) or lock them in this contract for
+///         6 months or 1 year. Only the creator can take locked LP back, and only after the lock ends.
+///         The launchpad owner can never touch anyone's liquidity.
+///         Launches can require proof that the creator holds at least $20 of AUTISTIK: the Hub's server checks
+///         the creator's AUTISTIK balance on BNB Chain and signs a short-lived permit that this contract verifies.
 ///         Tokens launched here can also pay in a stablecoin (e.g. USDT) to be promoted as trending on the Hub.
 ///         Launch fees and promotion payments go straight to the treasury wallet.
 /// @dev Deploy one per chain with that chain's V2 router and stablecoin.
@@ -44,6 +50,11 @@ contract AutistikLaunchpad {
     uint256 public constant MAX_CREATOR_BPS = 2000; // creator can keep at most 20% of supply
     uint256 public constant MIN_SUPPLY = 1_000 ether; // 1,000 tokens (18 decimals)
     uint256 public constant MAX_SUPPLY = 1_000_000_000_000_000 ether; // 1 quadrillion tokens
+    uint8 public constant LOCK_BURN = 0; // LP tokens to the dead address, forever
+    uint8 public constant LOCK_6_MONTHS = 1;
+    uint8 public constant LOCK_1_YEAR = 2;
+    uint256 public constant SIX_MONTHS = 182 days;
+    uint256 public constant ONE_YEAR = 365 days;
 
     IUniswapV2Router02 public immutable router;
     IERC20 public immutable stablecoin; // what promotions are paid in, e.g. USDT
@@ -54,6 +65,17 @@ contract AutistikLaunchpad {
     address payable public treasury;
     uint256 public launchFee;
     uint256 public launches;
+    /// @notice Signs eligibility permits ($20+ of AUTISTIK held). Zero address = no holding check.
+    address public eligibilitySigner;
+
+    struct Lock {
+        address pair;
+        address creator;
+        uint256 amount;
+        uint256 unlockAt;
+    }
+    /// @notice Locked LP per launched token. amount is 0 once the creator has taken it back.
+    mapping(address => Lock) public locks;
 
     struct Plan {
         uint256 price; // in stablecoin units
@@ -70,8 +92,11 @@ contract AutistikLaunchpad {
         uint256 creatorTokens,
         uint256 liquidityTokens,
         uint256 liquidityNative,
-        uint256 lpBurned
+        uint256 lp
     );
+    event LiquidityLocked(address indexed token, address indexed pair, address indexed creator, uint256 amount, uint256 unlockAt);
+    event LiquidityUnlocked(address indexed token, address indexed creator, uint256 amount);
+    event EligibilitySignerChanged(address signer);
     event Promoted(address indexed token, address indexed payer, uint256 indexed planId, uint256 price, uint256 duration);
     event PlanChanged(uint256 indexed planId, uint256 price, uint256 duration);
     event FeeChanged(uint256 fee);
@@ -89,6 +114,12 @@ contract AutistikLaunchpad {
     error FeeTransferFailed();
     error NotLaunchedHere();
     error UnknownPlan();
+    error InvalidLock();
+    error NotEligible();
+    error PermitExpired();
+    error NotCreator();
+    error StillLocked();
+    error NothingLocked();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -102,7 +133,8 @@ contract AutistikLaunchpad {
         uint256 launchFee_,
         uint256 maxFee_,
         uint256 minLiquidity_,
-        address stablecoin_
+        address stablecoin_,
+        address eligibilitySigner_
     ) {
         if (router_ == address(0) || treasury_ == address(0) || stablecoin_ == address(0)) revert ZeroAddress();
         if (launchFee_ > maxFee_) revert FeeTooHigh();
@@ -115,18 +147,27 @@ contract AutistikLaunchpad {
         launchFee = launchFee_;
         maxFee = maxFee_;
         minLiquidity = minLiquidity_;
+        eligibilitySigner = eligibilitySigner_;
         owner = msg.sender;
         emit OwnershipTransferred(address(0), msg.sender);
     }
 
     /// @param supply total supply in whole-token units times 1e18
     /// @param creatorBps share of supply sent to the creator, in basis points (100 = 1%)
+    /// @param lockOption 0 = burn LP forever, 1 = lock 6 months, 2 = lock 1 year
+    /// @param permitDeadline / permitSig eligibility permit from the Hub (ignored when no signer is set)
     /// @dev msg.value = launchFee + native coin to pair with the tokens as liquidity.
-    function launch(string calldata name_, string calldata symbol_, uint256 supply, uint256 creatorBps)
-        external
-        payable
-        returns (address token, address pair)
-    {
+    function launch(
+        string calldata name_,
+        string calldata symbol_,
+        uint256 supply,
+        uint256 creatorBps,
+        uint8 lockOption,
+        uint256 permitDeadline,
+        bytes calldata permitSig
+    ) external payable returns (address token, address pair) {
+        if (lockOption > LOCK_1_YEAR) revert InvalidLock();
+        _checkEligible(permitDeadline, permitSig);
         uint256 nameLen = bytes(name_).length;
         uint256 symbolLen = bytes(symbol_).length;
         if (nameLen == 0 || nameLen > 32) revert InvalidName();
@@ -137,7 +178,7 @@ contract AutistikLaunchpad {
         if (msg.value < fee + minLiquidity || msg.value == fee) revert NotEnoughLiquidity();
 
         token = address(new AutistikLaunchToken(name_, symbol_, supply, address(this)));
-        pair = _addLiquidityAndBurn(token, supply, creatorBps, msg.value - fee);
+        pair = _addLiquidity(token, supply, creatorBps, msg.value - fee, lockOption);
 
         if (fee > 0) {
             (bool ok,) = treasury.call{value: fee}("");
@@ -145,7 +186,21 @@ contract AutistikLaunchpad {
         }
     }
 
-    function _addLiquidityAndBurn(address token, uint256 supply, uint256 creatorBps, uint256 liquidityNative)
+    /// @notice The message the Hub signs: this launchpad, this chain, the creator and the permit deadline.
+    function permitHash(address creator, uint256 deadline) public view returns (bytes32) {
+        return keccak256(abi.encode(address(this), block.chainid, creator, deadline));
+    }
+
+    function _checkEligible(uint256 deadline, bytes calldata sig) private view {
+        address signer = eligibilitySigner;
+        if (signer == address(0)) return;
+        if (deadline < block.timestamp) revert PermitExpired();
+        bytes32 digest = MessageHashUtils.toEthSignedMessageHash(permitHash(msg.sender, deadline));
+        (address got, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
+        if (err != ECDSA.RecoverError.NoError || got != signer) revert NotEligible();
+    }
+
+    function _addLiquidity(address token, uint256 supply, uint256 creatorBps, uint256 liquidityNative, uint8 lockOption)
         private
         returns (address pair)
     {
@@ -154,16 +209,34 @@ contract AutistikLaunchpad {
         if (creatorTokens > 0) IERC20(token).transfer(msg.sender, creatorTokens);
 
         IERC20(token).approve(address(router), liquidityTokens);
-        // Fresh token, so the pool is empty and the exact amounts are used. LP tokens go straight to DEAD.
+        // Fresh token, so the pool is empty and the exact amounts are used.
+        // Burn: LP tokens go straight to DEAD. Lock: LP tokens stay in this contract until the lock ends.
+        address lpTo = lockOption == LOCK_BURN ? DEAD : address(this);
         (,, uint256 lp) = router.addLiquidityETH{value: liquidityNative}(
-            token, liquidityTokens, liquidityTokens, liquidityNative, DEAD, block.timestamp
+            token, liquidityTokens, liquidityTokens, liquidityNative, lpTo, block.timestamp
         );
         pair = IUniswapV2Factory(router.factory()).getPair(token, router.WETH());
+        if (lockOption != LOCK_BURN) {
+            uint256 unlockAt = block.timestamp + (lockOption == LOCK_6_MONTHS ? SIX_MONTHS : ONE_YEAR);
+            locks[token] = Lock(pair, msg.sender, lp, unlockAt);
+            emit LiquidityLocked(token, pair, msg.sender, lp, unlockAt);
+        }
         launchedHere[token] = true;
         unchecked {
             launches++;
         }
         emit Launched(token, pair, msg.sender, supply, creatorTokens, liquidityTokens, liquidityNative, lp);
+    }
+
+    /// @notice After the lock ends, the creator takes their LP tokens back. Nobody else can, ever.
+    function unlockLiquidity(address token) external {
+        Lock memory l = locks[token];
+        if (l.amount == 0) revert NothingLocked();
+        if (msg.sender != l.creator) revert NotCreator();
+        if (block.timestamp < l.unlockAt) revert StillLocked();
+        locks[token].amount = 0;
+        IERC20(l.pair).safeTransfer(l.creator, l.amount);
+        emit LiquidityUnlocked(token, l.creator, l.amount);
     }
 
     /// @notice Pay to show a token from this launchpad as trending. Approve the stablecoin for the plan's price first.
@@ -190,6 +263,12 @@ contract AutistikLaunchpad {
         if (fee > maxFee) revert FeeTooHigh();
         launchFee = fee;
         emit FeeChanged(fee);
+    }
+
+    /// @notice Set the Hub's eligibility signer, or the zero address to turn the AUTISTIK holding check off.
+    function setEligibilitySigner(address signer) external onlyOwner {
+        eligibilitySigner = signer;
+        emit EligibilitySignerChanged(signer);
     }
 
     function setTreasury(address payable treasury_) external onlyOwner {

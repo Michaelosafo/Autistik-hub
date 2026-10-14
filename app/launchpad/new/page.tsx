@@ -15,7 +15,7 @@ export default async function NewLaunchPage() {
       <div className="page-head">
         <div className="label">AUTISTIK Launch Pad</div>
         <h1>Launch your own token</h1>
-        <p className="muted">Tell Autistik about your token and sign one transaction. It goes live on PancakeSwap, Uniswap or Robinhood Chain with its liquidity locked forever, then shows up on DexScreener.</p>
+        <p className="muted">Tell Autistik about your token and sign one transaction. It goes live on PancakeSwap, Uniswap or Robinhood Chain with its liquidity locked for 6 months, 1 year, or burned forever, then shows up on DexScreener. You need at least $20 of AUTISTIK in your wallet to launch.</p>
       </div>
       <Launchpad signedIn={!!user} />
     </div>

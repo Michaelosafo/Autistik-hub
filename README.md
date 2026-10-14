@@ -101,18 +101,22 @@ Get the contract reviewed by someone experienced before putting large amounts in
 
 ## Launch Pad
 
-**AUTISTIK Launch Pad** has a token board (`/launchpad`: Trending, Most watched, New, with live prices from DexScreener), a page for every token (chart, Watch button, "Make it trend"), and the launch chat (`/launchpad/new`). Members launch their own token there. **Autistik**, the launch agent, asks the questions (chain, name, ticker, supply, their share, liquidity) and prepares a launch plan. The member then signs **one transaction in their own wallet**. The site never holds anyone's keys or money.
+**AUTISTIK Launch Pad** has a token board (`/launchpad`: Trending, Most watched, New, with live prices from DexScreener), a page for every token (chart, Watch button, "Make it trend"), and the launch chat (`/launchpad/new`). Members launch their own token there. **Autistik**, the launch agent, asks the questions (chain, name, ticker, supply, their share, liquidity, and whether to lock the liquidity for 6 months, 1 year or burn it) and prepares a launch plan. Members can turn on **Voice** so Autistik reads each question out loud, and press **Speak** to answer with their microphone (works in Chrome, Edge and Safari). The member then signs **one transaction in their own wallet**. The site never holds anyone's keys or money.
 
 That transaction calls the `AutistikLaunchpad` contract (`contracts/AutistikLaunchpad.sol`), which:
 1. creates a plain token with a fixed supply (no tax, no minting, no owner, no blacklist),
 2. sends the creator their share (0–20% of supply),
 3. adds the rest as liquidity on PancakeSwap (BNB Chain), Uniswap (Ethereum) or a Uniswap V2 style DEX on Robinhood Chain,
-4. sends the LP tokens to the dead address `0x…dEaD`, so **the liquidity is locked forever**. Nobody can remove it, not the creator and not the AUTISTIK team.
+4. handles the LP tokens the way the creator chose:
+   - **Burn:** sent to the dead address `0x…dEaD`, so the liquidity stays forever. Nobody can remove it.
+   - **Lock 6 months / Lock 1 year:** kept inside the Launch Pad contract until the date. After that, only the creator's wallet can take them back (the token page shows a button). The AUTISTIK team can never touch them.
+
+**Who can launch:** the wallet must hold at least **$20 of AUTISTIK on BNB Chain** (change it with `NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD`). When a member presses Launch, the Hub reads their AUTISTIK balance and the live price from DexScreener, and if it's enough it signs a permit that lasts 15 minutes. The contract refuses the launch without a valid permit for that exact wallet, so the AUTISTIK has to still be in the wallet at launch time. It is never spent or taken. This works for launches on Ethereum and Robinhood Chain too, because the same wallet address is used on every chain.
 
 DexScreener picks up the pair automatically once it trades. Creators can add a logo and links at marketplace.dexscreener.com; the board then shows that logo too.
 
 ### Money: where fees go
-- **Launch fee:** paid in BNB/ETH with every launch and sent straight to the `treasury_` wallet you set when deploying.
+- **Launch fee:** paid in BNB/ETH with every launch and sent straight to the `treasury_` wallet (your deployer wallet) you set when deploying.
 - **Trending:** anyone can pay **$30 for 5 hours** or **$200 for 24 hours** in USDT to put a Launch Pad token at the top of Trending and in the rotating **Ad** slot on the home page and Launch Pad pages. The USDT goes straight to the same `treasury_` wallet. Buying again adds time. When the time is up the token drops out of the ad slot and the Promoted spot by itself.
 - Only tokens launched through your launchpad can be promoted, and the contract records which token each payment was for, so payments can't be reused or claimed for another token.
 - Change prices or add plans any time from Remix or BscScan → **Write Contract** → `setPlan(planId, price, duration)` (price in USDT units: USDT has 18 decimals on BNB Chain and 6 on Ethereum; duration in seconds; duration `0` switches a plan off). Plan `0` and `1` are shown on the site.
@@ -130,10 +134,13 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
    | `maxFee_` | highest fee you can ever set, e.g. `100000000000000000` = 0.1 | e.g. `20000000000000000` = 0.02 |
    | `minLiquidity_` | smallest pool allowed, e.g. `100000000000000000` = 0.1 BNB | e.g. `50000000000000000` = 0.05 ETH |
    | `stablecoin_` | `0x55d398326f99059fF775485246999027B3197955` (USDT) | `0xdAC17F958D2ee523a2206206994597C13D1ec7` (USDT) |
+   | `eligibilitySigner_` | address of your permit-signing key (see below), or `0x0000000000000000000000000000000000000000` to switch the $20 AUTISTIK check off | same |
 
    For **Robinhood Chain**, use the Uniswap V2 compatible router and stablecoin addresses from Robinhood's official docs, and also set the `NEXT_PUBLIC_ROBINHOOD_*` values in Vercel.
+   **Make the permit-signing key** (for the $20 AUTISTIK rule): create a brand-new wallet in MetaMask used for nothing else, export its private key, and add it in Vercel as `ELIGIBILITY_SIGNER_KEY`. Its address goes in `eligibilitySigner_`. It never needs coins. Don't reuse your treasury or owner wallet for this. If the key ever leaks, call `setEligibilitySigner` with a new address.
 4. Copy the deployed address into Vercel as `NEXT_PUBLIC_LAUNCHPAD_BSC`, `NEXT_PUBLIC_LAUNCHPAD_ETHEREUM` or `NEXT_PUBLIC_LAUNCHPAD_ROBINHOOD`, then redeploy. Chains without an address show as "coming soon".
-5. Use a multisig (such as Safe) as the owner and treasury, and get the contract reviewed by an auditor before promoting it. The owner can only change the fee (up to `maxFee_`) and the treasury, never anyone's tokens or liquidity.
+5. Use a multisig (such as Safe) as the owner and treasury, and get the contract reviewed by an auditor before promoting it. The owner can only change the fee (up to `maxFee_`), the treasury and the eligibility signer, never anyone's tokens or liquidity.
+6. Already set up the database before? Run `supabase/launchpad.sql` again: it adds the `lp_lock` and `lp_unlock_at` columns.
 
 ---
 

@@ -4,10 +4,11 @@ import { getAddress, isAddress } from "viem";
 import AdBar from "@/components/AdBar";
 import PromoteCard from "@/components/PromoteCard";
 import TokenLogo from "@/components/TokenLogo";
+import UnlockButton from "@/components/UnlockButton";
 import WatchButton from "@/components/WatchButton";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
-import { CHAINS, dexscreenerUrl, isLive, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, LOCKS, dexscreenerUrl, isLock, isLive, type ChainKey } from "@/lib/launchpad";
 import { getMarkets, usd } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -35,6 +36,8 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   const m = markets[token.toLowerCase()];
   const promotedUntil = promo?.ends_at ?? null;
   const swap = c.swapUrl(token);
+  const lock = isLock(launch.lp_lock) ? launch.lp_lock : "burn";
+  const lockNote = lock === "burn" ? "🔥 burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `🔒 locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "🔓 lock ended";
 
   return (
     <div className="stack">
@@ -55,7 +58,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         <div><span className="label">Price</span><b>{usd(m?.priceUsd)}</b></div>
         <div><span className="label">24h</span><b className={(m?.change24h ?? 0) >= 0 ? "up" : "down"}>{m?.change24h == null ? "–" : `${m.change24h >= 0 ? "+" : ""}${m.change24h.toFixed(1)}%`}</b></div>
         <div><span className="label">Market cap</span><b>{usd(m?.marketCap)}</b></div>
-        <div><span className="label">Liquidity</span><b>{usd(m?.liquidityUsd)}</b> <span className="muted" style={{ fontSize: ".75em" }}>🔒 locked forever</span></div>
+        <div><span className="label">Liquidity</span><b>{usd(m?.liquidityUsd)}</b> <span className="muted" style={{ fontSize: ".75em" }}>{lockNote}</span></div>
         <div><span className="label">Volume 24h</span><b>{usd(m?.volume24h)}</b></div>
         <div><span className="label">Trades 24h</span><b>{m ? m.txns24h.toLocaleString("en-US") : "–"}</b></div>
       </div>
@@ -72,11 +75,12 @@ export default async function TokenPage({ params }: { params: { chain: string; t
               <a className="btn small" href={dexscreenerUrl(c, launch.pair, token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>
-            <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No tax, no minting, no owner. The liquidity was locked forever at launch.</p>
+            <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No tax, no minting, no owner. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the Launch Pad contract.`}</p>
           </div>
         </div>
         <div className="stack">
           <PromoteCard chain={c.key} token={token} promotedUntil={promotedUntil} />
+          {lock !== "burn" && launch.lp_unlock_at && <UnlockButton chain={c.key} token={token} creator={launch.creator} unlockAt={launch.lp_unlock_at} />}
           <div className="notice warn" style={{ fontSize: ".86em" }}>Made by a community member, not the AUTISTIK team. Token prices can go to zero. Nothing here is financial advice.</div>
         </div>
       </div>
