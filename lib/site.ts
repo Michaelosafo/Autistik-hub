@@ -19,4 +19,10 @@ export const LINKS = {
   youtube: "https://youtube.com/@autistik-charity",
   pancakeswap: "https://pancakeswap.finance/swap?outputCurrency=0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9",
   bscscan: "https://bscscan.com/address/0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9",
+  dexscreener: "https://dexscreener.com/bsc/0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9",
+  lpLock: "https://mudra.website/?certificate=yes&type=0&lp=0xeff4f155be6f23ff1f540f994bcd54e3271cb646",
+  dev: "https://x.com/ifonlyyoubelif",
+  coDev: "https://x.com/Rugpulloracle",
+  /** Put the whitepaper PDF in /public with this name. */
+  whitepaper: "/AUTISTIK-Whitepaper.pdf",
 };

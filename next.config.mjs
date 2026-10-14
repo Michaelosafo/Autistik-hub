@@ -4,6 +4,16 @@ const nextConfig = {
   // Keeps first deploys smooth; run `npx tsc --noEmit` locally to see type hints.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // Old autistikk.com addresses keep working after the switch to the Hub.
+  async redirects() {
+    return [
+      { source: "/index.html", destination: "/", permanent: true },
+      { source: "/fund.html", destination: "/fund", permanent: true },
+      { source: "/privacy.html", destination: "/safety", permanent: true },
+      { source: "/autism.html", destination: "/", permanent: false },
+      { source: "/how-to-buy", destination: "/buy", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {
