@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { MIN_PASSWORD, authMessage } from "@/lib/auth";
+import { SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 
 type Mode = "signin" | "join" | "forgot";
 
@@ -45,6 +46,7 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     setError(""); setCanResend(false);
     const em = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { setError("Please enter a valid email address."); return; }
+    if (!SUPABASE_CONFIGURED) { setError("Sign-in isn't set up on this site yet. The site owner needs to add the Supabase settings in Vercel and redeploy."); return; }
     setBusy(true);
     try {
       if (mode === "signin") {
@@ -66,8 +68,8 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
         if (error) { setError(authMessage(error.message)); return; }
         setSent("reset");
       }
-    } catch {
-      setError("Couldn't reach the Hub. Check your connection and try again.");
+    } catch (err: any) {
+      setError(authMessage(err?.message || "failed to fetch"));
     } finally { setBusy(false); }
   }
 
