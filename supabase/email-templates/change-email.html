@@ -1,0 +1,15 @@
+<!-- Paste into Supabase → Authentication → Emails (Email Templates). Keep the {{ }} parts exactly as they are. -->
+<div style="margin:0;padding:24px 12px;background:#F4F5FA;font-family:Verdana,Arial,sans-serif;color:#141830">
+  <div style="max-width:480px;margin:0 auto;background:#FFFFFF;border-radius:14px;overflow:hidden;border:1px solid #DCDFEA">
+    <div style="height:5px;background:linear-gradient(90deg,#E8453C,#F39A2B,#F5C935,#3DB66A,#2F8FE0,#7B55E0)"></div>
+    <div style="padding:28px 26px">
+      <p style="margin:0 0 4px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#5A6079;font-weight:bold">AUTISTIK Hub</p>
+      <h1 style="margin:0 0 14px;font-size:22px;line-height:1.25;color:#141830">Confirm your new email</h1>
+      <p style="margin:0 0 22px;font-size:15px;line-height:1.6">Press the button to confirm {{ .NewEmail }} as the new email for your AUTISTIK Hub account.</p>
+      <p style="margin:0 0 24px"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email_change&next=/companions" style="display:inline-block;background:#141830;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 22px;border-radius:10px">Confirm new email</a></p>
+      <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#5A6079">Didn't ask for this? Ignore this email and nothing changes.</p>
+      <p style="margin:0;font-size:13px;line-height:1.5;color:#5A6079">We will never ask for your password, seed phrase or private key.</p>
+    </div>
+  </div>
+  <p style="max-width:480px;margin:14px auto 0;font-size:12px;color:#5A6079;text-align:center">AUTISTIK Hub · Different wavelength. Same channel.</p>
+</div>

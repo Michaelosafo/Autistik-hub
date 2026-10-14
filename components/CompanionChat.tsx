@@ -189,7 +189,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         </div>
 
         <div className="stack">
-          {!signedIn && <div className="notice warn"><Link href="/login">Sign in</Link> to chat. It&apos;s free for members.</div>}
+          {!signedIn && <div className="notice warn"><Link href="/login?next=/companions">Sign in</Link> or <Link href="/login?mode=join&next=/companions">create a free account</Link> to chat.</div>}
           <div className="card prefs">
             <h3>How they talk to you</h3>
             {PREF_KEYS.map(([k, label]) => (

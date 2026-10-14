@@ -357,3 +357,12 @@ a.btn.primary{color:var(--bg)}
 .buy-steps li p{margin-top:2px;font-size:.94em}
 .alloc-bar{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;margin-top:4px}
 .alloc-bar i{display:block;height:100%;background:var(--spectrum)}
+
+/* Sign-in page */
+.auth-tabs{gap:6px}
+.linkish{all:unset;cursor:pointer;color:var(--violet);text-decoration:underline;text-underline-offset:2px}
+.linkish:disabled{opacity:.5;cursor:not-allowed}
+.linkish:focus-visible{outline:3px solid var(--sun-bright);outline-offset:2px;border-radius:4px}
+.pw-meter{display:flex;gap:4px}
+.pw-meter i{flex:1;height:5px;border-radius:3px;background:var(--line)}
+.pw-meter i.on{background:var(--teal)}

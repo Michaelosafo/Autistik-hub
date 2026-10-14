@@ -14,6 +14,7 @@ export async function guardAI(who = "Believer and Purity"): Promise<{ uid: strin
   if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: `${who} ${who.includes(" and ") ? "are" : "is"} coming soon. Check back shortly!` }, 503) };
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return { error: json({ error: `Please sign in to talk with ${who}.` }, 401) };
+  if (!user.email_confirmed_at && !user.phone_confirmed_at) return { error: json({ error: `Please confirm your email first. Open the email from AUTISTIK Hub and press Confirm, then try again.` }, 403) };
   const limit = Number(process.env.AI_DAILY_LIMIT || 60);
   const { data, error } = await supabaseService().rpc("bump_ai_usage", { p_user: user.id, p_limit: limit });
   if (error) return { error: json({ error: "The companions are unavailable right now. Try again soon." }, 503) };

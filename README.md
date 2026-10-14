@@ -27,6 +27,7 @@ Stack: **Next.js 14** · **Supabase** (login, database, realtime) · **Claude AP
 ---
 
 > **Going live?** Follow [`GO-LIVE.md`](GO-LIVE.md): one checklist with every setting for the Launch Pad, trending, the Fund and moving autistikk.com.
+> **Sign-up emails:** members join with email + password and confirm by email. Set it up with [`EMAIL-SETUP.md`](EMAIL-SETUP.md).
 
 ## Deploy it: step by step
 
@@ -42,7 +43,8 @@ You don't need to install anything on your computer for steps 1–6.
 3. (Optional) Run `supabase/seed.sql` the same way to add 3 example sessions.
 4. Go to **Authentication → URL Configuration**:
    - **Site URL:** `https://autistikk.com` (or your Vercel address for now)
-   - **Redirect URLs:** add `https://autistikk.com/auth/callback` and `https://*.vercel.app/auth/callback`
+   - **Redirect URLs:** add `https://autistikk.com/**` and `https://*.vercel.app/**`
+   - Then follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) so sign-up emails reach members.
 5. Go to **Project Settings → API** and copy the **Project URL**, the **anon public** key and the **service_role** key (keep that one secret).
 
 ### 3. Get a Claude API key
