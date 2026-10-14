@@ -208,7 +208,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
         </div>
 
         <div className="stack">
-          {!signedIn && <div className="notice warn"><Link href="/login">Sign in</Link> to talk with Autistik. It&apos;s free for members.</div>}
+          {!signedIn && <div className="notice warn"><Link href="/login?next=/launchpad/new">Sign in</Link> or <Link href="/login?mode=join&next=/launchpad/new">create a free account</Link> to talk with Autistik.</div>}
 
           {done && c ? (
             <div className="card stack">

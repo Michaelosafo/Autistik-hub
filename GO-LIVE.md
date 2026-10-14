@@ -5,7 +5,8 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 ## 1. Basics
 - [ ] Use **one** Vercel project for the Hub (`autistik-hub-h6td`). Remove autistikk.com from any other project.
 - [ ] Vercel → Settings → Environment Variables has: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_TOKEN_ADDRESS`.
-- [ ] You can sign in, and Believer and Autistik both reply.
+- [ ] Email sign-up works: follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) (Resend + Supabase settings + email templates).
+- [ ] You can create an account, confirm the email, and Believer and Autistik both reply.
 - [ ] You are admin (README step 6). **Admin** shows in the menu.
 
 ## 2. Database (Supabase → SQL Editor → New query → paste → Run)

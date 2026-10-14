@@ -88,7 +88,7 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
                   <button className="chip toggle" onClick={signOut}>Sign out</button>
                 </>
               ) : (
-                <Link className="chip toggle" href="/login" style={{ textDecoration: "none", color: "var(--ink)" }}>Sign in / Join</Link>
+                <Link className="chip toggle" href={`/login?next=${encodeURIComponent(path)}`} style={{ textDecoration: "none", color: "var(--ink)" }}>Sign in / Join</Link>
               )}
             </div>
             <div className="chips">

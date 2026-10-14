@@ -43,7 +43,7 @@ export default async function Home() {
             <h1>Autism is not a disease. <span className="grad">It&apos;s a community.</span></h1>
             <p>Autistic minds aren&apos;t broken and don&apos;t need a cure. They need understanding, connection and a place to belong. Here you&apos;ll find four groups, two AI companions called Believer and Purity, live talks with practitioners, and airdrops for the people who show up.</p>
             <div className="row">
-              <Link className="btn primary" href={user ? "/community" : "/login"}>{user ? "Join a group" : "Join the Hub"}</Link>
+              <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
               <Link className="btn ghost" href="/companions">Meet Believer &amp; Purity</Link>
               <Link className="btn ghost" href="/buy">Buy $AUTISTIK</Link>
             </div>
