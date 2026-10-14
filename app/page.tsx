@@ -45,6 +45,7 @@ export default async function Home() {
             <div className="row">
               <Link className="btn primary" href={user ? "/community" : "/login"}>{user ? "Join a group" : "Join the Hub"}</Link>
               <Link className="btn ghost" href="/companions">Meet Believer &amp; Purity</Link>
+              <Link className="btn ghost" href="/buy">Buy $AUTISTIK</Link>
             </div>
           </div>
           <div className="hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>

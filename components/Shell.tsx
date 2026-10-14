@@ -13,6 +13,8 @@ const NAV = [
   { href: "/sessions", name: "Sessions", icon: "i-ses" },
   { href: "/rewards", name: "Rewards", icon: "i-rew" },
   { href: "/launchpad", name: "Launch Pad", short: "Launch", icon: "i-rocket" },
+  { href: "/buy", name: "Buy $AUTISTIK", short: "Buy", icon: "i-buy" },
+  { href: "/fund", name: "Fund", icon: "i-fund", railOnly: true },
   { href: "/safety", name: "Safety", icon: "i-safe" },
 ];
 
@@ -97,7 +99,7 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
         </main>
       </div>
       <nav className="tabbar">
-        {nav.filter((n) => !(me?.is_admin && n.href === "/safety")).map((n) => (
+        {nav.filter((n) => !("railOnly" in n && n.railOnly) && !(me?.is_admin && n.href === "/safety")).map((n) => (
           <Link key={n.href} href={n.href} aria-current={isOn(n.href) ? "page" : undefined}><Icon id={n.icon} /><span>{n.short || n.name}</span></Link>
         ))}
       </nav>
@@ -115,6 +117,8 @@ function Sprites() {
   <symbol id="i-ses" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
   <symbol id="i-rew" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c-4.5 0-7 2-7 4s2.5 4 7 4 7-2 7-4-2.5-4-7-4z"/><path d="M5 7v5c0 2 2.5 4 7 4s7-2 7-4V7M5 12v5c0 2 2.5 4 7 4s7-2 7-4v-5"/></symbol>
   <symbol id="i-rocket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-3-3c1-4 4-8 10-9-1 6-5 9-9 10z"/><path d="M9 12H5l2-4h4M12 15v4l4-2v-4"/><path d="M6 16c-1.5 1-2 3-2 4 1 0 3-.5 4-2"/></symbol>
+  <symbol id="i-buy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/></symbol>
+  <symbol id="i-fund" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/><path d="M3 21h18"/></symbol>
   <symbol id="i-safe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
   <symbol id="i-adm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
   <symbol id="g-lounge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 10 0v4"/><path d="M4 11h16v4a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z"/></symbol>

@@ -12,6 +12,7 @@ export default function Safety() {
           <li>Chats with Believer and Purity are not stored on our servers.</li>
           <li>Your battery check-ins stay on your own device.</li>
           <li>Your wallet is only visible to you and the admins, for sending airdrops.</li>
+          <li>If you register interest in the AUTISTIK Fund, your name, email, country and phone (if you give it) are only seen by admins and only used to contact you about the fund. Ask in Telegram or by email and we&apos;ll delete them.</li>
           <li>The Hub is for adults aged 18 and over.</li>
         </ul>
       </div>

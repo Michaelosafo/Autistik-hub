@@ -146,6 +146,12 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 
 ---
 
+## Buy page, Fund page and the old autistikk.com
+- **`/buy`** has the How to Buy steps, the contract address, tokenomics, roadmap and community links from the old site. Edit them in `app/buy/page.tsx` and `lib/site.ts`.
+- **`/fund`** has the AUTISTIK Fund page with a "Register your interest" form. Run `supabase/fund.sql` once in Supabase SQL Editor. Sign-ups appear at the bottom of **Admin**, with **Copy as CSV**.
+- **Whitepaper:** upload `AUTISTIK-Whitepaper.pdf` into the `public` folder on GitHub (Add file → Upload files) so `autistikk.com/AUTISTIK-Whitepaper.pdf` keeps working.
+- Old links redirect automatically: `/fund.html` → `/fund`, `/privacy.html` → `/safety`, `/index.html` → `/`.
+
 ## Using real photos
 The site ships with original illustrations. To use real photos, add files to `public/photos/` and set their paths in `lib/site.ts`, for example `hero: { src: "/photos/hero.jpg", alt: "..." }`. Only use photos you have the rights to, with consent from everyone shown, especially when describing people as autistic.
 
