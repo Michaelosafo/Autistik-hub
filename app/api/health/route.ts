@@ -8,14 +8,18 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const out: Record<string, unknown> = {
     supabaseUrlSet: SUPABASE_CONFIGURED,
-    supabaseHost: SUPABASE_CONFIGURED ? new URL(SUPABASE_URL).host : null,
+    // Never print the value itself: if a key was pasted into the URL setting by mistake, it would leak.
+    supabaseUrlLooksRight: SUPABASE_CONFIGURED ? /^[a-z0-9-]+\.supabase\.(co|in)$/i.test(new URL(SUPABASE_URL).host) : false,
     anonKeySet: SUPABASE_ANON_KEY !== "not-configured",
     serviceKeySet: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
     claudeKeySet: !!process.env.ANTHROPIC_API_KEY,
     siteUrl: process.env.NEXT_PUBLIC_SITE_URL || null,
   };
   let advice = "";
-  if (!SUPABASE_CONFIGURED) {
+  if (SUPABASE_CONFIGURED && !out.supabaseUrlLooksRight) {
+    out.supabase = "wrong url";
+    advice = "NEXT_PUBLIC_SUPABASE_URL isn't a Supabase Project URL. It must look like https://abcdefgh.supabase.co (Supabase → Project Settings → API → Project URL). If you pasted a key there by mistake, replace it, rotate that key in Supabase, then Redeploy.";
+  } else if (!SUPABASE_CONFIGURED) {
     out.supabase = "not set";
     advice = "Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel → Settings → Environment Variables, then Redeploy.";
   } else {
