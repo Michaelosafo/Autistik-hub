@@ -8,3 +8,4 @@ out
 *.log
 .DS_Store
 airdrops/*.private.json
+*.tsbuildinfo

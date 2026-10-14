@@ -99,6 +99,37 @@ Get the contract reviewed by someone experienced before putting large amounts in
 
 ---
 
+## Launch Pad
+
+**AUTISTIK Launch Pad** (`/launchpad`) lets members launch their own token. **Autistik**, the launch agent, asks the questions (chain, name, ticker, supply, their share, liquidity) and prepares a launch plan. The member then signs **one transaction in their own wallet**. The site never holds anyone's keys or money.
+
+That transaction calls the `AutistikLaunchpad` contract (`contracts/AutistikLaunchpad.sol`), which:
+1. creates a plain token with a fixed supply (no tax, no minting, no owner, no blacklist),
+2. sends the creator their share (0–20% of supply),
+3. adds the rest as liquidity on PancakeSwap (BNB Chain), Uniswap (Ethereum) or a Uniswap V2 style DEX on Robinhood Chain,
+4. sends the LP tokens to the dead address `0x…dEaD`, so **the liquidity is locked forever**. Nobody can remove it, not the creator and not the AUTISTIK team.
+
+DexScreener picks up the pair automatically once it trades. Creators can add a logo and links at marketplace.dexscreener.com.
+
+### Turn it on for a chain
+1. Run `supabase/launchpad.sql` in Supabase **SQL Editor** (only needed if you set up the database before the Launch Pad existed).
+2. In **remix.ethereum.org**, create `AutistikLaunchpad.sol`, paste in `contracts/AutistikLaunchpad.sol`, and compile with Solidity **0.8.24** (optimizer on, 200 runs).
+3. In **Deploy**, choose **Injected Provider – MetaMask**, switch MetaMask to the chain, and enter:
+
+   | Field | BNB Chain | Ethereum |
+   |---|---|---|
+   | `router_` | `0x10ED43C718714eb63d5aA57B78B54704E256024E` (PancakeSwap V2) | `0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D` (Uniswap V2) |
+   | `treasury_` | wallet that receives launch fees | same |
+   | `launchFee_` | fee in wei, e.g. `10000000000000000` = 0.01 BNB (`0` = free) | e.g. `2000000000000000` = 0.002 ETH |
+   | `maxFee_` | highest fee you can ever set, e.g. `100000000000000000` = 0.1 | e.g. `20000000000000000` = 0.02 |
+   | `minLiquidity_` | smallest pool allowed, e.g. `100000000000000000` = 0.1 BNB | e.g. `50000000000000000` = 0.05 ETH |
+
+   For **Robinhood Chain**, use the Uniswap V2 compatible router address from Robinhood's official docs, and also set the `NEXT_PUBLIC_ROBINHOOD_*` values in Vercel.
+4. Copy the deployed address into Vercel as `NEXT_PUBLIC_LAUNCHPAD_BSC`, `NEXT_PUBLIC_LAUNCHPAD_ETHEREUM` or `NEXT_PUBLIC_LAUNCHPAD_ROBINHOOD`, then redeploy. Chains without an address show as "coming soon".
+5. Use a multisig (such as Safe) as the owner and treasury, and get the contract reviewed by an auditor before promoting it. The owner can only change the fee (up to `maxFee_`) and the treasury, never anyone's tokens or liquidity.
+
+---
+
 ## Using real photos
 The site ships with original illustrations. To use real photos, add files to `public/photos/` and set their paths in `lib/site.ts`, for example `hero: { src: "/photos/hero.jpg", alt: "..." }`. Only use photos you have the rights to, with consent from everyone shown, especially when describing people as autistic.
 
@@ -118,6 +149,7 @@ app/
   community/             4 groups × 3 channels, live feed
   sessions/              Live sessions, RSVPs, practitioner applications
   rewards/               Points, leaderboard, wallet link, claim
+  launchpad/             AUTISTIK Launch Pad with the Autistik agent
   admin/                 Admin dashboard
   safety/                Promises, guidelines, crisis help
   login/, auth/callback  Email sign-in (magic link) with 18+ confirmation
@@ -125,9 +157,12 @@ app/
   api/draw               Companion drawings (SVG)
   api/wallet             Verifies wallet signatures, saves wallets
   api/admin/airdrop      CSV of eligible wallets
+  api/launchpad/agent    Autistik, the launch agent (Claude API)
+  api/launchpad/record   Checks a launch on-chain and adds it to the public list
 components/              UI pieces (Shell, Community, CompanionChat, …)
 lib/                     Groups, companion personalities, illustrations, Supabase & AI helpers
 supabase/schema.sql      Tables + Row Level Security (who can read/write what)
+contracts/               AutistikLaunchpad.sol (token launches with locked liquidity)
 scripts/build-merkle.mjs Builds each airdrop round
 ```
 
