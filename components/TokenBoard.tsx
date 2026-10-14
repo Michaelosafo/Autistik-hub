@@ -41,7 +41,7 @@ export default function TokenBoard({ lists }: { lists: Record<Tab, BoardToken[]>
                 <span className="tname">
                   <span className="muted hide-sm" style={{ width: 18, textAlign: "right", fontSize: ".8em" }}>{n + 1}</span>
                   <TokenLogo src={m?.imageUrl} symbol={t.symbol} />
-                  <div><b>{t.name}</b> {tab === "trending" && t.promotedUntil && <span className="badge">Promoted</span>}<br /><span className="muted" style={{ fontSize: ".82em" }}>${t.symbol} · {CHAINS[t.chain].name}</span></div>
+                  <div><b>{t.name}</b> {tab === "trending" && t.promotedUntil && <span className="badge">Promoted</span>} {t.source === "listed" && <span className="badge listed">Listed</span>}<br /><span className="muted" style={{ fontSize: ".82em" }}>${t.symbol} · {CHAINS[t.chain].name}</span></div>
                 </span>
                 <span className="n">{usd(m?.priceUsd)}</span>
                 <span className={"n hide-sm " + ((m?.change24h ?? 0) >= 0 ? "up" : "down")}>{m?.change24h == null ? "–" : `${m.change24h >= 0 ? "+" : ""}${m.change24h.toFixed(1)}%`}</span>

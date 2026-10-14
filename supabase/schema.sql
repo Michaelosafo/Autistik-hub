@@ -278,6 +278,8 @@ create index if not exists launches_created_at on public.launches (created_at de
 -- Liquidity choice: 'burn' (forever), '6m' or '1y' (locked in the Launch Pad contract until lp_unlock_at).
 alter table public.launches add column if not exists lp_lock text not null default 'burn' check (lp_lock in ('burn','6m','1y'));
 alter table public.launches add column if not exists lp_unlock_at timestamptz;
+-- Where a token came from: 'launchpad' (launched here) or 'listed' (launched elsewhere, paid to be listed and trend).
+alter table public.launches add column if not exists source text not null default 'launchpad' check (source in ('launchpad','listed'));
 
 alter table public.launches enable row level security;
 -- Anyone can see launches. Only the server writes them, after checking the transaction on-chain.

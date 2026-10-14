@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, MODEL, guardAI, cleanTurns, json } from "@/lib/ai";
 import { CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains } from "@/lib/launchpad";
+import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,7 +51,7 @@ How a launch works (explain when useful, don't lecture):
 - To launch, the wallet they launch from must hold at least $${MIN_HOLD_USD} worth of AUTISTIK on BNB Chain, and keep it there until the launch is done. The Hub checks this automatically when they press Launch. If they don't hold enough, they can buy AUTISTIK on PancakeSwap into the same wallet first. AUTISTIK is not spent or taken; it just has to be in the wallet.
 - Trading opens straight away on the DEX. DexScreener shows the pair automatically once it has liquidity and trades. Afterwards they can add a logo and links on DexScreener themselves.
 - A small launch fee is paid in the same transaction and goes to the AUTISTIK deployer wallet. The exact fee shows on the Launch button before they sign.
-- After launch, the token gets its own page on the Launch Pad with a chart and a Watch button. Anyone can pay to make it trend: $30 for 5 hours or $200 for 24 hours, paid in USDT. Trending tokens show at the top of the board and in the "Ad" slot across the Launch Pad, labelled as paid. Don't pressure anyone to buy it.
+- After launch, the token gets its own page on the Launch Pad with a chart and a Watch button. Anyone can pay to make it trend: $${TRENDING_USD} worth of BNB, paid on BNB Chain to the AUTISTIK wallet shown in the "Get your token listed & trending" box, for ${TRENDING_HOURS} hours. Paying again adds time. Tokens launched somewhere else can be listed the same way, as long as they have a trading pool on DexScreener. Trending tokens show at the top of the board and in the "Ad" slot across the Hub, labelled as paid. Don't pressure anyone to buy it.
 
 Chains:
 ${chainLines}

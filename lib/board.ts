@@ -9,6 +9,8 @@ export type BoardToken = {
   name: string;
   symbol: string;
   created_at: string;
+  /** "launchpad" = launched here, "listed" = launched elsewhere and paid to be listed. */
+  source: "launchpad" | "listed";
   watchers: number;
   /** When the paid trending slot ends, if one is running. */
   promotedUntil: string | null;
@@ -22,7 +24,7 @@ export async function getBoard(limit = 200): Promise<BoardToken[]> {
   const sb = supabaseServer();
   const now = new Date().toISOString();
   const [{ data: launches }, { data: promos }, { data: counts }] = await Promise.all([
-    sb.from("launches").select("chain,token,pair,name,symbol,created_at").order("created_at", { ascending: false }).limit(limit),
+    sb.from("launches").select("*").order("created_at", { ascending: false }).limit(limit),
     sb.from("launch_promotions").select("chain,token,ends_at").gt("ends_at", now),
     sb.from("launch_watch_counts").select("chain,token,watchers"),
   ]);
@@ -35,7 +37,9 @@ export async function getBoard(limit = 200): Promise<BoardToken[]> {
   const watchers = new Map((counts || []).map((c: any) => [key(c.chain, c.token), c.watchers as number]));
   const markets = await getMarkets(rows.map((r: any) => ({ chain: r.chain, token: r.token })));
   return rows.map((r: any) => ({
-    ...r,
+    // Only the public fields: rows are read with * so the board keeps working before new columns exist.
+    chain: r.chain, token: r.token, pair: r.pair, name: r.name, symbol: r.symbol, created_at: r.created_at,
+    source: r.source === "listed" ? "listed" : "launchpad",
     watchers: watchers.get(key(r.chain, r.token)) ?? 0,
     promotedUntil: until.get(key(r.chain, r.token)) ?? null,
     market: markets[r.token.toLowerCase()] ?? null,
