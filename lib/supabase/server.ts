@@ -2,12 +2,16 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
+// Placeholders let pages render (signed out, no data) instead of crashing when Supabase isn't configured yet.
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://not-configured.supabase.co";
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "not-configured";
+
 /** Supabase client acting as the signed-in visitor (respects Row Level Security). */
 export function supabaseServer() {
   const cookieStore = cookies();
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    URL,
+    ANON,
     {
       cookies: {
         getAll() {
@@ -28,8 +32,8 @@ export function supabaseServer() {
 /** Admin client with the service role key. SERVER ONLY — bypasses Row Level Security. */
 export function supabaseService() {
   return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY || "not-configured",
     { auth: { persistSession: false } }
   );
 }
