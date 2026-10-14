@@ -104,7 +104,7 @@ export default function BuyPage() {
           <a className="btn small" href={LINKS.coDev} target="_blank" rel="noopener noreferrer">Co-dev on X</a>
           <a className="btn small" href={LINKS.whitepaper} target="_blank" rel="noopener noreferrer">Whitepaper (PDF)</a>
         </div>
-        <p className="muted" style={{ fontSize: ".9em" }}>Want to help autistic people directly? See the <Link href="/fund">AUTISTIK Fund</Link>.</p>
+        <p className="muted" style={{ fontSize: ".9em" }}>New to autism? Read <Link href="/autism">Understanding autism</Link>. Want to help autistic people directly? See the <Link href="/fund">AUTISTIK Fund</Link>.</p>
       </div>
 
       <p className="muted" style={{ fontSize: ".82em" }}>Nothing on this page is financial, legal or investment advice. $AUTISTIK is a community token and its price can go up or down a lot, including to zero. Only spend what you can afford to lose.</p>

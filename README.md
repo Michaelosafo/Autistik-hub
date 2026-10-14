@@ -26,6 +26,8 @@ Stack: **Next.js 14** · **Supabase** (login, database, realtime) · **Claude AP
 
 ---
 
+> **Going live?** Follow [`GO-LIVE.md`](GO-LIVE.md): one checklist with every setting for the Launch Pad, trending, the Fund and moving autistikk.com.
+
 ## Deploy it: step by step
 
 You don't need to install anything on your computer for steps 1–6.
@@ -150,7 +152,8 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 - **`/buy`** has the How to Buy steps, the contract address, tokenomics, roadmap and community links from the old site. Edit them in `app/buy/page.tsx` and `lib/site.ts`.
 - **`/fund`** has the AUTISTIK Fund page with a "Register your interest" form. Run `supabase/fund.sql` once in Supabase SQL Editor. Sign-ups appear at the bottom of **Admin**, with **Copy as CSV**.
 - **Whitepaper:** upload `AUTISTIK-Whitepaper.pdf` into the `public` folder on GitHub (Add file → Upload files) so `autistikk.com/AUTISTIK-Whitepaper.pdf` keeps working.
-- Old links redirect automatically: `/fund.html` → `/fund`, `/privacy.html` → `/safety`, `/index.html` → `/`.
+- **`/autism`** is the "Understanding autism" guide from the old site.
+- Old links redirect automatically: `/fund.html` → `/fund`, `/autism.html` → `/autism`, `/privacy.html` → `/safety`, `/index.html` → `/`.
 
 ## Using real photos
 The site ships with original illustrations. To use real photos, add files to `public/photos/` and set their paths in `lib/site.ts`, for example `hero: { src: "/photos/hero.jpg", alt: "..." }`. Only use photos you have the rights to, with consent from everyone shown, especially when describing people as autistic.
