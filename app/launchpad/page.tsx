@@ -1,21 +1,26 @@
-import Launchpad, { type LaunchRow } from "@/components/Launchpad";
-import { supabaseServer } from "@/lib/supabase/server";
+import Link from "next/link";
+import AdBar from "@/components/AdBar";
+import TokenBoard from "@/components/TokenBoard";
+import { ads, getBoard, mostWatched, trending } from "@/lib/board";
+import { toAds } from "@/lib/ads";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch Pad · AUTISTIK Hub" };
 
 export default async function LaunchpadPage() {
-  const sb = supabaseServer();
-  const { data: { user } } = await sb.auth.getUser();
-  const { data } = await sb.from("launches").select("chain,token,pair,name,symbol,created_at").order("created_at", { ascending: false }).limit(20);
+  const board = await getBoard();
   return (
     <div className="stack">
-      <div className="page-head">
-        <div className="label">AUTISTIK Launch Pad</div>
-        <h1>Launch your own token</h1>
-        <p className="muted">Tell Autistik about your token and sign one transaction. It goes live on PancakeSwap, Uniswap or Robinhood Chain with its liquidity locked forever, then shows up on DexScreener.</p>
+      <AdBar ads={toAds(ads(board))} />
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div className="page-head">
+          <div className="label">AUTISTIK Launch Pad</div>
+          <h1>Tokens launched by the community</h1>
+          <p className="muted">Every token here launched with its liquidity locked forever. See what&apos;s trending, what people are watching, and what&apos;s new.</p>
+        </div>
+        <Link className="btn primary" href="/launchpad/new">🚀 Launch a token</Link>
       </div>
-      <Launchpad signedIn={!!user} recent={(data as LaunchRow[]) || []} />
+      <TokenBoard lists={{ trending: trending(board), watched: mostWatched(board), new: board }} />
     </div>
   );
 }

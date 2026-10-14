@@ -5,14 +5,35 @@ export const LAUNCHPAD_ABI = parseAbi([
   "function launch(string name_, string symbol_, uint256 supply, uint256 creatorBps) payable returns (address token, address pair)",
   "function launchFee() view returns (uint256)",
   "function minLiquidity() view returns (uint256)",
+  "function stablecoin() view returns (address)",
+  "function plans(uint256) view returns (uint256 price, uint256 duration)",
+  "function promote(address token, uint256 planId)",
   "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 supply, uint256 creatorTokens, uint256 liquidityTokens, uint256 liquidityNative, uint256 lpBurned)",
   "error InvalidName()",
   "error InvalidSymbol()",
   "error InvalidSupply()",
   "error CreatorShareTooHigh()",
   "error NotEnoughLiquidity()",
+  "event Promoted(address indexed token, address indexed payer, uint256 indexed planId, uint256 price, uint256 duration)",
   "error FeeTransferFailed()",
+  "error NotLaunchedHere()",
+  "error UnknownPlan()",
 ]);
+
+/** Enough of ERC-20 to pay for a promotion in USDT/USDC. */
+export const STABLE_ABI = parseAbi([
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address owner, address spender) view returns (uint256)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+]);
+
+/** Trending plans the contract starts with (plan id → label). Prices are read from the contract. */
+export const PLANS = [
+  { id: 0, label: "5 hours" },
+  { id: 1, label: "24 hours" },
+] as const;
 
 export const ERC20_META_ABI = parseAbi(["function name() view returns (string)", "function symbol() view returns (string)"]);
 

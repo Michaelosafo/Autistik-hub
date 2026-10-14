@@ -23,3 +23,42 @@ alter table public.launches enable row level security;
 -- Anyone can see launches. Only the server writes them, after checking the transaction on-chain.
 drop policy if exists "launches public" on public.launches;
 create policy "launches public" on public.launches for select using (true);
+
+-- ---------- Watchlist: members star tokens; everyone sees how many people watch each one ----------
+create table if not exists public.launch_watchers (
+  user_id uuid not null references auth.users on delete cascade,
+  chain text not null,
+  token text not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, chain, token)
+);
+alter table public.launch_watchers enable row level security;
+drop policy if exists "see own watchlist" on public.launch_watchers;
+drop policy if exists "watch" on public.launch_watchers;
+drop policy if exists "unwatch" on public.launch_watchers;
+create policy "see own watchlist" on public.launch_watchers for select to authenticated using (user_id = auth.uid());
+create policy "watch" on public.launch_watchers for insert to authenticated with check (user_id = auth.uid());
+create policy "unwatch" on public.launch_watchers for delete to authenticated using (user_id = auth.uid());
+
+-- Counts only, never who is watching.
+create or replace view public.launch_watch_counts as
+  select chain, token, count(*)::int as watchers from public.launch_watchers group by chain, token;
+grant select on public.launch_watch_counts to anon, authenticated;
+
+-- ---------- Paid trending: one row per payment, checked on-chain by the server ----------
+create table if not exists public.launch_promotions (
+  id uuid primary key default gen_random_uuid(),
+  chain text not null,
+  token text not null,
+  plan int not null,
+  price numeric not null,
+  payer text not null,
+  tx_hash text not null unique,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists launch_promotions_ends_at on public.launch_promotions (ends_at desc);
+alter table public.launch_promotions enable row level security;
+drop policy if exists "promotions public" on public.launch_promotions;
+create policy "promotions public" on public.launch_promotions for select using (true);
