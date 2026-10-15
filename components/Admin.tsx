@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { GROUPS, CHANNELS } from "@/lib/groups";
 import FundAdmin from "@/components/FundAdmin";
+import AdminLog from "@/components/AdminLog";
 
 export default function Admin() {
   const sb = supabaseBrowser();
@@ -145,6 +146,7 @@ export default function Admin() {
         ))}
       </div>
       <FundAdmin />
+      <AdminLog />
     </>
   );
 }

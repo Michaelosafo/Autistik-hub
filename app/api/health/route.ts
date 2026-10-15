@@ -1,6 +1,7 @@
 import { SUPABASE_CONFIGURED, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase/env";
 import { anthropic, MODEL } from "@/lib/ai";
-import { supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { rateLimit } from "@/lib/ratelimit";
 
 // The AI check is free (it only looks up the model), and is cached so the page can't be used to spam the API.
 let aiCache: { at: number; result: string } | null = null;
@@ -24,12 +25,25 @@ async function checkDatabase(): Promise<string> {
   return /does not exist|schema cache/i.test(error.message) ? "tables missing" : /invalid api key|jwt|unauthorized/i.test(error.message) ? "wrong service key" : "error";
 }
 
+async function isAdmin(): Promise<boolean> {
+  if (!SUPABASE_CONFIGURED) return false;
+  try {
+    const sb = supabaseServer();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return false;
+    const { data } = await sb.from("profiles").select("is_admin").eq("id", user.id).maybeSingle();
+    return !!data?.is_admin;
+  } catch { return false; }
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // A quick self-check you can open in the browser: /api/health
 // It never shows keys, only whether each setting is there and whether Supabase answers.
-export async function GET() {
+export async function GET(req: Request) {
+  const slow = await rateLimit(req, "health", 30, 60);
+  if (slow) return slow;
   const out: Record<string, unknown> = {
     build: (process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7),
     environment: process.env.VERCEL_ENV || "local",
@@ -88,5 +102,10 @@ export async function GET() {
     else advice = "Everything is connected. If the AI still doesn't reply, check console.anthropic.com → Billing has credit.";
   }
   out.advice = advice;
+  // Visitors see whether each part works. Only admins see the finer details (sign-up settings, AI model, site address).
+  if (!(await isAdmin())) {
+    for (const k of ["emailSignupEnabled", "signupsAllowed", "emailConfirmationRequired", "aiModel", "siteUrl"]) delete out[k];
+    out.details = "Sign in as an admin to see more.";
+  }
   return new Response(JSON.stringify(out, null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }

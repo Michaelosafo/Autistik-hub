@@ -19,7 +19,9 @@ export async function GET() {
   const wallet = new Map((w || []).map((x: any) => [x.user_id, x.address]));
   const lines = ["wallet,points,alias"];
   for (const r of (pts || []).filter((r: any) => r.points >= need && wallet.has(r.user_id)).sort((a: any, b: any) => b.points - a.points)) {
-    lines.push(`${wallet.get(r.user_id)},${r.points},"${String(r.alias).replace(/"/g, "'")}"`);
+    // Hub names are typed by members: a leading = + - @ could run as a formula in Excel, so it's neutralised.
+    const alias = String(r.alias).replace(/"/g, "'").replace(/^[=+\-@\t\r]/, "'$&");
+    lines.push(`${wallet.get(r.user_id)},${r.points},"${alias}"`);
   }
   const name = `autistik-${String(st?.round_name || "round").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
   return new Response(lines.join("\n") + "\n", {

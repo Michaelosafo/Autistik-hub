@@ -1,26 +1,30 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
+import HumanCheck, { TURNSTILE_SITE_KEY, type HumanCheckHandle } from "@/components/HumanCheck";
 
 export default function FundForm() {
   const [f, setF] = useState({ name: "", email: "", country: "", phone: "", message: "", forSomeoneElse: false, consent: false, website: "" });
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  const [captcha, setCaptcha] = useState("");
+  const human = useRef<HumanCheckHandle>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setF({ ...f, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value });
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (TURNSTILE_SITE_KEY && !captcha) { setError("One moment: the \"are you human\" check is still loading. Try again in a few seconds."); return; }
     setBusy(true); setError("");
     try {
-      const res = await fetch("/api/fund", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(f) });
+      const res = await fetch("/api/fund", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...f, captcha }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data.error || "Something went wrong. Try again."); return; }
       setDone(true);
     } catch {
       setError("Couldn't reach the Hub. Check your connection and try again.");
-    } finally { setBusy(false); }
+    } finally { setBusy(false); human.current?.reset(); }
   }
 
   if (done) {
@@ -48,6 +52,7 @@ export default function FundForm() {
       <label className="row" style={{ gap: 8, flexWrap: "nowrap", alignItems: "flex-start" }}><input id="fundOther" type="checkbox" checked={f.forSomeoneElse} onChange={set("forSomeoneElse")} /> <span>I&apos;m a parent, guardian or caregiver registering for someone else.</span></label>
       <label className="row" style={{ gap: 8, flexWrap: "nowrap", alignItems: "flex-start" }}><input id="fundConsent" type="checkbox" checked={f.consent} onChange={set("consent")} /> <span>I agree that AUTISTIK can store these details and email me about the fund. See <Link href="/safety">Safety &amp; privacy</Link>.</span></label>
       {error && <div className="notice alert" role="alert">{error}</div>}
+      <HumanCheck ref={human} onToken={setCaptcha} />
       <div className="row"><button className="btn primary" type="submit" disabled={busy || !f.consent}>{busy ? "Saving…" : "Register my interest"}</button></div>
     </form>
   );

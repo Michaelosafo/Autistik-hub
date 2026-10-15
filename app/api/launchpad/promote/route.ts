@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
 import { CHAINS, LAUNCHPAD_ABI, isLive, type ChainKey } from "@/lib/launchpad";
@@ -9,6 +10,8 @@ export const maxDuration = 60;
 // Turns a confirmed on-chain trending payment into a trending slot. The token, plan, price and length all come
 // from the contract's Promoted event, so a payment can't be claimed for a different token or reused.
 export async function POST(req: Request) {
+  const slow = await rateLimit(req, "promote", 10, 600);
+  if (slow) return slow;
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");

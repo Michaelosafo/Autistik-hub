@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http, isAddress } from "viem";
 import { json } from "@/lib/ai";
 import { CHAINS, type ChainKey } from "@/lib/launchpad";
@@ -17,6 +18,8 @@ const SLACK = 95n;
 // Launch Pad if it isn't there yet. Everything is checked on BNB Chain; nothing is taken from the request
 // except which token the payment is for.
 export async function POST(req: Request) {
+  const slow = await rateLimit(req, "trending-pay", 10, 600);
+  if (slow) return slow;
   if (!TREASURY) return json({ error: "Trending payments aren't open yet." }, 503);
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
