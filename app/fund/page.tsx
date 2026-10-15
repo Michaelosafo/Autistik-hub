@@ -1,4 +1,5 @@
 import FundForm from "@/components/FundForm";
+import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
 
 export const metadata = {
   title: "AUTISTIK Fund · AUTISTIK Hub",
@@ -18,6 +19,7 @@ const FAQ = [
 export default function FundPage() {
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
+      <SectionTabs tabs={TOKEN_TABS} active="/fund" label="$AUTISTIK" />
       <div className="page-head">
         <div className="label">AUTISTIK Fund · BNB Chain</div>
         <h1>Funded by the community, built for individuals</h1>

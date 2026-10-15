@@ -1,6 +1,7 @@
 import Art from "@/components/Art";
 import SessionCard from "@/components/SessionCard";
 import SessionForms from "@/components/SessionForms";
+import SectionTabs, { COMMUNITY_TABS } from "@/components/SectionTabs";
 import { PHOTOS } from "@/lib/site";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -21,9 +22,10 @@ export default async function SessionsPage() {
   }
   return (
     <div className="stack">
+      <SectionTabs tabs={COMMUNITY_TABS} active="/sessions" label="Community" />
       <Art kind="stage" className="stage art" photo={PHOTOS.stage.src} alt={PHOTOS.stage.alt} />
       <div className="page-head">
-        <div className="label">Live sessions</div>
+        <div className="label">Community · Live sessions</div>
         <h1>Talks, Q&amp;As and support circles</h1>
         <p className="muted">Hosted by practitioners the AUTISTIK team has checked. Save your seat to earn participation points.</p>
       </div>
