@@ -8,9 +8,10 @@ export const metadata: Metadata = {
   description: "Autism is not a disease. It's a community. Groups, AI companions, live sessions and $AUTISTIK airdrops for autistic adults.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://autistik.io"),
   openGraph: { title: "AUTISTIK Hub", description: "Autism is not a disease. It's a community.", type: "website" },
+  appleWebApp: { capable: true, title: "AUTISTIK", statusBarStyle: "black-translucent" },
 };
 
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#141830" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const sb = supabaseServer();
@@ -21,8 +22,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     me = data ?? { alias: "Member", is_admin: false };
   }
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Applies saved comfort settings before the page paints, so there's no flash of bright colours or motion. */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";var t=l.getItem("theme");if(t==="light"||t==="dark")d.dataset.theme=t}catch(e){}` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Unbounded:wght@500;700;800&family=JetBrains+Mono:wght@400;600&display=swap" />

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Art from "@/components/Art";
+import InstallApp from "@/components/InstallApp";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 
@@ -29,11 +30,22 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
   const router = useRouter();
   const [calm, setCalm] = useState(false);
   const [big, setBig] = useState(false);
+  const [theme, setTheme] = useState<"auto" | "light" | "dark">("auto");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    try { setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1"); } catch {}
+    try {
+      setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1");
+      const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") setTheme(t);
+    } catch {}
+    // The app helper (public/sw.js): faster opening on phones and an offline page. Only on the live site.
+    if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, []);
+  useEffect(() => {
+    const d = document.documentElement;
+    if (theme === "auto") delete d.dataset.theme; else d.dataset.theme = theme;
+    try { localStorage.setItem("theme", theme); } catch {}
+  }, [theme]);
   useEffect(() => {
     document.documentElement.dataset.calm = calm ? "on" : "off";
     document.documentElement.dataset.size = big ? "large" : "";
@@ -89,7 +101,7 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
             <div className="chips">
               {me ? (
                 <>
-                  <span className="chip live">{me.alias}{me.is_admin ? " · Admin" : ""}</span>
+                  <Link className="chip live" href="/me" style={{ textDecoration: "none", color: "var(--ink)" }} title="Your profile">{me.alias}{me.is_admin ? " · Admin" : ""}</Link>
                   <button className="chip toggle" onClick={signOut}>Sign out</button>
                 </>
               ) : (
@@ -97,8 +109,12 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
               )}
             </div>
             <div className="chips">
-              <button className="chip toggle" aria-pressed={calm} onClick={() => setCalm(!calm)}>Calm mode</button>
+              <InstallApp />
+              <button className="chip toggle" aria-pressed={calm} onClick={() => setCalm(!calm)} title="No movement, softer colours, no adverts">Calm mode</button>
               <button className="chip toggle" aria-pressed={big} onClick={() => setBig(!big)}>Larger text</button>
+              <button className="chip toggle" onClick={() => setTheme(theme === "auto" ? "dark" : theme === "dark" ? "light" : "auto")} title="Colours: follow my phone, dark or light">
+                {theme === "auto" ? "◐ Auto colours" : theme === "dark" ? "☾ Dark" : "☀ Light"}
+              </button>
             </div>
           </div>
           <div className="page">{children}</div>

@@ -76,6 +76,24 @@ create policy "file report" on public.reports for insert to authenticated with c
 drop policy if exists "admins delete fund interest" on public.fund_interest;
 create policy "admins delete fund interest" on public.fund_interest for delete to authenticated using (public.is_admin());
 
+-- Hub names: no pretending to be the team, and colours must be plain colours (a colour is used in page styles,
+-- so anything else could be used to load outside images and track people).
+create or replace function public.profile_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return new; end if;
+  new.alias := btrim(regexp_replace(new.alias, '\s+', ' ', 'g'));
+  if new.color !~ '^#[0-9A-Fa-f]{6}$' then
+    raise exception 'Pick one of the colours shown.' using errcode = 'P0001';
+  end if;
+  if not public.is_admin() and new.alias ~* '(admin|moderator|\ymod\y|official|autistik|support team|hub team)' then
+    raise exception 'That name is reserved for the Hub team. Please pick another.' using errcode = 'P0001';
+  end if;
+  return new;
+end; $$;
+drop trigger if exists profile_guard on public.profiles;
+create trigger profile_guard before update on public.profiles for each row execute function public.profile_guard();
+
 -- ---------- 3. Admin log ----------
 create table if not exists public.admin_log (
   id bigserial primary key,
