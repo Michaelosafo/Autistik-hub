@@ -153,6 +153,12 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 - **`/autism`** is the "Understanding autism" guide from the old site.
 - Old links redirect automatically: `/fund.html` → `/fund`, `/autism.html` → `/autism`, `/privacy.html` → `/safety`, `/index.html` → `/`.
 
+## Trade page (referral links)
+`/trade` (under **Trending**) shows live prices of top meme coins (DOGE, SHIB, PEPE, WIF, BONK, FLOKI) and buttons to big exchanges. To earn from it:
+1. Join each exchange's referral or affiliate programme (e.g. Binance → Profile → Referral, or the Binance Affiliate Program) and copy your referral link.
+2. In Vercel → Settings → Environment Variables, add it as `NEXT_PUBLIC_REF_BINANCE`, `NEXT_PUBLIC_REF_BYBIT`, `NEXT_PUBLIC_REF_OKX`, `NEXT_PUBLIC_REF_BITGET`, `NEXT_PUBLIC_REF_MEXC` or `NEXT_PUBLIC_REF_KUCOIN` (Type: Config), then redeploy.
+Exchanges without a link still show, with a plain link. Change the coin list in `lib/trade.ts`.
+
 ## Using real photos
 The site ships with original illustrations. To use real photos, add files to `public/photos/` and set their paths in `lib/site.ts`, for example `hero: { src: "/photos/hero.jpg", alt: "..." }`. Only use photos you have the rights to, with consent from everyone shown, especially when describing people as autistic.
 

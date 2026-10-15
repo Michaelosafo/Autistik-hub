@@ -18,6 +18,11 @@ export const COMMUNITY_TABS: SectionTab[] = [
   { href: "/sessions", label: "Live sessions" },
 ];
 
+export const TRENDING_TABS: SectionTab[] = [
+  { href: "/launchpad", label: "Trending tokens" },
+  { href: "/trade", label: "Trade" },
+];
+
 export const TOKEN_TABS: SectionTab[] = [
   { href: "/buy", label: "Buy $AUTISTIK" },
   { href: "/rewards", label: "Rewards & airdrops" },
