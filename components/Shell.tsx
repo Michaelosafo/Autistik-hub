@@ -14,7 +14,7 @@ const NAV: NavItem[] = [
   { href: "/companions", name: "Companions", short: "Chat", icon: "i-kai" },
   { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad/new"] },
-  { href: "/launchpad", name: "Trending", icon: "i-trend", match: ["/launchpad"], not: ["/launchpad/new"] },
+  { href: "/launchpad", name: "Trending", icon: "i-trend", match: ["/launchpad", "/trade"], not: ["/launchpad/new"] },
   { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"] },
   { href: "/autism", name: "About autism", icon: "i-learn", railOnly: true },
   { href: "/safety", name: "Safety", icon: "i-safe" },

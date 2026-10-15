@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AdBar from "@/components/AdBar";
+import SectionTabs, { TRENDING_TABS } from "@/components/SectionTabs";
 import TokenBoard from "@/components/TokenBoard";
 import TrendingPay from "@/components/TrendingPay";
 import { ads, getBoard, mostWatched, trending } from "@/lib/board";
@@ -13,6 +14,7 @@ export default async function LaunchpadPage() {
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
+      <SectionTabs tabs={TRENDING_TABS} active="/launchpad" label="Trending" />
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
         <div className="page-head">
           <div className="label">Trending</div>
