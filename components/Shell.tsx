@@ -6,15 +6,16 @@ import Art from "@/components/Art";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 
-const NAV = [
+type NavItem = { href: string; name: string; short?: string; icon: string; railOnly?: boolean; match?: string[]; not?: string[] };
+
+// Each menu item is one section. Sections with several pages show tabs at the top (components/SectionTabs).
+const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
   { href: "/companions", name: "Companions", short: "Chat", icon: "i-kai" },
-  { href: "/community", name: "Community", icon: "i-com" },
-  { href: "/sessions", name: "Sessions", icon: "i-ses" },
-  { href: "/rewards", name: "Rewards", icon: "i-rew" },
-  { href: "/launchpad", name: "Launch Pad", short: "Launch", icon: "i-rocket" },
-  { href: "/buy", name: "Buy $AUTISTIK", short: "Buy", icon: "i-buy" },
-  { href: "/fund", name: "Fund", icon: "i-fund", railOnly: true },
+  { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
+  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad/new"] },
+  { href: "/launchpad", name: "Trending", icon: "i-trend", match: ["/launchpad"], not: ["/launchpad/new"] },
+  { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"] },
   { href: "/autism", name: "About autism", icon: "i-learn", railOnly: true },
   { href: "/safety", name: "Safety", icon: "i-safe" },
 ];
@@ -39,8 +40,12 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
     try { localStorage.setItem("calm", calm ? "1" : "0"); localStorage.setItem("big", big ? "1" : "0"); } catch {}
   }, [calm, big]);
 
-  const nav = me?.is_admin ? [...NAV, { href: "/admin", name: "Admin", icon: "i-adm" }] : NAV;
-  const isOn = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  const nav: NavItem[] = me?.is_admin ? [...NAV, { href: "/admin", name: "Admin", icon: "i-adm" }] : NAV;
+  const isOn = (n: NavItem) => {
+    if (n.href === "/") return path === "/";
+    if (n.not?.some((p) => path.startsWith(p))) return false;
+    return (n.match || [n.href]).some((p) => path.startsWith(p));
+  };
 
   async function signOut() {
     await supabaseBrowser().auth.signOut();
@@ -62,7 +67,7 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
           </Link>
           <nav className="nav">
             {nav.map((n) => (
-              <Link key={n.href} href={n.href} aria-current={isOn(n.href) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>
+              <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>
             ))}
           </nav>
           <div className="rail-pick" aria-label="Talk to a companion">
@@ -100,8 +105,8 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
         </main>
       </div>
       <nav className="tabbar">
-        {nav.filter((n) => !("railOnly" in n && n.railOnly) && !(me?.is_admin && n.href === "/safety")).map((n) => (
-          <Link key={n.href} href={n.href} aria-current={isOn(n.href) ? "page" : undefined}><Icon id={n.icon} /><span>{n.short || n.name}</span></Link>
+        {nav.filter((n) => !n.railOnly && !(me?.is_admin && n.href === "/safety")).map((n) => (
+          <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.short || n.name}</span></Link>
         ))}
       </nav>
     </>
@@ -121,6 +126,7 @@ function Sprites() {
   <symbol id="i-buy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2M12 16v2"/></symbol>
   <symbol id="i-fund" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/><path d="M3 21h18"/></symbol>
   <symbol id="i-learn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6M9 11h5"/></symbol>
+  <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
   <symbol id="i-safe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
   <symbol id="i-adm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
   <symbol id="g-lounge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 10 0v4"/><path d="M4 11h16v4a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z"/></symbol>

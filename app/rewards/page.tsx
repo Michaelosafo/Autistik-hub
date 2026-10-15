@@ -1,5 +1,6 @@
 import Link from "next/link";
 import WalletLink from "@/components/WalletLink";
+import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +24,9 @@ export default async function Rewards() {
 
   return (
     <div className="stack">
+      <SectionTabs tabs={TOKEN_TABS} active="/rewards" label="$AUTISTIK" />
       <div className="page-head">
-        <div className="label">Rewards · {settings?.round_name || "Round 1"}</div>
+        <div className="label">$AUTISTIK · Rewards · {settings?.round_name || "Round 1"}</div>
         <h1>Community airdrops</h1>
         <p className="muted">$AUTISTIK airdrops reward taking part, and holding. You never need to share anything about your health to qualify.</p>
       </div>

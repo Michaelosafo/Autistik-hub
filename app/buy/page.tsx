@@ -1,5 +1,6 @@
 import Link from "next/link";
 import CopyCA from "@/components/CopyCA";
+import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import { LINKS } from "@/lib/site";
 
@@ -33,6 +34,7 @@ const ROADMAP = [
 export default function BuyPage() {
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
+      <SectionTabs tabs={TOKEN_TABS} active="/buy" label="$AUTISTIK" />
       <div className="page-head">
         <div className="label">$AUTISTIK · BNB Smart Chain</div>
         <h1>How to buy $AUTISTIK</h1>

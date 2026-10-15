@@ -43,7 +43,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board)).filter((a) => a.token !== token)} />
-      <Link href="/launchpad" className="muted" style={{ fontSize: ".9em" }}>← All tokens</Link>
+      <Link href="/launchpad" className="muted" style={{ fontSize: ".9em" }}>← Trending</Link>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ gap: 14 }}>
           <TokenLogo src={m?.imageUrl} symbol={launch.symbol} big />
