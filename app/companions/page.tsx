@@ -12,7 +12,7 @@ export default async function CompanionsPage({ searchParams }: { searchParams: {
       <div className="page-head">
         <div className="label">AI companions</div>
         <h1>Believer or Purity?</h1>
-        <p className="muted">Two AI companions with different personalities. Pick the one that fits how you feel today. You can switch any time, and both can draw pictures for you. They&apos;re AIs, not doctors or therapists.</p>
+        <p className="muted">Two AI companions with different personalities. Pick the one that fits how you feel today. You can switch any time, and both can draw pictures for you. Every account gets 2 free tries, then an AI Pass keeps them going. They&apos;re AIs, not doctors or therapists.</p>
       </div>
       {user && searchParams.welcome && <div className="notice">Your email is confirmed and you&apos;re signed in. Welcome to the Hub! Say hello to Believer or Purity below.</div>}
       <CompanionChat signedIn={!!user} start={start} />

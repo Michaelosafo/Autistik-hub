@@ -77,7 +77,7 @@ Rules:
 
 // Autistik asks questions and, once the creator confirms, returns a launch plan for them to sign.
 export async function POST(req: Request) {
-  const g = await guardAI("Autistik");
+  const g = await guardAI("Autistik", { needsPass: false }); // the launch guide stays free: launches pay their own fee
   if ("error" in g) return g.error;
 
   const body = await req.json().catch(() => null);

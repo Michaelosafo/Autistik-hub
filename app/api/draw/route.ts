@@ -6,13 +6,13 @@ export const maxDuration = 60;
 
 // Asks the companion to draw an original SVG illustration.
 export async function POST(req: Request) {
-  const g = await guardAI();
-  if ("error" in g) return g.error;
-
   const body = await req.json().catch(() => null);
   const id = body?.companion as CompanionId;
   const request = typeof body?.request === "string" ? body.request.trim() : "";
   if (!COMPANIONS[id] || request.length < 3) return json({ error: "Describe the picture you want." }, 400);
+  // Checked after the request is valid, so a broken request never uses up a free try.
+  const g = await guardAI("Believer and Purity", { cost: 5 }); // a picture is about 5 messages of AI work
+  if ("error" in g) return g.error;
 
   try {
     const msg = await anthropic().messages.create({

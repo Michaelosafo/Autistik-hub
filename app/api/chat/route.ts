@@ -6,15 +6,15 @@ export const maxDuration = 60;
 
 // Streams Believer's or Purity's reply as plain text.
 export async function POST(req: Request) {
-  const g = await guardAI();
-  if ("error" in g) return g.error;
-
   const body = await req.json().catch(() => null);
   const id = body?.companion as CompanionId;
   if (!COMPANIONS[id]) return json({ error: "Unknown companion." }, 400);
   const turns = cleanTurns(body?.messages);
   if (!turns) return json({ error: "Send a message to start." }, 400);
   const prefs: Prefs = typeof body?.prefs === "object" && body.prefs ? body.prefs : {};
+  // Checked after the request is valid, so a broken request never uses up a free try.
+  const g = await guardAI();
+  if ("error" in g) return g.error;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
