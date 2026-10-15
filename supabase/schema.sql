@@ -1,7 +1,8 @@
+-- Safe to run more than once: it only adds what is missing.
 -- =====================================================================
 -- AUTISTIK Hub database
 -- Paste this whole file into Supabase → SQL Editor → New query → Run.
--- Safe to run once on a fresh project.
+-- Safe to run on a fresh project, and safe to run again later.
 -- =====================================================================
 
 create extension if not exists pgcrypto;
@@ -20,7 +21,7 @@ language sql volatile as $$
 $$;
 
 -- ---------- profiles (public Hub identity; never the real name) ----------
-create table public.profiles (
+create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   alias text not null default public.random_alias() check (char_length(alias) between 2 and 40),
   color text not null default public.random_color(),
@@ -38,9 +39,15 @@ begin
   return new;
 end; $$;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Accounts made before this script ran get their profile now.
+insert into public.profiles (id, confirmed_adult)
+select u.id, coalesce((u.raw_user_meta_data->>'confirmed_adult')::boolean, false) from auth.users u
+on conflict (id) do nothing;
 
 create or replace function public.is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -48,7 +55,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- ---------- app settings (current airdrop round) ----------
-create table public.app_settings (
+create table if not exists public.app_settings (
   id int primary key default 1 check (id = 1),
   round_name text not null default 'Round 1',
   round_started_at timestamptz not null default now(),
@@ -57,14 +64,14 @@ create table public.app_settings (
 insert into public.app_settings (id) values (1) on conflict do nothing;
 
 -- ---------- groups & channels ----------
-create table public.group_members (
+create table if not exists public.group_members (
   user_id uuid not null references public.profiles(id) on delete cascade,
   group_id text not null check (group_id in ('lounge','calm','spark','learn')),
   joined_at timestamptz not null default now(),
   primary key (user_id, group_id)
 );
 
-create table public.posts (
+create table if not exists public.posts (
   id uuid primary key default gen_random_uuid(),
   channel text not null check (channel ~ '^(lounge|calm|spark|learn)\.[a-z]+$'),
   author_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
@@ -73,16 +80,16 @@ create table public.posts (
   hidden boolean not null default false,
   created_at timestamptz not null default now()
 );
-create index posts_channel_created on public.posts (channel, created_at desc);
+create index if not exists posts_channel_created on public.posts (channel, created_at desc);
 
-create table public.hearts (
+create table if not exists public.hearts (
   post_id uuid not null references public.posts(id) on delete cascade,
   user_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
   created_at timestamptz not null default now(),
   primary key (post_id, user_id)
 );
 
-create table public.reports (
+create table if not exists public.reports (
   post_id uuid not null references public.posts(id) on delete cascade,
   reporter_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
   reason text,
@@ -91,7 +98,7 @@ create table public.reports (
 );
 
 -- ---------- live sessions ----------
-create table public.sessions (
+create table if not exists public.sessions (
   id uuid primary key default gen_random_uuid(),
   title text not null,
   host text,
@@ -102,7 +109,7 @@ create table public.sessions (
   created_at timestamptz not null default now()
 );
 
-create table public.rsvps (
+create table if not exists public.rsvps (
   session_id uuid not null references public.sessions(id) on delete cascade,
   user_id uuid not null default auth.uid() references public.profiles(id) on delete cascade,
   created_at timestamptz not null default now(),
@@ -110,7 +117,7 @@ create table public.rsvps (
 );
 
 -- ---------- practitioners ----------
-create table public.practitioner_applications (
+create table if not exists public.practitioner_applications (
   user_id uuid primary key default auth.uid() references public.profiles(id) on delete cascade,
   full_name text not null,
   role text not null,
@@ -121,7 +128,7 @@ create table public.practitioner_applications (
   created_at timestamptz not null default now()
 );
 
-create table public.practitioners (
+create table if not exists public.practitioners (
   user_id uuid primary key references public.profiles(id) on delete cascade,
   full_name text not null,
   role text not null,
@@ -129,14 +136,14 @@ create table public.practitioners (
 );
 
 -- ---------- wallets (written only by the server after signature check) ----------
-create table public.wallets (
+create table if not exists public.wallets (
   user_id uuid primary key references public.profiles(id) on delete cascade,
   address text not null unique check (address ~* '^0x[0-9a-f]{40}$'),
   verified_at timestamptz not null default now()
 );
 
 -- ---------- AI usage counter (server only) ----------
-create table public.ai_usage (
+create table if not exists public.ai_usage (
   user_id uuid not null references public.profiles(id) on delete cascade,
   day date not null default current_date,
   count int not null default 0,
@@ -200,53 +207,85 @@ alter table public.wallets enable row level security;
 alter table public.ai_usage enable row level security;
 
 -- profiles: members see each other's Hub names; you can change your own alias/colour only
+drop policy if exists "profiles readable" on public.profiles;
 create policy "profiles readable" on public.profiles for select to authenticated using (true);
+drop policy if exists "edit own profile" on public.profiles;
 create policy "edit own profile" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid());
 revoke update on public.profiles from authenticated;
 grant update (alias, color) on public.profiles to authenticated;
 
+drop policy if exists "settings readable" on public.app_settings;
 create policy "settings readable" on public.app_settings for select using (true);
+drop policy if exists "admins edit settings" on public.app_settings;
 create policy "admins edit settings" on public.app_settings for update to authenticated using (public.is_admin());
 
+drop policy if exists "memberships readable" on public.group_members;
 create policy "memberships readable" on public.group_members for select to authenticated using (true);
+drop policy if exists "join group" on public.group_members;
 create policy "join group" on public.group_members for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "leave group" on public.group_members;
 create policy "leave group" on public.group_members for delete to authenticated using (user_id = auth.uid());
 
+drop policy if exists "read posts" on public.posts;
 create policy "read posts" on public.posts for select to authenticated using (not hidden or public.is_admin() or author_id = auth.uid());
+drop policy if exists "post in joined groups" on public.posts;
 create policy "post in joined groups" on public.posts for insert to authenticated with check (
   author_id = auth.uid()
   and exists (select 1 from public.profiles where id = auth.uid() and confirmed_adult)
   and exists (select 1 from public.group_members gm where gm.user_id = auth.uid() and gm.group_id = split_part(channel,'.',1))
 );
+drop policy if exists "delete own or admin" on public.posts;
 create policy "delete own or admin" on public.posts for delete to authenticated using (author_id = auth.uid() or public.is_admin());
+drop policy if exists "admins moderate" on public.posts;
 create policy "admins moderate" on public.posts for update to authenticated using (public.is_admin());
 
+drop policy if exists "read hearts" on public.hearts;
 create policy "read hearts" on public.hearts for select to authenticated using (true);
+drop policy if exists "give heart" on public.hearts;
 create policy "give heart" on public.hearts for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "remove heart" on public.hearts;
 create policy "remove heart" on public.hearts for delete to authenticated using (user_id = auth.uid());
 
+drop policy if exists "file report" on public.reports;
 create policy "file report" on public.reports for insert to authenticated with check (reporter_id = auth.uid());
+drop policy if exists "admins read reports" on public.reports;
 create policy "admins read reports" on public.reports for select to authenticated using (public.is_admin() or reporter_id = auth.uid());
+drop policy if exists "admins clear reports" on public.reports;
 create policy "admins clear reports" on public.reports for delete to authenticated using (public.is_admin());
 
+drop policy if exists "sessions public" on public.sessions;
 create policy "sessions public" on public.sessions for select using (true);
+drop policy if exists "admins add sessions" on public.sessions;
 create policy "admins add sessions" on public.sessions for insert to authenticated with check (public.is_admin());
+drop policy if exists "admins edit sessions" on public.sessions;
 create policy "admins edit sessions" on public.sessions for update to authenticated using (public.is_admin());
+drop policy if exists "admins remove sessions" on public.sessions;
 create policy "admins remove sessions" on public.sessions for delete to authenticated using (public.is_admin());
 
+drop policy if exists "read rsvps" on public.rsvps;
 create policy "read rsvps" on public.rsvps for select to authenticated using (true);
+drop policy if exists "save seat" on public.rsvps;
 create policy "save seat" on public.rsvps for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "free seat" on public.rsvps;
 create policy "free seat" on public.rsvps for delete to authenticated using (user_id = auth.uid());
 
+drop policy if exists "own application" on public.practitioner_applications;
 create policy "own application" on public.practitioner_applications for select to authenticated using (user_id = auth.uid() or public.is_admin());
+drop policy if exists "apply" on public.practitioner_applications;
 create policy "apply" on public.practitioner_applications for insert to authenticated with check (user_id = auth.uid() and status = 'pending');
+drop policy if exists "admins review" on public.practitioner_applications;
 create policy "admins review" on public.practitioner_applications for update to authenticated using (public.is_admin());
 
+drop policy if exists "practitioners public" on public.practitioners;
 create policy "practitioners public" on public.practitioners for select using (true);
+drop policy if exists "admins verify" on public.practitioners;
 create policy "admins verify" on public.practitioners for insert to authenticated with check (public.is_admin());
+drop policy if exists "admins unverify" on public.practitioners;
 create policy "admins unverify" on public.practitioners for delete to authenticated using (public.is_admin());
 
+drop policy if exists "own wallet or admin" on public.wallets;
 create policy "own wallet or admin" on public.wallets for select to authenticated using (user_id = auth.uid() or public.is_admin());
+drop policy if exists "unlink own wallet" on public.wallets;
 create policy "unlink own wallet" on public.wallets for delete to authenticated using (user_id = auth.uid());
 -- no insert/update policy: only the server (service role) writes wallets after verifying a signature.
 
@@ -256,8 +295,12 @@ revoke all on public.member_points from anon;
 grant select on public.member_points to authenticated;
 
 -- ---------- realtime for the community feed ----------
-alter publication supabase_realtime add table public.posts;
-alter publication supabase_realtime add table public.hearts;
+do $$ begin
+  alter publication supabase_realtime add table public.posts;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table public.hearts;
+exception when duplicate_object then null; end $$;
 
 -- ---------- AUTISTIK Launch Pad (same as supabase/launchpad.sql) ----------
 
@@ -298,8 +341,11 @@ alter table public.launch_watchers enable row level security;
 drop policy if exists "see own watchlist" on public.launch_watchers;
 drop policy if exists "watch" on public.launch_watchers;
 drop policy if exists "unwatch" on public.launch_watchers;
+drop policy if exists "see own watchlist" on public.launch_watchers;
 create policy "see own watchlist" on public.launch_watchers for select to authenticated using (user_id = auth.uid());
+drop policy if exists "watch" on public.launch_watchers;
 create policy "watch" on public.launch_watchers for insert to authenticated with check (user_id = auth.uid());
+drop policy if exists "unwatch" on public.launch_watchers;
 create policy "unwatch" on public.launch_watchers for delete to authenticated using (user_id = auth.uid());
 
 -- Counts only, never who is watching.
@@ -350,5 +396,7 @@ alter table public.fund_interest enable row level security;
 -- Personal details: only admins can read or delete them. The website saves new entries with the server key.
 drop policy if exists "admins read fund interest" on public.fund_interest;
 drop policy if exists "admins delete fund interest" on public.fund_interest;
+drop policy if exists "admins read fund interest" on public.fund_interest;
 create policy "admins read fund interest" on public.fund_interest for select to authenticated using (public.is_admin());
+drop policy if exists "admins delete fund interest" on public.fund_interest;
 create policy "admins delete fund interest" on public.fund_interest for delete to authenticated using (public.is_admin());
