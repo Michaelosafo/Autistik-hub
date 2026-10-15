@@ -1,4 +1,4 @@
-import { anthropic, MODEL, guardAI, cleanTurns, json } from "@/lib/ai";
+import { anthropic, MODEL, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { COMPANIONS, systemPrompt, type CompanionId, type Prefs } from "@/lib/companions";
 
 export const runtime = "nodejs";
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
           }
         }
       } catch (e) {
-        controller.enqueue(encoder.encode("\n\n(Sorry, something went wrong. Please try again.)"));
+        controller.enqueue(encoder.encode(`\n\n(${aiErrorMessage(e, COMPANIONS[id].name)})`));
       } finally {
         controller.close();
       }

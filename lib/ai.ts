@@ -17,9 +17,26 @@ export async function guardAI(who = "Believer and Purity"): Promise<{ uid: strin
   if (!user.email_confirmed_at && !user.phone_confirmed_at) return { error: json({ error: `Please confirm your email first. Open the email from AUTISTIK Hub and press Confirm, then try again.` }, 403) };
   const limit = Number(process.env.AI_DAILY_LIMIT || 60);
   const { data, error } = await supabaseService().rpc("bump_ai_usage", { p_user: user.id, p_limit: limit });
-  if (error) return { error: json({ error: "The companions are unavailable right now. Try again soon." }, 503) };
+  if (error) {
+    console.error("bump_ai_usage failed (has supabase/schema.sql been run?):", error.message);
+    return { error: json({ error: `${who} ${who.includes(" and ") ? "aren't" : "isn't"} available right now. The site's database isn't fully set up yet.` }, 503) };
+  }
   if (data === -1) return { error: json({ error: `You've reached today's limit of ${limit} messages. ${who} will be back tomorrow.` }, 429) };
   return { uid: user.id };
+}
+
+/** Turns a Claude API error into a plain message, and logs the real reason for the site owner (Vercel → Logs). */
+export function aiErrorMessage(e: unknown, who = "The AI"): string {
+  const err = e as { status?: number; message?: string };
+  const status = err?.status ?? 0;
+  const msg = String(err?.message || "");
+  console.error(`Claude API error (${status}):`, msg);
+  if (/credit balance|billing/i.test(msg)) return `${who} is paused right now (the AI account needs credit). Please try again later.`;
+  if (status === 401 || status === 403) return `${who} isn't set up correctly yet. Please try again later.`;
+  if (status === 404) return `${who} isn't set up correctly yet (the AI model name is wrong). Please try again later.`;
+  if (status === 429) return `${who} is very busy right now. Wait a minute and try again.`;
+  if (status === 529 || status >= 500) return `${who} is overloaded right now. Try again in a minute.`;
+  return "Sorry, something went wrong. Please try again.";
 }
 
 export function json(body: unknown, status = 200) {

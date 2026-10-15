@@ -1,4 +1,4 @@
-import { anthropic, MODEL, guardAI, json } from "@/lib/ai";
+import { anthropic, MODEL, guardAI, json, aiErrorMessage } from "@/lib/ai";
 import { COMPANIONS, drawPrompt, type CompanionId } from "@/lib/companions";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     // First-pass strip on the server; the browser cleans it fully before showing it.
     const svg = m[0].replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, "").replace(/\son\w+\s*=\s*("[^"]*"|'[^']*')/gi, "");
     return json({ svg });
-  } catch {
-    return json({ error: "Something went wrong while drawing. Try again." }, 502);
+  } catch (e) {
+    return json({ error: aiErrorMessage(e, COMPANIONS[id].name) }, 502);
   }
 }

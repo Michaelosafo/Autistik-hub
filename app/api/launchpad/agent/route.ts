@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropic, MODEL, guardAI, cleanTurns, json } from "@/lib/ai";
+import { anthropic, MODEL, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains } from "@/lib/launchpad";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
@@ -101,7 +101,7 @@ export async function POST(req: Request) {
     const checked = checkPlan(call.input as any);
     if ("error" in checked) return json({ reply: `${reply ? reply + "\n\n" : ""}One thing needs fixing first: ${checked.error}` });
     return json({ reply: reply || "Here's your launch plan. Check it carefully below.", plan: checked.plan });
-  } catch {
-    return json({ error: "Autistik couldn't answer right now. Try again in a moment." }, 502);
+  } catch (e) {
+    return json({ error: aiErrorMessage(e, "Autistik") }, 502);
   }
 }
