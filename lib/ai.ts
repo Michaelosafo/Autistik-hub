@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { AI_FREE_TRIES, AI_PASS_DAYS, AI_PASS_USD } from "@/lib/aipass";
 
 let client: Anthropic | null = null;
 /** Created on first use, so the site builds and runs even before ANTHROPIC_API_KEY is added. */
@@ -9,20 +10,29 @@ export function anthropic() {
 }
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 
-/** Checks the visitor is signed in and under today's AI limit. Returns an error Response or the user id. */
-export async function guardAI(who = "Believer and Purity"): Promise<{ uid: string } | { error: Response }> {
-  if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: `${who} ${who.includes(" and ") ? "are" : "is"} coming soon. Check back shortly!` }, 503) };
+/**
+ * Checks the visitor is signed in, under today's AI limit, and has an AI Pass or free tries left.
+ * `cost` is how many messages this request counts as (a picture costs more). `needsPass: false` skips the pass
+ * check (the Launch Pad guide stays free so people can launch). Returns an error Response or the user id.
+ */
+export async function guardAI(who = "Believer and Purity", opts: { cost?: number; needsPass?: boolean } = {}): Promise<{ uid: string; freeLeft?: number } | { error: Response }> {
+  const plural = who.includes(" and ");
+  if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: `${who} ${plural ? "are" : "is"} coming soon. Check back shortly!` }, 503) };
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return { error: json({ error: `Please sign in to talk with ${who}.` }, 401) };
   if (!user.email_confirmed_at && !user.phone_confirmed_at) return { error: json({ error: `Please confirm your email first. Open the email from AUTISTIK Hub and press Confirm, then try again.` }, 403) };
   const limit = Number(process.env.AI_DAILY_LIMIT || 60);
-  const { data, error } = await supabaseService().rpc("bump_ai_usage", { p_user: user.id, p_limit: limit });
-  if (error) {
-    console.error("bump_ai_usage failed (has supabase/schema.sql been run?):", error.message);
-    return { error: json({ error: `${who} ${who.includes(" and ") ? "aren't" : "isn't"} available right now. The site's database isn't fully set up yet.` }, 503) };
+  const { data, error } = await supabaseService().rpc("ai_spend", {
+    p_user: user.id, p_free: AI_FREE_TRIES, p_limit: limit, p_cost: Math.max(1, opts.cost ?? 1), p_needs_pass: opts.needsPass ?? true,
+  });
+  if (error || !data) {
+    console.error("ai_spend failed (have supabase/schema.sql and supabase/ai-pass.sql been run?):", error?.message);
+    return { error: json({ error: `${who} ${plural ? "aren't" : "isn't"} available right now. The site's database isn't fully set up yet.` }, 503) };
   }
-  if (data === -1) return { error: json({ error: `You've reached today's limit of ${limit} messages. ${who} will be back tomorrow.` }, 429) };
-  return { uid: user.id };
+  const r = data as { ok: boolean; reason?: string; free_left?: number };
+  if (!r.ok && r.reason === "limit") return { error: json({ error: `You've reached today's limit of ${limit} messages. ${who} will be back tomorrow.` }, 429) };
+  if (!r.ok) return { error: json({ needPass: true, error: `You've used your ${AI_FREE_TRIES} free tries. Get an AI Pass ($${AI_PASS_USD} for ${AI_PASS_DAYS} days) to keep talking with ${who}.` }, 402) };
+  return { uid: user.id, freeLeft: r.free_left };
 }
 
 /** Turns a Claude API error into a plain message, and logs the real reason for the site owner (Vercel → Logs). */

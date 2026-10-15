@@ -17,7 +17,10 @@ async function checkAI(): Promise<string> {
 async function checkDatabase(): Promise<string> {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return "no service key";
   const { error } = await supabaseService().from("ai_usage").select("user_id").limit(1);
-  if (!error) return "ok";
+  if (!error) {
+    const p = await supabaseService().from("ai_passes").select("id").limit(1);
+    return p.error ? "ai pass tables missing" : "ok";
+  }
   return /does not exist|schema cache/i.test(error.message) ? "tables missing" : /invalid api key|jwt|unauthorized/i.test(error.message) ? "wrong service key" : "error";
 }
 
@@ -79,6 +82,7 @@ export async function GET() {
       "model not found": `ANTHROPIC_MODEL ("${MODEL}") isn't a model this key can use. Set ANTHROPIC_MODEL in Vercel to a current model name from docs.claude.com, then Redeploy.`,
     };
     if (out.database === "tables missing") advice = "Supabase is reachable but the Hub's tables are missing. Run supabase/schema.sql in Supabase → SQL Editor.";
+    else if (out.database === "ai pass tables missing") advice = "Run supabase/ai-pass.sql in Supabase → SQL Editor so the 2 free tries and AI Pass work.";
     else if (out.database === "wrong service key") advice = "SUPABASE_SERVICE_ROLE_KEY doesn't match this project. Copy the service_role (or secret) key again, then Redeploy.";
     else if (out.ai !== "ok") advice = fix[out.ai as string] || "The Claude API answered with an error. Check console.anthropic.com → Billing has credit, then try again.";
     else advice = "Everything is connected. If the AI still doesn't reply, check console.anthropic.com → Billing has credit.";

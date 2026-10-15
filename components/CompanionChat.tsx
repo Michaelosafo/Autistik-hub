@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import AIPass from "@/components/AIPass";
 import Art from "@/components/Art";
 import { COMPANIONS, DRAW_RE, type CompanionId, type Prefs } from "@/lib/companions";
 import { cleanSvg } from "@/lib/svg-clean";
@@ -23,6 +24,8 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const [busy, setBusy] = useState(false);
   const [draw, setDraw] = useState(false);
   const [prefs, setPrefs] = useState<Prefs>({ short: true, literal: true });
+  const [passKey, setPassKey] = useState(0);
+  const [needPass, setNeedPass] = useState(false);
   const ctl = useRef<AbortController | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const c = COMPANIONS[who];
@@ -66,6 +69,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
         replaceLast(id, { kind: "sys", text: e.error || "Something went wrong. Try again." });
+        if (e.needPass) showPass();
         turns.current[id].pop();
         return;
       }
@@ -82,8 +86,13 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
       if (reply) turns.current[id].push({ role: "assistant", content: reply });
       else { replaceLast(id, { kind: "sys", text: e?.name === "AbortError" ? "Stopped." : "Couldn't reach the companion. Check your connection." }); turns.current[id].pop(); }
     } finally {
-      setBusy(false); ctl.current = null;
+      setBusy(false); ctl.current = null; setPassKey((k) => k + 1);
     }
+  }
+
+  function showPass() {
+    setNeedPass(true);
+    setTimeout(() => document.getElementById("ai-pass")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
   }
 
   async function makePicture(request: string) {
@@ -96,7 +105,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
       const res = await fetch("/api/draw", { method: "POST", headers: { "content-type": "application/json" }, signal: ctl.current.signal, body: JSON.stringify({ companion: id, request }) });
       const data = await res.json().catch(() => ({}));
       if (data.refusal) { replaceLast(id, { kind: "ai", text: data.refusal }); return; }
-      if (!res.ok || !data.svg) { replaceLast(id, { kind: "sys", text: data.error || "That picture didn't come out right." }); return; }
+      if (!res.ok || !data.svg) { replaceLast(id, { kind: "sys", text: data.error || "That picture didn't come out right." }); if (data.needPass) showPass(); return; }
       const img = cleanSvg(data.svg);
       if (!img) { replaceLast(id, { kind: "sys", text: "That picture didn't come out right. Try describing it differently." }); return; }
       replaceLast(id, { kind: "img", svg: img.svg, title: img.title, request: request.replace(/ \(draw a new version\)$/, "") });
@@ -104,7 +113,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     } catch (e: any) {
       replaceLast(id, { kind: "sys", text: e?.name === "AbortError" ? "Stopped." : "Something went wrong while drawing." });
     } finally {
-      setBusy(false); ctl.current = null;
+      setBusy(false); ctl.current = null; setPassKey((k) => k + 1);
     }
   }
 
@@ -190,6 +199,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
 
         <div className="stack">
           {!signedIn && <div className="notice warn"><Link href="/login?next=/companions">Sign in</Link> or <Link href="/login?mode=join&next=/companions">create a free account</Link> to chat.</div>}
+          {signedIn && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => setNeedPass(false)} />}
           <div className="card prefs">
             <h3>How they talk to you</h3>
             {PREF_KEYS.map(([k, label]) => (
