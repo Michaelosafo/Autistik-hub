@@ -32,6 +32,7 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
   const [big, setBig] = useState(false);
   const [theme, setTheme] = useState<"auto" | "light" | "dark">("auto");
   const [copied, setCopied] = useState(false);
+  const [settings, setSettings] = useState(false);
 
   useEffect(() => {
     try {
@@ -110,11 +111,17 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
             </div>
             <div className="chips">
               <InstallApp />
-              <button className="chip toggle" aria-pressed={calm} onClick={() => setCalm(!calm)} title="No movement, softer colours, no adverts">Calm mode</button>
-              <button className="chip toggle" aria-pressed={big} onClick={() => setBig(!big)}>Larger text</button>
-              <button className="chip toggle" onClick={() => setTheme(theme === "auto" ? "dark" : theme === "dark" ? "light" : "auto")} title="Colours: follow my phone, dark or light">
-                {theme === "auto" ? "◐ Auto colours" : theme === "dark" ? "☾ Dark" : "☀ Light"}
-              </button>
+              {/* Comfort settings live behind one button to keep the top of every page clean. */}
+              <button className="chip toggle" type="button" aria-expanded={settings} onClick={() => setSettings(!settings)}>⚙ Settings</button>
+              {settings && (
+                <div className="settings-pop card" role="dialog" aria-label="Settings">
+                  <button className="chip toggle" type="button" aria-pressed={calm} onClick={() => setCalm(!calm)} title="No movement, softer colours, no adverts">Calm mode</button>
+                  <button className="chip toggle" type="button" aria-pressed={big} onClick={() => setBig(!big)}>Larger text</button>
+                  <button className="chip toggle" type="button" onClick={() => setTheme(theme === "auto" ? "dark" : theme === "dark" ? "light" : "auto")} title="Colours: follow my phone, dark or light">
+                    {theme === "auto" ? "◐ Auto colours" : theme === "dark" ? "☾ Dark" : "☀ Light"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="page">{children}</div>

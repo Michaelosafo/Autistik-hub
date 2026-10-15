@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { GROUPS, CHANNELS } from "@/lib/groups";
+import { ALL_GROUPS, CHANNELS } from "@/lib/groups";
 import FundAdmin from "@/components/FundAdmin";
 import AdminLog from "@/components/AdminLog";
 
@@ -107,7 +107,7 @@ export default function Admin() {
         <div className="card stack">
           <h2>Group sizes</h2>
           <table><thead><tr><th>Group</th><th>Members</th></tr></thead>
-            <tbody>{GROUPS.map((g) => <tr key={g.id}><td>{g.name}</td><td className="num">{groups[g.id] || 0}</td></tr>)}</tbody>
+            <tbody>{ALL_GROUPS.map((g) => <tr key={g.id}><td>{g.name}</td><td className="num">{groups[g.id] || 0}</td></tr>)}</tbody>
           </table>
           <p className="muted" style={{ fontSize: ".88em" }}>To make someone else an admin, run the SQL at the bottom of supabase/schema.sql with their email.</p>
         </div>

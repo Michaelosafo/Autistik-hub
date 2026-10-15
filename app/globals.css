@@ -142,7 +142,7 @@ textarea{resize:vertical;min-height:84px}
 .mini .av{width:52px;height:52px;border-radius:50%;background:var(--cs);padding:4px;flex:none}
 
 /* groups grid */
-.groups-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.groups-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .gcard{position:relative;overflow:hidden;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column}
 .gcard .art{aspect-ratio:240/150;max-width:100%;border-bottom:5px solid var(--g)}
 .gcard .gbody{padding:16px;display:flex;flex-direction:column;gap:8px;flex:1}
@@ -296,7 +296,7 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 @keyframes fade{from{opacity:.5}to{opacity:1}}
 
 @media (min-width:861px){ .kai.lp{grid-template-columns:minmax(0,1fr) 340px} }
-@media (max-width:1020px){ .groups-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .gallery{grid-template-columns:repeat(3,minmax(0,1fr))} }
+@media (max-width:1020px){ .gallery{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media (max-width:860px){
   .app{grid-template-columns:minmax(0,1fr)}
   .rail{display:none}
@@ -380,6 +380,7 @@ a.btn.primary{color:var(--bg)}
 
 /* install app help (iPhone) */
 .topbar .chips{position:relative}
+.settings-pop{position:absolute;top:calc(100% + 8px);right:0;z-index:30;display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .install-help{position:absolute;top:calc(100% + 8px);right:0;z-index:30;max-width:320px;display:flex;flex-direction:column;gap:8px;font-size:.9em;background:var(--surface);box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .install-help ol{margin:0;padding-left:18px}
 .human-check{min-height:0}
