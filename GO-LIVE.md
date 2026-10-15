@@ -3,7 +3,7 @@
 Tick these off in order. Every step happens in a website (Vercel, Supabase, GitHub, Remix, MetaMask, your domain company). Nothing needs installing on your computer. The full details for each step are in `README.md`.
 
 ## 1. Basics
-- [ ] Use **one** Vercel project for the Hub: **`autistiklatestwork`** (it has your settings). Remove autistikk.com from any other project. Check settings any time at `/api/health`.
+- [ ] Use **one** Vercel project for the Hub: **`autistiklatestwork`** (it has your settings). Its domain is **autistik.io** (bought on Vercel). Check settings any time at `/api/health`.
 - [ ] Vercel → Settings → Environment Variables has: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_TOKEN_ADDRESS`.
 - [ ] Email sign-up works: follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) (Resend + Supabase settings + email templates).
 - [ ] You can create an account, confirm the email, and Believer and Autistik both reply.
@@ -23,7 +23,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 ## 4. Vercel settings for the Launch Pad and trending
 | Name | Value |
 |---|---|
-| `NEXT_PUBLIC_SITE_URL` | `https://autistikk.com` |
+| `NEXT_PUBLIC_SITE_URL` | `https://autistik.io` |
 | `NEXT_PUBLIC_TREASURY_WALLET` | treasury address |
 | `NEXT_PUBLIC_TRENDING_USD` | `20` |
 | `NEXT_PUBLIC_TRENDING_HOURS` | `24` |
@@ -49,10 +49,9 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] "Make it trend" with $20 of BNB. The BNB arrives in the treasury and the token shows **Promoted**.
 - [ ] Register on `/fund`. The entry shows in Admin.
 
-## 7. Move autistikk.com to the Hub
-- [ ] Vercel → `autistik-hub-h6td` → Settings → Domains → add `autistikk.com` (and `www`).
-- [ ] At your domain company, replace the old A / CNAME records with the ones Vercel shows. Leave email (MX/TXT) records alone.
-- [ ] Supabase → Authentication → URL Configuration: Site URL `https://autistikk.com`, Redirect URLs `https://autistikk.com/auth/callback` and `https://www.autistikk.com/auth/callback`.
+## 7. Website address: autistik.io
+- [ ] autistik.io (bought on Vercel) is added to the `autistiklatestwork` project, with `www.autistik.io` redirecting to it.
+- [ ] Supabase → Authentication → URL Configuration: Site URL `https://autistik.io`, Redirect URLs `https://autistik.io/**` and `https://www.autistik.io/**`.
 - [ ] Upload `AUTISTIK-Whitepaper.pdf` into the `public` folder on GitHub.
 
 ## 8. Before opening to the public

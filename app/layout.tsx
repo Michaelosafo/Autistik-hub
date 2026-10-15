@@ -6,7 +6,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 export const metadata: Metadata = {
   title: "AUTISTIK Hub",
   description: "Autism is not a disease. It's a community. Groups, AI companions, live sessions and $AUTISTIK airdrops for autistic adults.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://autistikk.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://autistik.io"),
   openGraph: { title: "AUTISTIK Hub", description: "Autism is not a disease. It's a community.", type: "website" },
 };
 
