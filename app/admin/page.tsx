@@ -1,20 +1,19 @@
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Admin from "@/components/Admin";
-import { supabaseServer } from "@/lib/supabase/server";
+import AdminMfa from "@/components/AdminMfa";
+import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Admin · AUTISTIK Hub" };
+export const metadata = { title: "Admin · AUTISTIK Hub", robots: { index: false, follow: false } };
 
 export default async function AdminPage() {
-  const sb = supabaseServer();
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: me } = await sb.from("profiles").select("is_admin").eq("id", user.id).single();
-  if (!me?.is_admin) redirect("/");
+  const { owner, admin } = await adminState();
+  // Everyone except the owner sees an ordinary "page not found", so the admin area isn't advertised.
+  if (!owner) notFound();
   return (
     <div className="stack">
-      <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only admins see this page.</p></div>
-      <Admin />
+      <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only the Hub owner can open this page.</p></div>
+      {admin ? <Admin /> : <AdminMfa />}
     </div>
   );
 }

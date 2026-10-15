@@ -18,8 +18,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const { data: { user } } = await sb.auth.getUser();
   let me: { alias: string; is_admin: boolean } | null = null;
   if (user) {
-    const { data } = await sb.from("profiles").select("alias,is_admin").eq("id", user.id).single();
-    me = data ?? { alias: "Member", is_admin: false };
+    // The Admin menu item only shows for the owner (see supabase/admin-lock.sql).
+    const [{ data }, { data: owner }] = await Promise.all([sb.from("profiles").select("alias").eq("id", user.id).single(), sb.rpc("is_owner")]);
+    me = { alias: data?.alias ?? "Member", is_admin: owner === true };
   }
   return (
     <html lang="en" suppressHydrationWarning>

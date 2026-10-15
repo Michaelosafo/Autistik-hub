@@ -14,6 +14,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] `supabase/fund.sql` (Fund "register your interest" list)
 - [ ] `supabase/ai-pass.sql` (2 free AI tries, then the paid AI Pass)
 - [ ] `supabase/security.sql` (rate limits, anti-spam rules, admin log)
+- [ ] `supabase/admin-lock.sql` with your email (admin area only for you, with 2-step verification)
 
 ## 3. Wallets
 | Wallet | Used for | Notes |

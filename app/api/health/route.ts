@@ -1,6 +1,7 @@
 import { SUPABASE_CONFIGURED, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase/env";
+import { adminState } from "@/lib/admin";
 import { anthropic, MODEL } from "@/lib/ai";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseService } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/ratelimit";
 
 // The AI check is free (it only looks up the model), and is cached so the page can't be used to spam the API.
@@ -28,11 +29,7 @@ async function checkDatabase(): Promise<string> {
 async function isAdmin(): Promise<boolean> {
   if (!SUPABASE_CONFIGURED) return false;
   try {
-    const sb = supabaseServer();
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) return false;
-    const { data } = await sb.from("profiles").select("is_admin").eq("id", user.id).maybeSingle();
-    return !!data?.is_admin;
+    return (await adminState()).admin;
   } catch { return false; }
 }
 

@@ -1,3 +1,4 @@
+import { adminState } from "@/lib/admin";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -7,8 +8,7 @@ export async function GET() {
   const sb = supabaseServer();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return new Response("Sign in first.", { status: 401 });
-  const { data: me } = await sb.from("profiles").select("is_admin").eq("id", user.id).single();
-  if (!me?.is_admin) return new Response("Admins only.", { status: 403 });
+  if (!(await adminState()).admin) return new Response("Admins only. Open the Admin page and enter your 2-step code first.", { status: 403 });
 
   const [{ data: st }, { data: pts }, { data: w }] = await Promise.all([
     sb.from("app_settings").select("*").eq("id", 1).single(),

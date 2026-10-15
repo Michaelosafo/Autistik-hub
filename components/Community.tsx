@@ -68,7 +68,7 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
 
   useEffect(() => {
     loadMembership();
-    sb.from("profiles").select("is_admin").eq("id", uid).single().then(({ data }) => setIsAdmin(!!data?.is_admin));
+    sb.rpc("is_admin").then(({ data }) => setIsAdmin(data === true));
     sb.from("practitioners").select("user_id").then(({ data }) => setVerified(Object.fromEntries((data || []).map((r: any) => [r.user_id, true]))));
     sb.from("reports").select("post_id").eq("reporter_id", uid).then(({ data }) => setReported(Object.fromEntries((data || []).map((r: any) => [r.post_id, true]))));
   }, [uid]);

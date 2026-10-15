@@ -62,14 +62,17 @@ Go to **console.anthropic.com → API Keys → Create key**, add a payment metho
 ### 5. Website address
 The Hub's address is **autistik.io**, bought and managed in Vercel (Project → Settings → Domains). The old autistikk.com is no longer used for the Hub.
 
-### 6. Make yourself admin
-1. Open your site, click **Sign in / Join**, and sign in with your email.
-2. In Supabase **SQL Editor**, run (with your email):
+### 6. Make yourself admin (owner only)
+The admin area is locked to the owner's email and needs 2-step verification (see `supabase/admin-lock.sql`).
+1. Open your site, click **Sign in / Join**, and sign in with your email. Confirm it from the email you get.
+2. In Supabase **SQL Editor**, run `supabase/admin-lock.sql` with your email on the line marked ←, then run (with your email):
    ```sql
    update public.profiles set is_admin = true
    where id = (select id from auth.users where email = 'you@example.com');
    ```
-3. Refresh the site. **Admin** now appears in the menu: approve practitioners, add sessions, review reports, run rounds and download the airdrop CSV.
+   The database refuses this for any email that isn't on the owner list.
+3. Refresh the site. **Admin** appears in the menu (only for you). The first time, it asks you to scan a QR code with an authenticator app (Google Authenticator, Microsoft Authenticator or Authy); after that it asks for the 6-digit code each time you sign in. Everyone else gets "page not found".
+4. **Lost your phone?** In Supabase SQL Editor run `delete from auth.mfa_factors where user_id = (select id from auth.users where email = 'you@example.com');` then set up a new code on the Admin page.
 
 ### 7. Airdrops (when you're ready for round 1)
 **a) Deploy the claim contract once**
@@ -199,7 +202,7 @@ scripts/build-merkle.mjs Builds each airdrop round
 ## How the safety rules are enforced
 - **Row Level Security** in `supabase/schema.sql` means the database itself enforces the rules, not just the website:
   - only members who joined a group can post in it;
-  - only admins can moderate, add sessions or verify practitioners;
+  - only the owner (email on the private owner list, signed in with 2-step verification) can moderate, add sessions or verify practitioners;
   - wallets are visible only to their owner and admins, and only the server writes them after checking a signature.
 - **Points** are calculated by a database view from real activity, so members can't edit them.
 - **AI keys** stay on the server. Every chat and drawing needs a signed-in member and counts toward a daily limit.
