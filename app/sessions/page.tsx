@@ -1,3 +1,4 @@
+import { adminState } from "@/lib/admin";
 import Art from "@/components/Art";
 import SessionCard from "@/components/SessionCard";
 import SessionForms from "@/components/SessionForms";
@@ -17,8 +18,7 @@ export default async function SessionsPage() {
   if (user) {
     const { data } = await sb.from("rsvps").select("session_id");
     for (const r of data || []) seats[r.session_id] = (seats[r.session_id] || 0) + 1;
-    const { data: me } = await sb.from("profiles").select("is_admin").eq("id", user.id).single();
-    admin = !!me?.is_admin;
+    admin = (await adminState()).admin;
   }
   return (
     <div className="stack">
