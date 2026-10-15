@@ -1,10 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { MIN_PASSWORD, authMessage } from "@/lib/auth";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/env";
+import HumanCheck, { TURNSTILE_SITE_KEY, type HumanCheckHandle } from "@/components/HumanCheck";
 
 type Mode = "signin" | "join" | "forgot";
 
@@ -36,7 +37,15 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
   const [error, setError] = useState(initialError ? authMessage(initialError) : "");
   const [sent, setSent] = useState<"" | "confirm" | "reset" | "link">("");
   const [canResend, setCanResend] = useState(false);
+  const [captcha, setCaptcha] = useState("");
+  const human = useRef<HumanCheckHandle>(null);
   const sb = supabaseBrowser();
+  // Each "are you human" token works once, so get a fresh one after every try.
+  const captchaToken = () => (TURNSTILE_SITE_KEY ? captcha : undefined);
+  const needCaptcha = () => {
+    if (TURNSTILE_SITE_KEY && !captcha) { setError("One moment: the \"are you human\" check is still loading. Try again in a few seconds."); return true; }
+    return false;
+  };
   const confirmUrl = (n: string) => `${window.location.origin}/auth/callback?next=${encodeURIComponent(n)}`;
 
   function switchTo(m: Mode) { setMode(m); setError(""); setSent(""); setCanResend(false); }
@@ -47,47 +56,52 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     const em = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { setError("Please enter a valid email address."); return; }
     if (!SUPABASE_CONFIGURED) { setError("Sign-in isn't set up on this site yet. The site owner needs to add the Supabase settings in Vercel and redeploy."); return; }
+    if (mode === "join") {
+      if (!adult || !rules) { setError("Please tick both boxes to join."); return; }
+      if (password.length < MIN_PASSWORD) { setError(`Your password needs at least ${MIN_PASSWORD} characters.`); return; }
+      if (password !== password2) { setError("The two passwords don't match."); return; }
+    }
+    if (needCaptcha()) return;
     setBusy(true);
     try {
       if (mode === "signin") {
-        const { error } = await sb.auth.signInWithPassword({ email: em, password });
+        const { error } = await sb.auth.signInWithPassword({ email: em, password, options: { captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); setCanResend(/not confirmed/i.test(error.message)); return; }
         router.push(next); router.refresh();
       } else if (mode === "join") {
-        if (!adult || !rules) { setError("Please tick both boxes to join."); return; }
-        if (password.length < MIN_PASSWORD) { setError(`Your password needs at least ${MIN_PASSWORD} characters.`); return; }
-        if (password !== password2) { setError("The two passwords don't match."); return; }
-        const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true } } });
+        const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true }, captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); return; }
         // Supabase returns a user with no identities when the email is already registered.
         if (data.user && data.user.identities && data.user.identities.length === 0) { setError(authMessage("already registered")); return; }
         if (data.session) { router.push(next); router.refresh(); return; } // email confirmation switched off
         setSent("confirm"); setCanResend(true);
       } else {
-        const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password` });
+        const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`, captchaToken: captchaToken() });
         if (error) { setError(authMessage(error.message)); return; }
         setSent("reset");
       }
     } catch (err: any) {
       setError(authMessage(err?.message || "failed to fetch"));
-    } finally { setBusy(false); }
+    } finally { setBusy(false); human.current?.reset(); }
   }
 
   async function resend() {
     const em = email.trim().toLowerCase();
     if (!em) { setError("Type your email above first."); return; }
+    if (needCaptcha()) return;
     setBusy(true); setError("");
-    const { error } = await sb.auth.resend({ type: "signup", email: em, options: { emailRedirectTo: confirmUrl(next) } });
-    setBusy(false);
+    const { error } = await sb.auth.resend({ type: "signup", email: em, options: { emailRedirectTo: confirmUrl(next), captchaToken: captchaToken() } });
+    setBusy(false); human.current?.reset();
     if (error) setError(authMessage(error.message)); else setSent("confirm");
   }
 
   async function magicLink() {
     const em = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { setError("Type your email above first."); return; }
+    if (needCaptcha()) return;
     setBusy(true); setError("");
-    const { error } = await sb.auth.signInWithOtp({ email: em, options: { emailRedirectTo: confirmUrl(next), shouldCreateUser: false } });
-    setBusy(false);
+    const { error } = await sb.auth.signInWithOtp({ email: em, options: { emailRedirectTo: confirmUrl(next), shouldCreateUser: false, captchaToken: captchaToken() } });
+    setBusy(false); human.current?.reset();
     if (error) setError(/signups not allowed|not found/i.test(error.message) ? "There's no account with this email yet. Create one first." : authMessage(error.message));
     else setSent("link");
   }
@@ -106,6 +120,7 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
             : "Open it and press Sign me in."}</p>
         <div className="notice" style={{ fontSize: ".9em" }}>It comes from AUTISTIK Hub and usually arrives within a minute. Check your spam or promotions folder if you can&apos;t see it.</div>
         <div className="row" style={{ gap: 8 }}>
+          {sent === "confirm" && <HumanCheck ref={human} onToken={setCaptcha} />}
           {sent === "confirm" && <button className="btn" type="button" disabled={busy} onClick={resend}>{busy ? "Sending…" : "Send it again"}</button>}
           <button className="btn" type="button" onClick={() => switchTo("signin")}>Back to sign in</button>
         </div>
@@ -149,6 +164,7 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
           </>
         )}
 
+        <HumanCheck ref={human} onToken={setCaptcha} />
         {error && <div className="notice warn" role="alert">{error}</div>}
 
         <button className="btn primary" type="submit" disabled={busy}>

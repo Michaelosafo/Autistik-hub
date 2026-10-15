@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http } from "viem";
 import { json } from "@/lib/ai";
 import { AI_FREE_TRIES, AI_PASS_DAYS, AI_PASS_USD, passTag } from "@/lib/aipass";
@@ -54,6 +55,8 @@ export async function POST(req: Request) {
   if (!TREASURY) return json({ error: "AI Passes aren't on sale yet." }, 503);
   const user = await signedInUser();
   if (!user) return json({ error: "Please sign in." }, 401);
+  const slow = await rateLimit(req, "ai-pass", 10, 600, user.id);
+  if (slow) return slow;
   const body = await req.json().catch(() => null);
   const txHash = String(body?.txHash || "").toLowerCase();
   if (!/^0x[0-9a-f]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);

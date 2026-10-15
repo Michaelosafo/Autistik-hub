@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
 import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, isLive, type ChainKey } from "@/lib/launchpad";
@@ -8,6 +9,8 @@ export const maxDuration = 60;
 
 // Saves a launch to the public list. Everything stored is read from the chain, never taken from the request.
 export async function POST(req: Request) {
+  const slow = await rateLimit(req, "launch-record", 20, 600);
+  if (slow) return slow;
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");

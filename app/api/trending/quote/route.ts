@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { json } from "@/lib/ai";
 import { TREASURY, TRENDING_HOURS, TRENDING_USD, bnbPriceUsd, weiFor } from "@/lib/trending";
 
@@ -5,7 +6,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // How much BNB a trending slot costs right now, and where to send it.
-export async function GET() {
+export async function GET(req: Request) {
+  const slow = await rateLimit(req, "trending-quote", 60, 60);
+  if (slow) return slow;
   if (!TREASURY) return json({ error: "Trending payments aren't open yet." }, 503);
   const price = await bnbPriceUsd();
   if (!price) return json({ error: "Couldn't get the BNB price right now. Try again in a minute." }, 502);

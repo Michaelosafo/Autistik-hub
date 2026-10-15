@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { AI_FREE_TRIES, AI_PASS_DAYS, AI_PASS_USD } from "@/lib/aipass";
+import { rateLimit } from "@/lib/ratelimit";
 
 let client: Anthropic | null = null;
 /** Created on first use, so the site builds and runs even before ANTHROPIC_API_KEY is added. */
@@ -21,6 +22,9 @@ export async function guardAI(who = "Believer and Purity", opts: { cost?: number
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return { error: json({ error: `Please sign in to talk with ${who}.` }, 401) };
   if (!user.email_confirmed_at && !user.phone_confirmed_at) return { error: json({ error: `Please confirm your email first. Open the email from AUTISTIK Hub and press Confirm, then try again.` }, 403) };
+  // No more than 12 AI requests a minute per account, so a script can't burn through the credit.
+  const slow = await rateLimit(null, "ai", 12, 60, user.id);
+  if (slow) return { error: slow };
   const limit = Number(process.env.AI_DAILY_LIMIT || 60);
   const { data, error } = await supabaseService().rpc("ai_spend", {
     p_user: user.id, p_free: AI_FREE_TRIES, p_limit: limit, p_cost: Math.max(1, opts.cost ?? 1), p_needs_pass: opts.needsPass ?? true,

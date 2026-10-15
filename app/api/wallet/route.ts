@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { verifyMessage, getAddress } from "viem";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { json } from "@/lib/ai";
@@ -8,6 +9,8 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return json({ error: "Please sign in first." }, 401);
+  const slow = await rateLimit(req, "wallet", 10, 600, user.id);
+  if (slow) return slow;
   const body = await req.json().catch(() => null);
   const address = String(body?.address || "");
   const issued = String(body?.issued || "");

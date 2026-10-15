@@ -14,6 +14,8 @@ export function authMessage(raw: string | undefined | null): string {
   const m = String(raw || "").toLowerCase();
   if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("load failed") || m.includes("network request failed"))
     return "We couldn't reach the sign-in service. Check your internet, turn off any ad blocker or VPN for this site, and try again. If it keeps happening, the site's sign-in settings need fixing (see /api/health).";
+  if (m.includes("captcha")) return "The \"are you human\" check didn't pass. Refresh the page and try again.";
+  if (m.includes("rate limit") || m.includes("too many")) return "Too many tries. Please wait a few minutes and try again.";
   if (m.includes("invalid login credentials")) return "That email and password don't match. Check them, or reset your password.";
   if (m.includes("email not confirmed")) return "Please confirm your email first. Open the email from AUTISTIK Hub and press the button. You can send it again below.";
   if (m.includes("already registered") || m.includes("already been registered")) return "There's already an account with this email. Sign in instead, or reset your password.";

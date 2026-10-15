@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http, keccak256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { json } from "@/lib/ai";
@@ -16,6 +17,8 @@ const PERMIT_SECONDS = 15 * 60;
 // Checks the wallet holds at least $20 of AUTISTIK on BNB Chain and, if so, signs a short-lived permit
 // that the AutistikLaunchpad contract checks before it creates the token.
 export async function POST(req: Request) {
+  const slow = await rateLimit(req, "eligibility", 20, 600);
+  if (slow) return slow;
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return json({ error: "Please sign in first." }, 401);
 

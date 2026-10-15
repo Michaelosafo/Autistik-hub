@@ -13,6 +13,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] `supabase/launchpad.sql` (lock options, Listed tokens, trending)
 - [ ] `supabase/fund.sql` (Fund "register your interest" list)
 - [ ] `supabase/ai-pass.sql` (2 free AI tries, then the paid AI Pass)
+- [ ] `supabase/security.sql` (rate limits, anti-spam rules, admin log)
 
 ## 3. Wallets
 | Wallet | Used for | Notes |
@@ -61,6 +62,11 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] autistik.io (bought on Vercel) is added to the `autistiklatestwork` project, with `www.autistik.io` redirecting to it.
 - [ ] Supabase → Authentication → URL Configuration: Site URL `https://autistik.io`, Redirect URLs `https://autistik.io/**` and `https://www.autistik.io/**`.
 - [ ] Upload `AUTISTIK-Whitepaper.pdf` into the `public` folder on GitHub.
+
+## 7b. "Are you human" check (free, stops bot sign-ups)
+- [ ] dash.cloudflare.com → sign up free → **Turnstile** → **Add widget**: name `AUTISTIK Hub`, hostnames `autistik.io` and `www.autistik.io`, mode **Managed** → Create. Copy the **Site Key** and **Secret Key**.
+- [ ] Vercel: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` = Site Key (**Config**), `TURNSTILE_SECRET_KEY` = Secret Key (**Secret**) → Redeploy.
+- [ ] **After** the redeploy: Supabase → Authentication → **Attack Protection** → turn on **Captcha protection**, provider **Turnstile**, paste the **Secret Key** → Save. (Doing this before the redeploy would block sign-ins.)
 
 ## 8. Before opening to the public
 - [ ] Audit of `contracts/AutistikLaunchpad.sol` by a smart-contract auditor.
