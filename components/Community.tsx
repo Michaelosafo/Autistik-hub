@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Art from "@/components/Art";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -174,7 +175,7 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
               <div className="avatar" aria-hidden="true" style={{ background: author?.color || "#6141D4" }}>{(author?.alias || "M").charAt(0)}</div>
               <div className="post-body">
                 <div className="post-head">
-                  <b>{author?.alias || "Member"}</b>
+                  <Link className="author-link" href={`/members/${p.author_id}`}><b>{author?.alias || "Member"}</b></Link>
                   {verified[p.author_id] && <span className="badge v">Verified practitioner</span>}
                   {p.author_id === uid && <span className="badge gold">You</span>}
                   {p.hidden && <span className="badge gold">Hidden by admin</span>}

@@ -266,6 +266,7 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 [data-calm="on"] *{animation:none!important;transition:none!important}
 [data-calm="on"] .inf-path{stroke-dashoffset:0}
 [data-calm="on"] .ticker div{transform:none}
+[data-calm="on"] .adbar,[data-calm="on"] .ticker{display:none}
 [data-calm="on"] .avatar,[data-calm="on"] .banner,[data-calm="on"] .art,[data-calm="on"] .msg.me,[data-calm="on"] .av{filter:saturate(.5)}
 /* ---------- Launch Pad board ---------- */
 .adbar{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r);background:var(--violet-soft);border:1px solid var(--line);min-width:0}
@@ -376,3 +377,21 @@ a.btn.primary{color:var(--bg)}
 /* Trade page: coin, price, 24h, market cap */
 .board-row.trade-row{grid-template-columns:minmax(0,1.6fr) repeat(3,minmax(0,1fr))}
 @media (max-width:700px){ .board-row.trade-row{grid-template-columns:minmax(0,1fr) auto auto} }
+
+/* install app help (iPhone) */
+.topbar .chips{position:relative}
+.install-help{position:absolute;top:calc(100% + 8px);right:0;z-index:30;max-width:320px;display:flex;flex-direction:column;gap:8px;font-size:.9em;background:var(--surface);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.install-help ol{margin:0;padding-left:18px}
+.human-check{min-height:0}
+
+/* member profiles */
+.profile-head{display:flex;align-items:center;gap:18px}
+.avatar.big{width:76px;height:76px;font-size:2em;flex:none}
+.badges{display:flex;flex-wrap:wrap;gap:8px}
+.badge-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-weight:700;font-size:.88em}
+.group-link{display:block;padding:8px 10px;border-radius:10px;background:var(--gs);color:var(--ink);text-decoration:none;border-left:4px solid var(--g)}
+.swatch{width:34px;height:34px;border-radius:50%;border:3px solid transparent;cursor:pointer;padding:0}
+.swatch[aria-pressed="true"]{border-color:var(--ink);box-shadow:0 0 0 2px var(--surface)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.author-link{color:inherit;text-decoration:none}
+.author-link:hover b{text-decoration:underline}
