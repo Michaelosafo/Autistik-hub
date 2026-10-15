@@ -8,17 +8,17 @@ The website code is done. These settings live in Supabase and Resend, so you set
 
 ## 1. Resend (sends the emails)
 1. Go to **resend.com** and sign up.
-2. **Domains → Add Domain** → type `autistikk.com` → choose a region near you.
-3. Resend shows 3–4 DNS records (TXT and MX, for "send" / "resend._domainkey"). Add each one at the company where you bought autistikk.com. These are **extra** records: don't delete anything.
+2. **Domains → Add Domain** → type `autistik.io` → choose a region near you.
+3. Resend shows 3–4 DNS records (TXT and CNAME records). Add each one in **Vercel → Domains → autistik.io → DNS Records** (the domain was bought on Vercel). These are **extra** records: don't delete anything.
 4. Back in Resend, press **Verify**. It turns green within minutes (sometimes a few hours).
-5. **API Keys → Create API Key** → name it `Supabase`, permission **Sending access**, domain `autistikk.com` → copy the key (starts with `re_`). You only see it once.
+5. **API Keys → Create API Key** → name it `Supabase`, permission **Sending access**, domain `autistik.io` → copy the key (starts with `re_`). You only see it once.
 
 ## 2. Supabase: connect Resend
 Supabase → your project → **Project Settings → Authentication → SMTP Settings** → turn on **Enable Custom SMTP**:
 
 | Field | Value |
 |---|---|
-| Sender email | `hello@autistikk.com` (any address on your domain) |
+| Sender email | `hello@autistik.io` (any address on your domain) |
 | Sender name | `AUTISTIK Hub` |
 | Host | `smtp.resend.com` |
 | Port | `465` |
@@ -35,8 +35,8 @@ Press **Save**. Then **Authentication → Rate Limits**: set "emails per hour" t
 - Save.
 
 **Authentication → URL Configuration**:
-- **Site URL:** `https://autistikk.com` (or your `.vercel.app` address until the domain moves)
-- **Redirect URLs:** `https://autistikk.com/**`, `https://www.autistikk.com/**`, `https://*.vercel.app/**`
+- **Site URL:** `https://autistik.io`
+- **Redirect URLs:** `https://autistik.io/**`, `https://www.autistik.io/**`, `https://*.vercel.app/**`
 
 ## 4. Supabase: the AUTISTIK emails
 **Authentication → Emails (Email Templates)**. For each one, set the subject and paste the whole file from `supabase/email-templates/` into the message body, then **Save**:

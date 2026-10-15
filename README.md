@@ -26,7 +26,7 @@ Stack: **Next.js 14** · **Supabase** (login, database, realtime) · **Claude AP
 
 ---
 
-> **Going live?** Follow [`GO-LIVE.md`](GO-LIVE.md): one checklist with every setting for the Launch Pad, trending, the Fund and moving autistikk.com.
+> **Going live?** Follow [`GO-LIVE.md`](GO-LIVE.md): one checklist with every setting for the Launch Pad, trending, the Fund and the autistik.io address.
 > **Sign-up emails:** members join with email + password and confirm by email. Set it up with [`EMAIL-SETUP.md`](EMAIL-SETUP.md).
 
 ## Deploy it: step by step
@@ -42,8 +42,8 @@ You don't need to install anything on your computer for steps 1–6.
 2. Open **SQL Editor → New query**, paste the whole of `supabase/schema.sql`, and click **Run**.
 3. (Optional) Run `supabase/seed.sql` the same way to add 3 example sessions.
 4. Go to **Authentication → URL Configuration**:
-   - **Site URL:** `https://autistikk.com` (or your Vercel address for now)
-   - **Redirect URLs:** add `https://autistikk.com/**` and `https://*.vercel.app/**`
+   - **Site URL:** `https://autistik.io`
+   - **Redirect URLs:** add `https://autistik.io/**`, `https://www.autistik.io/**` and `https://*.vercel.app/**`
    - Then follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) so sign-up emails reach members.
 5. Go to **Project Settings → API** and copy the **Project URL**, the **anon public** key and the **service_role** key (keep that one secret).
 
@@ -59,12 +59,8 @@ Go to **console.anthropic.com → API Keys → Create key**, add a payment metho
    - leave `NEXT_PUBLIC_AIRDROP_CONTRACT` empty until step 7
 3. Click **Deploy**. In about 2 minutes you get a live link like `autistik-hub.vercel.app`.
 
-### 5. Connect autistikk.com
-In Vercel go to **Project → Settings → Domains → Add**. You have two choices:
-- **`hub.autistikk.com`** (recommended): keeps your current site and adds the Hub beside it. Add the CNAME record Vercel shows you at your domain registrar.
-- **`autistikk.com`**: replaces your current site with the Hub. Copy any pages you want to keep (whitepaper, fund page) into `/public` first.
-
-Then update the Supabase **Site URL** and **Redirect URLs** (step 2.4) to the domain you chose.
+### 5. Website address
+The Hub's address is **autistik.io**, bought and managed in Vercel (Project → Settings → Domains). The old autistikk.com is no longer used for the Hub.
 
 ### 6. Make yourself admin
 1. Open your site, click **Sign in / Join**, and sign in with your email.
@@ -150,10 +146,10 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 
 ---
 
-## Buy page, Fund page and the old autistikk.com
+## Buy page, Fund page and old links
 - **`/buy`** has the How to Buy steps, the contract address, tokenomics, roadmap and community links from the old site. Edit them in `app/buy/page.tsx` and `lib/site.ts`.
 - **`/fund`** has the AUTISTIK Fund page with a "Register your interest" form. Run `supabase/fund.sql` once in Supabase SQL Editor. Sign-ups appear at the bottom of **Admin**, with **Copy as CSV**.
-- **Whitepaper:** upload `AUTISTIK-Whitepaper.pdf` into the `public` folder on GitHub (Add file → Upload files) so `autistikk.com/AUTISTIK-Whitepaper.pdf` keeps working.
+- **Whitepaper:** upload `AUTISTIK-Whitepaper.pdf` into the `public` folder on GitHub (Add file → Upload files) so `autistik.io/AUTISTIK-Whitepaper.pdf` works.
 - **`/autism`** is the "Understanding autism" guide from the old site.
 - Old links redirect automatically: `/fund.html` → `/fund`, `/autism.html` → `/autism`, `/privacy.html` → `/safety`, `/index.html` → `/`.
 
