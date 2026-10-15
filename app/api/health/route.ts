@@ -1,4 +1,25 @@
 import { SUPABASE_CONFIGURED, SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabase/env";
+import { anthropic, MODEL } from "@/lib/ai";
+import { supabaseService } from "@/lib/supabase/server";
+
+// The AI check is free (it only looks up the model), and is cached so the page can't be used to spam the API.
+let aiCache: { at: number; result: string } | null = null;
+async function checkAI(): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) return "no key";
+  if (aiCache && Date.now() - aiCache.at < 10 * 60_000) return aiCache.result;
+  let result = "ok";
+  try { await anthropic().models.retrieve(MODEL); }
+  catch (e: any) { result = e?.status === 401 || e?.status === 403 ? "invalid key" : e?.status === 404 ? "model not found" : `error ${e?.status ?? ""}`.trim(); }
+  aiCache = { at: Date.now(), result };
+  return result;
+}
+
+async function checkDatabase(): Promise<string> {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return "no service key";
+  const { error } = await supabaseService().from("ai_usage").select("user_id").limit(1);
+  if (!error) return "ok";
+  return /does not exist|schema cache/i.test(error.message) ? "tables missing" : /invalid api key|jwt|unauthorized/i.test(error.message) ? "wrong service key" : "error";
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +68,20 @@ export async function GET() {
       out.supabase = "unreachable";
       advice = "Can't reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL is your Project URL (https://xxxx.supabase.co), and that the project isn't paused in the Supabase dashboard (press Restore project).";
     }
+  }
+  if (out.supabase === "ok") {
+    out.database = await checkDatabase();
+    out.aiModel = MODEL;
+    out.ai = await checkAI();
+    const fix: Record<string, string> = {
+      "no key": "Add ANTHROPIC_API_KEY in Vercel (from console.anthropic.com → API Keys), then Redeploy.",
+      "invalid key": "ANTHROPIC_API_KEY is wrong or was deleted. Create a new key at console.anthropic.com → API Keys, paste it in Vercel, then Redeploy.",
+      "model not found": `ANTHROPIC_MODEL ("${MODEL}") isn't a model this key can use. Set ANTHROPIC_MODEL in Vercel to a current model name from docs.claude.com, then Redeploy.`,
+    };
+    if (out.database === "tables missing") advice = "Supabase is reachable but the Hub's tables are missing. Run supabase/schema.sql in Supabase → SQL Editor.";
+    else if (out.database === "wrong service key") advice = "SUPABASE_SERVICE_ROLE_KEY doesn't match this project. Copy the service_role (or secret) key again, then Redeploy.";
+    else if (out.ai !== "ok") advice = fix[out.ai as string] || "The Claude API answered with an error. Check console.anthropic.com → Billing has credit, then try again.";
+    else advice = "Everything is connected. If the AI still doesn't reply, check console.anthropic.com → Billing has credit.";
   }
   out.advice = advice;
   return new Response(JSON.stringify(out, null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
