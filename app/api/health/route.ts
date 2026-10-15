@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 // It never shows keys, only whether each setting is there and whether Supabase answers.
 export async function GET() {
   const out: Record<string, unknown> = {
+    build: (process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7),
+    environment: process.env.VERCEL_ENV || "local",
     supabaseUrlSet: SUPABASE_CONFIGURED,
     // Never print the value itself: if a key was pasted into the URL setting by mistake, it would leak.
     supabaseUrlLooksRight: SUPABASE_CONFIGURED ? /^[a-z0-9-]+\.supabase\.(co|in)$/i.test(new URL(SUPABASE_URL).host) : false,
