@@ -743,3 +743,7 @@ a.alert-row:hover{background:var(--surface-2)}
 }
 .chess-key span{display:inline-flex;align-items:center;gap:3px}
 .chess-key i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.live-dot{font-size:.74em;font-weight:800;color:var(--alert);display:inline-flex;align-items:center;gap:6px}
+.live-dot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--alert);animation:cb-check 1s infinite}
+.alert-row.trade.buy .alert-ic{background:var(--teal-soft)}
+.alert-row.trade.sell .alert-ic{background:var(--alert-soft)}

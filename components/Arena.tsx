@@ -10,7 +10,8 @@ import { seatOf, sellRisk, type EventRow, type HolderRow, type LinkRow, type Ris
  * Holders who didn't move wait on the bench, coloured by how likely they are to sell; wallets that sold
  * everything are out of the game.
  */
-type Props = { holders: HolderRow[]; events: EventRow[]; links: LinkRow[]; explorer: string; token: string; symbol: string };
+export type TradeRow = { wallet: string; side: "buy" | "sell"; amount: number | string; balance_after: number | string | null; pct_after: number | string | null; at: string };
+type Props = { holders: HolderRow[]; events: EventRow[]; trades?: TradeRow[]; links: LinkRow[]; explorer: string; token: string; symbol: string };
 type TF = "1h" | "6h" | "24h" | "7d" | "all";
 type Side = "buy" | "sell";
 type Kind = "K" | "Q" | "R" | "B" | "N" | "P";
@@ -44,7 +45,7 @@ const dur = (t?: string | null) => {
   return h < 1 ? `${Math.max(1, Math.round(h * 60))} min` : h < 48 ? `${Math.round(h)} h` : `${Math.round(h / 24)} days`;
 };
 
-export default function Arena({ holders, events, links, explorer, token, symbol }: Props) {
+export default function Arena({ holders, events, trades = [], links, explorer, token, symbol }: Props) {
   const [tf, setTf] = useState<TF>("24h");
   const [sel, setSel] = useState<string | null>(null);
   const dev = holders.find((h) => h.is_dev)?.wallet || null;
@@ -52,16 +53,28 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
   const d = useMemo(() => {
     const frame = FRAMES.find((f) => f.k === tf)!;
     const since = frame.ms === Infinity ? 0 : Date.now() - frame.ms;
-    const win = events.filter((e) => Date.parse(e.created_at) >= since);
+    // Live trades (every buy and sell through the pool) when we have them; otherwise top-wallet balance changes.
+    const live = trades.length > 0;
+    const win: { wallet: string; buy: boolean; amount: number; at: string }[] = live
+      ? trades.filter((x) => Date.parse(x.at) >= since).map((x) => ({ wallet: x.wallet, buy: x.side === "buy", amount: n(x.amount), at: x.at }))
+      : events.filter((e) => Date.parse(e.created_at) >= since).map((e) => ({ wallet: e.wallet, buy: e.kind === "buy", amount: n(e.amount), at: e.created_at }));
     const flow = new Map<string, { bought: number; sold: number }>();
     for (const e of win) {
       const f = flow.get(e.wallet) || { bought: 0, sold: 0 };
-      if (e.kind === "buy") f.bought += n(e.amount); else f.sold += n(e.amount);
+      if (e.buy) f.bought += e.amount; else f.sold += e.amount;
       flow.set(e.wallet, f);
     }
     const byWallet = new Map(holders.map((h) => [h.wallet, h]));
-    const buyVol = win.filter((e) => e.kind === "buy").reduce((a, e) => a + n(e.amount), 0);
-    const sellVol = win.filter((e) => e.kind !== "buy").reduce((a, e) => a + n(e.amount), 0);
+    // Traders we don't follow yet still get a piece, from what the trade told us.
+    const latest = new Map<string, TradeRow>();
+    for (const x of trades) if (!latest.has(x.wallet)) latest.set(x.wallet, x);
+    const rowFor = (w: string): HolderRow => byWallet.get(w) || {
+      wallet: w, rank: null, pct: latest.get(w)?.pct_after ?? null, balance: latest.get(w)?.balance_after ?? 0,
+      peak_balance: n(latest.get(w)?.balance_after) + (flow.get(w)?.sold || 0), is_dev: w === dev, is_contract: false, label: null, in_top: false,
+      acquired_at: null, first_seen_at: trades.filter((x) => x.wallet === w).slice(-1)[0]?.at || new Date().toISOString(),
+    };
+    const buyVol = win.filter((e) => e.buy).reduce((a, e) => a + e.amount, 0);
+    const sellVol = win.filter((e) => !e.buy).reduce((a, e) => a + e.amount, 0);
     const total = buyVol + sellVol;
     const power = total ? buyVol / total : 0.5;
     const risk = (h: HolderRow) => sellRisk(h, events, links, dev);
@@ -70,11 +83,19 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
     // Holders: everyone still holding, ranked by the size of their bag; the ones who bought more get a "+" tag.
     const sellers: { h: HolderRow; amount: number; bought: number }[] = [];
     const holding: { h: HolderRow; amount: number; bought: number }[] = [];
+    const seen = new Set<string>();
     for (const h of holders) {
       if (h.is_contract || !(h.in_top || h.is_dev)) continue;
+      seen.add(h.wallet);
       const f = flow.get(h.wallet);
       if (f && f.sold > f.bought) sellers.push({ h, amount: f.sold - f.bought, bought: 0 });
       else if (seatOf(h) !== "left") holding.push({ h, amount: n(h.pct), bought: f ? f.bought - f.sold : 0 });
+    }
+    for (const [w, f] of flow) {
+      if (seen.has(w) || byWallet.get(w)?.is_contract) continue;
+      const h = rowFor(w);
+      if (f.sold > f.bought) sellers.push({ h, amount: f.sold - f.bought, bought: 0 });
+      else if (f.bought > f.sold) holding.push({ h, amount: n(h.pct), bought: f.bought - f.sold });
     }
     const sides: Record<Side, typeof sellers> = { buy: holding, sell: sellers };
     // The winning side's pawns march forward (up to 3 squares).
@@ -101,15 +122,15 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
     const buyers = holding.filter((x) => x.bought > 0).length;
 
     // Timeline: 12 slots across the time frame.
-    const start = since || (win.length ? Math.min(...win.map((e) => Date.parse(e.created_at))) : Date.now() - 86_400_000);
+    const start = since || (win.length ? Math.min(...win.map((e) => Date.parse(e.at))) : Date.now() - 86_400_000);
     const span = Math.max(60_000, Date.now() - start);
     const slots = Array.from({ length: 12 }, () => ({ buy: 0, sell: 0 }));
     for (const e of win) {
-      const i = Math.min(11, Math.max(0, Math.floor(((Date.parse(e.created_at) - start) / span) * 12)));
-      if (e.kind === "buy") slots[i].buy += n(e.amount); else slots[i].sell += n(e.amount);
+      const i = Math.min(11, Math.max(0, Math.floor(((Date.parse(e.at) - start) / span) * 12)));
+      if (e.buy) slots[i].buy += e.amount; else slots[i].sell += e.amount;
     }
     return { pieces, bench, out, buyVol, sellVol, total, power, slots, buyers, holders: holding.length, sellers: sellers.length };
-  }, [tf, holders, events, links, dev]);
+  }, [tf, holders, events, trades, links, dev]);
 
   const { power, total } = d;
   const check = total > 0 && (power >= 0.7 || power <= 0.3);
@@ -118,6 +139,7 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
   const pickedPiece = sel ? d.pieces.find((p) => p.h.wallet === sel) : null;
   const pickedBench = sel && !pickedPiece ? d.bench.find((b) => b.h.wallet === sel) : null;
   const picked = pickedPiece || pickedBench || null;
+  const pickedTrades = picked ? trades.filter((x) => x.wallet === picked.h.wallet) : [];
   const pickedFlow = picked ? events.filter((e) => e.wallet === picked.h.wallet) : [];
   const pickedLinks = picked ? links.filter((l) => l.a === picked.h.wallet || l.b === picked.h.wallet) : [];
   const slotMax = Math.max(1, ...d.slots.map((s) => Math.max(s.buy, s.sell)));
@@ -219,7 +241,8 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
               <span className={"risk " + picked.risk.level}>Chance to sell: {picked.risk.level} ({picked.risk.score}/100)</span>
               {picked.risk.reasons.length > 0 && <span className="muted">because it {picked.risk.reasons.join(", ")}.</span>}
             </div>
-            {pickedFlow.length > 0 && <div className="muted" style={{ fontSize: ".86em" }}>History: {pickedFlow.slice(0, 5).map((e) => `${e.kind === "buy" ? "bought" : e.kind === "exit" ? "sold all" : `sold ${Math.round(n(e.pct_of_holding))}%`} ${dur(e.created_at)} ago`).join(" · ")}</div>}
+            {pickedTrades.length > 0 && <div className="muted" style={{ fontSize: ".86em" }}>Trades: {pickedTrades.slice(0, 6).map((x) => `${x.side === "buy" ? "bought" : "sold"} ${fmt(n(x.amount))} ${dur(x.at)} ago`).join(" · ")}</div>}
+            {!pickedTrades.length && pickedFlow.length > 0 && <div className="muted" style={{ fontSize: ".86em" }}>History: {pickedFlow.slice(0, 5).map((e) => `${e.kind === "buy" ? "bought" : e.kind === "exit" ? "sold all" : `sold ${Math.round(n(e.pct_of_holding))}%`} ${dur(e.created_at)} ago`).join(" · ")}</div>}
             {pickedLinks.length > 0 && <div className="club-conn">🔗 Connected to {pickedLinks.map((l) => { const o = l.a === picked.h.wallet ? l.b : l.a; return <button key={o} type="button" onClick={() => setSel(o)}>{short(o)}{o === dev ? " 👑" : ""}</button>; })}</div>}
           </div>
         )}

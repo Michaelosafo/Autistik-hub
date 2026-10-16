@@ -143,3 +143,21 @@ revoke all on function public.analytics_lease(int), public.analytics_budget(int,
 create extension if not exists pg_net;
 create extension if not exists pg_cron;
 select cron.schedule('autistik-analytics', '*/10 * * * *', $$ select net.http_get('https://autistik.io/api/analytics/cron') $$);
+
+-- ---------- live trades: every buy and sell through the token's main pool ----------
+alter table public.tracked_tokens add column if not exists pair text, add column if not exists last_block bigint, add column if not exists trades_at timestamptz;
+create table if not exists public.token_trades (
+  chain text not null, token text not null,
+  tx_hash text not null, log_index int not null,
+  wallet text not null, side text not null check (side in ('buy', 'sell')),
+  amount numeric not null, balance_after numeric, pct_after numeric,
+  block bigint, at timestamptz not null default now(),
+  primary key (chain, tx_hash, log_index),
+  foreign key (chain, token) references public.tracked_tokens on delete cascade
+);
+create index if not exists token_trades_recent on public.token_trades (chain, token, at desc);
+alter table public.token_trades enable row level security;
+drop policy if exists "trades public" on public.token_trades;
+create policy "trades public" on public.token_trades for select to anon, authenticated using (true);
+revoke all on public.token_trades from anon, authenticated;
+grant select on public.token_trades to anon, authenticated;
