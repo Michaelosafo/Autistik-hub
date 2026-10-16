@@ -8,7 +8,7 @@ export const PHOTOS: Record<string, { src: string; alt: string }> = {
   hero: { src: "", alt: "Autistic friends together" },
   stage: { src: "", alt: "AUTISTIK live session" },
   lounge: { src: "", alt: "Spectrum Lounge" },
-  calm: { src: "", alt: "Calm Corner" },
+  calm: { src: "", alt: "Support & Questions" },
   spark: { src: "", alt: "Spark Studio" },
   learn: { src: "", alt: "Ask & Learn" },
 };
