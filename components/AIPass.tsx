@@ -9,9 +9,9 @@ type Status = {
 };
 
 /**
- * AI Pass card: shows free tries left or when the pass ends, and lets a member pay in BNB from their wallet.
+ * AI Pass card: shows free messages left today or when the pass ends, and lets a member pay in BNB from their wallet.
  * `refreshKey` reloads the status (the chat bumps it after each message). `highlight` makes it stand out when
- * the free tries have just run out.
+ * today's free messages have just run out.
  */
 export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { refreshKey?: number; highlight?: boolean; onPaid?: () => void }) {
   const [s, setS] = useState<Status | null>(null);
@@ -81,8 +81,8 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
         <p>Your pass is active until <b>{new Date(s.passUntil!).toLocaleDateString()}</b>. Paying again adds {s.days} more days.</p>
       ) : (
         <p>{s.freeLeft > 0
-          ? <>You have <b>{s.freeLeft} free {s.freeLeft === 1 ? "try" : "tries"}</b> left. After that, get a pass to keep talking with Believer and Purity.</>
-          : <>Your {s.freeTries} free tries are used up. Get a pass to keep talking with Believer and Purity.</>}</p>
+          ? <>You have <b>{s.freeLeft} of {s.freeTries} free messages</b> left today. They reset every day. Want more? Get a pass.</>
+          : <>You&apos;ve used today&apos;s {s.freeTries} free messages. They come back tomorrow, or get a pass to keep talking with Believer and Purity now.</>}</p>
       )}
       <table><tbody>
         <tr><th>Price</th><td className="num">${s.usd} in BNB{s.wei && <span className="muted"> (≈ {formatEther(BigInt(s.wei))} BNB)</span>}</td></tr>

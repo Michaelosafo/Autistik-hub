@@ -12,7 +12,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 ## 2. Database (Supabase → SQL Editor → New query → paste → Run)
 - [ ] `supabase/launchpad.sql` (lock options, Listed tokens, trending)
 - [ ] `supabase/fund.sql` (Fund "register your interest" list)
-- [ ] `supabase/ai-pass.sql` (2 free AI tries, then the paid AI Pass)
+- [ ] `supabase/ai-pass.sql` (15 free AI messages a day, then the paid AI Pass)
 - [ ] `supabase/security.sql` (rate limits, anti-spam rules, admin log)
 - [ ] `supabase/admin-lock.sql` with your email (admin area only for you, with 2-step verification)
 
@@ -34,7 +34,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 | `NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD` | `20` |
 | `NEXT_PUBLIC_AI_PASS_USD` | `5` (price of an AI Pass) |
 | `NEXT_PUBLIC_AI_PASS_DAYS` | `30` |
-| `NEXT_PUBLIC_AI_FREE_TRIES` | `2` |
+| `NEXT_PUBLIC_AI_FREE_PER_DAY` | `15` (free Believer & Purity messages per member per day; a picture counts as 5) |
 | `AI_DAILY_LIMIT` | `60` (messages a day per member; lower it if Claude costs get high) |
 
 > AI Pass and trending payments carry a small note (the account id or token address) inside the BNB transfer. A normal wallet (MetaMask, Trust Wallet) as `NEXT_PUBLIC_TREASURY_WALLET` accepts these. A Safe multisig may reject them, so if you use a Safe, receive into a normal wallet and move the BNB to the Safe now and then. Test with one payment first.
@@ -57,7 +57,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] A wallet **without** AUTISTIK is refused.
 - [ ] "Make it trend" with $20 of BNB. The BNB arrives in the treasury and the token shows **Promoted**.
 - [ ] Register on `/fund`. The entry shows in Admin.
-- [ ] With a new (non-admin) account: 2 free messages to Believer work, the 3rd asks for an AI Pass. Pay $5 of BNB, and chatting works again.
+- [ ] With a new (non-admin) account: 15 messages to Believer work, the 16th asks for an AI Pass (or to come back tomorrow). Pay $5 of BNB, and chatting works again.
 
 ## 7. Website address: autistik.io
 - [ ] autistik.io (bought on Vercel) is added to the `autistiklatestwork` project, with `www.autistik.io` redirecting to it.

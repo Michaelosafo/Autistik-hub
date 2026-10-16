@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const id = body?.companion as CompanionId;
   const request = typeof body?.request === "string" ? body.request.trim() : "";
   if (!COMPANIONS[id] || request.length < 3) return json({ error: "Describe the picture you want." }, 400);
-  // Checked after the request is valid, so a broken request never uses up a free try.
+  // Checked after the request is valid, so a broken request never uses up a free message.
   const g = await guardAI("Believer and Purity", { cost: 5 }); // a picture is about 5 messages of AI work
   if ("error" in g) return g.error;
 

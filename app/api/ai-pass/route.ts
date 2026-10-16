@@ -1,7 +1,7 @@
 import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http } from "viem";
 import { json } from "@/lib/ai";
-import { AI_FREE_TRIES, AI_PASS_DAYS, AI_PASS_USD, passTag } from "@/lib/aipass";
+import { AI_FREE_PER_DAY, AI_PASS_DAYS, AI_PASS_USD, passTag } from "@/lib/aipass";
 import { CHAINS } from "@/lib/launchpad";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { TREASURY, bnbPriceUsd, weiFor } from "@/lib/trending";
@@ -26,20 +26,21 @@ async function passUntil(uid: string): Promise<string | null> {
   return data?.ends_at ?? null;
 }
 
-// Your AI Pass: free tries left, when your pass ends, and the price in BNB right now.
+// Your AI Pass: free messages left today, when your pass ends, and the price in BNB right now.
 export async function GET() {
   const user = await signedInUser();
   if (!user) return json({ error: "Please sign in." }, 401);
   const sb = supabaseService();
   const [{ data: trial }, { data: prof }, until, price] = await Promise.all([
-    sb.from("ai_trials").select("used").eq("user_id", user.id).maybeSingle(),
+    sb.from("ai_trials").select("*").eq("user_id", user.id).maybeSingle(),
     sb.from("profiles").select("is_admin").eq("id", user.id).maybeSingle(),
     passUntil(user.id),
     TREASURY ? bnbPriceUsd() : Promise.resolve(null),
   ]);
   return json({
-    usd: AI_PASS_USD, days: AI_PASS_DAYS, freeTries: AI_FREE_TRIES,
-    freeLeft: Math.max(AI_FREE_TRIES - (trial?.used ?? 0), 0),
+    usd: AI_PASS_USD, days: AI_PASS_DAYS, freeTries: AI_FREE_PER_DAY,
+    // Free messages reset each day (UTC); rows from an earlier day count as unused.
+    freeLeft: Math.max(AI_FREE_PER_DAY - (trial && trial.day === new Date().toISOString().slice(0, 10) ? trial.used : 0), 0),
     dailyLimit: Number(process.env.AI_DAILY_LIMIT || 60),
     passUntil: until, admin: !!prof?.is_admin,
     onSale: !!TREASURY && !!price,
