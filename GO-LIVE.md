@@ -5,6 +5,8 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 ## 1. Basics
 - [ ] Use **one** Vercel project for the Hub: **`autistiklatestwork`** (it has your settings). Its domain is **autistik.io** (bought on Vercel). Check settings any time at `/api/health`.
 - [ ] Vercel → Settings → Environment Variables has: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_TOKEN_ADDRESS`.
+  - `SUPABASE_SERVICE_ROLE_KEY`: a Supabase **secret** key (`sb_secret_…`, Project Settings → API Keys → Secret keys) or the legacy `service_role` key. Not the anon/publishable key. If AI chat says "isn't available… database isn't fully set up", this key is usually wrong.
+  - `ANTHROPIC_API_KEY`: the `sk-ant-…` key. `ANTHROPIC_MODEL` is optional and must be a model name like `claude-sonnet-5-5`, never a key.
 - [ ] Email sign-up works: follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) (Resend + Supabase settings + email templates).
 - [ ] You can create an account, confirm the email, and Believer and Autistik both reply.
 - [ ] You are admin (README step 6). **Admin** shows in the menu.
