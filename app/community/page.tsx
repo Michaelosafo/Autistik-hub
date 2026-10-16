@@ -13,7 +13,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: { 
       <SectionTabs tabs={COMMUNITY_TABS} active="/community" label="Community" />
       <div className="page-head">
         <div className="label">Community · Groups</div>
-        <h1>Four groups. One community.</h1>
+        <h1>Two groups. One community.</h1>
         <p className="muted">Join the groups that fit you, then talk in their channels. You post under your Hub name, never your real name.</p>
       </div>
       {user ? (

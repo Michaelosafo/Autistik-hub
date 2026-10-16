@@ -5,7 +5,7 @@
 The community dApp for [$AUTISTIK](https://bscscan.com/address/0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9) on BNB Chain, built for autistic adults (18+):
 
 - **Believer & Purity:** two AI companions (Claude API) with different personalities. They chat and draw pictures.
-- **4 community groups:** Spectrum Lounge, Calm Corner, Spark Studio and Ask & Learn, each with 3 channels and live updates.
+- **2 community groups:** Spectrum Lounge and Support & Questions, each with 3 channels and live updates.
 - **Live sessions:** talks, Q&As and support circles hosted by verified practitioners, with "Save my seat".
 - **Points & airdrops:** points are counted by the database, wallets are verified by signature, and members claim on-chain with a Merkle proof.
 - **Safety by design:** members use Hub names only, health data is never on-chain, chats aren't stored, there are content notes and reports, plus Calm mode and Larger text.
@@ -178,7 +178,7 @@ Add `http://localhost:3000/auth/callback` to Supabase Redirect URLs for local si
 app/
   page.tsx               Home: hero, companions, groups, faces, sessions
   companions/            Believer & Purity chat + picture making
-  community/             4 groups × 3 channels, live feed
+  community/             2 groups × 3 channels, live feed
   sessions/              Live sessions, RSVPs, practitioner applications
   rewards/               Points, leaderboard, wallet link, claim
   launchpad/             Launch Pad board (trending, watched, new), token pages, launch chat with Autistik

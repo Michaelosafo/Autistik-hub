@@ -142,7 +142,7 @@ textarea{resize:vertical;min-height:84px}
 .mini .av{width:52px;height:52px;border-radius:50%;background:var(--cs);padding:4px;flex:none}
 
 /* groups grid */
-.groups-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.groups-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .gcard{position:relative;overflow:hidden;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column}
 .gcard .art{aspect-ratio:240/150;max-width:100%;border-bottom:5px solid var(--g)}
 .gcard .gbody{padding:16px;display:flex;flex-direction:column;gap:8px;flex:1}
