@@ -6,10 +6,11 @@ import Art from "@/components/Art";
 import { COMPANIONS, DRAW_RE, type CompanionId } from "@/lib/companions";
 import { cleanSvg } from "@/lib/svg-clean";
 import { useVoice } from "@/lib/voice";
+import { Handwritten, WritingNote } from "@/components/Handwriting";
 
 type Msg =
   | { kind: "me"; text: string }
-  | { kind: "ai"; text: string; pending?: boolean }
+  | { kind: "ai"; text: string; pending?: boolean; writing?: boolean; born?: number }
   | { kind: "img"; svg: string; title: string; request: string }
   | { kind: "drawing" }
   | { kind: "sys"; text: string };
@@ -65,6 +66,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     setBusy(true);
     ctl.current = new AbortController();
     let reply = "";
+    const born = Date.now(); // replies written in the last 20 seconds are shown being written out
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "content-type": "application/json" }, signal: ctl.current.signal,
@@ -83,13 +85,14 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         const { done, value } = await reader.read();
         if (done) break;
         reply += dec.decode(value, { stream: true });
-        replaceLast(id, { kind: "ai", text: reply });
+        replaceLast(id, { kind: "ai", text: reply, writing: true, born });
       }
+      replaceLast(id, { kind: "ai", text: reply, born });
       turns.current[id].push({ role: "assistant", content: reply || "…" });
       // Voice notes get a spoken reply; typed messages too when "Read replies aloud" is on.
       if (reply && (spoken || voice.autoRead)) voice.speak(reply);
     } catch (e: any) {
-      if (reply) turns.current[id].push({ role: "assistant", content: reply });
+      if (reply) { turns.current[id].push({ role: "assistant", content: reply }); replaceLast(id, { kind: "ai", text: reply, born }); }
       else { replaceLast(id, { kind: "sys", text: e?.name === "AbortError" ? "Stopped." : "Couldn't reach the companion. Check your connection." }); turns.current[id].pop(); }
     } finally {
       setBusy(false); ctl.current = null; setPassKey((k) => k + 1);
@@ -182,10 +185,10 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
             );
             return (
               <div key={i} className="msgrow"><Art kind={who} className="av" />
-                <div className={"msg ai" + (m.pending ? " muted" : "")}>
-                  {m.text}
-                  {!m.pending && voice.canSpeak && <button className="listen" type="button" onClick={() => voice.speak(m.text)} title="Listen to this reply">▶ Listen</button>}
-                </div>
+                {m.pending ? <WritingNote name={c.name} /> : (
+                  <Handwritten text={m.text} done={!m.writing} fresh={!!m.born && Date.now() - m.born < 20_000}
+                    after={voice.canSpeak && <button className="listen" type="button" onClick={() => voice.speak(m.text)} title="Listen to this reply">▶ Listen</button>} />
+                )}
               </div>
             );
           })}
