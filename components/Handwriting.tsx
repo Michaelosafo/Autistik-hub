@@ -23,9 +23,9 @@ export function WritingNote({ name }: { name: string }) {
 }
 
 /**
- * An AI reply written out on paper: the words appear a few at a time with a pencil at the end, then the paper
- * turns back into a normal bubble. `done` is false while the reply is still arriving. `fresh` makes a reply that
- * arrived all at once still be written out; older messages show in full straight away.
+ * An AI reply written on paper: the words appear a few at a time with a pencil at the end. `done` is false
+ * while the reply is still arriving. `fresh` makes a reply that arrived all at once still be written out;
+ * older messages show in full straight away.
  */
 export function Handwritten({ text, done, fresh, className = "msg ai", after }: {
   text: string; done: boolean; fresh?: boolean; className?: string; after?: ReactNode;
@@ -49,7 +49,7 @@ export function Handwritten({ text, done, fresh, className = "msg ai", after }: 
 
   const writing = !done || n < text.length;
   return (
-    <div ref={ref} className={className + (writing ? " paper" : "")}>
+    <div ref={ref} className={className + " paper"}>
       {writing ? <span aria-hidden="true">{text.slice(0, n)}</span> : text}
       {writing && <span className="sr-only">{text}</span>}
       {writing && <span className="pencil" aria-hidden="true">✏️</span>}
