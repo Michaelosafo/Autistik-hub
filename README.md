@@ -159,7 +159,7 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 ## Trade page (referral links)
 `/trade` (under **Trending**) shows live prices of top meme coins (DOGE, SHIB, PEPE, WIF, BONK, FLOKI) and buttons to big exchanges. To earn from it:
 1. Join each exchange's referral or affiliate programme (e.g. Binance → Profile → Referral, or the Binance Affiliate Program) and copy your referral link.
-2. In Vercel → Settings → Environment Variables, add it as `NEXT_PUBLIC_REF_BINANCE`, `NEXT_PUBLIC_REF_BYBIT`, `NEXT_PUBLIC_REF_OKX`, `NEXT_PUBLIC_REF_BITGET`, `NEXT_PUBLIC_REF_MEXC` or `NEXT_PUBLIC_REF_KUCOIN` (Type: Config), then redeploy.
+2. In Vercel → Settings → Environment Variables, add it as `NEXT_PUBLIC_REF_BINANCE`, `NEXT_PUBLIC_REF_BYBIT`, `NEXT_PUBLIC_REF_OKX`, `NEXT_PUBLIC_REF_BITGET`, `NEXT_PUBLIC_REF_MEXC`, `NEXT_PUBLIC_REF_KUCOIN` or `NEXT_PUBLIC_REF_ASTER` (Type: Config), then redeploy. The same links are used on the Perps tab, so futures fees count too.
 Exchanges without a link still show, with a plain link. Change the coin list in `lib/trade.ts`.
 
 ## Using real photos
