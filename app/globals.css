@@ -726,3 +726,20 @@ a.alert-row:hover{background:var(--surface-2)}
 .me-row[aria-checked="true"] .sw{background:var(--violet)}
 .me-row[aria-checked="true"] .sw::after{transform:translateX(16px)}
 @media (max-width:600px){ .me-pop{position:fixed;top:60px;right:12px;left:12px;width:auto} }
+/* chess: bigger board, holding card */
+.chess-wrap{max-width:1000px}
+.cb-empty.good{fill:#0E7A55;font-size:30px}
+.cb-plus{fill:#fff;font:900 20px var(--f-body)}
+.hold-card{border:2px solid var(--line);background:var(--surface)}
+.hold-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.hold-grid div{background:var(--surface-2);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column}
+.hold-grid span{font-size:.7em;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
+.hold-grid b{font-family:var(--f-display);font-size:1.15em}
+.hold-grid small{font-size:.74em;color:var(--muted)}
+@media (max-width:600px){
+  .hold-grid{grid-template-columns:1fr 1fr}
+  .card:has(> .chess){margin-inline:-12px;border-radius:16px;padding-inline:8px}
+  .chess-banner{font-size:.7em}
+}
+.chess-key span{display:inline-flex;align-items:center;gap:3px}
+.chess-key i{width:9px;height:9px;border-radius:50%;display:inline-block}
