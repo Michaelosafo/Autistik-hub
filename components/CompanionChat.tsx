@@ -16,8 +16,8 @@ type Msg =
 type Turn = { role: "user" | "assistant"; content: string };
 
 const PREF_KEYS: [keyof Prefs, string][] = [["short", "Short answers"], ["steps", "Step-by-step lists"], ["literal", "Literal language, no idioms"], ["gentle", "Extra gentle tone"], ["fewQuestions", "Ask me fewer questions"]];
-// Each companion has its own voice: Believer brighter, Purity slower and calmer.
-const VOICES: Record<CompanionId, { rate: number; pitch: number }> = { believer: { rate: 1, pitch: 1.1 }, purity: { rate: 0.85, pitch: 0.95 } };
+// Both speak with a natural male voice; Purity a little slower and calmer.
+const VOICES: Record<CompanionId, { rate: number }> = { believer: { rate: 0.98 }, purity: { rate: 0.88 } };
 
 export default function CompanionChat({ signedIn, start }: { signedIn: boolean; start?: CompanionId }) {
   const [who, setWho] = useState<CompanionId>(start || "believer");

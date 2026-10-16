@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
+import { maleUtterance } from "@/lib/voice";
 import { CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan } from "@/lib/launchpad";
 
 type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean };
@@ -11,20 +12,14 @@ type Done = { token: string; pair: string; hash: string; listed: boolean };
 const HELLO = "Hello, I'm Autistik. I will guide you through launching your token in a few short steps. First, which chain would you like to launch on: BNB Chain (PancakeSwap), Ethereum (Uniswap) or Robinhood Chain?";
 const STARTERS = ["Launch on BNB Chain", "Launch on Ethereum", "Launch on Robinhood Chain", "How does the liquidity lock work?", "Who can launch?"];
 
-/** Reads text out loud with the browser's own voice. Links and addresses are skipped so it sounds natural. */
+/** Reads text out loud with the device's most natural male voice (see lib/voice.ts). */
 function speak(text: string, onState: (talking: boolean) => void) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  const synth = window.speechSynthesis;
-  synth.cancel();
-  const clean = text.replace(/https?:\/\/\S+/g, "the link").replace(/0x[0-9a-fA-F]{6,}/g, "the address").replace(/[*_#`>]/g, "");
-  const u = new SpeechSynthesisUtterance(clean);
-  u.rate = 0.95;
-  const voices = synth.getVoices();
-  const v = voices.find((x) => /^en/i.test(x.lang) && /female|samantha|aria|zira|google us/i.test(x.name)) || voices.find((x) => /^en/i.test(x.lang));
-  if (v) u.voice = v;
+  window.speechSynthesis.cancel();
+  const u = maleUtterance(text, 0.97);
   u.onstart = () => onState(true);
   u.onend = u.onerror = () => onState(false);
-  synth.speak(u);
+  window.speechSynthesis.speak(u);
 }
 
 function Avatar() {
