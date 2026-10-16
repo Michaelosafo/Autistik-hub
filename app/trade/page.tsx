@@ -55,7 +55,7 @@ export default async function TradePage() {
 
       <div className="notice warn" style={{ fontSize: ".9em" }}>
         <b>Please read before trading.</b> Meme coins can lose most of their value in hours. Only use money you can afford to lose.
-        Avoid leverage (futures, &quot;10x&quot;, &quot;margin&quot;): most people who use it lose money. Check that crypto trading is legal where you live.
+        Leverage (futures, &quot;10x&quot;, &quot;margin&quot;) is much riskier: read the Perps tab first. Check that crypto trading is legal where you live.
         Nothing here is financial advice. Never share your password, seed phrase or 2FA codes with anyone, including people claiming to be from AUTISTIK.
       </div>
     </div>
