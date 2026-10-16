@@ -103,8 +103,8 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
       </div>
 
       <div className="card stack">
-        <h2>♟️ The battle: buyers vs sellers</h2>
-        <p className="muted" style={{ fontSize: ".86em" }}>A chess game between the top wallets that bought and the ones that sold. The bigger the move, the stronger the piece. Pick a time frame, and tap any piece to see how long they&apos;ve held and how likely they are to sell.</p>
+        <h2>♟️ The battle: holders vs sellers</h2>
+        <p className="muted" style={{ fontSize: ".86em" }}>Holders defend from the bottom, sellers attack from the top. The bigger the bag (or the sale), the stronger the piece. Pick a time frame and tap any piece to see its holdings.</p>
         <Arena holders={(holders || []) as any} events={(events || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
       </div>
 

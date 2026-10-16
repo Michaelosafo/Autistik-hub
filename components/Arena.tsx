@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { seatOf, sellRisk, type EventRow, type HolderRow, type LinkRow, type Risk } from "@/lib/analytics-insights";
 
 /**
@@ -14,7 +14,7 @@ type Props = { holders: HolderRow[]; events: EventRow[]; links: LinkRow[]; explo
 type TF = "1h" | "6h" | "24h" | "7d" | "all";
 type Side = "buy" | "sell";
 type Kind = "K" | "Q" | "R" | "B" | "N" | "P";
-type Piece = { h: HolderRow; side: Side; amount: number; kind: Kind; file: number; rank: number; risk: Risk };
+type Piece = { h: HolderRow; side: Side; amount: number; bought: number; kind: Kind; file: number; rank: number; risk: Risk };
 type Bencher = { h: HolderRow; risk: Risk };
 
 const FRAMES: { k: TF; label: string; ms: number }[] = [
@@ -66,13 +66,17 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
     const power = total ? buyVol / total : 0.5;
     const risk = (h: HolderRow) => sellRisk(h, events, links, dev);
 
-    const sides: Record<Side, { h: HolderRow; amount: number }[]> = { buy: [], sell: [] };
-    for (const [w, f] of flow) {
-      const h = byWallet.get(w);
-      if (!h || h.is_contract) continue;
-      if (f.bought > f.sold) sides.buy.push({ h, amount: f.bought - f.sold });
-      else if (f.sold > 0) sides.sell.push({ h, amount: f.sold - f.bought });
+    // Two armies. Sellers: wallets that sold in this time frame, ranked by how much they sold.
+    // Holders: everyone still holding, ranked by the size of their bag; the ones who bought more get a "+" tag.
+    const sellers: { h: HolderRow; amount: number; bought: number }[] = [];
+    const holding: { h: HolderRow; amount: number; bought: number }[] = [];
+    for (const h of holders) {
+      if (h.is_contract || !(h.in_top || h.is_dev)) continue;
+      const f = flow.get(h.wallet);
+      if (f && f.sold > f.bought) sellers.push({ h, amount: f.sold - f.bought, bought: 0 });
+      else if (seatOf(h) !== "left") holding.push({ h, amount: n(h.pct), bought: f ? f.bought - f.sold : 0 });
     }
+    const sides: Record<Side, typeof sellers> = { buy: holding, sell: sellers };
     // The winning side's pawns march forward (up to 3 squares).
     const push = (side: Side) => {
       const lead = side === "buy" ? power - 0.5 : 0.5 - power;
@@ -86,15 +90,15 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
         const kind = ORDER[i];
         const k = used[kind] = (used[kind] || 0) + 1;
         const file = kind === "P" ? PAWN_FILES[k - 1] : BACK[kind][k - 1];
-        pieces.push({ h: x.h, side, amount: x.amount, kind, file, rank: kind === "P" ? pawnRank : back, risk: risk(x.h) });
+        pieces.push({ h: x.h, side, amount: x.amount, bought: x.bought, kind, file, rank: kind === "P" ? pawnRank : back, risk: risk(x.h) });
       });
     });
 
-    // The bench: holders still in who didn't move in this time frame.
-    const playing = new Set(pieces.map((p) => p.h.wallet));
-    const bench: Bencher[] = holders.filter((h) => !h.is_contract && (h.in_top || h.is_dev) && !playing.has(h.wallet) && seatOf(h) !== "left")
-      .sort((a, b) => n(b.pct) - n(a.pct)).slice(0, 40).map((h) => ({ h, risk: risk(h) }));
+    // The bench: holders who didn't fit on the board.
+    const onBoard = new Set(pieces.map((p) => p.h.wallet));
+    const bench: Bencher[] = holding.filter((x) => !onBoard.has(x.h.wallet)).map((x) => ({ h: x.h, risk: risk(x.h) })).slice(0, 40);
     const out = holders.filter((h) => !h.is_contract && (h.in_top || h.is_dev) && seatOf(h) === "left");
+    const buyers = holding.filter((x) => x.bought > 0).length;
 
     // Timeline: 12 slots across the time frame.
     const start = since || (win.length ? Math.min(...win.map((e) => Date.parse(e.created_at))) : Date.now() - 86_400_000);
@@ -104,12 +108,12 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
       const i = Math.min(11, Math.max(0, Math.floor(((Date.parse(e.created_at) - start) / span) * 12)));
       if (e.kind === "buy") slots[i].buy += n(e.amount); else slots[i].sell += n(e.amount);
     }
-    return { pieces, bench, out, buyVol, sellVol, total, power, slots, buyers: sides.buy.length, sellers: sides.sell.length };
+    return { pieces, bench, out, buyVol, sellVol, total, power, slots, buyers, holders: holding.length, sellers: sellers.length };
   }, [tf, holders, events, links, dev]);
 
   const { power, total } = d;
   const check = total > 0 && (power >= 0.7 || power <= 0.3);
-  const verdict = !total ? "No moves yet in this time frame" : power >= 0.7 ? "♔ Check! Buyers are crushing the sellers" : power >= 0.56 ? "♙ Buyers are winning"
+  const verdict = !total ? (d.holders ? "🛡️ Holders are holding strong: no sells in this time frame" : "No wallets tracked yet") : power >= 0.7 ? "♔ Check! Buyers are crushing the sellers" : power >= 0.56 ? "♙ Buyers are winning"
     : power <= 0.3 ? "♚ Check! Sellers are crushing the buyers" : power <= 0.44 ? "♟ Sellers are winning" : "⚖️ It's an even game";
   const pickedPiece = sel ? d.pieces.find((p) => p.h.wallet === sel) : null;
   const pickedBench = sel && !pickedPiece ? d.bench.find((b) => b.h.wallet === sel) : null;
@@ -118,6 +122,13 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
   const pickedLinks = picked ? links.filter((l) => l.a === picked.h.wallet || l.b === picked.h.wallet) : [];
   const slotMax = Math.max(1, ...d.slots.map((s) => Math.max(s.buy, s.sell)));
   const pick = (w: string) => setSel(sel === w ? null : w);
+  // On a phone, bring the holding card into view when someone is tapped.
+  const infoRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sel || !infoRef.current) return;
+    const r = infoRef.current.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight - 70) infoRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [sel]);
   const keys = (w: string) => (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(w); } };
   const king = (side: Side) => d.pieces.find((p) => p.side === side && p.kind === "K");
   const threatened = power >= 0.7 ? king("sell") : power <= 0.3 ? king("buy") : undefined;
@@ -132,13 +143,13 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
       </div>
 
       <div className="power" role="img" aria-label={`Buy volume ${fmt(d.buyVol)} ${symbol}, sell volume ${fmt(d.sellVol)} ${symbol}`}>
-        <span className="pb" style={{ width: `${power * 100}%` }}><b>♙ Buyers {Math.round(power * 100)}%</b><small>{d.buyers} pieces · {fmt(d.buyVol)}</small></span>
-        <span className="ps"><b>Sellers {Math.round((1 - power) * 100)}% ♟</b><small>{d.sellers} pieces · {fmt(d.sellVol)}</small></span>
+        <span className="pb" style={{ width: `${power * 100}%` }}><b>♙ Buyers {Math.round(power * 100)}%</b><small>{d.buyers} bought · {fmt(d.buyVol)}</small></span>
+        <span className="ps"><b>Sellers {Math.round((1 - power) * 100)}% ♟</b><small>{d.sellers} sold · {fmt(d.sellVol)}</small></span>
         <i className="clash" style={{ left: `${power * 100}%` }} aria-hidden="true">⚡</i>
       </div>
 
       <div className="chess-wrap">
-        <div className="chess-banner s">♟ SELLERS · {d.sellers} piece{d.sellers === 1 ? "" : "s"}</div>
+        <div className="chess-banner s">♟ SELLERS · {d.sellers} wallet{d.sellers === 1 ? "" : "s"} sold</div>
         <svg className="chess-board" viewBox={`0 0 ${BOARD + PAD * 2} ${BOARD + PAD * 2}`} role="img"
           aria-label={`Chess battle for ${symbol}: ${d.buyers} buyer pieces against ${d.sellers} seller pieces. ${verdict}.`}>
           <defs>
@@ -159,14 +170,15 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
             <rect x="0" y="0" width={BOARD} height={BOARD * (1 - power)} fill="#F0563A" opacity=".1" />
             <line x1="0" x2={BOARD} y1={BOARD * (1 - power)} y2={BOARD * (1 - power)} stroke="#FFE58F" strokeWidth="4" strokeDasharray="10 8" className="cb-front" />
             {threatened && <rect x={threatened.file * SQ + 3} y={threatened.rank * SQ + 3} width={SQ - 6} height={SQ - 6} rx="8" fill="none" stroke="#E5484D" strokeWidth="6" className="cb-check" />}
-            {!d.pieces.length && <text x={BOARD / 2} y={BOARD / 2} textAnchor="middle" className="cb-empty">No moves by top wallets in this time frame</text>}
+            {!d.pieces.length && <text x={BOARD / 2} y={BOARD / 2} textAnchor="middle" className="cb-empty">Scan the token to fill the board</text>}
+            {d.pieces.length > 0 && !d.sellers && <text x={BOARD / 2} y={SQ * 1.15} textAnchor="middle" className="cb-empty good">✓ No sellers in this time frame</text>}
             {d.pieces.map((p, i) => {
               const x = p.file * SQ + SQ / 2, y = p.rank * SQ + SQ / 2;
               const on = sel === p.h.wallet;
               return (
                 <g key={p.h.wallet} transform={`translate(${x} ${y})`} className={"cb-piece " + p.side + (on ? " sel" : "")} style={{ ["--dl" as any]: `${(i % 8) * 0.18}s` }}
                   role="button" tabIndex={0} onClick={() => pick(p.h.wallet)} onKeyDown={keys(p.h.wallet)}
-                  aria-label={`${p.side === "buy" ? "Buyer" : "Seller"} ${NAME[p.kind]}: ${short(p.h.wallet)} ${p.side === "buy" ? "bought" : "sold"} ${fmt(p.amount)} ${symbol}, holding for ${dur(p.h.acquired_at || p.h.first_seen_at)}`}>
+                  aria-label={`${p.side === "buy" ? "Holder" : "Seller"} ${NAME[p.kind]}: ${short(p.h.wallet)} ${p.side === "buy" ? `holds ${pct(n(p.h.pct))}` : `sold ${fmt(p.amount)} ${symbol}`}, holding for ${dur(p.h.acquired_at || p.h.first_seen_at)}, ${p.risk.level} chance to sell`}>
                   <circle r="44" fill={`url(#cb-${p.side})`} />
                   {on && <circle r="44" fill="none" stroke="#1D4ED8" strokeWidth="5" />}
                   <g className="cb-lift">
@@ -175,7 +187,9 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
                   </g>
                   {p.h.is_dev && <text x="30" y="-26" textAnchor="middle" fontSize="22">👑</text>}
                   <rect x="-34" y="30" width="68" height="18" rx="9" fill={p.side === "buy" ? "#0E7A55" : "#8E1F10"} />
-                  <text y="43" textAnchor="middle" className="cb-amt">{p.side === "buy" ? "+" : "−"}{fmt(p.amount)}</text>
+                  <text y="43" textAnchor="middle" className="cb-amt">{p.side === "buy" ? pct(n(p.h.pct)) : "−" + fmt(p.amount)}</text>
+                  {p.side === "buy" && <circle cx="-34" cy="-34" r="9" fill={RISK_COLOR[p.risk.level]} stroke="#fff" strokeWidth="2.5" />}
+                  {p.bought > 0 && <g transform="translate(34 -34)"><circle r="12" fill="#0E7A55" stroke="#fff" strokeWidth="2.5" /><text y="5" textAnchor="middle" className="cb-plus">+</text></g>}
                 </g>
               );
             })}
@@ -183,15 +197,40 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
           {"abcdefgh".split("").map((c, i) => <text key={c} x={PAD + i * SQ + SQ / 2} y={BOARD + PAD * 2 - 8} textAnchor="middle" className="cb-coord">{c}</text>)}
           {Array.from({ length: 8 }, (_, i) => <text key={i} x={12} y={PAD + i * SQ + SQ / 2 + 5} textAnchor="middle" className="cb-coord">{8 - i}</text>)}
         </svg>
-        <div className="chess-banner b">♙ BUYERS · {d.buyers} piece{d.buyers === 1 ? "" : "s"}</div>
+        <div className="chess-banner b">♙ HOLDERS · {d.holders} wallet{d.holders === 1 ? "" : "s"} holding</div>
       </div>
 
+      <div className="club-info hold-card" aria-live="polite" ref={infoRef}>
+        {!picked ? <span className="muted">👆 Tap any piece to see its holdings: how much it holds, how long it&apos;s held and how likely it is to sell.</span> : (
+          <div className="stack" style={{ gap: 6 }}>
+            <div>
+              <b>{picked.h.is_dev ? "👑 Dev · " : ""}{pickedPiece ? `${GLYPH[pickedPiece.side][pickedPiece.kind]} ${pickedPiece.side === "buy" ? "Holder" : "Seller"} ${NAME[pickedPiece.kind]}` : "🪑 On the bench"}</b>{" "}
+              <a className="mono" href={`${explorer}/token/${token}?a=${picked.h.wallet}`} target="_blank" rel="noopener noreferrer">{short(picked.h.wallet)}</a>
+            </div>
+            <div className="hold-grid">
+              <div><span>Holds</span><b>{pct(n(picked.h.pct))}</b><small>of the supply</small></div>
+              <div><span>Tokens</span><b>{fmt(n(picked.h.balance))}</b><small>{symbol}</small></div>
+              <div><span>Holding for</span><b>{dur(picked.h.acquired_at || picked.h.first_seen_at)}</b><small>{picked.h.acquired_at ? "since first buy" : "since tracking"}</small></div>
+              <div><span>Biggest bag</span><b>{fmt(Math.max(n(picked.h.peak_balance), n(picked.h.balance)))}</b><small>{n(picked.h.balance) < n(picked.h.peak_balance) * 0.99 ? `now ${Math.round((n(picked.h.balance) / n(picked.h.peak_balance)) * 100)}% of it` : "still all of it"}</small></div>
+            </div>
+            {pickedPiece && pickedPiece.side === "sell" && <div>🗡️ Sold <b>{fmt(pickedPiece.amount)} {symbol}</b> in this time frame.</div>}
+            {pickedPiece && pickedPiece.bought > 0 && <div>🟢 Bought <b>{fmt(pickedPiece.bought)} {symbol}</b> more in this time frame.</div>}
+            <div className="risk-row">
+              <span className={"risk " + picked.risk.level}>Chance to sell: {picked.risk.level} ({picked.risk.score}/100)</span>
+              {picked.risk.reasons.length > 0 && <span className="muted">because it {picked.risk.reasons.join(", ")}.</span>}
+            </div>
+            {pickedFlow.length > 0 && <div className="muted" style={{ fontSize: ".86em" }}>History: {pickedFlow.slice(0, 5).map((e) => `${e.kind === "buy" ? "bought" : e.kind === "exit" ? "sold all" : `sold ${Math.round(n(e.pct_of_holding))}%`} ${dur(e.created_at)} ago`).join(" · ")}</div>}
+            {pickedLinks.length > 0 && <div className="club-conn">🔗 Connected to {pickedLinks.map((l) => { const o = l.a === picked.h.wallet ? l.b : l.a; return <button key={o} type="button" onClick={() => setSel(o)}>{short(o)}{o === dev ? " 👑" : ""}</button>; })}</div>}
+          </div>
+        )}
+      </div>
       <div className="chess-key">
-        <span>♔ King = biggest move</span><span>♕ Queen = 2nd</span><span>♖ ♗ ♘ next biggest</span><span>♙ Pawns = smaller moves</span><span>👑 = dev</span>
+        <span>♔ King = biggest bag (or biggest seller)</span><span>♕ Queen = 2nd</span><span>♖ ♗ ♘ next</span><span>♙ Pawns = smaller</span>
+        <span><i style={{ background: RISK_COLOR.low }} /><i style={{ background: RISK_COLOR.medium }} /><i style={{ background: RISK_COLOR.high }} /> chance to sell</span><span>➕ bought more</span><span>👑 dev</span>
       </div>
 
       <div className="bench">
-        <div className="bench-head"><b>🪑 On the bench</b><span className="muted">holding, didn&apos;t move · colour = chance to sell</span></div>
+        <div className="bench-head"><b>🪑 On the bench</b><span className="muted">more holders · colour = chance to sell</span></div>
         <div className="bench-row">
           {d.bench.length ? d.bench.map((b) => (
             <button key={b.h.wallet} type="button" className={"bencher " + b.risk.level} aria-pressed={sel === b.h.wallet} onClick={() => pick(b.h.wallet)}
@@ -213,24 +252,6 @@ export default function Arena({ holders, events, links, explorer, token, symbol 
         <div className="tl-axis"><span>{tf === "all" ? "Start" : FRAMES.find((f) => f.k === tf)!.label + " ago"}</span><span>Now</span></div>
       </div>
 
-      <div className="club-info" aria-live="polite">
-        {!picked ? <span className="muted">Tap any piece or anyone on the bench to see their wallet, how long they&apos;ve held and how likely they are to sell.</span> : (
-          <div className="stack" style={{ gap: 6 }}>
-            <div>
-              <b>{picked.h.is_dev ? "👑 Dev · " : ""}{pickedPiece ? `${GLYPH[pickedPiece.side][pickedPiece.kind]} ${pickedPiece.side === "buy" ? "Buyer" : "Seller"} ${NAME[pickedPiece.kind]}` : "🪑 On the bench"}</b>{" "}
-              <a className="mono" href={`${explorer}/token/${token}?a=${picked.h.wallet}`} target="_blank" rel="noopener noreferrer">{short(picked.h.wallet)}</a>
-              <span> · holds <b>{pct(n(picked.h.pct))}</b> · holding for <b>{dur(picked.h.acquired_at || picked.h.first_seen_at)}</b></span>
-              {pickedPiece && <span> · {pickedPiece.side === "buy" ? "bought" : "sold"} <b>{fmt(pickedPiece.amount)} {symbol}</b> in this time frame</span>}
-            </div>
-            <div className="risk-row">
-              <span className={"risk " + picked.risk.level}>Chance to sell: {picked.risk.level} ({picked.risk.score}/100)</span>
-              {picked.risk.reasons.length > 0 && <span className="muted">because it {picked.risk.reasons.join(", ")}.</span>}
-            </div>
-            {pickedFlow.length > 0 && <div className="muted" style={{ fontSize: ".86em" }}>History: {pickedFlow.slice(0, 5).map((e) => `${e.kind === "buy" ? "bought" : e.kind === "exit" ? "sold all" : `sold ${Math.round(n(e.pct_of_holding))}%`} ${dur(e.created_at)} ago`).join(" · ")}</div>}
-            {pickedLinks.length > 0 && <div className="club-conn">🔗 Connected to {pickedLinks.map((l) => { const o = l.a === picked.h.wallet ? l.b : l.a; return <button key={o} type="button" onClick={() => setSel(o)}>{short(o)}{o === dev ? " 👑" : ""}</button>; })}</div>}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
