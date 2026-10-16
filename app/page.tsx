@@ -45,13 +45,30 @@ export default async function Home() {
             <p>A safe place to chat, get support and belong.</p>
             <div className="row">
               <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
-              <Link className="btn ghost" href="/companions">Meet Believer &amp; Purity</Link>
+              <Link className="btn ghost" href="/launchpad/new">🚀 Launch a token</Link>
               <Link className="btn ghost" href="/buy">Buy $AUTISTIK</Link>
             </div>
           </div>
           <div className="hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
         </div>
         <div className="ticker" aria-hidden="true"><div>{ticker.map((t, i) => <span key={i}><i>∞</i> {t.toUpperCase()}</span>)}</div></div>
+      </div>
+
+      <div className="launch-cta">
+        <div className="stack" style={{ gap: 10 }}>
+          <div className="eyebrow">AUTISTIK Launch Pad</div>
+          <h2>Launch your own token</h2>
+          <ol className="buy-steps">
+            <li><b>Hold $20 of AUTISTIK</b></li>
+            <li><b>Chat with Autistik</b></li>
+            <li><b>Sign once. It&apos;s live.</b></li>
+          </ol>
+          <div className="row">
+            <Link className="btn primary" href="/launchpad/new">🚀 Launch a token</Link>
+            <Link className="btn ghost" href="/launchpad">See trending</Link>
+          </div>
+        </div>
+        <svg className="launch-rocket" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-rocket" /></svg>
       </div>
 
       <div className="truths">

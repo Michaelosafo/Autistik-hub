@@ -17,9 +17,8 @@ export default async function LaunchpadPage() {
       <SectionTabs tabs={TRENDING_TABS} active="/launchpad" label="Trending" />
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
         <div className="page-head">
-          <div className="label">Trending</div>
           <h1>Trending on AUTISTIK</h1>
-          <p className="muted">Tokens launched here have their liquidity locked or burned, so it can&apos;t be pulled early. Tokens marked Listed launched elsewhere and paid to be listed. See what&apos;s trending, what people are watching, and what&apos;s new.</p>
+          <p className="muted">Liquidity locked or burned. &quot;Listed&quot; means launched elsewhere.</p>
         </div>
         <Link className="btn primary" href="/launchpad/new">🚀 Launch a token</Link>
       </div>

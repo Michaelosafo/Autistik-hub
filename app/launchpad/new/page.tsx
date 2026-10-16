@@ -1,6 +1,6 @@
 import AdBar from "@/components/AdBar";
 import Launchpad from "@/components/Launchpad";
-import Link from "next/link";
+import SectionTabs, { TRENDING_TABS } from "@/components/SectionTabs";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { currentUser } from "@/lib/supabase/server";
@@ -13,13 +13,12 @@ export default async function NewLaunchPage() {
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
+      <SectionTabs tabs={TRENDING_TABS} active="/launchpad/new" label="Launch Pad" />
       <div className="page-head">
-        <div className="label">Launch</div>
-        <h1>Launch your own token</h1>
-        <p className="muted">Tell Autistik about your token and sign one transaction. It goes live on PancakeSwap, Uniswap or Robinhood Chain with its liquidity locked for 6 months, 1 year, or burned forever, then shows up on DexScreener. You need at least $20 of AUTISTIK in your wallet to launch.</p>
+        <h1>Launch your token</h1>
+        <p className="muted">Chat with Autistik, then sign once. Hold $20 of AUTISTIK to launch.</p>
       </div>
       <Launchpad signedIn={!!user} />
-      <p className="muted" style={{ fontSize: ".9em" }}>Already launched, or launched somewhere else? See <Link href="/launchpad">Trending</Link> to get your token listed and promoted.</p>
     </div>
   );
 }
