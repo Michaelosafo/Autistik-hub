@@ -1,4 +1,4 @@
-import { anthropic, MODEL, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
+import { anthropic, MODEL, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { COMPANIONS, systemPrompt, type CompanionId, type Prefs } from "@/lib/companions";
 
 export const runtime = "nodejs";
@@ -16,21 +16,25 @@ export async function POST(req: Request) {
   const g = await guardAI();
   if ("error" in g) return g.error;
 
+  // AI Pass subscribers get the better model; free messages use the low-cost one.
+  const model = g.premium ? MODEL : FAST_MODEL;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       try {
         const s = anthropic().messages.stream({
-          model: MODEL,
-          max_tokens: 800,
+          model,
+          max_tokens: 1500,
           system: systemPrompt(id, prefs),
           messages: turns,
-        });
+          ...cheap(model),
+        } as any);
         for await (const ev of s) {
           if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") {
             controller.enqueue(encoder.encode(ev.delta.text));
           }
         }
+        logCost(model, "chat", (await s.finalMessage()).usage);
       } catch (e) {
         controller.enqueue(encoder.encode(`\n\n(${aiErrorMessage(e, COMPANIONS[id].name)})`));
       } finally {

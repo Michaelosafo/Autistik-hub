@@ -93,7 +93,7 @@ export async function GET(req: Request) {
       "model not found": `ANTHROPIC_MODEL ("${MODEL}") isn't a model this key can use. Set ANTHROPIC_MODEL in Vercel to a current model name from docs.claude.com, then Redeploy.`,
     };
     if (out.database === "tables missing") advice = "Supabase is reachable but the Hub's tables are missing. Run supabase/schema.sql in Supabase → SQL Editor.";
-    else if (out.database === "ai pass tables missing") advice = "Run supabase/ai-pass.sql in Supabase → SQL Editor so the 15 free daily messages and AI Pass work.";
+    else if (out.database === "ai pass tables missing") advice = "Run supabase/ai-pass.sql in Supabase → SQL Editor so the free daily messages and AI Pass work.";
     else if (out.database === "wrong service key") advice = "SUPABASE_SERVICE_ROLE_KEY doesn't match this project. Copy the service_role (or secret) key again, then Redeploy.";
     else if (out.ai !== "ok") advice = fix[out.ai as string] || "The Claude API answered with an error. Check console.anthropic.com → Billing has credit, then try again.";
     else advice = "Everything is connected. If the AI still doesn't reply, check console.anthropic.com → Billing has credit.";

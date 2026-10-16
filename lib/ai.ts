@@ -11,17 +11,35 @@ export function anthropic() {
 }
 // Only a real Claude model name is used (e.g. "claude-sonnet-5-5"); anything else, such as a key pasted into the
 // wrong setting, falls back to the default so the AI keeps working.
-const DEFAULT_MODEL = "claude-sonnet-5-5";
-const envModel = (process.env.ANTHROPIC_MODEL || "").trim();
-export const MODEL = /^claude-[a-z0-9.-]+$/.test(envModel) ? envModel : DEFAULT_MODEL;
-if (envModel && MODEL !== envModel) console.error("ANTHROPIC_MODEL isn't a Claude model name, so the default is used. Set it to e.g. claude-sonnet-5-5 or remove it.");
+function modelSetting(name: string, fallback: string) {
+  const v = (process.env[name] || "").trim();
+  if (v && !/^claude-[a-z0-9.-]+$/.test(v)) console.error(`${name} isn't a Claude model name, so ${fallback} is used.`);
+  return /^claude-[a-z0-9.-]+$/.test(v) ? v : fallback;
+}
+/** The better model, for AI Pass subscribers. */
+export const MODEL = modelSetting("ANTHROPIC_MODEL", "claude-sonnet-5-5");
+/** The low-cost model, for free messages and the Launch Pad guide (about 1/20th of the price). */
+export const FAST_MODEL = modelSetting("ANTHROPIC_FAST_MODEL", "claude-haiku-5-5");
+
+/** Request options that keep each reply cheap: little hidden "thinking" on models that support the setting. */
+export function cheap(model: string): Record<string, unknown> {
+  return /^claude-(haiku|sonnet|opus|fable)-5/.test(model) ? { output_config: { effort: "low" } } : {};
+}
+
+/** Records what a request used, for the Admin page's AI budget. Never blocks or breaks the reply. */
+export function logCost(model: string, feature: "chat" | "draw" | "launch", usage: any) {
+  if (!usage || !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+  const input = (usage.input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+  supabaseService().rpc("log_ai_cost", { p_model: model, p_feature: feature, p_in: input, p_out: usage.output_tokens || 0 })
+    .then(({ error }) => { if (error) console.error("log_ai_cost failed (has supabase/ai-budget.sql been run?):", error.message); });
+}
 
 /**
  * Checks the visitor is signed in, under today's AI limit, and has an AI Pass or free messages left today.
  * `cost` is how many messages this request counts as (a picture costs more). `needsPass: false` skips the pass
  * check (the Launch Pad guide stays free so people can launch). Returns an error Response or the user id.
  */
-export async function guardAI(who = "Believer and Purity", opts: { cost?: number; needsPass?: boolean } = {}): Promise<{ uid: string; freeLeft?: number } | { error: Response }> {
+export async function guardAI(who = "Believer and Purity", opts: { cost?: number; needsPass?: boolean } = {}): Promise<{ uid: string; freeLeft?: number; premium: boolean } | { error: Response }> {
   const plural = who.includes(" and ");
   if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: `${who} ${plural ? "are" : "is"} coming soon. Check back shortly!` }, 503) };
   const { data: { user } } = await supabaseServer().auth.getUser();
@@ -41,7 +59,7 @@ export async function guardAI(who = "Believer and Purity", opts: { cost?: number
   const r = data as { ok: boolean; reason?: string; free_left?: number };
   if (!r.ok && r.reason === "limit") return { error: json({ error: `You've reached today's limit of ${limit} messages. ${who} will be back tomorrow.` }, 429) };
   if (!r.ok) return { error: json({ needPass: true, error: `You've used today's ${AI_FREE_PER_DAY} free messages${(r.free_left ?? 0) > 0 ? ` (a picture needs more than the ${r.free_left} you have left)` : ""}. They come back tomorrow, or get an AI Pass ($${AI_PASS_USD} for ${AI_PASS_DAYS} days) to keep talking with ${who} now.` }, 402) };
-  return { uid: user.id, freeLeft: r.free_left };
+  return { uid: user.id, freeLeft: r.free_left, premium: !!(r as any).pass_until };
 }
 
 /** Turns a Claude API error into a plain message, and logs the real reason for the site owner (Vercel → Logs). */

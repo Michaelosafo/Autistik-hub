@@ -1,4 +1,4 @@
-import { anthropic, MODEL, guardAI, json, aiErrorMessage } from "@/lib/ai";
+import { anthropic, MODEL, FAST_MODEL, cheap, logCost, guardAI, json, aiErrorMessage } from "@/lib/ai";
 import { COMPANIONS, drawPrompt, type CompanionId } from "@/lib/companions";
 
 export const runtime = "nodejs";
@@ -15,11 +15,14 @@ export async function POST(req: Request) {
   if ("error" in g) return g.error;
 
   try {
+    const model = g.premium ? MODEL : FAST_MODEL;
     const msg = await anthropic().messages.create({
-      model: MODEL,
+      model,
       max_tokens: 8000,
       messages: [{ role: "user", content: drawPrompt(id, request) }],
-    });
+      ...cheap(model),
+    } as any);
+    logCost(model, "draw", msg.usage);
     const text = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
     if (/^NO:/i.test(text)) return json({ refusal: text.replace(/^NO:\s*/i, "") });
     const m = text.match(/<svg[\s\S]*<\/svg>/i);
