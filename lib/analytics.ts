@@ -327,23 +327,27 @@ async function findPair(chain: AChain, token: string): Promise<string | null> {
   } catch { return null; }
 }
 
-const LOOKBACK = 20_000n; // first look back about 4 hours on BNB Chain
-const CHUNK = 5_000n;
+const LOOKBACK = 10_000n; // first look back about 2 hours on BNB Chain
+const CHUNK = 2_500n;
 
 /**
  * Reads every buy and sell through the token's main pool since the last check, saves them, and alerts watchers
  * about big sells. Free: only public blockchain reads. Returns how many trades were found.
  */
-export async function syncTrades(chain: AChain, token: string): Promise<number> {
+export async function syncTrades(chain: AChain, token: string, maxChunks = 8): Promise<number> {
   const sb = supabaseService();
   const { data: t } = await sb.from("tracked_tokens").select("symbol,decimals,total_supply,pair,last_block,dev").eq("chain", chain).eq("token", token).maybeSingle();
   if (!t) return 0;
   const pair = t.pair || (await findPair(chain, token));
   if (!pair) return 0;
+  if (!t.pair) await sb.from("tracked_tokens").update({ pair }).eq("chain", chain).eq("token", token);
   const lc = logClient(chain);
-  const latest = await lc.getBlockNumber();
-  let from = t.last_block ? BigInt(t.last_block) + 1n : latest - LOOKBACK;
-  if (latest - from > LOOKBACK * 2n) from = latest - LOOKBACK * 2n;
+  const head = await lc.getBlockNumber();
+  let from = t.last_block ? BigInt(t.last_block) + 1n : head - LOOKBACK;
+  if (head - from > LOOKBACK * 4n) from = head - LOOKBACK * 4n;
+  if (from < 0n) from = 0n;
+  // Read at most `maxChunks` pieces per call and remember where we stopped, so a slow call never loses progress.
+  const latest = from + CHUNK * BigInt(maxChunks) - 1n < head ? from + CHUNK * BigInt(maxChunks) - 1n : head;
   if (from > latest) { await sb.from("tracked_tokens").update({ pair, trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
 
   const logs: any[] = [];
@@ -384,9 +388,9 @@ export async function syncTrades(chain: AChain, token: string): Promise<number> 
 
   if (trades.length) {
     // Times from block numbers (one lookup for the speed of the chain, not one per block).
-    const [now, back] = await Promise.all([lc.getBlock({ blockNumber: latest }), lc.getBlock({ blockNumber: latest - 1000n })]);
+    const [now, back] = await Promise.all([lc.getBlock({ blockNumber: head }), lc.getBlock({ blockNumber: head - 1000n })]);
     const per = Number(now.timestamp - back.timestamp) / 1000;
-    for (const tr of trades) tr.at = new Date((Number(now.timestamp) - (Number(latest) - tr.block) * per) * 1000).toISOString();
+    for (const tr of trades) tr.at = new Date((Number(now.timestamp) - (Number(head) - tr.block) * per) * 1000).toISOString();
     // Where each trader stands now.
     const wallets = [...new Set(trades.map((x) => x.wallet as string))];
     const bal = await balances(chain, token, dec, wallets).catch(() => new Map<string, string>());

@@ -52,7 +52,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
     const balancesStale = !t.checked_at || Date.now() - Date.parse(t.checked_at) > 3 * 60_000;
     if (tradesStale || balancesStale) {
       await Promise.race([
-        Promise.all([tradesStale ? syncTrades(chain, t.token).catch(() => 0) : 0, balancesStale ? checkToken(chain, t.token).catch(() => []) : []]),
+        Promise.all([tradesStale ? syncTrades(chain, t.token, 2).catch(() => 0) : 0, balancesStale ? checkToken(chain, t.token).catch(() => []) : []]),
         new Promise((r) => setTimeout(r, 8000)),
       ]);
       ({ data: t } = await sb.from("tracked_tokens").select("*").eq("chain", chain).eq("token", params.token).maybeSingle());
