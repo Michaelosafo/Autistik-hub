@@ -169,6 +169,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>
           <div className="page">{children}</div>
+          <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.</footer>
         </main>
       </div>
       <nav className="tabbar">

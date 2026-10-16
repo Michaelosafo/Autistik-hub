@@ -4,7 +4,7 @@ import AnalyticsScan from "@/components/AnalyticsScan";
 import WatchButton from "@/components/WatchButton";
 import Arena from "@/components/Arena";
 import { insights } from "@/lib/analytics-insights";
-import { tradeCall, whoMightSell } from "@/lib/analytics-signals";
+import { holdOutlook, tradeCall, whoMightSell } from "@/lib/analytics-signals";
 import { ACHAINS, checkToken, heldFor, isAChain, syncTrades } from "@/lib/analytics";
 import AutoRefresh from "@/components/AutoRefresh";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -73,6 +73,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   const sigIn = { holders: (holders || []) as any, events: (events || []) as any, trades: (trades || []) as any, links: (links || []) as any, dev: t.dev, security: t.security };
   const call = tradeCall(sigIn);
   const { groups, suspects } = whoMightSell(sigIn);
+  const hold = holdOutlook(sigIn, call);
   const lastEvent = new Map<string, any>();
   for (const e of events || []) if (!lastEvent.has(e.wallet)) lastEvent.set(e.wallet, e);
   const top = (holders || []).filter((h: any) => h.in_top).slice(0, 40);
@@ -135,7 +136,17 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
           <summary>Why?</summary>
           <ul className="signals">{call.reasons.map((r, i) => <li key={i} className={r.level}>{r.text}</li>)}</ul>
         </details>
-        <p className="muted" style={{ fontSize: ".78em" }}>Updated every minute from live trades. A guide only, not financial advice. Never buy more than you can lose.</p>
+        <div className="hold-split">
+          {([["⏳", "Holding long term", "weeks to months", hold.long], ["⚡", "Short term", "hours to days", hold.short]] as const).map(([ic, name, span, o]) => (
+            <div key={name} className={"hold-box " + o.level}>
+              <div className="label">{ic} {name} <span className="muted">· {span}</span></div>
+              <b>{o.level === "good" ? "👍 " : o.level === "ok" ? "🤔 " : "👎 "}{o.title}</b>
+              <ul className="signals">{o.reasons.map((x, i) => <li key={i} className={x.level}>{x.text}</li>)}</ul>
+              {!o.reasons.length && <small className="muted">Not enough trading yet to say more.</small>}
+            </div>
+          ))}
+        </div>
+        <p className="fin-note">⚠️ Nothing stated here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Do your own research and never put in more than you can afford to lose.</p>
       </div>
 
       <div className="card stack">

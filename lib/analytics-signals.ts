@@ -162,3 +162,72 @@ export function tradeCall(input: Input & { supply?: number }): Verdict {
   if (score >= 30) return { ...base, kind: "careful", emoji: "🟠", title: "Careful: sellers are active", summary: "Not a good moment to buy. If you hold, think about taking some profit." };
   return { ...base, kind: "sell", emoji: "🔴", title: "Good time to take profit", summary: "Heavy selling or warning signs. If you hold, consider selling some." };
 }
+
+export type Outlook = { level: "good" | "ok" | "weak"; title: string; reasons: Signal[] };
+
+/**
+ * Is it a good hold, and for how long? Long term leans on loyalty: how long the top wallets have held, how many
+ * never sold, locked supply and a dev who stays. Short term leans on the live buying and selling.
+ * Holding times only count when the first purchase is known; otherwise a wallet counts from when tracking started.
+ */
+export function holdOutlook(input: Input, call: Verdict): { long: Outlook; short: Outlook } {
+  const now = input.now ?? Date.now();
+  const s = input.security || {};
+  const { rows, all } = people(input);
+  const sold = (w: string) => all.some((e) => e.wallet === w && e.kind !== "buy");
+  const top = [...rows.values()].filter((h) => h.in_top);
+  const daysOf = (at: string | null) => (at ? (now - Date.parse(at)) / DAY : NaN);
+  const r: Signal[] = [];
+  let score = 50;
+
+  // Loyalty: who hasn't sold, and for how long they've held.
+  if (top.length >= 3) {
+    const loyal = top.filter((h) => !sold(h.wallet));
+    const share = loyal.length / top.length;
+    if (share >= 0.8) { score += 15; r.push({ level: "good", text: `${loyal.length} of the ${top.length} top wallets have never sold. People here are holding, not flipping.` }); }
+    else if (share <= 0.5) { score -= 15; r.push({ level: "bad", text: `Only ${loyal.length} of the ${top.length} top wallets have never sold. Lots of flipping.` }); }
+    else r.push({ level: "warn", text: `${loyal.length} of the ${top.length} top wallets have never sold.` });
+  }
+  const known = top.map((h) => ({ h, d: daysOf(h.acquired_at) })).filter((x) => isFinite(x.d));
+  if (known.length >= 5) {
+    const mid = known.map((x) => x.d).sort((a, b) => a - b)[Math.floor(known.length / 2)];
+    const longPct = known.filter((x) => x.d >= 30 && !sold(x.h.wallet)).reduce((a, x) => a + n(x.h.pct), 0);
+    if (mid >= 30) { score += 20; r.push({ level: "good", text: `Most top wallets have held for over ${Math.floor(mid)} days. Lots of people are in it for the long run, which gives it a chance to outperform over time.` }); }
+    else if (mid >= 7) { score += 10; r.push({ level: "good", text: `Most top wallets have held for about ${Math.round(mid)} days.` }); }
+    else if (mid < 1) { score -= 10; r.push({ level: "warn", text: "Most top wallets bought less than a day ago, so nobody has proven they'll hold yet." }); }
+    if (longPct >= 5) r.push({ level: "good", text: `Wallets that have held for over a month without selling own ${p(longPct)} of the supply.` });
+  } else {
+    const tracked = Math.max(0, ...top.map((h) => daysOf(h.first_seen_at)).filter(isFinite));
+    if (tracked >= 1) r.push({ level: "warn", text: `We've followed the top wallets for ${Math.floor(tracked)} day${Math.floor(tracked) === 1 ? "" : "s"}. Holding times get clearer the longer we watch.` });
+  }
+
+  // Locked supply and the dev.
+  const locked = input.holders.filter((h) => h.is_contract && /lock|vest/i.test(h.label || "")).reduce((a, h) => a + n(h.pct), 0);
+  if (locked >= 5) { score += 10; r.push({ level: "good", text: `${p(locked)} of the supply is locked, so it can't be dumped right now.` }); }
+  const devSold = !!input.dev && all.some((e) => e.wallet === input.dev && e.kind !== "buy");
+  if (devSold) { score -= 20; r.push({ level: "bad", text: "The dev has sold. Long-term holders usually want a dev who stays." }); }
+  else if (input.dev) { score += 10; r.push({ level: "good", text: "The dev hasn't sold since we started watching." }); }
+
+  // Things that hurt any hold.
+  const top10 = input.holders.filter((x) => x.in_top && !x.is_contract).sort((a, b) => n(b.pct) - n(a.pct)).slice(0, 10).reduce((a, x) => a + n(x.pct), 0);
+  if (top10 > 50) { score -= 10; r.push({ level: "bad", text: `The 10 biggest wallets hold ${p(top10)}. If they leave, the price falls hard.` }); }
+  if (s.honeypot === true) { score -= 40; r.push({ level: "bad", text: "Honeypot warning: you may never be able to sell." }); }
+  if (s.mintable === true) { score -= 10; r.push({ level: "warn", text: "The owner can make new tokens, which can water down your bag over time." }); }
+  const week = input.trades.filter((t) => within(t.at, 7 * DAY, now));
+  const wb = new Set(week.filter((t) => t.side === "buy").map((t) => t.wallet)).size, ws = new Set(week.filter((t) => t.side === "sell").map((t) => t.wallet)).size;
+  if (wb >= 5 && wb > ws) { score += 5; r.push({ level: "good", text: `${wb} wallets bought this week and ${ws} sold, so new holders keep arriving.` }); }
+
+  score = Math.max(0, Math.min(100, score));
+  const order = { good: 0, warn: 1, bad: 2 };
+  const long: Outlook = score >= 65 ? { level: "good", title: "Looks strong to hold long term", reasons: r }
+    : score >= 45 ? { level: "ok", title: "Okay to hold, keep an eye on it", reasons: r } : { level: "weak", title: "Risky to hold long term", reasons: r };
+  long.reasons.sort((a, b) => order[a.level] - order[b.level]);
+
+  // Short term: the live buying and selling.
+  const shortReasons = call.reasons.filter((x) => /hour|24 h|wallets bought|wallets sold|likely to sell|connected wallets is selling|quiet/i.test(x.text)).slice(0, 4);
+  const short: Outlook = call.kind === "avoid" ? { level: "weak", title: "Not safe to trade", reasons: call.reasons }
+    : call.score >= 65 ? { level: "good", title: "Good momentum for a short-term trade", reasons: shortReasons }
+    : call.score >= 45 ? { level: "ok", title: "Choppy: no clear direction right now", reasons: shortReasons }
+    : { level: "weak", title: "Sellers in control for now", reasons: shortReasons };
+  return { long, short };
+}
