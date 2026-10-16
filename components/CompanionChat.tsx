@@ -36,6 +36,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const [passKey, setPassKey] = useState(0);
   const [needPass, setNeedPass] = useState(false);
   const [mood, setMood] = useState<Mood>("okay");
+  const [sheet, setSheet] = useState<null | "pass" | "privacy" | "help">(null);
   const ctl = useRef<AbortController | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const c = COMPANIONS[who];
@@ -49,6 +50,12 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem("companion", who); } catch {} }, [who]);
+  useEffect(() => {
+    if (!sheet) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSheet(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheet]);
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs, who]);
 
   const push = (id: CompanionId, m: Msg) => setMsgs((all) => ({ ...all, [id]: [...all[id], m] }));
@@ -114,10 +121,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     }
   }
 
-  function showPass() {
-    setNeedPass(true);
-    setTimeout(() => document.getElementById("ai-pass")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
-  }
+  function showPass() { setNeedPass(true); setSheet("pass"); }
 
   async function makePicture(request: string) {
     const id = who;
@@ -243,19 +247,37 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
             ? <button className="lux-send" type="button" onClick={() => ctl.current?.abort()} title="Stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg><span className="sr-only">Stop</span></button>
             : <button className="lux-send" type="submit" title="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" /><path d="m11 13 9-9" /></svg><span className="sr-only">Send</span></button>}
         </form>
-        <div className="lux-foot">AUTISTIK · Different minds. One community.</div>
+        <div className="lux-chips">
+          {signedIn
+            ? <button type="button" onClick={() => setSheet("pass")} data-hot={needPass ? "1" : undefined}>🎟️ AI Pass</button>
+            : <Link href="/login?next=/companions">🔑 Sign in to chat</Link>}
+          <button type="button" onClick={() => setSheet("privacy")}>🔒 Privacy</button>
+          <button type="button" onClick={() => setSheet("help")}>🆘 Help now</button>
+        </div>
       </div>
 
-      <div className="stack side">
-        {!signedIn && <div className="notice warn"><Link href="/login?next=/companions">Sign in</Link> or <Link href="/login?mode=join&next=/companions">create a free account</Link> to chat.</div>}
-        {signedIn && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => setNeedPass(false)} />}
-        <div className="card stack" style={{ fontSize: ".86em", gap: 8 }}>
-          <b>Privacy</b>
-          <p className="muted">Chats aren&apos;t saved on our servers. Voice notes are turned into text by your browser and aren&apos;t recorded.</p>
-          <button className="btn small" type="button" onClick={() => { ctl.current?.abort(); voice.stopSpeaking(); turns.current[who] = []; setMsgs((a) => ({ ...a, [who]: [] })); }}>Clear this chat</button>
+      {sheet && (
+        <div className="sheet-back" onClick={() => setSheet(null)}>
+          <div className="sheet stack" role="dialog" aria-modal="true" aria-label={sheet === "pass" ? "AI Pass" : sheet === "privacy" ? "Privacy" : "Help now"} onClick={(e) => e.stopPropagation()}>
+            <button className="sheet-x" type="button" onClick={() => setSheet(null)} aria-label="Close">✕</button>
+            {sheet === "pass" && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => { setNeedPass(false); setSheet(null); }} />}
+            {sheet === "privacy" && (
+              <div className="card stack">
+                <h3>🔒 Privacy</h3>
+                <p className="muted">Chats aren&apos;t saved on our servers. Voice notes are turned into text by your browser and aren&apos;t recorded.</p>
+                <div className="row"><button className="btn small" type="button" onClick={() => { ctl.current?.abort(); voice.stopSpeaking(); turns.current[who] = []; setMsgs((a) => ({ ...a, [who]: [] })); setSheet(null); }}>Clear this chat</button></div>
+              </div>
+            )}
+            {sheet === "help" && (
+              <div className="card stack">
+                <h3>🆘 In danger right now?</h3>
+                <p>Call your local emergency number now, or find a free crisis line in your country at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</p>
+                <p className="muted">Believer and Purity are AIs, not doctors or therapists. Please also reach out to someone you trust.</p>
+              </div>
+            )}
+          </div>
         </div>
-        <p className="notice alert" style={{ fontSize: ".82em" }}><b>In danger right now?</b> Call your local emergency number, or find a free crisis line at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</p>
-      </div>
+      )}
     </div>
   );
 }
