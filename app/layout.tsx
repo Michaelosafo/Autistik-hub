@@ -16,11 +16,11 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const sb = supabaseServer();
   const { data: { user } } = await sb.auth.getUser();
-  let me: { alias: string; is_admin: boolean } | null = null;
+  let me: { alias: string; color: string; is_admin: boolean } | null = null;
   if (user) {
     // The Admin menu item only shows for the owner (see supabase/admin-lock.sql).
-    const [{ data }, { data: owner }] = await Promise.all([sb.from("profiles").select("alias").eq("id", user.id).single(), sb.rpc("is_owner")]);
-    me = { alias: data?.alias ?? "Member", is_admin: owner === true };
+    const [{ data }, { data: owner }] = await Promise.all([sb.from("profiles").select("alias, color").eq("id", user.id).single(), sb.rpc("is_owner")]);
+    me = { alias: data?.alias ?? "Member", color: /^#[0-9a-f]{6}$/i.test(data?.color || "") ? data!.color : "#6141D4", is_admin: owner === true };
   }
   return (
     <html lang="en" suppressHydrationWarning>

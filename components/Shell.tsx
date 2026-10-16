@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Art from "@/components/Art";
 import InstallApp from "@/components/InstallApp";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -25,7 +25,7 @@ function Icon({ id }: { id: string }) {
   return <svg aria-hidden="true"><use href={"#" + id} /></svg>;
 }
 
-export default function Shell({ me, children }: { me: { alias: string; is_admin: boolean } | null; children: React.ReactNode }) {
+export default function Shell({ me, children }: { me: { alias: string; color: string; is_admin: boolean } | null; children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [calm, setCalm] = useState(false);
@@ -64,6 +64,17 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
     router.push("/");
     router.refresh();
   }
+  // A short message after each display change, so people who can't see tooltips (phones) know what happened.
+  const [note, setNote] = useState("");
+  const noteTimer = useRef<ReturnType<typeof setTimeout>>();
+  function tell(text: string) {
+    setNote(text);
+    clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(() => setNote(""), 1600);
+  }
+  const THEME_NEXT = { auto: "dark", dark: "light", light: "auto" } as const;
+  const THEME_LABEL = { auto: "Colours follow your phone", dark: "Dark colours", light: "Light colours" } as const;
+
   async function copyCA() {
     try { await navigator.clipboard.writeText(TOKEN_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
@@ -98,24 +109,30 @@ export default function Shell({ me, children }: { me: { alias: string; is_admin:
 
         <main>
           <div className="topbar">
-            <div className="chips">
-              {me ? (
-                <>
-                  <Link className="chip live" href="/me" style={{ textDecoration: "none", color: "var(--ink)" }} title="Your profile">{me.alias}{me.is_admin ? " · Admin" : ""}</Link>
-                  <button className="chip toggle" onClick={signOut}>Sign out</button>
-                </>
-              ) : (
-                <Link className="chip toggle" href={`/login?next=${encodeURIComponent(path)}`} style={{ textDecoration: "none", color: "var(--ink)" }}>Sign in / Join</Link>
-              )}
-            </div>
+            {me ? (
+              <div className="me-pill">
+                <Link href="/me" className="me-link" title="Your profile">
+                  <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
+                  <span className="me-name">{me.alias}</span>
+                  {me.is_admin && <span className="me-tag">Admin</span>}
+                </Link>
+                <button className="me-out" type="button" onClick={signOut} title="Sign out" aria-label="Sign out"><Icon id="i-out" /></button>
+              </div>
+            ) : (
+              <Link className="signin-btn" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>
+            )}
             <div className="chips">
               <InstallApp />
-              <button className="chip toggle" aria-pressed={calm} onClick={() => setCalm(!calm)} title="No movement, softer colours, no adverts">Calm mode</button>
-              <button className="chip toggle" aria-pressed={big} onClick={() => setBig(!big)}>Larger text</button>
-              <button className="chip toggle" onClick={() => setTheme(theme === "auto" ? "dark" : theme === "dark" ? "light" : "auto")} title="Colours: follow my phone, dark or light">
-                {theme === "auto" ? "◐ Auto colours" : theme === "dark" ? "☾ Dark" : "☀ Light"}
-              </button>
+              <div className="tools" role="group" aria-label="Display">
+                <button className="tool" type="button" aria-pressed={calm} aria-label="Calm mode" title="Calm mode: no movement, softer colours, no adverts"
+                  onClick={() => { setCalm(!calm); tell(calm ? "Calm mode off" : "Calm mode on"); }}><Icon id="i-calm" /></button>
+                <button className="tool" type="button" aria-pressed={big} aria-label="Larger text" title="Larger text"
+                  onClick={() => { setBig(!big); tell(big ? "Normal text" : "Larger text"); }}><Icon id="i-text" /></button>
+                <button className="tool" type="button" aria-label={`${THEME_LABEL[theme]}. Tap to change.`} title={`${THEME_LABEL[theme]} (tap to change)`}
+                  onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}><Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /></button>
+              </div>
             </div>
+            <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>
           <div className="page">{children}</div>
         </main>
@@ -144,6 +161,12 @@ function Sprites() {
   <symbol id="i-learn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6M9 11h5"/></symbol>
   <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
   <symbol id="i-safe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-calm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8.5 5.5-14 15-15-.8 9.8-6.5 15-15 15z"/><path d="M5 19l8-8"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19l5.5-14L13 19M4 14h7"/><path d="M15 19l3.5-9 3.5 9M16.2 16h4.6"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 6.8 6.8 0 0 0 20 14.5z"/></symbol>
+  <symbol id="i-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3"/><path d="M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-adm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
   <symbol id="g-lounge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11V7a5 5 0 0 1 10 0v4"/><path d="M4 11h16v4a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z"/></symbol>
   <symbol id="g-calm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c-5-3-8-6.5-8-10.5A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 8 3.5C20 14.5 17 18 12 21z"/></symbol>
