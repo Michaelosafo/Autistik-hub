@@ -5,6 +5,7 @@ import AIPass from "@/components/AIPass";
 import Art from "@/components/Art";
 import { COMPANIONS, DRAW_RE, type CompanionId, type Prefs } from "@/lib/companions";
 import { cleanSvg } from "@/lib/svg-clean";
+import { useVoice } from "@/lib/voice";
 
 type Msg =
   | { kind: "me"; text: string }
@@ -15,6 +16,8 @@ type Msg =
 type Turn = { role: "user" | "assistant"; content: string };
 
 const PREF_KEYS: [keyof Prefs, string][] = [["short", "Short answers"], ["steps", "Step-by-step lists"], ["literal", "Literal language, no idioms"], ["gentle", "Extra gentle tone"], ["fewQuestions", "Ask me fewer questions"]];
+// Each companion has its own voice: Believer brighter, Purity slower and calmer.
+const VOICES: Record<CompanionId, { rate: number; pitch: number }> = { believer: { rate: 1, pitch: 1.1 }, purity: { rate: 0.85, pitch: 0.95 } };
 
 export default function CompanionChat({ signedIn, start }: { signedIn: boolean; start?: CompanionId }) {
   const [who, setWho] = useState<CompanionId>(start || "believer");
@@ -29,7 +32,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const ctl = useRef<AbortController | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const c = COMPANIONS[who];
-  const other = COMPANIONS[who === "believer" ? "purity" : "believer"];
+  const voice = useVoice("companion-voice", VOICES[who]);
 
   useEffect(() => {
     try {
@@ -46,9 +49,14 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const replaceLast = (id: CompanionId, m: Msg) => setMsgs((all) => ({ ...all, [id]: [...all[id].slice(0, -1), m] }));
   const lowBattery = () => { try { return Number(localStorage.getItem("battery")) > 0 && Number(localStorage.getItem("battery")) <= 2; } catch { return false; } };
 
-  function choose(id: CompanionId) { ctl.current?.abort(); setWho(id); }
+  function choose(id: CompanionId) { ctl.current?.abort(); voice.stopSpeaking(); setWho(id); }
 
-  async function send(text: string) {
+  function voiceNote() {
+    if (!signedIn) { push(who, { kind: "sys", text: "Please sign in to talk with Believer and Purity." }); return; }
+    voice.listen((text) => send(text, true), (message) => push(who, { kind: "sys", text: message }));
+  }
+
+  async function send(text: string, spoken = false) {
     text = text.trim();
     if (!text || busy) return;
     if (!signedIn) { push(who, { kind: "sys", text: "Please sign in to talk with Believer and Purity." }); return; }
@@ -82,6 +90,8 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         replaceLast(id, { kind: "ai", text: reply });
       }
       turns.current[id].push({ role: "assistant", content: reply || "…" });
+      // Voice notes get a spoken reply; typed messages too when "Read replies aloud" is on.
+      if (reply && (spoken || voice.autoRead)) voice.speak(reply);
     } catch (e: any) {
       if (reply) turns.current[id].push({ role: "assistant", content: reply });
       else { replaceLast(id, { kind: "sys", text: e?.name === "AbortError" ? "Stopped." : "Couldn't reach the companion. Check your connection." }); turns.current[id].pop(); }
@@ -134,86 +144,91 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const list = msgs[who];
 
   return (
-    <>
-      <div className="comp-grid">
-        {(Object.keys(COMPANIONS) as CompanionId[]).map((id) => {
-          const k = COMPANIONS[id];
-          return (
-            <div key={id} className="comp" data-c={id} aria-pressed={who === id}>
-              <Art kind={id} className="av" />
-              <div style={{ minWidth: 0 }}>
-                <h2>{k.name}</h2><div className="tagline">{k.tagline}</div>
-                <div className="traits">{k.traits.map((t) => <span key={t}>{t}</span>)}</div>
-                <div className="row"><button className="btn c small" type="button" onClick={() => choose(id)}>{who === id ? `Talking to ${k.name}` : `Talk to ${k.name}`}</button></div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="kai">
-        <div className="card chat" data-c={who}>
-          <div className="chat-head">
-            <Art kind={who} className="av" />
-            <div className="grow"><b>{c.name}</b><div className="muted" style={{ fontSize: ".82em" }}>{c.tagline}</div></div>
-            <button className="btn small" type="button" onClick={() => choose(other.id)}>Switch to {other.name}</button>
-          </div>
-          <div className="msgs" ref={box} aria-live="polite">
-            <div className="msgrow"><Art kind={who} className="av" /><div className="msg ai">{c.hello}</div></div>
-            {list.map((m, i) => {
-              if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
-              if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
-              if (m.kind === "drawing") return (
-                <div key={i} className="msgrow"><Art kind={who} className="av" /><div className="msg ai"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
-              );
-              if (m.kind === "img") return (
-                <div key={i} className="msgrow"><Art kind={who} className="av" />
-                  <div className="msg ai"><div className="genwrap">
-                    <span>{m.title}</span>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img className="genimg" alt={m.title} src={"data:image/svg+xml;charset=utf-8," + encodeURIComponent(m.svg)} />
-                    <div className="row" style={{ gap: 6 }}>
-                      <button className="btn small" type="button" onClick={() => save(m.svg, m.title, "png")}>Save as PNG</button>
-                      <button className="btn small" type="button" onClick={() => save(m.svg, m.title, "svg")}>Save as SVG</button>
-                      <button className="btn small" type="button" disabled={busy} onClick={() => makePicture(m.request + " (draw a new version)")}>Try another</button>
-                    </div>
-                  </div></div>
-                </div>
-              );
-              return <div key={i} className="msgrow"><Art kind={who} className="av" /><div className={"msg ai" + (m.pending ? " muted" : "")}>{m.text}</div></div>;
-            })}
-          </div>
-          {!list.length && (
-            <div className="starters">{c.starters.map((s) => <button key={s} className="btn small" type="button" onClick={() => send(s)}>{s}</button>)}</div>
-          )}
-          <div className="composer-tools">
-            <button className="btn small" id="kaiDraw" type="button" aria-pressed={draw} onClick={() => setDraw(!draw)}>✎ Make a picture</button>
-            <span className="muted" style={{ fontSize: ".82em" }}>{draw ? "Picture mode is on. Describe what to draw." : "Turn on, then describe the picture you want."}</span>
-          </div>
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-            <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={signedIn ? `Message ${c.name}… (Enter to send, Shift+Enter for a new line)` : "Sign in to start chatting"} aria-label={`Message ${c.name}`}
-              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
-            {busy ? <button className="btn" type="button" onClick={() => ctl.current?.abort()}>Stop</button> : <button className="btn c" type="submit">Send</button>}
-          </form>
-        </div>
-
-        <div className="stack">
-          {!signedIn && <div className="notice warn"><Link href="/login?next=/companions">Sign in</Link> or <Link href="/login?mode=join&next=/companions">create a free account</Link> to chat.</div>}
-          {signedIn && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => setNeedPass(false)} />}
-          <div className="card prefs">
-            <h3>How they talk to you</h3>
-            {PREF_KEYS.map(([k, label]) => (
-              <label key={k}><input type="checkbox" checked={!!prefs[k]} onChange={(e) => setPrefs({ ...prefs, [k]: e.target.checked })} /> {label}</label>
+    <div className="kai companions">
+      <div className="card chat" data-c={who}>
+        <div className="chat-head">
+          <div className="who-switch" role="tablist" aria-label="Choose a companion">
+            {(Object.keys(COMPANIONS) as CompanionId[]).map((id) => (
+              <button key={id} type="button" role="tab" data-c={id} aria-selected={who === id} onClick={() => choose(id)}>
+                <Art kind={id} className="av" /><span><b>{COMPANIONS[id].name}</b><small>{COMPANIONS[id].tagline}</small></span>
+              </button>
             ))}
           </div>
-          <div className="card stack" style={{ fontSize: ".9em" }}>
-            <h3>Privacy</h3>
-            <p className="muted">Your chats are not saved on our servers. Close the page and they&apos;re gone.</p>
-            <button className="btn small" type="button" onClick={() => { ctl.current?.abort(); turns.current[who] = []; setMsgs((a) => ({ ...a, [who]: [] })); }}>Clear this chat</button>
-          </div>
-          <div className="notice alert" style={{ fontSize: ".88em" }}><b>In danger right now?</b> Call your local emergency number, or find a free crisis line at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</div>
+          {voice.canSpeak && (
+            <button className="icon-btn" type="button" aria-pressed={voice.autoRead} onClick={() => voice.setRead(!voice.autoRead)}
+              title={voice.autoRead ? "Replies are read aloud. Click to turn off." : "Read replies aloud"}>
+              {voice.talking ? "🔊" : voice.autoRead ? "🔉" : "🔈"}<span className="sr-only">Read replies aloud</span>
+            </button>
+          )}
         </div>
+
+        <div className="msgs" ref={box} aria-live="polite">
+          <div className="msgrow"><Art kind={who} className="av" /><div className="msg ai">{c.hello}</div></div>
+          {list.map((m, i) => {
+            if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
+            if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
+            if (m.kind === "drawing") return (
+              <div key={i} className="msgrow"><Art kind={who} className="av" /><div className="msg ai"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
+            );
+            if (m.kind === "img") return (
+              <div key={i} className="msgrow"><Art kind={who} className="av" />
+                <div className="msg ai"><div className="genwrap">
+                  <span>{m.title}</span>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img className="genimg" alt={m.title} src={"data:image/svg+xml;charset=utf-8," + encodeURIComponent(m.svg)} />
+                  <div className="row" style={{ gap: 6 }}>
+                    <button className="btn small" type="button" onClick={() => save(m.svg, m.title, "png")}>Save as PNG</button>
+                    <button className="btn small" type="button" onClick={() => save(m.svg, m.title, "svg")}>Save as SVG</button>
+                    <button className="btn small" type="button" disabled={busy} onClick={() => makePicture(m.request + " (draw a new version)")}>Try another</button>
+                  </div>
+                </div></div>
+              </div>
+            );
+            return (
+              <div key={i} className="msgrow"><Art kind={who} className="av" />
+                <div className={"msg ai" + (m.pending ? " muted" : "")}>
+                  {m.text}
+                  {!m.pending && voice.canSpeak && <button className="listen" type="button" onClick={() => voice.speak(m.text)} title="Listen to this reply">▶ Listen</button>}
+                </div>
+              </div>
+            );
+          })}
+          {voice.listening && <div className="msg me listening">🎙️ {voice.heard || "Listening… speak now"}</div>}
+        </div>
+
+        {!list.length && (
+          <div className="starters">{c.starters.map((s) => <button key={s} className="chip" type="button" onClick={() => send(s)}>{s}</button>)}</div>
+        )}
+        <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
+          <button className="icon-btn" id="kaiDraw" type="button" aria-pressed={draw} onClick={() => setDraw(!draw)} title={draw ? "Picture mode is on: describe what to draw" : "Make a picture"}>🖼️<span className="sr-only">Make a picture</span></button>
+          <textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)}
+            placeholder={!signedIn ? "Sign in to start chatting" : draw ? `Describe the picture for ${c.name} to draw…` : `Message ${c.name}…`} aria-label={`Message ${c.name}`}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
+          {voice.canListen && (
+            <button className={"icon-btn" + (voice.listening ? " rec" : "")} type="button" aria-pressed={voice.listening} onClick={voiceNote} disabled={busy}
+              title={voice.listening ? "Stop and send" : "Send a voice note"}>{voice.listening ? "⏹" : "🎤"}<span className="sr-only">{voice.listening ? "Stop and send" : "Send a voice note"}</span></button>
+          )}
+          {busy ? <button className="btn" type="button" onClick={() => ctl.current?.abort()}>Stop</button> : <button className="btn c" type="submit">Send</button>}
+        </form>
       </div>
-    </>
+
+      <div className="stack side">
+        {!signedIn && <div className="notice warn"><Link href="/login?next=/companions">Sign in</Link> or <Link href="/login?mode=join&next=/companions">create a free account</Link> to chat.</div>}
+        {signedIn && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => setNeedPass(false)} />}
+        <details className="card prefs">
+          <summary><b>Settings</b><span className="muted">How {c.name} talks to you</span></summary>
+          {PREF_KEYS.map(([k, label]) => (
+            <label key={k}><input type="checkbox" checked={!!prefs[k]} onChange={(e) => setPrefs({ ...prefs, [k]: e.target.checked })} /> {label}</label>
+          ))}
+          {voice.canSpeak && <label><input type="checkbox" checked={voice.autoRead} onChange={(e) => voice.setRead(e.target.checked)} /> Read replies aloud</label>}
+        </details>
+        <div className="card stack" style={{ fontSize: ".86em", gap: 8 }}>
+          <b>Privacy</b>
+          <p className="muted">Chats aren&apos;t saved on our servers. Voice notes are turned into text by your browser and aren&apos;t recorded.</p>
+          <button className="btn small" type="button" onClick={() => { ctl.current?.abort(); voice.stopSpeaking(); turns.current[who] = []; setMsgs((a) => ({ ...a, [who]: [] })); }}>Clear this chat</button>
+        </div>
+        <p className="notice alert" style={{ fontSize: ".82em" }}><b>In danger right now?</b> Call your local emergency number, or find a free crisis line at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</p>
+      </div>
+    </div>
   );
 }
