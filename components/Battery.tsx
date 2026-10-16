@@ -26,7 +26,7 @@ export default function Battery() {
       </div>
       <p className="muted" style={{ fontSize: ".9em" }}>
         {level && level <= 2
-          ? "Low battery noted. Purity is a good choice on low-battery days; she keeps things slow and quiet."
+          ? "Low battery noted. Believer and Purity will keep their replies short and calm today."
           : "Only you can see this. It's saved on this device and helps your companion adapt to you."}
       </p>
     </div>

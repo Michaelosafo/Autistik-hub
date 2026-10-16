@@ -1,8 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** How a voice sounds: Believer speaks at a normal pace, Purity a little slower and calmer. */
-export type VoiceStyle = { rate?: number };
+/** How a voice sounds: speed and pitch (1 = normal). */
+export type VoiceStyle = { rate?: number; pitch?: number };
 
 // The most natural-sounding male English voices that browsers ship, best first. Edge's "Online (Natural)"
 // voices and Apple's Enhanced/Premium voices are neural and sound close to a real person.
@@ -28,12 +28,12 @@ export function pickMaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVo
 }
 
 /** Sets up an utterance with a natural male voice. Pitch is only lowered when the device has no male voice. */
-export function maleUtterance(text: string, rate = 0.97): SpeechSynthesisUtterance {
+export function maleUtterance(text: string, rate = 0.97, pitch = 1): SpeechSynthesisUtterance {
   const u = new SpeechSynthesisUtterance(forSpeech(text));
   const v = pickMaleVoice(window.speechSynthesis.getVoices());
   u.rate = rate;
-  if (v) { u.voice = v; u.lang = v.lang; u.pitch = 1; }
-  else { u.pitch = 0.8; } // no male voice installed: deepen the default one a little
+  if (v) { u.voice = v; u.lang = v.lang; u.pitch = pitch; }
+  else { u.pitch = 0.8 * pitch; } // no male voice installed: deepen the default one a little
   return u;
 }
 
@@ -78,7 +78,7 @@ export function useVoice(storageKey: string, style: VoiceStyle = {}) {
     if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
     const synth = window.speechSynthesis;
     synth.cancel();
-    const u = maleUtterance(text, styleRef.current.rate ?? 0.97);
+    const u = maleUtterance(text, styleRef.current.rate ?? 0.97, styleRef.current.pitch ?? 1);
     u.onstart = () => setTalking(true);
     u.onend = u.onerror = () => setTalking(false);
     synth.speak(u);

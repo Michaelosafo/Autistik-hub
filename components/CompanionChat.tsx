@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AIPass from "@/components/AIPass";
 import Art from "@/components/Art";
-import { COMPANIONS, DRAW_RE, type CompanionId, type Prefs } from "@/lib/companions";
+import { COMPANIONS, DRAW_RE, type CompanionId } from "@/lib/companions";
 import { cleanSvg } from "@/lib/svg-clean";
 import { useVoice } from "@/lib/voice";
 
@@ -15,9 +15,8 @@ type Msg =
   | { kind: "sys"; text: string };
 type Turn = { role: "user" | "assistant"; content: string };
 
-const PREF_KEYS: [keyof Prefs, string][] = [["short", "Short answers"], ["steps", "Step-by-step lists"], ["literal", "Literal language, no idioms"], ["gentle", "Extra gentle tone"], ["fewQuestions", "Ask me fewer questions"]];
-// Both speak with a natural male voice; Purity a little slower and calmer.
-const VOICES: Record<CompanionId, { rate: number }> = { believer: { rate: 0.98 }, purity: { rate: 0.88 } };
+// Both speak with a natural male voice: Believer slower and heartfelt, Purity quicker and brighter.
+const VOICES: Record<CompanionId, { rate: number; pitch: number }> = { believer: { rate: 0.92, pitch: 0.95 }, purity: { rate: 1.08, pitch: 1.12 } };
 
 export default function CompanionChat({ signedIn, start }: { signedIn: boolean; start?: CompanionId }) {
   const [who, setWho] = useState<CompanionId>(start || "believer");
@@ -26,7 +25,6 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [draw, setDraw] = useState(false);
-  const [prefs, setPrefs] = useState<Prefs>({ short: true, literal: true });
   const [passKey, setPassKey] = useState(0);
   const [needPass, setNeedPass] = useState(false);
   const ctl = useRef<AbortController | null>(null);
@@ -38,11 +36,9 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     try {
       const saved = localStorage.getItem("companion") as CompanionId | null;
       if (!start && saved && COMPANIONS[saved]) setWho(saved);
-      const p = localStorage.getItem("prefs"); if (p) setPrefs(JSON.parse(p));
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem("companion", who); } catch {} }, [who]);
-  useEffect(() => { try { localStorage.setItem("prefs", JSON.stringify(prefs)); } catch {} }, [prefs]);
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs, who]);
 
   const push = (id: CompanionId, m: Msg) => setMsgs((all) => ({ ...all, [id]: [...all[id], m] }));
@@ -72,7 +68,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "content-type": "application/json" }, signal: ctl.current.signal,
-        body: JSON.stringify({ companion: id, messages: turns.current[id], prefs: { ...prefs, lowBattery: lowBattery() } }),
+        body: JSON.stringify({ companion: id, messages: turns.current[id], prefs: { lowBattery: lowBattery() } }),
       });
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
@@ -212,13 +208,6 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
       <div className="stack side">
         {!signedIn && <div className="notice warn"><Link href="/login?next=/companions">Sign in</Link> or <Link href="/login?mode=join&next=/companions">create a free account</Link> to chat.</div>}
         {signedIn && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => setNeedPass(false)} />}
-        <details className="card prefs">
-          <summary><b>Settings</b><span className="muted">How {c.name} talks to you</span></summary>
-          {PREF_KEYS.map(([k, label]) => (
-            <label key={k}><input type="checkbox" checked={!!prefs[k]} onChange={(e) => setPrefs({ ...prefs, [k]: e.target.checked })} /> {label}</label>
-          ))}
-          {voice.canSpeak && <label><input type="checkbox" checked={voice.autoRead} onChange={(e) => voice.setRead(e.target.checked)} /> Read replies aloud</label>}
-        </details>
         <div className="card stack" style={{ fontSize: ".86em", gap: 8 }}>
           <b>Privacy</b>
           <p className="muted">Chats aren&apos;t saved on our servers. Voice notes are turned into text by your browser and aren&apos;t recorded.</p>
