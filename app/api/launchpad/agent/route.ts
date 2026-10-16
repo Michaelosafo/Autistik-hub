@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { anthropic, MODEL, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
-import { CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains } from "@/lib/launchpad";
+import { anthropic, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
+import { supabaseService } from "@/lib/supabase/server";
+import { AI_LAUNCH_SESSIONS, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains } from "@/lib/launchpad";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
 export const runtime = "nodejs";
@@ -83,24 +84,42 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const turns = cleanTurns(body?.messages);
   if (!turns) return json({ error: "Send a message to start." }, 400);
+  const session = String(body?.session || "");
+  if (!/^[a-zA-Z0-9-]{8,64}$/.test(session)) return json({ error: "Please refresh the page and try again." }, 400);
+
+  // 2 AI launch sessions a day (30 messages each). The quick launch form is unlimited and uses no AI.
+  const { data: t, error: tErr } = await supabaseService().rpc("launch_ai_turn", { p_user: g.uid, p_session: session, p_max: AI_LAUNCH_SESSIONS, p_max_messages: 30 });
+  if (tErr) console.error("launch_ai_turn failed (has supabase/ai-budget.sql been run?):", tErr.message);
+  const turn = (t || { ok: true, sessions_left: null }) as { ok: boolean; reason?: string; sessions_left: number | null };
+  if (!turn.ok) {
+    return json({
+      limit: true, sessionsLeft: turn.sessions_left ?? 0,
+      error: turn.reason === "messages"
+        ? "This AI session has reached its 30-message limit. Use the Quick launch form, or press Start over to begin a new AI session."
+        : `You've used today's ${AI_LAUNCH_SESSIONS} AI launch sessions. The Quick launch form has no limit, or come back tomorrow.`,
+    }, 429);
+  }
 
   try {
     const msg = await anthropic().messages.create({
-      model: MODEL,
-      max_tokens: 16000,
+      model: FAST_MODEL,
+      max_tokens: 4000,
       system: systemPrompt(),
       tools: [PREPARE_LAUNCH],
       messages: turns,
-    });
+      ...cheap(FAST_MODEL),
+    } as any);
+    logCost(FAST_MODEL, "launch", msg.usage);
     if ((msg.stop_reason as string) === "refusal") return json({ reply: "I can't help with that one. Let's try a different idea for your token." });
 
     const reply = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
     const call = msg.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "prepare_launch");
-    if (!call) return json({ reply: reply || "Sorry, I lost my train of thought. Could you say that again?" });
+    const left = turn.sessions_left;
+    if (!call) return json({ reply: reply || "I'm sorry, I didn't catch that. Could you say it again?", sessionsLeft: left });
 
     const checked = checkPlan(call.input as any);
-    if ("error" in checked) return json({ reply: `${reply ? reply + "\n\n" : ""}One thing needs fixing first: ${checked.error}` });
-    return json({ reply: reply || "Here's your launch plan. Check it carefully below.", plan: checked.plan });
+    if ("error" in checked) return json({ reply: `${reply ? reply + "\n\n" : ""}One thing needs fixing first: ${checked.error}`, sessionsLeft: left });
+    return json({ reply: reply || "Here is your launch plan. Please check it carefully.", plan: checked.plan, sessionsLeft: left });
   } catch (e) {
     return json({ error: aiErrorMessage(e, "Autistik") }, 502);
   }

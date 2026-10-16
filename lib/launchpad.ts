@@ -166,6 +166,9 @@ export const LOCKS: Record<LiquidityLock, { option: number; label: string; short
 };
 export const isLock = (v: unknown): v is LiquidityLock => typeof v === "string" && v in LOCKS;
 
+/** AI launch sessions (with Autistik) per member per day. The quick launch form has no limit and uses no AI. */
+export const AI_LAUNCH_SESSIONS = 2;
+
 /** Creators must hold at least this much AUTISTIK (in US dollars), on BNB Chain, in the wallet they launch from. */
 export const MIN_HOLD_USD = Number(process.env.NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD || 20);
 

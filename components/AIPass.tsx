@@ -113,7 +113,7 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
         </>
       )}
       {msg && <span className="muted" role="status">{msg}</span>}
-      <p className="muted" style={{ fontSize: ".85em" }}>Up to {s.dailyLimit} messages a day. A picture counts as 5 messages. The Launch Pad guide (Autistik) stays free. Passes aren&apos;t refundable.</p>
+      <p className="muted" style={{ fontSize: ".85em" }}>With a pass: up to {s.dailyLimit} messages a day and the more advanced AI model. A picture counts as 5 messages. Autistik on the Launch page is free (2 sessions a day). Passes aren&apos;t refundable.</p>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
-import { CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, type LiquidityLock } from "@/lib/launchpad";
 
 type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean };
 type Turn = { role: "user" | "assistant"; content: string };
@@ -46,15 +46,26 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
   const [canSpeak, setCanSpeak] = useState(false);
   const [canListen, setCanListen] = useState(false);
   const rec = useRef<any>(null);
+  // Two ways to launch: the quick form (no AI, unlimited) or Autistik (AI, 2 sessions a day).
+  const [mode, setMode] = useState<"quick" | "ai">("quick");
+  const session = useRef("");
+  const [sessionsLeft, setSessionsLeft] = useState<number | null>(null);
+  const newSession = () => { session.current = (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36); };
+  if (!session.current) newSession();
 
   useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs]);
   useEffect(() => {
     setCanSpeak("speechSynthesis" in window);
     setCanListen(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));
-    try { setVoice(localStorage.getItem("autistik-voice") === "on"); } catch {}
+    try { setVoice(localStorage.getItem("autistik-voice") === "on"); const m = localStorage.getItem("launch-mode"); if (m === "ai" || m === "quick") setMode(m); } catch {}
     return () => { try { window.speechSynthesis?.cancel(); rec.current?.abort(); } catch {} };
   }, []);
 
+  function pickMode(m: "quick" | "ai") {
+    setMode(m);
+    try { localStorage.setItem("launch-mode", m); } catch {}
+    if (m === "quick") { window.speechSynthesis?.cancel(); setTalking(false); }
+  }
   function say(text: string) { if (voice) speak(text, setTalking); }
   function toggleVoice() {
     const next = !voice;
@@ -98,8 +109,9 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
     turns.current.push({ role: "user", content: text });
     setBusy(true);
     try {
-      const res = await fetch("/api/launchpad/agent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: turns.current }) });
+      const res = await fetch("/api/launchpad/agent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: turns.current, session: session.current }) });
       const data = await res.json().catch(() => ({}));
+      if (typeof data.sessionsLeft === "number") setSessionsLeft(data.sessionsLeft);
       if (!res.ok) {
         turns.current.pop();
         setMsgs((m) => [...m.slice(0, -1), { kind: "sys", text: data.error || "Something went wrong. Try again." }]);
@@ -177,13 +189,22 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
 
   return (
     <div className="stack">
+      <div className="launch-modes" role="tablist" aria-label="How do you want to launch?">
+        <button type="button" role="tab" aria-selected={mode === "quick"} onClick={() => pickMode("quick")}>
+          <b>⚡ Quick launch</b><span>Fill in one short form. No AI, free and unlimited.</span>
+        </button>
+        <button type="button" role="tab" aria-selected={mode === "ai"} onClick={() => pickMode("ai")}>
+          <b>🤖 Launch with Autistik</b><span>Autistik asks the questions by text or voice. {AI_LAUNCH_SESSIONS} AI sessions a day{sessionsLeft !== null ? ` · ${sessionsLeft} left today` : ""}.</span>
+        </button>
+      </div>
       <div className="kai lp">
+        {mode === "quick" ? <QuickLaunch disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
         <div className="card chat" data-c="autistik">
           <div className="chat-head">
             <span className={talking ? "speaking" : undefined}><Avatar /></span>
             <div className="grow"><b>Autistik</b><div className="muted" style={{ fontSize: ".82em" }}>{talking ? "Speaking…" : "Your launch agent. Asks the questions, you sign."}</div></div>
             {canSpeak && <button className="btn small" type="button" aria-pressed={voice} onClick={toggleVoice} title="Autistik reads its questions out loud">{voice ? "🔊 Voice on" : "🔈 Voice off"}</button>}
-            {msgs.length > 0 && <button className="btn small" type="button" disabled={busy} onClick={() => { turns.current = []; setMsgs([]); setPlan(null); setDone(null); setStatus(""); }}>Start over</button>}
+            {msgs.length > 0 && <button className="btn small" type="button" disabled={busy} onClick={() => { turns.current = []; newSession(); setMsgs([]); setPlan(null); setDone(null); setStatus(""); }}>Start over</button>}
           </div>
           <div className="msgs" ref={box} aria-live="polite">
             <div className="msgrow"><Avatar /><div className="msg ai">{HELLO}</div></div>
@@ -201,6 +222,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             <button className="btn c" type="submit" disabled={busy}>Send</button>
           </form>
         </div>
+        )}
 
         <div className="stack">
           {!signedIn && <div className="notice warn"><Link href="/login?next=/launchpad/new">Sign in</Link> or <Link href="/login?mode=join&next=/launchpad/new">create a free account</Link> to talk with Autistik.</div>}
@@ -221,7 +243,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
                 : <span className="muted" style={{ fontSize: ".85em" }}>Your token is live, but we couldn&apos;t add it to the Hub list.</span>}
             </div>
           ) : plan && c ? (
-            <div className="card stack">
+            <div className="card stack" id="launch-plan">
               <h3>Launch plan</h3>
               <table><tbody>
                 <tr><th>Chain</th><td>{c.name} · {c.dex}</td></tr>
@@ -245,7 +267,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             <div className="card stack" style={{ fontSize: ".9em" }}>
               <h3>How it works</h3>
               <ol className="stack" style={{ margin: 0, paddingLeft: 18, gap: 6 }}>
-                <li>Answer Autistik&apos;s questions. Turn on Voice to hear them, and press Speak to answer out loud.</li>
+                <li>Fill in the quick form, or answer Autistik&apos;s questions by text or voice.</li>
                 <li>Check your launch plan.</li>
                 <li>Sign one transaction in your wallet.</li>
                 <li>Your token trades on {Object.values(CHAINS).filter(isLive).map((x) => x.dex).join(", ") || "the DEX"} and shows up on DexScreener.</li>
@@ -257,5 +279,62 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The launch form without AI: the same plan Autistik would prepare, filled in directly. */
+function QuickLaunch({ onPlan, disabled }: { onPlan: (p: LaunchPlan) => void; disabled?: boolean }) {
+  const live = Object.values(CHAINS).filter(isLive);
+  const [f, setF] = useState({
+    chain: (live[0]?.key ?? "bsc") as LaunchPlan["chain"], name: "", symbol: "", supply: "1000000000", creatorPercent: "5",
+    liquidity: live[0]?.suggestedLiquidity ?? "0.5", lock: "burn" as LiquidityLock, description: "", website: "", x: "", telegram: "",
+  });
+  const [err, setErr] = useState("");
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
+  const coin = CHAINS[f.chain]?.coin ?? "BNB";
+
+  function review(e: React.FormEvent) {
+    e.preventDefault();
+    const r = checkPlan({ ...f, creatorPercent: Number(f.creatorPercent) });
+    if ("error" in r) { setErr(r.error); return; }
+    setErr("");
+    onPlan(r.plan);
+    setTimeout(() => document.getElementById("launch-plan")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+  }
+
+  if (!live.length) return <div className="card"><p className="muted">Launches open soon. No chain is live yet.</p></div>;
+  return (
+    <form className="card stack quick-launch" onSubmit={review}>
+      <div><b>⚡ Quick launch</b><p className="muted" style={{ fontSize: ".88em" }}>Fill in the details, review your plan, then sign once in your wallet.</p></div>
+      <div className="form-grid">
+        <label className="field"><span>Chain</span>
+          <select value={f.chain} onChange={(e) => { const c = CHAINS[e.target.value as LaunchPlan["chain"]]; setF({ ...f, chain: c.key, liquidity: c.suggestedLiquidity }); }}>
+            {live.map((c) => <option key={c.key} value={c.key}>{c.name} · {c.dex}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>Token name</span><input value={f.name} onChange={set("name")} maxLength={32} placeholder="e.g. Calm Otter" required /></label>
+        <label className="field"><span>Ticker</span><input value={f.symbol} onChange={set("symbol")} maxLength={13} placeholder="e.g. OTTER" required /></label>
+        <label className="field"><span>Total supply</span><input value={f.supply} onChange={set("supply")} inputMode="numeric" required /></label>
+        <label className="field"><span>Your share (0–{MAX_CREATOR_PERCENT}%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
+        <label className="field"><span>Liquidity ({coin})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" required /></label>
+      </div>
+      <fieldset className="lock-pick">
+        <legend>Liquidity</legend>
+        {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
+          <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
+        ))}
+      </fieldset>
+      <details>
+        <summary className="muted">Optional: description and links</summary>
+        <div className="form-grid" style={{ marginTop: 8 }}>
+          <label className="field"><span>One-line description</span><input value={f.description} onChange={set("description")} maxLength={500} /></label>
+          <label className="field"><span>Website (https://…)</span><input value={f.website} onChange={set("website")} /></label>
+          <label className="field"><span>X (https://…)</span><input value={f.x} onChange={set("x")} /></label>
+          <label className="field"><span>Telegram (https://…)</span><input value={f.telegram} onChange={set("telegram")} /></label>
+        </div>
+      </details>
+      {err && <div className="notice warn">{err}</div>}
+      <button className="btn primary" type="submit" disabled={disabled}>Review launch plan</button>
+    </form>
   );
 }
