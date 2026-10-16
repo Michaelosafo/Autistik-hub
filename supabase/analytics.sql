@@ -61,6 +61,19 @@ create table if not exists public.holder_events (
 create index if not exists holder_events_recent on public.holder_events (created_at desc);
 create index if not exists holder_events_token on public.holder_events (chain, token, created_at desc);
 
+-- "Connected wallets" for the bubble map: wallet a sent this token to wallet b.
+create table if not exists public.token_links (
+  chain text not null,
+  token text not null,
+  a text not null,
+  b text not null,
+  kind text not null,              -- funded (b's first tokens came from a) | moved | transfer
+  amount numeric,
+  created_at timestamptz not null default now(),
+  primary key (chain, token, a, b),
+  foreign key (chain, token) references public.tracked_tokens on delete cascade
+);
+
 create table if not exists public.notifications (
   id bigserial primary key,
   user_id uuid not null references auth.users on delete cascade,
@@ -87,6 +100,9 @@ alter table public.token_holders enable row level security;
 alter table public.holder_events enable row level security;
 alter table public.notifications enable row level security;
 alter table public.analytics_state enable row level security;
+alter table public.token_links enable row level security;
+drop policy if exists "links public" on public.token_links;
+create policy "links public" on public.token_links for select to anon, authenticated using (true);
 
 drop policy if exists "tracked public" on public.tracked_tokens;
 create policy "tracked public" on public.tracked_tokens for select to anon, authenticated using (true);
@@ -99,8 +115,8 @@ create policy "own notifications" on public.notifications for select to authenti
 drop policy if exists "mark own read" on public.notifications;
 create policy "mark own read" on public.notifications for update to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
 
-revoke all on public.tracked_tokens, public.token_holders, public.holder_events, public.notifications, public.analytics_state from anon, authenticated;
-grant select on public.tracked_tokens, public.token_holders, public.holder_events to anon, authenticated;
+revoke all on public.tracked_tokens, public.token_holders, public.holder_events, public.token_links, public.notifications, public.analytics_state from anon, authenticated;
+grant select on public.tracked_tokens, public.token_holders, public.holder_events, public.token_links to anon, authenticated;
 grant select on public.notifications to authenticated;
 grant update (read_at) on public.notifications to authenticated;
 revoke all on sequence public.holder_events_id_seq, public.notifications_id_seq from anon, authenticated;

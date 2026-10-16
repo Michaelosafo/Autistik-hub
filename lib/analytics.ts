@@ -85,13 +85,44 @@ async function topHolders(chain: AChain, token: string): Promise<Holder[] | null
   } catch (e) { console.error("Moralis holders failed:", (e as Error).message); return null; }
 }
 
-/** When a wallet first received this token (Moralis). Null when unknown. */
-async function firstReceived(chain: AChain, token: string, wallet: string): Promise<string | null> {
+/** When a wallet first received this token, and from whom (Moralis). Null when unknown. */
+async function firstReceived(chain: AChain, token: string, wallet: string): Promise<{ at: string; from: string | null } | null> {
   try {
     const j = await moralis(`/${wallet}/erc20/transfers?chain=${ACHAINS[chain].moralis}&contract_addresses%5B0%5D=${token}&order=ASC&limit=5`);
     const t = (j?.result || []).find((x: any) => lower(String(x.to_address)) === lower(wallet));
-    return t?.block_timestamp ? new Date(t.block_timestamp).toISOString() : null;
+    if (!t?.block_timestamp) return null;
+    return { at: new Date(t.block_timestamp).toISOString(), from: isAddress(t.from_address) ? getAddress(t.from_address) : null };
   } catch { return null; }
+}
+
+/**
+ * Saves "connected wallet" links for the bubble map: one tracked wallet sent tokens to another (a → b).
+ * Pools and other contracts are skipped, because every buyer gets tokens from the pool.
+ */
+async function saveLinks(chain: AChain, token: string, links: { a: string; b: string; kind: string; amount?: number }[]) {
+  const seen = new Set<string>();
+  const rows = links.filter((l) => l.a !== l.b && !seen.has(l.a + l.b) && seen.add(l.a + l.b))
+    .map((l) => ({ chain, token, a: l.a, b: l.b, kind: l.kind, amount: l.amount ?? null, created_at: new Date().toISOString() }));
+  if (rows.length) await supabaseService().from("token_links").upsert(rows, { onConflict: "chain,token,a,b" });
+}
+
+/** People (not pools or contracts) followed for a token. */
+async function people(chain: AChain, token: string) {
+  const { data } = await supabaseService().from("token_holders").select("wallet").eq("chain", chain).eq("token", token).eq("is_contract", false);
+  return new Set((data || []).map((r: any) => r.wallet as string));
+}
+
+/** Recent transfers of the token between followed wallets (one paid call). */
+async function recentLinks(chain: AChain, token: string) {
+  if (!(await budget(1))) return;
+  try {
+    const j = await moralis(`/erc20/${token}/transfers?chain=${ACHAINS[chain].moralis}&limit=100`);
+    const ppl = await people(chain, token);
+    const links = (j?.result || []).filter((x: any) => isAddress(x.from_address) && isAddress(x.to_address))
+      .map((x: any) => ({ a: getAddress(x.from_address), b: getAddress(x.to_address), amount: num(x.value_decimal), kind: "transfer" }))
+      .filter((l: any) => ppl.has(l.a) && ppl.has(l.b));
+    await saveLinks(chain, token, links);
+  } catch {}
 }
 
 type Meta = { name: string; symbol: string; decimals: number; supply: number; owner: string | null };
@@ -172,6 +203,13 @@ async function apply(chain: AChain, token: string, t: { symbol: string; supply: 
   if (!events.length) return events;
   await sb.from("holder_events").insert(events);
 
+  // One wallet dropping and another rising by the same amount in the same check: tokens moved between them.
+  const ups = events.filter((e) => e.kind === "buy");
+  const moves = events.filter((e) => e.kind !== "buy").flatMap((d) => ups
+    .filter((u) => Math.abs(num(u.amount) - num(d.amount)) <= num(d.amount) * 0.03)
+    .map((u) => ({ a: d.wallet, b: u.wallet, kind: "moved", amount: num(d.amount) })));
+  if (moves.length) await saveLinks(chain, token, moves);
+
   // Tell everyone watching this token about sells (not buys). At most 3 alerts per token per check.
   const sells = events.filter((e) => e.kind !== "buy").sort((a, b) => Number(b.is_dev) - Number(a.is_dev) || b.pct_of_holding - a.pct_of_holding).slice(0, 3);
   if (sells.length) {
@@ -230,6 +268,7 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
   const fresh = await balances(chain, token, m.decimals, all).catch(() => new Map<string, string>());
   await apply(chain, token, { symbol: m.symbol, supply: m.supply }, (rows2 || []).map((r: any) => (r.wallet === dev ? { ...r, is_dev: true } : r)), fresh, list.length ? top : undefined);
   await fillHoldingTimes(chain, token, 12);
+  if (list.length) await recentLinks(chain, token);
   return null;
 }
 
@@ -241,10 +280,16 @@ async function fillHoldingTimes(chain: AChain, token: string, max: number) {
     .or("in_top.eq.true,is_dev.eq.true").order("rank", { ascending: true, nullsFirst: false }).limit(max);
   const todo = data || [];
   if (!todo.length || !(await budget(todo.length))) return;
+  const ppl = await people(chain, token);
+  const links: { a: string; b: string; kind: string }[] = [];
   await Promise.all(todo.map(async ({ wallet }: any) => {
-    const at = await firstReceived(chain, token, wallet);
-    if (at) await sb.from("token_holders").update({ acquired_at: at }).eq("chain", chain).eq("token", token).eq("wallet", wallet);
+    const first = await firstReceived(chain, token, wallet);
+    if (!first) return;
+    await sb.from("token_holders").update({ acquired_at: first.at }).eq("chain", chain).eq("token", token).eq("wallet", wallet);
+    // Their first tokens came from another followed wallet (often the dev): they're connected.
+    if (first.from && ppl.has(first.from)) links.push({ a: first.from, b: wallet, kind: "funded" });
   }));
+  await saveLinks(chain, token, links);
 }
 
 /** Re-checks the balances of every wallet followed for a token. Free (public RPC only). */
