@@ -4,7 +4,8 @@ import AnalyticsScan from "@/components/AnalyticsScan";
 import WatchButton from "@/components/WatchButton";
 import Arena from "@/components/Arena";
 import { insights } from "@/lib/analytics-insights";
-import { ACHAINS, checkToken, heldFor, isAChain } from "@/lib/analytics";
+import { ACHAINS, checkToken, heldFor, isAChain, syncTrades } from "@/lib/analytics";
+import AutoRefresh from "@/components/AutoRefresh";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -47,18 +48,25 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const svc = supabaseService();
     await svc.from("tracked_tokens").update({ viewed_at: new Date().toISOString() }).eq("chain", chain).eq("token", t.token);
-    if (!t.checked_at || Date.now() - Date.parse(t.checked_at) > 3 * 60_000) {
-      await Promise.race([checkToken(chain, t.token).catch(() => []), new Promise((r) => setTimeout(r, 6000))]);
+    const tradesStale = !t.trades_at || Date.now() - Date.parse(t.trades_at) > 60_000;
+    const balancesStale = !t.checked_at || Date.now() - Date.parse(t.checked_at) > 3 * 60_000;
+    if (tradesStale || balancesStale) {
+      await Promise.race([
+        Promise.all([tradesStale ? syncTrades(chain, t.token).catch(() => 0) : 0, balancesStale ? checkToken(chain, t.token).catch(() => []) : []]),
+        new Promise((r) => setTimeout(r, 8000)),
+      ]);
       ({ data: t } = await sb.from("tracked_tokens").select("*").eq("chain", chain).eq("token", params.token).maybeSingle());
     }
   }
 
-  const [{ data: holders }, { data: events }, { data: watch }, { data: wc }, { data: links }] = await Promise.all([
+  const [{ data: holders }, { data: events }, { data: watch }, { data: wc }, { data: links }, { data: trades }] = await Promise.all([
     sb.from("token_holders").select("*").eq("chain", chain).eq("token", t.token).order("rank", { ascending: true, nullsFirst: false }),
     sb.from("holder_events").select("*").eq("chain", chain).eq("token", t.token).order("created_at", { ascending: false }).limit(500),
     user ? sb.from("launch_watchers").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] }),
     sb.from("launch_watch_counts").select("watchers").eq("chain", chain).eq("token", t.token).maybeSingle(),
     sb.from("token_links").select("a,b,kind").eq("chain", chain).eq("token", t.token).limit(500),
+    sb.from("token_trades").select("wallet,side,amount,balance_after,pct_after,at,tx_hash").eq("chain", chain).eq("token", t.token)
+      .gt("at", new Date(Date.now() - 7 * 86_400_000).toISOString()).order("at", { ascending: false }).limit(1000),
   ]);
   const signals = insights({ holders: (holders || []) as any, events: (events || []) as any, links: (links || []) as any, security: t.security, fullList: t.holder_source === "moralis" });
   const lastEvent = new Map<string, any>();
@@ -73,6 +81,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
   return (
     <div className="stack" style={{ maxWidth: 1040 }}>
+      <AutoRefresh seconds={60} />
       <Link href="/analytics" className="muted">← Analytics</Link>
       <div className="card stack an-head">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
@@ -105,7 +114,25 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
       <div className="card stack">
         <h2>♟️ The battle: holders vs sellers</h2>
         <p className="muted" style={{ fontSize: ".86em" }}>Holders defend from the bottom, sellers attack from the top. The bigger the bag (or the sale), the stronger the piece. Pick a time frame and tap any piece to see its holdings.</p>
-        <Arena holders={(holders || []) as any} events={(events || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
+        <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
+      </div>
+
+      <div className="card stack">
+        <div className="row" style={{ justifyContent: "space-between" }}><h2>⚡ Live trades</h2><span className="live-dot">LIVE · updates every minute</span></div>
+        {!trades?.length && <div className="empty">{t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
+        <div className="alert-list">
+          {(trades || []).slice(0, 15).map((x: any) => (
+            <a key={x.tx_hash + x.wallet + x.side} className={"alert-row trade " + x.side} href={`${c.explorer}/tx/${x.tx_hash}`} target="_blank" rel="noopener noreferrer">
+              <span className="alert-ic">{x.side === "buy" ? "🟢" : x.wallet === t.dev ? "⚠️" : "🔴"}</span>
+              <span className="grow">
+                <span className="mono">{short(x.wallet)}</span>{x.wallet === t.dev ? " (dev)" : ""} {x.side === "buy" ? "bought" : "sold"} <b>{amt(x.amount)} {t.symbol}</b>
+                {Number(t.total_supply) > 0 && <span className="muted"> · {((Number(x.amount) / Number(t.total_supply)) * 100).toFixed(2)}% of supply</span>}
+                {x.pct_after != null && <span className="muted"> · now holds {pct(x.pct_after)}</span>}
+              </span>
+              <span className="muted nowrap">{heldFor(x.at)} ago</span>
+            </a>
+          ))}
+        </div>
       </div>
 
       {signals.length > 0 && (

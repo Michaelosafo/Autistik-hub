@@ -8,8 +8,10 @@
  *   Calls are capped per day (MORALIS_DAILY_LIMIT, default 600).
  * - GoPlus (free, no key): the creator wallet, safety checks (honeypot, taxes, minting) and, without Moralis,
  *   the top 10 holders.
+ * - Live trades (free, no key): every transfer into or out of the token's main trading pool, read from the chain's
+ *   logs. Tokens leaving the pool are buys, tokens going into it are sells. The pool comes from DexScreener.
  */
-import { createPublicClient, formatUnits, getAddress, http, isAddress, parseAbi } from "viem";
+import { createPublicClient, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem } from "viem";
 import { bsc, mainnet } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
@@ -31,6 +33,13 @@ const ERC20 = parseAbi([
 ]);
 
 const client = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem as any, transport: http(ACHAINS[c].rpc, { timeout: 10_000 }) });
+// Reading trade logs needs a node that allows it; the default public BNB node refuses big log requests.
+const LOG_RPC: Record<AChain, string> = {
+  bsc: process.env.ANALYTICS_BSC_RPC || "https://bsc-rpc.publicnode.com",
+  ethereum: process.env.ANALYTICS_ETH_RPC || "https://ethereum-rpc.publicnode.com",
+};
+const logClient = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem as any, transport: http(LOG_RPC[c], { timeout: 15_000 }) });
+const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const num = (v: unknown) => { const n = Number(v); return isFinite(n) ? n : 0; };
 const lower = (a: string) => a.toLowerCase();
 
@@ -269,6 +278,7 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
   await apply(chain, token, { symbol: m.symbol, supply: m.supply }, (rows2 || []).map((r: any) => (r.wallet === dev ? { ...r, is_dev: true } : r)), fresh, list.length ? top : undefined);
   await fillHoldingTimes(chain, token, 12);
   if (list.length) await recentLinks(chain, token);
+  await syncTrades(chain, token).catch((e) => console.error("trades failed", token, (e as Error).message));
   return null;
 }
 
@@ -306,6 +316,104 @@ export async function checkToken(chain: AChain, token: string) {
   return ev;
 }
 
+/** The token's main trading pool (most liquidity), from DexScreener. */
+async function findPair(chain: AChain, token: string): Promise<string | null> {
+  try {
+    const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token}`, { signal: AbortSignal.timeout(8000), cache: "no-store" });
+    const j = r.ok ? await r.json() : null;
+    const pairs = (j?.pairs || []).filter((p: any) => p?.chainId === ACHAINS[chain].dex && isAddress(p?.pairAddress));
+    pairs.sort((a: any, b: any) => num(b?.liquidity?.usd) - num(a?.liquidity?.usd));
+    return pairs[0] ? getAddress(pairs[0].pairAddress) : null;
+  } catch { return null; }
+}
+
+const LOOKBACK = 20_000n; // first look back about 4 hours on BNB Chain
+const CHUNK = 5_000n;
+
+/**
+ * Reads every buy and sell through the token's main pool since the last check, saves them, and alerts watchers
+ * about big sells. Free: only public blockchain reads. Returns how many trades were found.
+ */
+export async function syncTrades(chain: AChain, token: string): Promise<number> {
+  const sb = supabaseService();
+  const { data: t } = await sb.from("tracked_tokens").select("symbol,decimals,total_supply,pair,last_block,dev").eq("chain", chain).eq("token", token).maybeSingle();
+  if (!t) return 0;
+  const pair = t.pair || (await findPair(chain, token));
+  if (!pair) return 0;
+  const lc = logClient(chain);
+  const latest = await lc.getBlockNumber();
+  let from = t.last_block ? BigInt(t.last_block) + 1n : latest - LOOKBACK;
+  if (latest - from > LOOKBACK * 2n) from = latest - LOOKBACK * 2n;
+  if (from > latest) { await sb.from("tracked_tokens").update({ pair, trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
+
+  const logs: any[] = [];
+  for (let a = from; a <= latest; a += CHUNK) {
+    const b = a + CHUNK - 1n > latest ? latest : a + CHUNK - 1n;
+    logs.push(...(await lc.getLogs({ address: token as `0x${string}`, event: TRANSFER, fromBlock: a, toBlock: b } as any)));
+  }
+
+  // Turn pool transfers into trades. When a router passes tokens on in the same transaction, credit the real wallet.
+  const P = lower(pair), T = lower(token);
+  const byTx = new Map<string, any[]>();
+  const seenLog = new Set<string>();
+  for (const l of logs) {
+    const k = `${l.transactionHash}:${l.logIndex}`;
+    if (seenLog.has(k)) continue;
+    seenLog.add(k);
+    byTx.set(l.transactionHash, [...(byTx.get(l.transactionHash) || []), l]);
+  }
+  const dec = Number(t.decimals ?? 18);
+  const trades: any[] = [];
+  for (const [tx, list] of byTx) {
+    for (const l of list) {
+      const f = lower(l.args.from), to = lower(l.args.to), amount = num(formatUnits(l.args.value, dec));
+      if (!amount) continue;
+      let side: "buy" | "sell" | null = null, wallet = "";
+      if (f === P && to !== T && to !== P && !SKIP.has(to)) {
+        side = "buy"; wallet = to;
+        const next = list.find((x) => lower(x.args.from) === to && lower(x.args.to) !== P && Math.abs(num(formatUnits(x.args.value, dec)) - amount) <= amount * 0.1);
+        if (next) wallet = lower(next.args.to);
+      } else if (to === P && f !== T && f !== P && !SKIP.has(f)) {
+        side = "sell"; wallet = f;
+        const prev = list.find((x) => lower(x.args.to) === f && lower(x.args.from) !== P && lower(x.args.from) !== T && Math.abs(num(formatUnits(x.args.value, dec)) - amount) <= amount * 0.1);
+        if (prev) wallet = lower(prev.args.from);
+      }
+      if (side && !SKIP.has(wallet) && wallet !== T) trades.push({ chain, token, tx_hash: tx, log_index: Number(l.logIndex), wallet: getAddress(wallet), side, amount: String(amount), block: Number(l.blockNumber) });
+    }
+  }
+
+  if (trades.length) {
+    // Times from block numbers (one lookup for the speed of the chain, not one per block).
+    const [now, back] = await Promise.all([lc.getBlock({ blockNumber: latest }), lc.getBlock({ blockNumber: latest - 1000n })]);
+    const per = Number(now.timestamp - back.timestamp) / 1000;
+    for (const tr of trades) tr.at = new Date((Number(now.timestamp) - (Number(latest) - tr.block) * per) * 1000).toISOString();
+    // Where each trader stands now.
+    const wallets = [...new Set(trades.map((x) => x.wallet as string))];
+    const bal = await balances(chain, token, dec, wallets).catch(() => new Map<string, string>());
+    const supply = num(t.total_supply);
+    for (const tr of trades) {
+      const b = bal.get(tr.wallet);
+      if (b != null) { tr.balance_after = b; tr.pct_after = supply ? (num(b) / supply) * 100 : null; }
+    }
+    for (let i = 0; i < trades.length; i += 500) await sb.from("token_trades").upsert(trades.slice(i, i + 500), { onConflict: "chain,tx_hash,log_index", ignoreDuplicates: true });
+
+    // Big sells (0.3% of supply or more) alert everyone watching the token.
+    const big = trades.filter((x) => x.side === "sell" && supply && num(x.amount) >= supply * 0.003).sort((a, b) => num(b.amount) - num(a.amount)).slice(0, 3);
+    if (big.length) {
+      const { data: watchers } = await sb.from("launch_watchers").select("user_id").eq("chain", chain).eq("token", token).limit(5000);
+      const notes = (watchers || []).flatMap((w: any) => big.map((x) => ({
+        user_id: w.user_id,
+        title: `${x.wallet === t.dev ? "⚠️ " : "🔴 "}${t.symbol || "Token"}: ${x.wallet === t.dev ? "the dev" : short(x.wallet)} sold ${((num(x.amount) / supply) * 100).toFixed(2)}% of the supply`,
+        body: `${fmtAmount(num(x.amount))} ${t.symbol} sold${x.pct_after != null ? `. They now hold ${num(x.pct_after).toFixed(2)}%` : ""}.`,
+        link: `/analytics/${chain}/${token}`,
+      })));
+      for (let i = 0; i < notes.length; i += 500) await sb.from("notifications").insert(notes.slice(i, i + 500));
+    }
+  }
+  await sb.from("tracked_tokens").update({ pair, last_block: Number(latest), trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token);
+  return trades.length;
+}
+
 /** The scheduled check (every 10 minutes): the tokens people looked at or watch recently, oldest check first. */
 export async function runChecks(deadlineMs: number) {
   const sb = supabaseService();
@@ -330,6 +438,7 @@ export async function runChecks(deadlineMs: number) {
       const stale = !r.snapshot_at || Date.now() - Date.parse(r.snapshot_at) > MEMBERSHIP_HOURS * 3_600_000;
       if (stale) await scanToken(r.chain, r.token, { force: true });
       else events += (await checkToken(r.chain, r.token)).length;
+      events += await syncTrades(r.chain, r.token).catch((e) => { console.error("trades failed", r.token, (e as Error).message); return 0; });
       done++;
     } catch (e) { console.error("analytics check failed", r.chain, r.token, (e as Error).message); }
   }
