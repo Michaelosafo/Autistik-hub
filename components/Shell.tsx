@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Art from "@/components/Art";
 import InstallApp from "@/components/InstallApp";
-import NotificationBell from "@/components/NotificationBell";
+import { AlertsList, useAlerts } from "@/components/NotificationBell";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 
@@ -74,6 +74,19 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     clearTimeout(noteTimer.current);
     noteTimer.current = setTimeout(() => setNote(""), 1600);
   }
+  // Everything at the top lives behind one small button, so pages get the whole screen.
+  const [menu, setMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const alerts = useAlerts(!!me);
+  useEffect(() => { setMenu(false); }, [path]);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenu(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [menu]);
+  const openMenu = () => { const next = !menu; setMenu(next); if (next) setTimeout(alerts.markAll, 2000); };
   const THEME_NEXT = { auto: "dark", dark: "light", light: "auto" } as const;
   const THEME_LABEL = { auto: "Colours follow your phone", dark: "Dark colours", light: "Light colours" } as const;
 
@@ -110,30 +123,48 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
         </aside>
 
         <main>
-          <div className="topbar">
-            {me ? (
-              <div className="me-pill">
-                <Link href="/me" className="me-link" title="Your profile">
-                  <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
-                  <span className="me-name">{me.alias}</span>
-                  {me.is_admin && <span className="me-tag">Admin</span>}
-                </Link>
-                <button className="me-out" type="button" onClick={signOut} title="Sign out" aria-label="Sign out"><Icon id="i-out" /></button>
-              </div>
-            ) : (
-              <Link className="signin-btn" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>
-            )}
-            <div className="chips">
-              <InstallApp />
-              {me && <div className="tools"><NotificationBell /></div>}
-              <div className="tools" role="group" aria-label="Display">
-                <button className="tool" type="button" aria-pressed={calm} aria-label="Calm mode" title="Calm mode: no movement, softer colours, no adverts"
-                  onClick={() => { setCalm(!calm); tell(calm ? "Calm mode off" : "Calm mode on"); }}><Icon id="i-calm" /></button>
-                <button className="tool" type="button" aria-pressed={big} aria-label="Larger text" title="Larger text"
-                  onClick={() => { setBig(!big); tell(big ? "Normal text" : "Larger text"); }}><Icon id="i-text" /></button>
-                <button className="tool" type="button" aria-label={`${THEME_LABEL[theme]}. Tap to change.`} title={`${THEME_LABEL[theme]} (tap to change)`}
-                  onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}><Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /></button>
-              </div>
+          <div className="topbar mini">
+            {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
+            <div className="me-menu" ref={menuRef}>
+              <button className="me-btn" type="button" aria-expanded={menu} aria-haspopup="dialog" onClick={openMenu}
+                aria-label={me ? `Menu for ${me.alias}${alerts.unread ? `, ${alerts.unread} new alerts` : ""}` : "Display settings"}>
+                {me
+                  ? <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
+                  : <span className="me-av guest" aria-hidden="true"><Icon id="i-auto" /></span>}
+                {alerts.unread > 0 && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
+              </button>
+              {menu && (
+                <div className="me-pop" role="dialog" aria-label="Menu">
+                  {me && (
+                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
+                      <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
+                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
+                    </Link>
+                  )}
+                  {me && (
+                    <div className="me-sec">
+                      <div className="me-sec-h"><b>🔔 Alerts</b>{alerts.unread > 0 && <span className="badge gold">{alerts.unread} new</span>}<Link href="/analytics" onClick={() => setMenu(false)}>Stats →</Link></div>
+                      <AlertsList alerts={alerts} onPick={() => setMenu(false)} />
+                    </div>
+                  )}
+                  <div className="me-sec">
+                    <div className="me-sec-h"><b>Display</b></div>
+                    <button className="me-row" type="button" role="switch" aria-checked={calm} onClick={() => { setCalm(!calm); tell(calm ? "Calm mode off" : "Calm mode on"); }}>
+                      <Icon id="i-calm" /><span>Calm mode<small>No movement, softer colours, no adverts</small></span><i className="sw" />
+                    </button>
+                    <button className="me-row" type="button" role="switch" aria-checked={big} onClick={() => { setBig(!big); tell(big ? "Normal text" : "Larger text"); }}>
+                      <Icon id="i-text" /><span>Larger text</span><i className="sw" />
+                    </button>
+                    <button className="me-row" type="button" onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}>
+                      <Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
+                    </button>
+                    <InstallApp />
+                  </div>
+                  {me
+                    ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
+                    : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}
+                </div>
+              )}
             </div>
             <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>
