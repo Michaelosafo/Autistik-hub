@@ -747,3 +747,29 @@ a.alert-row:hover{background:var(--surface-2)}
 .live-dot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--alert);animation:cb-check 1s infinite}
 .alert-row.trade.buy .alert-ic{background:var(--teal-soft)}
 .alert-row.trade.sell .alert-ic{background:var(--alert-soft)}
+
+/* ===== Analytics: buy-or-sell verdict, connected wallets ===== */
+.verdict{border:2px solid var(--line)}
+.verdict.buy{border-color:var(--teal);background:linear-gradient(180deg,var(--teal-soft),var(--surface) 70%)}
+.verdict.wait{border-color:var(--sun-bright);background:linear-gradient(180deg,var(--sun-soft),var(--surface) 70%)}
+.verdict.careful,.verdict.sell,.verdict.avoid{border-color:var(--alert);background:linear-gradient(180deg,var(--alert-soft),var(--surface) 70%)}
+.verdict-top{display:flex;gap:14px;align-items:center}
+.verdict-top h2{margin:0;font-size:1.5em}
+.verdict-top p{margin:2px 0 0}
+.verdict-emoji{font-size:2.6em;line-height:1}
+.verdict-meter{position:relative;height:12px;border-radius:999px;margin:6px 0 18px;background:linear-gradient(90deg,var(--alert),var(--sun-bright),var(--teal))}
+.verdict-meter span{position:absolute;top:50%;width:20px;height:20px;border-radius:50%;background:var(--surface);border:3px solid var(--ink);transform:translate(-50%,-50%)}
+.verdict-meter small{position:absolute;top:16px;font-size:.72em;font-weight:800;color:var(--muted)}
+.verdict-meter small:nth-of-type(1){left:0} .verdict-meter small:nth-of-type(2){left:50%;transform:translateX(-50%)} .verdict-meter small:nth-of-type(3){right:0}
+.verdict details summary{cursor:pointer;font-weight:800;margin-bottom:8px}
+.conn-list{display:flex;flex-direction:column;gap:10px}
+.conn-group{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:14px;background:var(--surface-2);border-left:4px solid var(--teal)}
+.conn-group.medium{border-left-color:var(--sun-bright)} .conn-group.high{border-left-color:var(--alert)}
+.conn-group small{font-size:.82em;line-height:1.45}
+.club-conn a{font-family:var(--f-mono);font-size:.86em;padding:3px 9px;border-radius:999px;background:var(--violet-soft);color:var(--violet);text-decoration:none}
+.risk-pill{font-size:.74em;font-weight:800;padding:3px 10px;border-radius:999px;white-space:nowrap;background:var(--teal-soft);color:var(--teal)}
+.risk-pill.medium{background:var(--sun-soft);color:var(--sun)} .risk-pill.high{background:var(--alert-soft);color:var(--alert)}
+.risk-ring{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;font-weight:800;font-size:.85em;
+  background:radial-gradient(var(--surface) 58%,transparent 60%),conic-gradient(var(--c,var(--teal)) calc(var(--r)*1%),var(--line) 0)}
+.risk-ring.medium{--c:var(--sun-bright)} .risk-ring.high{--c:var(--alert)}
+.alert-row.suspect{align-items:center;text-decoration:none;color:inherit}
