@@ -17,7 +17,7 @@ function ago(t: string) {
 
 export default function Community({ uid, initialGroup, initialChannel }: { uid: string; initialGroup?: string; initialChannel?: string }) {
   const sb = supabaseBrowser();
-  const startChannel = (initialChannel && CHANNELS[initialChannel]?.id) || GROUPS.find((g) => g.id === initialGroup)?.channels[0].id || "lounge.intros";
+  const startChannel = (initialChannel && GROUPS.some((g) => g.id === CHANNELS[initialChannel]?.group.id) && initialChannel) || GROUPS.find((g) => g.id === initialGroup)?.channels[0].id || "lounge.intros";
   const [channel, setChannel] = useState(startChannel);
   const [mine, setMine] = useState<string[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -159,7 +159,7 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
           </form>
         ) : (
           <div className="joincta">
-            <div><b>Join {g.name} to post here</b><p className="muted" style={{ fontSize: ".9em" }}>You can read every channel. Joining lets you post and shows you as a member.</p></div>
+            <div><b>Join {g.name} to post here</b></div>
             <button className="btn g" type="button" onClick={join}>Join group</button>
           </div>
         )}

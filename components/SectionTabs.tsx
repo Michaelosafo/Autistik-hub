@@ -19,7 +19,8 @@ export const COMMUNITY_TABS: SectionTab[] = [
 ];
 
 export const TRENDING_TABS: SectionTab[] = [
-  { href: "/launchpad", label: "Trending tokens" },
+  { href: "/launchpad/new", label: "🚀 Launch" },
+  { href: "/launchpad", label: "Trending" },
   { href: "/trade", label: "Trade" },
 ];
 

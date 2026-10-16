@@ -12,15 +12,14 @@ export default async function CommunityPage({ searchParams }: { searchParams: { 
     <div className="stack">
       <SectionTabs tabs={COMMUNITY_TABS} active="/community" label="Community" />
       <div className="page-head">
-        <div className="label">Community · Groups</div>
-        <h1>Four groups. One community.</h1>
-        <p className="muted">Join the groups that fit you, then talk in their channels. You post under your Hub name, never your real name.</p>
+        <h1>Two groups. One community.</h1>
+        <p className="muted">Pick a group, join, and say hi.</p>
       </div>
       {user ? (
         <Community uid={user.id} initialGroup={searchParams.g} initialChannel={searchParams.c} />
       ) : (
         <div className="joincta" data-g="lounge">
-          <div><b>Sign in to join the groups</b><p className="muted" style={{ fontSize: ".9em" }}>The community is members-only to keep it safe. It takes one email.</p></div>
+          <div><b>Sign in to join the groups</b><p className="muted" style={{ fontSize: ".9em" }}>Members only, to keep it safe.</p></div>
           <Link className="btn g" href="/login">Sign in / Join</Link>
         </div>
       )}

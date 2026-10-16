@@ -73,7 +73,7 @@ export default function AutismPage() {
       <div className="card stack">
         <h2>Where to learn more</h2>
         <p>Autistic-led organisations and communities are the best place for first-hand, up-to-date views. They are more reliable than any single article, including this one.</p>
-        <p>On the Hub, you can ask questions in the <Link href="/community?g=learn">Ask &amp; Learn</Link> group, join a <Link href="/sessions">live session</Link> with verified practitioners, or talk things through with <Link href="/companions">Believer or Purity</Link>.</p>
+        <p>On the Hub, you can ask questions in the <Link href="/community">community groups</Link>, join a <Link href="/sessions">live session</Link> with verified practitioners, or talk things through with <Link href="/companions">Believer or Purity</Link>.</p>
         <div className="row" style={{ gap: 6 }}>
           <Link className="btn primary" href="/community">Join the community</Link>
           <Link className="btn" href="/fund">AUTISTIK Fund</Link>

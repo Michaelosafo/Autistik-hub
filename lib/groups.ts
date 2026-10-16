@@ -1,7 +1,7 @@
 export type Channel = { id: string; name: string; title: string; prompt: string };
 export type Group = { id: "lounge" | "calm" | "spark" | "learn"; name: string; tag: string; desc: string; channels: Channel[] };
 
-export const GROUPS: Group[] = [
+export const ALL_GROUPS: Group[] = [
   {
     id: "lounge", name: "Spectrum Lounge", tag: "Connect & hang out",
     desc: "Say hello, share your joys and chat about anything. The front room of the Hub.",
@@ -40,8 +40,12 @@ export const GROUPS: Group[] = [
   },
 ];
 
+/** The groups shown in the app. Kept to two so the community is quick to find your way around.
+ * The other groups stay in ALL_GROUPS so old posts and memberships still show their names. */
+export const GROUPS: Group[] = ALL_GROUPS.filter((g) => g.id === "lounge" || g.id === "calm");
+
 export const CHANNELS: Record<string, Channel & { group: Group }> = Object.fromEntries(
-  GROUPS.flatMap((g) => g.channels.map((c) => [c.id, { ...c, group: g }]))
+  ALL_GROUPS.flatMap((g) => g.channels.map((c) => [c.id, { ...c, group: g }]))
 );
 
 export const TOKEN_ADDRESS = process.env.NEXT_PUBLIC_TOKEN_ADDRESS || "0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9";

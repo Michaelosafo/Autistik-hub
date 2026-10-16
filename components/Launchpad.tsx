@@ -250,12 +250,11 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             <div className="card stack" style={{ fontSize: ".9em" }}>
               <h3>How it works</h3>
               <ol className="stack" style={{ margin: 0, paddingLeft: 18, gap: 6 }}>
-                <li>Answer Autistik&apos;s questions. Turn on Voice to hear them, and press Speak to answer out loud.</li>
-                <li>Check your launch plan.</li>
-                <li>Sign one transaction in your wallet.</li>
-                <li>Your token trades on {Object.values(CHAINS).filter(isLive).map((x) => x.dex).join(", ") || "the DEX"} and shows up on DexScreener.</li>
+                <li>Answer Autistik&apos;s questions (type or speak).</li>
+                <li>Check your plan.</li>
+                <li>Sign once. Your token is live on {Object.values(CHAINS).filter(isLive).map((x) => x.dex).join(", ") || "the DEX"}.</li>
               </ol>
-              <p className="muted">Choose to lock the liquidity for 6 months, 1 year, or burn it forever, so holders know it can&apos;t be pulled early. Your wallet needs at least ${MIN_HOLD_USD} of AUTISTIK on BNB Chain to launch.</p>
+              <p className="muted">Liquidity is locked or burned. You need ${MIN_HOLD_USD} of AUTISTIK.</p>
             </div>
           )}
           <div className="notice alert" style={{ fontSize: ".86em" }}><b>Never</b> share your seed phrase or private key. Autistik will never ask for it.</div>
