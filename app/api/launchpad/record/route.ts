@@ -3,6 +3,7 @@ import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
 import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, isLive, type ChainKey } from "@/lib/launchpad";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { isAChain, scanToken } from "@/lib/analytics";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -65,5 +66,7 @@ export async function POST(req: Request) {
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
+  // Analytics follows every token launched here: its top wallets and the creator as the dev.
+  if (isAChain(chain.key)) await scanToken(chain.key, row.token, { dev: row.creator, userId: owner }).catch(() => null);
   return json({ launch: row });
 }

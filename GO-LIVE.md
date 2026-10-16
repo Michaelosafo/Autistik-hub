@@ -18,7 +18,8 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] `supabase/security.sql` (rate limits, anti-spam rules, admin log)
 - [ ] `supabase/ai-budget.sql` (AI cost tracking for the Admin page, 2 AI launch sessions a day)
 - [ ] `supabase/admin-lock.sql` with your email (admin area only for you, with 2-step verification)
-- [ ] `supabase/hardening.sql` **last** (browsers get only the exact database access the site uses)
+- [ ] `supabase/hardening.sql` (browsers get only the exact database access the site uses)
+- [ ] `supabase/analytics.sql` (Analytics: top 40 wallets, dev wallet, sell alerts, checked every 10 minutes)
 - [ ] Supabase → Authentication → **Attack Protection** → turn on **Prevent use of leaked passwords** → Save.
 
 ## 3. Wallets
@@ -46,6 +47,10 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 > AI Pass and trending payments carry a small note (the account id or token address) inside the BNB transfer. A normal wallet (MetaMask, Trust Wallet) as `NEXT_PUBLIC_TREASURY_WALLET` accepts these. A Safe multisig may reject them, so if you use a Safe, receive into a normal wallet and move the BNB to the Safe now and then. Test with one payment first.
 
 - [ ] Deployments → ⋯ → **Redeploy**. Trending payments now work.
+
+## 4b. Analytics (top 40 wallets and sell alerts)
+- [ ] moralis.com → sign up free → copy your **API key**. Vercel: `MORALIS_API_KEY` = the key (**Secret**) → Redeploy. Without it, Analytics still works but shows the top 10 wallets only.
+- [ ] Optional: `MORALIS_DAILY_LIMIT` (default `600`) caps the paid calls per day.
 
 ## 5. Launch Pad contract on BNB Chain (remix.ethereum.org)
 - [ ] Paste `contracts/AutistikLaunchpad.sol`. It imports OpenZeppelin **5.0.2**: Remix fetches it; if it asks for a version, use `@openzeppelin/contracts@5.0.2`.

@@ -36,3 +36,11 @@ self.addEventListener("fetch", (e) => {
     );
   }
 });
+
+// Tapping an alert pop-up opens the token's Analytics page on this site.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const link = e.notification.data && e.notification.data.link;
+  const path = typeof link === "string" && /^\/[A-Za-z0-9\/_-]*$/.test(link) ? link : "/analytics";
+  e.waitUntil(self.clients.openWindow(path));
+});

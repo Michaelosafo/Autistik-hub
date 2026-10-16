@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Art from "@/components/Art";
 import InstallApp from "@/components/InstallApp";
+import NotificationBell from "@/components/NotificationBell";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 
@@ -14,6 +15,7 @@ const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad/new"] },
   { href: "/launchpad", name: "Trending", icon: "i-trend", match: ["/launchpad", "/trade", "/perps"], not: ["/launchpad/new"] },
+  { href: "/analytics", name: "Analytics", short: "Stats", icon: "i-stats" },
   { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
   { href: "/companions", name: "Companions", short: "Chat", icon: "i-kai" },
   { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"] },
@@ -123,6 +125,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             )}
             <div className="chips">
               <InstallApp />
+              {me && <div className="tools"><NotificationBell /></div>}
               <div className="tools" role="group" aria-label="Display">
                 <button className="tool" type="button" aria-pressed={calm} aria-label="Calm mode" title="Calm mode: no movement, softer colours, no adverts"
                   onClick={() => { setCalm(!calm); tell(calm ? "Calm mode off" : "Calm mode on"); }}><Icon id="i-calm" /></button>
@@ -161,6 +164,7 @@ function Sprites() {
   <symbol id="i-learn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6M9 11h5"/></symbol>
   <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
   <symbol id="i-safe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-stats" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><circle cx="16" cy="9" r="1.6"/></symbol>
   <symbol id="i-calm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8.5 5.5-14 15-15-.8 9.8-6.5 15-15 15z"/><path d="M5 19l8-8"/></symbol>
   <symbol id="i-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 19l5.5-14L13 19M4 14h7"/><path d="M15 19l3.5-9 3.5 9M16.2 16h4.6"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>

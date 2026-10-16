@@ -1,0 +1,73 @@
+import Link from "next/link";
+import AnalyticsScan from "@/components/AnalyticsScan";
+import { ACHAINS, heldFor, isAChain } from "@/lib/analytics";
+import { currentUser, supabaseServer } from "@/lib/supabase/server";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Analytics · AUTISTIK Hub", description: "Top 40 wallets, the dev wallet and live sell alerts for any token." };
+
+const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
+const ago = (t: string) => heldFor(t) + " ago";
+
+export default async function AnalyticsPage() {
+  const user = await currentUser();
+  const sb = supabaseServer();
+  const [{ data: events }, { data: tokens }] = await Promise.all([
+    sb.from("holder_events").select("*").in("kind", ["sell", "exit"]).order("created_at", { ascending: false }).limit(30),
+    sb.from("tracked_tokens").select("chain,token,name,symbol,dev,holder_source,viewed_at").order("viewed_at", { ascending: false }).limit(30),
+  ]);
+  const names = new Map((tokens || []).map((t: any) => [`${t.chain}:${t.token}`, t]));
+  const missing = [...new Set((events || []).map((e: any) => e.token).filter((tk: string) => ![...names.keys()].some((k) => k.endsWith(tk))))];
+  if (missing.length) {
+    const { data } = await sb.from("tracked_tokens").select("chain,token,name,symbol").in("token", missing);
+    for (const t of data || []) names.set(`${t.chain}:${t.token}`, t);
+  }
+
+  return (
+    <div className="stack" style={{ maxWidth: 980 }}>
+      <div className="page-head">
+        <h1>Analytics</h1>
+        <p className="muted">See any token&apos;s top 40 wallets and the dev, how long they&apos;ve held, and get an alert when they sell.</p>
+      </div>
+      <div className="card stack">
+        <AnalyticsScan signedIn={!!user} />
+        <p className="muted" style={{ fontSize: ".82em" }}>Tokens launched on AUTISTIK are tracked automatically. Scanning a token also turns on its sell alerts for you (🔔 at the top).</p>
+      </div>
+
+      <div className="card stack">
+        <h2>🚨 Live sell alerts</h2>
+        {!events?.length && <div className="empty">No sells spotted yet. They show here as soon as a tracked wallet sells.</div>}
+        <div className="alert-list">
+          {(events || []).map((e: any) => {
+            const t: any = names.get(`${e.chain}:${e.token}`) || {};
+            return (
+              <Link key={e.id} href={`/analytics/${e.chain}/${e.token}`} className={"alert-row" + (e.is_dev ? " dev" : "")}>
+                <span className="alert-ic">{e.is_dev ? "⚠️" : e.kind === "exit" ? "🏃" : "📉"}</span>
+                <span className="grow">
+                  <b>{t.symbol || short(e.token)}</b> · {e.is_dev ? "Dev" : "Holder"} <span className="mono">{short(e.wallet)}</span> {e.kind === "exit" ? "sold everything" : `sold ${Math.round(e.pct_of_holding)}%`}
+                  {e.held_since && <span className="muted"> · held {heldFor(e.held_since, Date.parse(e.created_at))}</span>}
+                </span>
+                <span className="muted nowrap">{ago(e.created_at)}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card stack">
+        <h2>Tracked tokens</h2>
+        {!tokens?.length && <div className="empty">Nothing tracked yet. Scan a token above to start.</div>}
+        <div className="tracked-grid">
+          {(tokens || []).filter((t: any) => isAChain(t.chain)).map((t: any) => (
+            <Link key={t.chain + t.token} href={`/analytics/${t.chain}/${t.token}`} className="tracked">
+              <b>{t.symbol || short(t.token)}</b>
+              <span className="muted">{t.name || ACHAINS[t.chain as keyof typeof ACHAINS].name}</span>
+              <span className="badge v">{ACHAINS[t.chain as keyof typeof ACHAINS].name}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+      <p className="muted" style={{ fontSize: ".8em" }}>&quot;Sold&quot; means the wallet&apos;s balance went down: it sold or moved the tokens to another wallet. Data comes straight from the blockchain and is checked every 10 minutes. Nothing here is financial advice.</p>
+    </div>
+  );
+}
