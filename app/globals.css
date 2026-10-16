@@ -557,3 +557,16 @@ a.btn.primary{color:var(--bg)}
   .lux-online{display:none}
   .lux-who button{padding-right:10px}
 }
+
+/* companion page: chat takes the full width; AI Pass, Privacy and Help are small buttons that open a pop-up */
+.kai.companions{grid-template-columns:minmax(0,1fr);max-width:880px;margin:0 auto;width:100%}
+.lux-chips{display:flex;justify-content:center;flex-wrap:wrap;gap:8px;padding:2px 12px 12px}
+.lux-chips button,.lux-chips a{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:.76em;font-weight:700;color:rgba(255,255,255,.8);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12)}
+.lux-chips button:hover,.lux-chips a:hover{background:rgba(255,255,255,.12);color:#fff}
+.lux-chips button:focus-visible,.lux-chips a:focus-visible{outline:2px solid #E9B65A;outline-offset:2px}
+.lux-chips [data-hot]{border-color:#E9B65A;color:#fff;box-shadow:0 0 12px rgba(233,182,90,.45)}
+.sheet-back{position:fixed;inset:0;z-index:80;background:rgba(5,6,15,.6);backdrop-filter:blur(3px);display:grid;place-items:center;padding:16px}
+.sheet{position:relative;width:min(420px,100%);max-height:calc(100dvh - 32px);overflow:auto;gap:0}
+.sheet > .card{margin:0;box-shadow:0 20px 50px rgba(0,0,0,.35);padding-top:22px}
+.sheet-x{position:absolute;top:8px;right:8px;z-index:2;width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-size:.9em}
+@media (max-width:600px){ .chat.lux{height:calc(100dvh - 160px)} .sheet-back{place-items:end center;padding:0} .sheet{width:100%} .sheet > .card{border-radius:20px 20px 0 0} }
