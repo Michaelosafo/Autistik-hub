@@ -214,7 +214,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             {msgs.length > 0 && <button className="btn small" type="button" disabled={busy} onClick={() => { turns.current = []; newSession(); setMsgs([]); setPlan(null); setDone(null); setStatus(""); }}>Start over</button>}
           </div>
           <div className="msgs" ref={box} aria-live="polite">
-            <div className="msgrow"><Avatar /><div className="msg ai">{HELLO}</div></div>
+            <div className="msgrow"><Avatar /><div className="msg ai paper">{HELLO}</div></div>
             {msgs.map((m, i) =>
               m.kind === "me" ? <div key={i} className="msg me">{m.text}</div>
               : m.kind === "sys" ? <div key={i} className="msg sys">{m.text}</div>

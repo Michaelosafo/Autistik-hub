@@ -162,16 +162,16 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         </div>
 
         <div className="msgs" ref={box} aria-live="polite">
-          <div className="msgrow"><Art kind={who} className="av" /><div className="msg ai">{c.hello}</div></div>
+          <div className="msgrow"><Art kind={who} className="av" /><div className="msg ai paper">{c.hello}</div></div>
           {list.map((m, i) => {
             if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
             if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
             if (m.kind === "drawing") return (
-              <div key={i} className="msgrow"><Art kind={who} className="av" /><div className="msg ai"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
+              <div key={i} className="msgrow"><Art kind={who} className="av" /><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
             );
             if (m.kind === "img") return (
               <div key={i} className="msgrow"><Art kind={who} className="av" />
-                <div className="msg ai"><div className="genwrap">
+                <div className="msg ai paper"><div className="genwrap">
                   <span>{m.title}</span>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img className="genimg" alt={m.title} src={"data:image/svg+xml;charset=utf-8," + encodeURIComponent(m.svg)} />
