@@ -268,6 +268,16 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 [data-calm="on"] .ticker div{transform:none}
 [data-calm="on"] .adbar,[data-calm="on"] .ticker{display:none}
 [data-calm="on"] .avatar,[data-calm="on"] .banner,[data-calm="on"] .art,[data-calm="on"] .msg.me,[data-calm="on"] .av{filter:saturate(.5)}
+/* ---------- Home: utilities ---------- */
+.utils{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+.util{display:flex;flex-direction:column;gap:6px;padding:18px;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);text-decoration:none;color:var(--ink)}
+.util:hover{border-color:var(--violet);background:var(--surface-2)}
+.util svg{width:28px;height:28px;color:var(--violet)}
+.util p{font-size:.88em;flex:1}
+.util-cta{font-weight:700;font-size:.88em;color:var(--violet)}
+.launch-hero{grid-template-columns:minmax(0,1fr)}
+.launch-hero h2{font-size:clamp(1.5em,3.4vw,2.3em);line-height:1.1;color:#fff;margin-top:12px}
+.launch-hero h2 .grad{background:var(--spectrum);-webkit-background-clip:text;background-clip:text;color:transparent}
 /* ---------- Launch Pad board ---------- */
 .adbar{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--r);background:var(--violet-soft);border:1px solid var(--line);min-width:0}
 .adbar a{display:flex;align-items:center;gap:10px;min-width:0;flex:1;text-decoration:none;color:var(--ink)}
