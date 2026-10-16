@@ -9,7 +9,12 @@ export function anthropic() {
   if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || "missing" });
   return client;
 }
-export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+// Only a real Claude model name is used (e.g. "claude-sonnet-5-5"); anything else, such as a key pasted into the
+// wrong setting, falls back to the default so the AI keeps working.
+const DEFAULT_MODEL = "claude-sonnet-5-5";
+const envModel = (process.env.ANTHROPIC_MODEL || "").trim();
+export const MODEL = /^claude-[a-z0-9.-]+$/.test(envModel) ? envModel : DEFAULT_MODEL;
+if (envModel && MODEL !== envModel) console.error("ANTHROPIC_MODEL isn't a Claude model name, so the default is used. Set it to e.g. claude-sonnet-5-5 or remove it.");
 
 /**
  * Checks the visitor is signed in, under today's AI limit, and has an AI Pass or free messages left today.
