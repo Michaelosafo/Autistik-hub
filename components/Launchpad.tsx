@@ -4,8 +4,9 @@ import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
 import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, type LiquidityLock } from "@/lib/launchpad";
+import { Handwritten, WritingNote } from "@/components/Handwriting";
 
-type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean };
+type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean; born?: number };
 type Turn = { role: "user" | "assistant"; content: string };
 type Done = { token: string; pair: string; hash: string; listed: boolean };
 
@@ -123,7 +124,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
         memory += `\n\n[Launch plan shown to the creator: ${p.name} (${p.symbol}) on ${CHAINS[p.chain].name}, supply ${p.supply}, creator keeps ${p.creatorPercent}%, liquidity ${p.liquidity} ${CHAINS[p.chain].coin}, ${LOCKS[p.lock].short}]`;
       }
       turns.current.push({ role: "assistant", content: memory });
-      setMsgs((m) => [...m.slice(0, -1), { kind: "ai", text: data.reply }]);
+      setMsgs((m) => [...m.slice(0, -1), { kind: "ai", text: data.reply, born: Date.now() }]);
       say(data.reply);
     } catch {
       turns.current.pop();
@@ -217,7 +218,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             {msgs.map((m, i) =>
               m.kind === "me" ? <div key={i} className="msg me">{m.text}</div>
               : m.kind === "sys" ? <div key={i} className="msg sys">{m.text}</div>
-              : <div key={i} className="msgrow"><Avatar /><div className={"msg ai" + (m.pending ? " muted" : "")}>{m.text}</div></div>
+              : <div key={i} className="msgrow"><Avatar />{m.pending ? <WritingNote name="Autistik" /> : <Handwritten text={m.text} done fresh={!!m.born && Date.now() - m.born < 20_000} />}</div>
             )}
           </div>
           <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
