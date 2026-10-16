@@ -185,7 +185,6 @@ textarea{resize:vertical;min-height:84px}
 .msg.sys{align-self:center;max-width:100%;background:none;color:var(--muted);font-size:.85em;text-align:center}
 .composer{border-top:1px solid var(--line);padding:12px;display:flex;gap:8px;align-items:flex-end}
 .composer textarea{min-height:44px;max-height:160px}
-.prefs label{display:flex;gap:8px;align-items:flex-start;padding:6px 0;cursor:pointer}
 .genwrap{display:flex;flex-direction:column;gap:8px}
 .genimg{width:100%;max-width:340px;aspect-ratio:1;border-radius:12px;background:#fff;display:block;box-shadow:0 0 0 1px var(--line)}
 .drawing{display:flex;gap:10px;align-items:center}
@@ -289,10 +288,6 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 .msg.listening{opacity:.75;font-style:italic}
 .composer{align-items:center}
 .composer textarea{min-height:42px;max-height:140px;resize:none;border-radius:12px}
-details.prefs summary{cursor:pointer;display:flex;flex-direction:column;gap:2px;list-style:none}
-details.prefs summary::-webkit-details-marker{display:none}
-details.prefs summary .muted{font-size:.84em}
-details.prefs[open] summary{margin-bottom:6px}
 @media (max-width:860px){ .kai.companions{grid-template-columns:minmax(0,1fr)} .kai.companions .side{position:static} .who-switch small{display:none} }
 /* ---------- Launch: quick form or Autistik ---------- */
 .launch-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
