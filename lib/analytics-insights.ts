@@ -4,7 +4,7 @@ export type HolderRow = {
   wallet: string; rank: number | null; pct: number | string | null; balance: number | string; peak_balance: number | string;
   is_dev: boolean; is_contract: boolean; label: string | null; in_top: boolean; acquired_at: string | null; first_seen_at: string;
 };
-export type EventRow = { wallet: string; kind: "sell" | "exit" | "buy"; pct_of_holding: number | string | null; created_at: string; is_dev: boolean };
+export type EventRow = { wallet: string; kind: "sell" | "exit" | "buy"; pct_of_holding: number | string | null; created_at: string; is_dev: boolean; amount?: number | string };
 export type LinkRow = { a: string; b: string; kind: string };
 export type Signal = { level: "good" | "warn" | "bad"; text: string };
 export type Seat = "holding" | "sold" | "left";
@@ -94,4 +94,31 @@ export function insights(input: {
     else out.push({ level: "warn", text: `Most top wallets have held for about ${Math.round(mid)} day${Math.round(mid) === 1 ? "" : "s"}.` });
   }
   return out;
+}
+
+export type Risk = { score: number; level: "low" | "medium" | "high"; reasons: string[] };
+
+/**
+ * How likely a wallet is to sell soon, from what it has done so far. A rough guide only:
+ * past selling, a short holding time, being the dev or linked to other wallets, and a big bag all raise it;
+ * holding a long time without selling lowers it.
+ */
+export function sellRisk(h: HolderRow, events: EventRow[], links: LinkRow[], devWallet?: string | null): Risk {
+  let score = 10;
+  const reasons: string[] = [];
+  const sells = events.filter((e) => e.wallet === h.wallet && e.kind !== "buy");
+  const buys = events.filter((e) => e.wallet === h.wallet && e.kind === "buy");
+  const held = days(h.acquired_at || h.first_seen_at);
+  if (sells.length) { score += 35; reasons.push(`has sold ${sells.length === 1 ? "once" : sells.length + " times"} already`); }
+  if (isFinite(held) && held < 1) { score += 20; reasons.push("bought less than a day ago"); }
+  else if (isFinite(held) && held < 7) { score += 10; reasons.push("has held for under a week"); }
+  if (h.is_dev) { score += 15; reasons.push("is the dev wallet"); }
+  const linked = links.filter((l) => l.a === h.wallet || l.b === h.wallet);
+  if (linked.some((l) => l.a === devWallet || l.b === devWallet) && !h.is_dev) { score += 15; reasons.push("is connected to the dev"); }
+  else if (linked.length) { score += 10; reasons.push("is connected to other top wallets"); }
+  if (n(h.pct) > 3) { score += 10; reasons.push(`holds a big bag (${p(n(h.pct))})`); }
+  if (buys.length && !sells.length) { score -= 10; reasons.push("has been buying more"); }
+  if (isFinite(held) && held > 30 && !sells.length) { score -= 15; reasons.push("has held for over a month without selling"); }
+  score = Math.max(0, Math.min(100, score));
+  return { score, level: score >= 55 ? "high" : score >= 30 ? "medium" : "low", reasons };
 }
