@@ -10,11 +10,10 @@ export default async function CompanionsPage({ searchParams }: { searchParams: {
   return (
     <div className="stack">
       <div className="page-head">
-        <div className="label">AI companions</div>
-        <h1>Talk with Believer or Purity</h1>
-        <p className="muted">Believer helps you plan and keep going; Purity helps you slow down when things feel like too much. Type, or tap 🎤 to send a voice note. 5 free messages a day; an AI Pass gives you more. They&apos;re AIs, not doctors or therapists.</p>
+        <h1>Chat</h1>
+        <p className="muted">Type or tap 🎤. 5 free messages a day.</p>
       </div>
-      {user && searchParams.welcome && <div className="notice">Your email is confirmed and you&apos;re signed in. Welcome to the Hub! Say hello to Believer or Purity below.</div>}
+      {user && searchParams.welcome && <div className="notice">Your email is confirmed and you&apos;re signed in. Welcome to the Hub!</div>}
       <CompanionChat signedIn={!!user} start={start} />
     </div>
   );
