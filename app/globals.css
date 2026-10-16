@@ -489,3 +489,71 @@ a.btn.primary{color:var(--bg)}
 .chat .who-switch .av{background:#fff}
 .chat .msgrow .av{background:var(--surface-2)}
 .chat .msgs{background:var(--bg)}
+
+/* ===== Companion chat: dark & gold, with moods ===== */
+.chat.lux{--gold:#E9B65A;--gold-2:#C98A2A;--glow:#5CE1FF;height:min(78vh,760px);min-height:560px;color:#EDEFF7;border:1px solid rgba(233,182,90,.28);border-radius:22px;
+  background:radial-gradient(120% 60% at 0% 100%,rgba(233,160,60,.16),transparent 55%),radial-gradient(90% 50% at 100% 0%,rgba(123,85,224,.16),transparent 60%),#07080F;box-shadow:0 18px 50px rgba(5,6,15,.35)}
+.chat.lux[data-mood="overwhelmed"]{--glow:#9DB8FF}
+.chat.lux[data-mood="motivation"]{--glow:#FFB84D}
+.chat.lux[data-mood="chat"]{--glow:#FF7AB6}
+.chat.lux[data-c="purity"]{--gold:#8FE9FF;--gold-2:#FF8AD8}
+.lux-top{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.07)}
+.lux-who{display:flex;gap:4px;padding:4px;border-radius:999px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08)}
+.lux-who button{all:unset;cursor:pointer;display:flex;align-items:center;gap:7px;padding:4px 12px 4px 4px;border-radius:999px;font-weight:700;font-size:.9em;color:rgba(255,255,255,.7)}
+.lux-who button[aria-selected="true"]{background:rgba(255,255,255,.12);color:#fff;box-shadow:inset 0 0 0 1px rgba(233,182,90,.5)}
+.lux-who button:focus-visible{outline:2px solid var(--gold)}
+.lux-who .av{width:28px;height:28px;flex:none}
+.lux-online{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.78em;color:rgba(255,255,255,.75);padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.05)}
+.lux-online i,.lux-here i{width:7px;height:7px;border-radius:50%;background:#3EE07F;box-shadow:0 0 8px #3EE07F}
+.lux-icon{flex:none;width:36px;height:36px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;display:grid;place-items:center}
+.chat.lux .msgs{background:none;padding:14px 16px}
+.lux-hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:16px 8px 10px}
+.lux-ring{width:168px;height:168px;border-radius:50%;padding:3px;display:grid;place-items:center;
+  background:conic-gradient(from 210deg,var(--gold),#7B55E0,var(--glow),var(--gold-2),var(--gold));box-shadow:0 0 34px color-mix(in srgb,var(--glow) 45%,transparent),0 0 80px rgba(233,160,60,.12);transition:box-shadow .4s}
+.lux-ring .lux-bot{width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 50% 40%,#1A1E33,#07080F 70%);padding:7px;box-sizing:border-box}
+.lux-hello{display:flex;flex-direction:column;align-items:center;gap:6px}
+.lux-ring .lux-bot svg{width:100%;height:100%;display:block}
+.lux-hero h2{font-family:var(--f-display);font-size:1.9em;color:#fff;margin-top:8px}
+.lux-name{background:linear-gradient(90deg,var(--gold),var(--gold-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.chat.lux[data-c="believer"] .lux-name{background:linear-gradient(90deg,#FF5A5F,#FFB347,#F5E663,#4CD48A,#4FA3FF,#A86BFF);-webkit-background-clip:text;background-clip:text}
+.lux-hero p{color:rgba(233,236,248,.78);max-width:34ch}
+.lux-here{display:inline-flex;align-items:center;gap:7px;margin-top:6px;font-size:.82em;color:rgba(255,255,255,.85);padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+.lux-hero[data-small]{flex-direction:row;justify-content:center;gap:12px;padding:4px 0 8px;text-align:left}
+.lux-hero[data-small] .lux-ring{width:58px;height:58px;padding:2px}
+.lux-hero[data-small] .lux-ring .lux-bot{padding:3px}
+.lux-hero[data-small] .lux-hello{align-items:flex-start;gap:2px}
+.lux-hero[data-small] h2{white-space:nowrap}
+.lux-hero[data-small] h2{font-size:1.15em;margin:0}
+.lux-hero[data-small] p{font-size:.85em}
+.lux-hero[data-small] .lux-here{display:none}
+.chat.lux .msgrow .av{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;padding:2px}
+.chat.lux .msg.me{background:linear-gradient(135deg,#F3C969,#D99A2B);color:#1B1206;font-weight:600}
+.chat.lux .msg.sys{color:rgba(233,236,248,.6)}
+.chat.lux .listen{color:#B06A10}
+.lux-moods{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;padding:8px 14px 4px}
+.lux-moods button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:.84em;color:rgba(255,255,255,.88);border:1px solid rgba(233,182,90,.45);background:rgba(255,255,255,.03);transition:background .2s,box-shadow .2s}
+.lux-moods button svg{width:18px;height:18px;fill:none;stroke:var(--gold);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.lux-moods button:hover{background:rgba(255,255,255,.08)}
+.lux-moods button[aria-checked="true"]{background:rgba(233,182,90,.16);border-color:var(--glow);box-shadow:0 0 14px color-mix(in srgb,var(--glow) 40%,transparent);color:#fff}
+.lux-moods button[aria-checked="true"] svg{stroke:var(--glow)}
+.lux-moods button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.lux-composer{display:flex;align-items:center;gap:8px;margin:8px 14px 6px;padding:6px;border-radius:999px;border:1px solid rgba(233,182,90,.55);background:rgba(255,255,255,.04);box-shadow:0 0 22px rgba(233,160,60,.14)}
+.lux-composer textarea{flex:1;min-width:0;min-height:40px;max-height:120px;resize:none;border:0;background:transparent;color:#fff;padding:10px 6px;font:inherit;outline:none}
+.lux-composer textarea::placeholder{color:rgba(255,255,255,.5)}
+.lux-plus,.lux-mic,.lux-send{flex:none;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;cursor:pointer;border:1px solid rgba(233,182,90,.6);background:transparent;color:var(--gold)}
+.lux-plus svg,.lux-mic svg,.lux-send svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.lux-plus[aria-pressed="true"]{background:var(--gold);color:#1B1206}
+.lux-mic{border-color:rgba(255,255,255,.14);color:#fff;background:rgba(255,255,255,.06)}
+.lux-mic.rec{background:#E5484D;border-color:#E5484D}
+.lux-send{border:0;background:linear-gradient(135deg,#F7D27A,#E0952B);color:#1B1206;box-shadow:0 4px 16px rgba(233,150,40,.35)}
+.lux-plus:focus-visible,.lux-mic:focus-visible,.lux-send:focus-visible,.lux-icon:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.lux-foot{text-align:center;font-size:.66em;letter-spacing:.22em;text-transform:uppercase;color:rgba(233,182,90,.7);padding:4px 0 12px}
+@media (max-width:600px){
+  .chat.lux{height:calc(100dvh - 190px);min-height:520px;border-radius:18px}
+  .lux-ring{width:132px;height:132px}
+  .lux-hero h2{font-size:1.55em}
+  .lux-moods{display:grid;grid-template-columns:1fr 1fr;padding:8px 12px 2px}
+  .lux-moods button{justify-content:center;padding:8px 8px;font-size:.8em}
+  .lux-online{display:none}
+  .lux-who button{padding-right:10px}
+}

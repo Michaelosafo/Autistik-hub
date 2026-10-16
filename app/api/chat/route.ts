@@ -1,5 +1,5 @@
 import { anthropic, MODEL, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
-import { COMPANIONS, systemPrompt, type CompanionId, type Prefs } from "@/lib/companions";
+import { COMPANIONS, isMood, systemPrompt, type CompanionId, type Prefs } from "@/lib/companions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   if (!COMPANIONS[id]) return json({ error: "Unknown companion." }, 400);
   const turns = cleanTurns(body?.messages);
   if (!turns) return json({ error: "Send a message to start." }, 400);
-  const prefs: Prefs = { lowBattery: body?.prefs?.lowBattery === true };
+  const prefs: Prefs = { lowBattery: body?.prefs?.lowBattery === true, mood: isMood(body?.prefs?.mood) ? body.prefs.mood : undefined };
   // Checked after the request is valid, so a broken request never uses up a free message.
   const g = await guardAI();
   if ("error" in g) return g.error;

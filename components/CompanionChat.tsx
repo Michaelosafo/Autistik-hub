@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AIPass from "@/components/AIPass";
 import Art from "@/components/Art";
-import { COMPANIONS, DRAW_RE, type CompanionId } from "@/lib/companions";
+import { COMPANIONS, DRAW_RE, MOODS, isMood, type CompanionId, type Mood } from "@/lib/companions";
 import { cleanSvg } from "@/lib/svg-clean";
 import { useVoice } from "@/lib/voice";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
@@ -19,6 +19,13 @@ type Turn = { role: "user" | "assistant"; content: string };
 // Both speak with a natural male voice: Believer slower and heartfelt, Purity quicker and brighter.
 const VOICES: Record<CompanionId, { rate: number; pitch: number }> = { believer: { rate: 0.92, pitch: 0.95 }, purity: { rate: 1.08, pitch: 1.12 } };
 
+const MOOD_ICONS: Record<Mood, JSX.Element> = {
+  okay: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5c1.8 2 5.2 2 7 0M9 9.5h.01M15 9.5h.01" /></svg>,
+  overwhelmed: <svg viewBox="0 0 24 24"><path d="M7 18h10.5a4 4 0 0 0 .5-8 6 6 0 0 0-11.6 1.5A3.3 3.3 0 0 0 7 18z" /></svg>,
+  motivation: <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>,
+  chat: <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" /></svg>,
+};
+
 export default function CompanionChat({ signedIn, start }: { signedIn: boolean; start?: CompanionId }) {
   const [who, setWho] = useState<CompanionId>(start || "believer");
   const [msgs, setMsgs] = useState<Record<CompanionId, Msg[]>>({ believer: [], purity: [] });
@@ -28,6 +35,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const [draw, setDraw] = useState(false);
   const [passKey, setPassKey] = useState(0);
   const [needPass, setNeedPass] = useState(false);
+  const [mood, setMood] = useState<Mood>("okay");
   const ctl = useRef<AbortController | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const c = COMPANIONS[who];
@@ -37,6 +45,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     try {
       const saved = localStorage.getItem("companion") as CompanionId | null;
       if (!start && saved && COMPANIONS[saved]) setWho(saved);
+      const m = localStorage.getItem("mood"); if (isMood(m)) setMood(m);
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem("companion", who); } catch {} }, [who]);
@@ -47,6 +56,12 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const lowBattery = () => { try { return Number(localStorage.getItem("battery")) > 0 && Number(localStorage.getItem("battery")) <= 2; } catch { return false; } };
 
   function choose(id: CompanionId) { ctl.current?.abort(); voice.stopSpeaking(); setWho(id); }
+  function pickMood(m: Mood) {
+    if (m === mood) return;
+    setMood(m);
+    try { localStorage.setItem("mood", m); } catch {}
+    if (msgs[who].length) push(who, { kind: "sys", text: `Mood: ${MOODS[m].label}` });
+  }
 
   function voiceNote() {
     if (!signedIn) { push(who, { kind: "sys", text: "Please sign in to talk with Believer and Purity." }); return; }
@@ -70,7 +85,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     try {
       const res = await fetch("/api/chat", {
         method: "POST", headers: { "content-type": "application/json" }, signal: ctl.current.signal,
-        body: JSON.stringify({ companion: id, messages: turns.current[id], prefs: { lowBattery: lowBattery() } }),
+        body: JSON.stringify({ companion: id, messages: turns.current[id], prefs: { lowBattery: lowBattery(), mood } }),
       });
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
@@ -144,33 +159,41 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
 
   return (
     <div className="kai companions">
-      <div className="card chat" data-c={who}>
-        <div className="chat-head">
-          <div className="who-switch" role="tablist" aria-label="Choose a companion">
+      <div className="card chat lux" data-c={who} data-mood={mood}>
+        <div className="lux-top">
+          <div className="lux-who" role="tablist" aria-label="Choose a companion">
             {(Object.keys(COMPANIONS) as CompanionId[]).map((id) => (
               <button key={id} type="button" role="tab" data-c={id} aria-selected={who === id} onClick={() => choose(id)}>
-                <Art kind={id} className="av" /><span><b>{COMPANIONS[id].name}</b><small>{COMPANIONS[id].tagline}</small></span>
+                <Art kind="robot" who={id} mood={who === id ? mood : "okay"} className="av" /><span>{COMPANIONS[id].name}</span>
               </button>
             ))}
           </div>
+          <span className="lux-online"><i />AI online</span>
           {voice.canSpeak && (
-            <button className="icon-btn" type="button" aria-pressed={voice.autoRead} onClick={() => voice.setRead(!voice.autoRead)}
-              title={voice.autoRead ? "Replies are read aloud. Click to turn off." : "Read replies aloud"}>
+            <button className="lux-icon" type="button" aria-pressed={voice.autoRead} onClick={() => voice.setRead(!voice.autoRead)}
+              title={voice.autoRead ? "Replies are read aloud. Tap to turn off." : "Read replies aloud"}>
               {voice.talking ? "🔊" : voice.autoRead ? "🔉" : "🔈"}<span className="sr-only">Read replies aloud</span>
             </button>
           )}
         </div>
 
         <div className="msgs" ref={box} aria-live="polite">
-          <div className="msgrow"><Art kind={who} className="av" /><div className="msg ai paper">{c.hello}</div></div>
+          <div className="lux-hero" data-small={list.length > 0 ? "1" : undefined}>
+            <div className="lux-ring"><Art kind="robot" who={who} mood={mood} className="lux-bot" /></div>
+            <div className="lux-hello">
+              <h2>Hi, I&apos;m <span className="lux-name">{c.name}</span></h2>
+              <p>{MOODS[mood].line}</p>
+              <span className="lux-here"><i />Always here for you</span>
+            </div>
+          </div>
           {list.map((m, i) => {
             if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
             if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
             if (m.kind === "drawing") return (
-              <div key={i} className="msgrow"><Art kind={who} className="av" /><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
+              <div key={i} className="msgrow"><Art kind="robot" who={who} mood={mood} className="av" /><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
             );
             if (m.kind === "img") return (
-              <div key={i} className="msgrow"><Art kind={who} className="av" />
+              <div key={i} className="msgrow"><Art kind="robot" who={who} mood={mood} className="av" />
                 <div className="msg ai paper"><div className="genwrap">
                   <span>{m.title}</span>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -184,7 +207,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
               </div>
             );
             return (
-              <div key={i} className="msgrow"><Art kind={who} className="av" />
+              <div key={i} className="msgrow"><Art kind="robot" who={who} mood={mood} className="av" />
                 {m.pending ? <WritingNote name={c.name} /> : (
                   <Handwritten text={m.text} done={!m.writing} fresh={!!m.born && Date.now() - m.born < 20_000}
                     after={voice.canSpeak && <button className="listen" type="button" onClick={() => voice.speak(m.text)} title="Listen to this reply">▶ Listen</button>} />
@@ -195,17 +218,32 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
           {voice.listening && <div className="msg me listening">🎙️ {voice.heard || "Listening… speak now"}</div>}
         </div>
 
-        <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-          <button className="icon-btn" id="kaiDraw" type="button" aria-pressed={draw} onClick={() => setDraw(!draw)} title={draw ? "Picture mode is on: describe what to draw" : "Make a picture"}>🖼️<span className="sr-only">Make a picture</span></button>
+        <div className="lux-moods" role="radiogroup" aria-label="How are you feeling?">
+          {(Object.keys(MOODS) as Mood[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={mood === k} data-m={k} onClick={() => pickMood(k)}>
+              {MOOD_ICONS[k]}<span>{MOODS[k].label}</span>
+            </button>
+          ))}
+        </div>
+        <form className="lux-composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
+          <button className="lux-plus" type="button" aria-pressed={draw} onClick={() => setDraw(!draw)} title={draw ? "Picture mode is on: describe what to draw" : "Make a picture"}>
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg><span className="sr-only">Make a picture</span>
+          </button>
           <textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)}
-            placeholder={!signedIn ? "Sign in to chat" : draw ? `Describe the picture for ${c.name} to draw…` : `Message ${c.name}…`} aria-label={`Message ${c.name}`}
+            placeholder={!signedIn ? "Sign in to chat" : draw ? `Describe a picture for ${c.name} to draw…` : "Write a message…"} aria-label={`Message ${c.name}`}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
           {voice.canListen && (
-            <button className={"icon-btn" + (voice.listening ? " rec" : "")} type="button" aria-pressed={voice.listening} onClick={voiceNote} disabled={busy}
-              title={voice.listening ? "Stop and send" : "Send a voice note"}>{voice.listening ? "⏹" : "🎤"}<span className="sr-only">{voice.listening ? "Stop and send" : "Send a voice note"}</span></button>
+            <button className={"lux-mic" + (voice.listening ? " rec" : "")} type="button" aria-pressed={voice.listening} onClick={voiceNote} disabled={busy}
+              title={voice.listening ? "Stop and send" : "Send a voice note"}>
+              {voice.listening ? <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg> : <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>}
+              <span className="sr-only">{voice.listening ? "Stop and send" : "Send a voice note"}</span>
+            </button>
           )}
-          {busy ? <button className="btn" type="button" onClick={() => ctl.current?.abort()}>Stop</button> : <button className="btn c" type="submit">Send</button>}
+          {busy
+            ? <button className="lux-send" type="button" onClick={() => ctl.current?.abort()} title="Stop"><svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg><span className="sr-only">Stop</span></button>
+            : <button className="lux-send" type="submit" title="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" /><path d="m11 13 9-9" /></svg><span className="sr-only">Send</span></button>}
         </form>
+        <div className="lux-foot">AUTISTIK · Different minds. One community.</div>
       </div>
 
       <div className="stack side">
