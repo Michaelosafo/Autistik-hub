@@ -4,6 +4,7 @@ import AnalyticsScan from "@/components/AnalyticsScan";
 import WatchButton from "@/components/WatchButton";
 import Arena from "@/components/Arena";
 import { insights } from "@/lib/analytics-insights";
+import { tradeCall, whoMightSell } from "@/lib/analytics-signals";
 import { ACHAINS, checkToken, heldFor, isAChain, syncTrades } from "@/lib/analytics";
 import AutoRefresh from "@/components/AutoRefresh";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -65,10 +66,13 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
     user ? sb.from("launch_watchers").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] }),
     sb.from("launch_watch_counts").select("watchers").eq("chain", chain).eq("token", t.token).maybeSingle(),
     sb.from("token_links").select("a,b,kind").eq("chain", chain).eq("token", t.token).limit(500),
-    sb.from("token_trades").select("wallet,side,amount,balance_after,pct_after,at,tx_hash").eq("chain", chain).eq("token", t.token)
+    sb.from("token_trades").select("wallet,side,amount,balance_after,pct_after,at,tx_hash,block").eq("chain", chain).eq("token", t.token)
       .gt("at", new Date(Date.now() - 7 * 86_400_000).toISOString()).order("at", { ascending: false }).limit(1000),
   ]);
   const signals = insights({ holders: (holders || []) as any, events: (events || []) as any, links: (links || []) as any, security: t.security, fullList: t.holder_source === "moralis" });
+  const sigIn = { holders: (holders || []) as any, events: (events || []) as any, trades: (trades || []) as any, links: (links || []) as any, dev: t.dev, security: t.security };
+  const call = tradeCall(sigIn);
+  const { groups, suspects } = whoMightSell(sigIn);
   const lastEvent = new Map<string, any>();
   for (const e of events || []) if (!lastEvent.has(e.wallet)) lastEvent.set(e.wallet, e);
   const top = (holders || []).filter((h: any) => h.in_top).slice(0, 40);
@@ -111,10 +115,70 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         </div>
       </div>
 
+
+      <div className={"card stack verdict " + call.kind}>
+        <div className="label">🧭 Buy or sell? The read right now</div>
+        <div className="verdict-top">
+          <span className="verdict-emoji" aria-hidden>{call.emoji}</span>
+          <div className="grow">
+            <h2>{call.title}</h2>
+            <p>{call.summary}</p>
+          </div>
+        </div>
+        {call.kind !== "avoid" && (
+          <div className="verdict-meter" aria-label={`Buy score ${call.score} out of 100`}>
+            <span style={{ left: `${call.score}%` }} />
+            <small>Sell</small><small>Wait</small><small>Buy</small>
+          </div>
+        )}
+        <details open>
+          <summary>Why?</summary>
+          <ul className="signals">{call.reasons.map((r, i) => <li key={i} className={r.level}>{r.text}</li>)}</ul>
+        </details>
+        <p className="muted" style={{ fontSize: ".78em" }}>Updated every minute from live trades. A guide only, not financial advice. Never buy more than you can lose.</p>
+      </div>
+
       <div className="card stack">
         <h2>♟️ The battle: holders vs sellers</h2>
         <p className="muted" style={{ fontSize: ".86em" }}>Holders defend from the bottom, sellers attack from the top. The bigger the bag (or the sale), the stronger the piece. Pick a time frame and tap any piece to see its holdings.</p>
         <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
+      </div>
+
+
+      <div className="card stack">
+        <h2>🕸️ Connected wallets &amp; who might sell next</h2>
+        <p className="muted" style={{ fontSize: ".86em" }}>Wallets that sent tokens to each other or bought at the exact same moment are often the same person. Tap a wallet to see it on the explorer.</p>
+        <h3>Connected groups</h3>
+        {!groups.length && <div className="empty">No connected wallets found yet. We keep checking every trade.</div>}
+        <div className="conn-list">
+          {groups.slice(0, 5).map((g, i) => (
+            <div key={i} className={"conn-group " + g.risk.level}>
+              <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
+                <b>{g.wallets.length} wallets · hold {pct(g.pct)}{g.withDev ? " · tied to the dev" : ""}</b>
+                <span className={"risk-pill " + g.risk.level}>{g.risk.level === "high" ? "Likely to sell" : g.risk.level === "medium" ? "Might sell" : "Calm"} · {g.risk.score}/100</span>
+              </div>
+              <div className="club-conn">
+                {g.wallets.map((w) => <a key={w} className="mono" href={`${c.explorer}/token/${t.token}?a=${w}`} target="_blank" rel="noopener noreferrer">{short(w)}{w === t.dev ? " (dev)" : ""}</a>)}
+              </div>
+              <small className="muted">Why connected: {g.how.join("; ")}.</small>
+              {g.risk.reasons.length > 0 && <small>Why they might sell: {g.risk.reasons.join("; ")}.</small>}
+            </div>
+          ))}
+        </div>
+        <h3>Most likely to sell</h3>
+        {!suspects.length && <div className="empty">✓ No wallet looks likely to sell right now.</div>}
+        <div className="alert-list">
+          {suspects.slice(0, 8).map((x) => (
+            <a key={x.wallet} className="alert-row suspect" href={`${c.explorer}/token/${t.token}?a=${x.wallet}`} target="_blank" rel="noopener noreferrer">
+              <span className={"risk-ring " + x.risk.level} style={{ ["--r" as any]: x.risk.score }}>{x.risk.score}</span>
+              <span className="grow">
+                <span className="mono">{short(x.wallet)}</span>{x.isDev ? " (dev)" : ""} <span className="muted">· holds {pct(x.pct)}</span>
+                <small className="muted" style={{ display: "block" }}>{x.risk.reasons.join(" · ")}</small>
+              </span>
+            </a>
+          ))}
+        </div>
+        <p className="muted" style={{ fontSize: ".78em" }}>The number is the chance-to-sell score (0 to 100), worked out from past sells, holding time, links to the dev and bag size. A guide, not a promise.</p>
       </div>
 
       <div className="card stack">

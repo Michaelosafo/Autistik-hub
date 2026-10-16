@@ -390,6 +390,20 @@ export async function syncTrades(chain: AChain, token: string, maxChunks = 8): P
     }
   }
 
+  // Free "connected wallet" links: tokens sent straight from one wallet to another (no pool in the transaction).
+  // Senders that hand tokens to lots of wallets (exchanges, airdrops) are left out.
+  const sends: { a: string; b: string; kind: string; amount: number }[] = [];
+  for (const list of byTx.values()) {
+    if (list.some((l) => lower(l.args.from) === P || lower(l.args.to) === P)) continue;
+    for (const l of list) {
+      const f = lower(l.args.from), to = lower(l.args.to), amount = num(formatUnits(l.args.value, dec));
+      if (amount && f !== to && f !== T && to !== T && !SKIP.has(f) && !SKIP.has(to)) sends.push({ a: getAddress(f), b: getAddress(to), kind: "transfer", amount });
+    }
+  }
+  const fanOut = new Map<string, Set<string>>();
+  for (const x of sends) fanOut.set(x.a, (fanOut.get(x.a) || new Set()).add(x.b));
+  await saveLinks(chain, token, sends.filter((x) => fanOut.get(x.a)!.size <= 5).slice(0, 200)).catch(() => {});
+
   if (trades.length) {
     // Times from block numbers (one lookup for the speed of the chain, not one per block).
     const [now, back] = await Promise.all([lc.getBlock({ blockNumber: head }), lc.getBlock({ blockNumber: head - 1000n })]);
