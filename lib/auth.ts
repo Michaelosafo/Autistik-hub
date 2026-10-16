@@ -1,10 +1,14 @@
 /** Only allow redirects to pages on this site, never to another website. */
 export function safeNext(v: string | null | undefined, fallback = "/companions") {
   const s = String(v || "");
-  if (!s.startsWith("/") || s.startsWith("//") || s.startsWith("/\\")) return fallback;
+  // Browsers drop tabs and line breaks from addresses, so "/\t/evil.com" would become "//evil.com": refuse them.
+  if (!s.startsWith("/") || /[\x00-\x1f\x7f\\]/.test(s)) return fallback;
+  let u: URL;
+  try { u = new URL(s, "https://this.site"); } catch { return fallback; }
+  if (u.origin !== "https://this.site") return fallback;
   // Never send people back to the sign-in pages themselves (that would loop).
-  if (/^\/(login|auth|reset-password)(\/|\?|$)/.test(s)) return fallback;
-  return s;
+  if (/^\/(login|auth|reset-password)(\/|\?|$)/.test(u.pathname)) return fallback;
+  return u.pathname + u.search + u.hash;
 }
 
 export const MIN_PASSWORD = 8;

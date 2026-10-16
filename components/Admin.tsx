@@ -121,7 +121,9 @@ export default function Admin() {
             <div className="row" style={{ justifyContent: "space-between" }}><h3>{a.full_name} · {a.role}</h3><span className={a.status === "approved" ? "badge v" : "badge gold"}>{a.status}</span></div>
             <p className="muted">{a.country || "Country not given"}</p>
             {a.topic && <p>{a.topic}</p>}
-            <a className="mono" href={a.verify_link} target="_blank" rel="noopener noreferrer" style={{ overflowWrap: "anywhere" }}>{a.verify_link}</a>
+            {/^https:\/\/[^\s"<>]+$/.test(a.verify_link || "")
+              ? <a className="mono" href={a.verify_link} target="_blank" rel="noopener noreferrer" style={{ overflowWrap: "anywhere" }}>{a.verify_link}</a>
+              : <span className="mono muted" style={{ overflowWrap: "anywhere" }}>Unsafe link, not opened: {a.verify_link}</span>}
             <div className="row">
               {a.status !== "approved" && <button className="btn primary small" type="button" onClick={() => approve(a)}>Approve &amp; verify</button>}
               {a.status === "pending" && <button className="btn small" type="button" onClick={() => reject(a)}>Reject</button>}

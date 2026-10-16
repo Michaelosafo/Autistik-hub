@@ -18,6 +18,8 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] `supabase/security.sql` (rate limits, anti-spam rules, admin log)
 - [ ] `supabase/ai-budget.sql` (AI cost tracking for the Admin page, 2 AI launch sessions a day)
 - [ ] `supabase/admin-lock.sql` with your email (admin area only for you, with 2-step verification)
+- [ ] `supabase/hardening.sql` **last** (browsers get only the exact database access the site uses)
+- [ ] Supabase → Authentication → **Attack Protection** → turn on **Prevent use of leaked passwords** → Save.
 
 ## 3. Wallets
 | Wallet | Used for | Notes |
@@ -46,7 +48,8 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] Deployments → ⋯ → **Redeploy**. Trending payments now work.
 
 ## 5. Launch Pad contract on BNB Chain (remix.ethereum.org)
-- [ ] Paste `contracts/AutistikLaunchpad.sol`, compile with **0.8.24**, optimizer **200**.
+- [ ] Paste `contracts/AutistikLaunchpad.sol`. It imports OpenZeppelin **5.0.2**: Remix fetches it; if it asks for a version, use `@openzeppelin/contracts@5.0.2`.
+- [ ] Compile with **0.8.24**, optimizer **200**, EVM version **paris** (Advanced configurations). This is exactly what the tests used.
 - [ ] Deploy with MetaMask on BNB Smart Chain (owner wallet):
   - `router_` `0x10ED43C718714eb63d5aA57B78B54704E256024E`
   - `treasury_` treasury address
@@ -54,6 +57,9 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
   - `minLiquidity_` `100000000000000000` (0.1 BNB)
   - `stablecoin_` `0x55d398326f99059fF775485246999027B3197955`
   - `eligibilitySigner_` signer wallet's **address**
+- [ ] Check before going on: the contract's `factory()` reads `0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73` and `weth()` reads `0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c` (WBNB).
+- [ ] Verify the source on BscScan (Contract → Verify & Publish, same compiler settings), so buyers can read it.
+- [ ] Move ownership to the Safe in two steps: owner calls `transferOwnership(Safe address)`, then the Safe calls `acceptOwnership()`.
 - [ ] Vercel: `NEXT_PUBLIC_LAUNCHPAD_BSC` = the new contract address → Redeploy.
 
 ## 6. Test with small amounts

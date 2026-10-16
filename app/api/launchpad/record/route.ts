@@ -43,7 +43,13 @@ export async function POST(req: Request) {
   const read = (functionName: "name" | "symbol") => client.readContract({ address: token, abi: ERC20_META_ABI, functionName } as any) as Promise<string>;
   const [name, symbol] = await Promise.all([read("name"), read("symbol")]).catch(() => ["", ""]);
 
+  // The launch is only tied to this account if the account's linked wallet is the one that launched it.
   const { data: { user } } = await supabaseServer().auth.getUser();
+  let owner: string | null = null;
+  if (user) {
+    const { data: w } = await supabaseService().from("wallets").select("address").eq("user_id", user.id);
+    if ((w || []).some((x: any) => String(x.address).toLowerCase() === String(creator).toLowerCase())) owner = user.id;
+  }
   const row = {
     chain: chain.key,
     token: getAddress(token),
@@ -55,7 +61,7 @@ export async function POST(req: Request) {
     tx_hash: txHash.toLowerCase(),
     lp_lock: !locked ? "burn" : lockDays > 200 ? "1y" : "6m",
     lp_unlock_at: locked ? new Date(unlockAt * 1000).toISOString() : null,
-    user_id: user?.id ?? null,
+    user_id: owner,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);

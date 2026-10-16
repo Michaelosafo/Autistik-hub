@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 const TOKEN = (process.env.NEXT_PUBLIC_TOKEN_ADDRESS || "0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9") as `0x${string}`;
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"]);
 /** How long a permit is valid. Short, so the AUTISTIK has to still be in the wallet when the launch happens. */
-const PERMIT_SECONDS = 15 * 60;
+const PERMIT_SECONDS = 5 * 60;
 
 // Checks the wallet holds at least $20 of AUTISTIK on BNB Chain and, if so, signs a short-lived permit
 // that the AutistikLaunchpad contract checks before it creates the token.
@@ -21,6 +21,9 @@ export async function POST(req: Request) {
   if (slow) return slow;
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return json({ error: "Please sign in first." }, 401);
+  // Per account too, so one AUTISTIK bag can't be passed around to get permits for many wallets quickly.
+  const perUser = await rateLimit(null, "eligibility-user", 10, 3600, user.id);
+  if (perUser) return perUser;
 
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];

@@ -100,9 +100,8 @@ export async function GET(req: Request) {
   }
   out.advice = advice;
   // Visitors see whether each part works. Only admins see the finer details (sign-up settings, AI model, site address).
-  if (!(await isAdmin())) {
-    for (const k of ["emailSignupEnabled", "signupsAllowed", "emailConfirmationRequired", "aiModel", "siteUrl"]) delete out[k];
-    out.details = "Sign in as an admin to see more.";
-  }
-  return new Response(JSON.stringify(out, null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
+  // Visitors only see whether everything works. The details (which settings are set, what's wrong) are admin-only,
+  // so they can't help an attacker.
+  const body = (await isAdmin()) ? out : { ok: out.supabase === "ok" && out.database === "ok" && out.ai === "ok", details: "Sign in as the admin to see more." };
+  return new Response(JSON.stringify(body, null, 2), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
 }
