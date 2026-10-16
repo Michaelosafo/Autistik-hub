@@ -382,7 +382,11 @@ export async function syncTrades(chain: AChain, token: string, maxChunks = 8): P
         const prev = list.find((x) => lower(x.args.to) === f && lower(x.args.from) !== P && lower(x.args.from) !== T && Math.abs(num(formatUnits(x.args.value, dec)) - amount) <= amount * 0.1);
         if (prev) wallet = lower(prev.args.from);
       }
-      if (side && !SKIP.has(wallet) && wallet !== T) trades.push({ chain, token, tx_hash: tx, log_index: Number(l.logIndex), wallet: getAddress(wallet), side, amount: String(amount), block: Number(l.blockNumber) });
+      if (!side || SKIP.has(wallet) || wallet === T) continue;
+      // One sale or buy that moves in several pieces in the same transaction counts once, with the pieces added up.
+      const same = trades.find((x) => x.tx_hash === tx && x.side === side && lower(x.wallet) === wallet);
+      if (same) same.amount = String(num(same.amount) + amount);
+      else trades.push({ chain, token, tx_hash: tx, log_index: Number(l.logIndex), wallet: getAddress(wallet), side, amount: String(amount), block: Number(l.blockNumber) });
     }
   }
 
