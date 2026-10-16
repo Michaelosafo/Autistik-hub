@@ -1,8 +1,41 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** How a voice sounds: Believer is brighter, Purity slower and calmer. */
-export type VoiceStyle = { rate?: number; pitch?: number };
+/** How a voice sounds: Believer speaks at a normal pace, Purity a little slower and calmer. */
+export type VoiceStyle = { rate?: number };
+
+// The most natural-sounding male English voices that browsers ship, best first. Edge's "Online (Natural)"
+// voices and Apple's Enhanced/Premium voices are neural and sound close to a real person.
+const MALE_VOICES: RegExp[] = [
+  /\b(Andrew|Brian|Christopher|Guy|Eric|Roger|Steffan|Davis|Tony|Jason|Ryan|Thomas|William|Liam|Connor|Kenji)\b.*(Natural|Online|Neural)/i,
+  /\b(Daniel|Arthur|Aaron|Oliver|Evan|Nathan|Reed|Tom|Alex|Rishi|Gordon|Lee|Fred)\b.*(Premium|Enhanced)/i,
+  /Google UK English Male/i,
+  /\b(Daniel|Arthur|Aaron|Oliver|Evan|Nathan|Reed|Tom|Alex|Rishi|Gordon|Lee)\b/i,
+  /\b(David|Mark|George|James|Richard|Sean|Ravi)\b/i,
+  /\bmale\b/i,
+];
+
+/** Picks the most natural male English voice on this device, or null if it has none. */
+export function pickMaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  const en = voices.filter((v) => /^en/i.test(v.lang) && !/female|woman|girl/i.test(v.name));
+  for (const re of MALE_VOICES) {
+    const hits = en.filter((v) => re.test(v.name));
+    // Prefer the person's own accent (e.g. en-GB) when there is a choice.
+    const local = hits.find((v) => v.lang.toLowerCase() === (navigator.language || "").toLowerCase());
+    if (local || hits[0]) return local || hits[0];
+  }
+  return null;
+}
+
+/** Sets up an utterance with a natural male voice. Pitch is only lowered when the device has no male voice. */
+export function maleUtterance(text: string, rate = 0.97): SpeechSynthesisUtterance {
+  const u = new SpeechSynthesisUtterance(forSpeech(text));
+  const v = pickMaleVoice(window.speechSynthesis.getVoices());
+  u.rate = rate;
+  if (v) { u.voice = v; u.lang = v.lang; u.pitch = 1; }
+  else { u.pitch = 0.8; } // no male voice installed: deepen the default one a little
+  return u;
+}
 
 /** Makes text sound natural when read out: links, wallet addresses and markdown symbols are skipped. */
 function forSpeech(text: string) {
@@ -34,8 +67,8 @@ export function useVoice(storageKey: string, style: VoiceStyle = {}) {
     setCanSpeak("speechSynthesis" in window);
     setCanListen(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));
     try { setAutoRead(localStorage.getItem(storageKey) === "on"); } catch {}
-    // Some browsers load their voice list late.
-    try { window.speechSynthesis?.getVoices(); } catch {}
+    // Some browsers load their voice list late; ask early so the male voice is ready on the first reply.
+    try { window.speechSynthesis?.getVoices(); window.speechSynthesis?.addEventListener?.("voiceschanged", () => window.speechSynthesis.getVoices()); } catch {}
     return () => { try { window.speechSynthesis?.cancel(); rec.current?.abort(); } catch {} };
   }, [storageKey]);
 
@@ -45,12 +78,7 @@ export function useVoice(storageKey: string, style: VoiceStyle = {}) {
     if (typeof window === "undefined" || !("speechSynthesis" in window) || !text.trim()) return;
     const synth = window.speechSynthesis;
     synth.cancel();
-    const u = new SpeechSynthesisUtterance(forSpeech(text));
-    u.rate = styleRef.current.rate ?? 0.95;
-    u.pitch = styleRef.current.pitch ?? 1;
-    const voices = synth.getVoices();
-    const v = voices.find((x) => /^en/i.test(x.lang) && /female|samantha|aria|zira|jenny|google us|google uk english female/i.test(x.name)) || voices.find((x) => /^en/i.test(x.lang));
-    if (v) u.voice = v;
+    const u = maleUtterance(text, styleRef.current.rate ?? 0.97);
     u.onstart = () => setTalking(true);
     u.onend = u.onerror = () => setTalking(false);
     synth.speak(u);
