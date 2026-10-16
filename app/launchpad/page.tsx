@@ -21,7 +21,7 @@ export default async function LaunchpadPage() {
           <h1>Trending on AUTISTIK</h1>
           <p className="muted">Tokens launched here have their liquidity locked or burned, so it can&apos;t be pulled early. Tokens marked Listed launched elsewhere and paid to be listed. See what&apos;s trending, what people are watching, and what&apos;s new.</p>
         </div>
-        <Link className="btn primary" href="/launchpad/new">🚀 Launch a token</Link>
+        <Link className="btn primary" href="/analytics">📊 Analytics: top wallets & sell alerts</Link>
       </div>
       <TokenBoard lists={{ trending: trending(board), watched: mostWatched(board), new: board }} />
       <TrendingPay />
