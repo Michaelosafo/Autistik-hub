@@ -149,7 +149,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
       const liquidity = parseEther(plan.liquidity);
       if (liquidity < m) { setStatus(`The pool needs at least ${formatEther(m)} ${c.coin}. Ask Autistik to change the amount.`); return; }
 
-      // The Hub checks this wallet holds $20+ of AUTISTIK on BNB Chain and gives a 15-minute permit the contract checks.
+      // The Hub checks this wallet holds $20+ of AUTISTIK on BNB Chain and gives a 5-minute, one-use permit the contract checks.
       setStatus(`Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
       const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, wallet: account }) });
       const permit = await er.json().catch(() => ({}));
@@ -158,7 +158,13 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
       setStatus("Confirm the launch in your wallet…");
       const call = {
         account, address: c.launchpad!, abi: LAUNCHPAD_ABI, functionName: "launch",
-        args: [plan.name, plan.symbol, BigInt(plan.supply) * 10n ** 18n, BigInt(Math.round(plan.creatorPercent * 100)), LOCKS[plan.lock].option, BigInt(permit.deadline || 0), (permit.signature || "0x") as `0x${string}`],
+        args: [{
+          name: plan.name, symbol: plan.symbol, supply: BigInt(plan.supply) * 10n ** 18n,
+          creatorBps: BigInt(Math.round(plan.creatorPercent * 100)), lockOption: LOCKS[plan.lock].option,
+          permitDeadline: BigInt(permit.deadline || 0),
+          // The fee shown now is the most this launch will pay, and it must happen within 20 minutes.
+          maxFeeAccepted: f, deadline: BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
+        }, (permit.signature || "0x") as `0x${string}`],
         value: f + liquidity,
       } as const;
       // A launch creates two contracts in one go; some mobile wallets underestimate that, so add 25% headroom.
@@ -178,8 +184,9 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
       say(`${plan.symbol} is live. Congratulations!`);
     } catch (e: any) {
       const reason = String(e?.shortMessage || e?.message || "");
-      setStatus(/NotEligible|PermitExpired/.test(reason)
+      setStatus(/NotEligible|PermitExpired|PermitUsed/.test(reason)
         ? `The launch was refused: this wallet must hold at least $${MIN_HOLD_USD} of AUTISTIK. Press Launch again to re-check.`
+        : /FeeTooHigh|TooLate/.test(reason) ? "The launch fee changed or the launch took too long. Nothing was launched. Press Launch again."
         : e?.shortMessage || "You cancelled in your wallet. Nothing was launched.");
     } finally { setLaunching(false); }
   }

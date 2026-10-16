@@ -49,10 +49,16 @@ insert into public.profiles (id, confirmed_adult)
 select u.id, coalesce((u.raw_user_meta_data->>'confirmed_adult')::boolean, false) from auth.users u
 on conflict (id) do nothing;
 
-create or replace function public.is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select coalesce((select is_admin from public.profiles where id = auth.uid()), false);
-$$;
+-- Admin powers. Until supabase/admin-lock.sql has run, nobody is an admin. admin-lock.sql replaces this with
+-- "the owner, signed in with 2-step verification", and running this file again never loosens that.
+do $$ begin
+  if to_regprocedure('public.is_owner()') is null then
+    create or replace function public.is_admin() returns boolean
+    language sql stable security definer set search_path = '' as 'select false';
+  end if;
+end $$;
+revoke all on function public.is_admin() from public, anon;
+grant execute on function public.is_admin() to authenticated;
 
 -- ---------- app settings (current airdrop round) ----------
 create table if not exists public.app_settings (

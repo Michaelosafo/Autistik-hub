@@ -45,8 +45,10 @@ export async function POST(req: Request) {
   if (receipt.status !== "success") return json({ error: "That payment failed on-chain." }, 400);
   if (!tx.to || getAddress(tx.to) !== getAddress(TREASURY)) return json({ error: "That payment didn't go to the AUTISTIK trending wallet." }, 400);
   if (Date.now() / 1000 - Number(block.timestamp) > MAX_AGE_SECONDS) return json({ error: "That payment is more than 2 days old. Send a new one." }, 400);
-  // Payments made from this site carry the token address, so they can only be claimed for that token.
-  if (tx.input && tx.input !== "0x" && tx.input.toLowerCase() !== token.toLowerCase()) return json({ error: "That payment was made for a different token." }, 400);
+  // Payments made from this site carry the token address, so only that token can claim them. A plain transfer
+  // (no token address attached) could be claimed by anyone watching the wallet, so it isn't accepted.
+  if (!tx.input || tx.input === "0x") return json({ error: "That payment doesn't say which token it's for. Please pay with the Pay button on this page, so the token address is attached. Contact the team about the earlier payment." }, 400);
+  if (tx.input.toLowerCase() !== token.toLowerCase()) return json({ error: "That payment was made for a different token." }, 400);
 
   const price = await bnbPriceUsd();
   if (!price) return json({ error: "Couldn't get the BNB price right now. Try again in a minute." }, 502);

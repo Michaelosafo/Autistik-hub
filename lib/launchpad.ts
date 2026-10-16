@@ -2,7 +2,8 @@ import { defineChain, parseAbi, parseEther, type PublicClient } from "viem";
 
 /** Matches contracts/AutistikLaunchpad.sol. */
 export const LAUNCHPAD_ABI = parseAbi([
-  "function launch(string name_, string symbol_, uint256 supply, uint256 creatorBps, uint8 lockOption, uint256 permitDeadline, bytes permitSig) payable returns (address token, address pair)",
+  "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint8 lockOption; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; }",
+  "function launch(LaunchParams p, bytes permitSig) payable returns (address token, address pair)",
   "function unlockLiquidity(address token)",
   "function locks(address) view returns (address pair, address creator, uint256 amount, uint256 unlockAt)",
   "function eligibilitySigner() view returns (address)",
@@ -10,7 +11,7 @@ export const LAUNCHPAD_ABI = parseAbi([
   "function minLiquidity() view returns (uint256)",
   "function stablecoin() view returns (address)",
   "function plans(uint256) view returns (uint256 price, uint256 duration)",
-  "function promote(address token, uint256 planId)",
+  "function promote(address token, uint256 planId, uint256 maxPrice)",
   "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 supply, uint256 creatorTokens, uint256 liquidityTokens, uint256 liquidityNative, uint256 lp)",
   "event LiquidityLocked(address indexed token, address indexed pair, address indexed creator, uint256 amount, uint256 unlockAt)",
   "event LiquidityUnlocked(address indexed token, address indexed creator, uint256 amount)",
@@ -29,6 +30,11 @@ export const LAUNCHPAD_ABI = parseAbi([
   "error FeeTransferFailed()",
   "error NotLaunchedHere()",
   "error UnknownPlan()",
+  "error FeeTooHigh()",
+  "error PriceTooHigh()",
+  "error TooLate()",
+  "error PairNotEmpty()",
+  "error PermitUsed()",
 ]);
 
 /** Enough of ERC-20 to pay for a promotion in USDT/USDC. */
