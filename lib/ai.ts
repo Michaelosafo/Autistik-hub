@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
-import { AI_FREE_TRIES, AI_PASS_DAYS, AI_PASS_USD } from "@/lib/aipass";
+import { AI_FREE_PER_DAY, AI_PASS_DAYS, AI_PASS_USD } from "@/lib/aipass";
 import { rateLimit } from "@/lib/ratelimit";
 
 let client: Anthropic | null = null;
@@ -12,7 +12,7 @@ export function anthropic() {
 export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 
 /**
- * Checks the visitor is signed in, under today's AI limit, and has an AI Pass or free tries left.
+ * Checks the visitor is signed in, under today's AI limit, and has an AI Pass or free messages left today.
  * `cost` is how many messages this request counts as (a picture costs more). `needsPass: false` skips the pass
  * check (the Launch Pad guide stays free so people can launch). Returns an error Response or the user id.
  */
@@ -27,7 +27,7 @@ export async function guardAI(who = "Believer and Purity", opts: { cost?: number
   if (slow) return { error: slow };
   const limit = Number(process.env.AI_DAILY_LIMIT || 60);
   const { data, error } = await supabaseService().rpc("ai_spend", {
-    p_user: user.id, p_free: AI_FREE_TRIES, p_limit: limit, p_cost: Math.max(1, opts.cost ?? 1), p_needs_pass: opts.needsPass ?? true,
+    p_user: user.id, p_free: AI_FREE_PER_DAY, p_limit: limit, p_cost: Math.max(1, opts.cost ?? 1), p_needs_pass: opts.needsPass ?? true,
   });
   if (error || !data) {
     console.error("ai_spend failed (have supabase/schema.sql and supabase/ai-pass.sql been run?):", error?.message);
@@ -35,7 +35,7 @@ export async function guardAI(who = "Believer and Purity", opts: { cost?: number
   }
   const r = data as { ok: boolean; reason?: string; free_left?: number };
   if (!r.ok && r.reason === "limit") return { error: json({ error: `You've reached today's limit of ${limit} messages. ${who} will be back tomorrow.` }, 429) };
-  if (!r.ok) return { error: json({ needPass: true, error: `You've used your ${AI_FREE_TRIES} free tries. Get an AI Pass ($${AI_PASS_USD} for ${AI_PASS_DAYS} days) to keep talking with ${who}.` }, 402) };
+  if (!r.ok) return { error: json({ needPass: true, error: `You've used today's ${AI_FREE_PER_DAY} free messages${(r.free_left ?? 0) > 0 ? ` (a picture needs more than the ${r.free_left} you have left)` : ""}. They come back tomorrow, or get an AI Pass ($${AI_PASS_USD} for ${AI_PASS_DAYS} days) to keep talking with ${who} now.` }, 402) };
   return { uid: user.id, freeLeft: r.free_left };
 }
 

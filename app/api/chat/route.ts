@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const turns = cleanTurns(body?.messages);
   if (!turns) return json({ error: "Send a message to start." }, 400);
   const prefs: Prefs = typeof body?.prefs === "object" && body.prefs ? body.prefs : {};
-  // Checked after the request is valid, so a broken request never uses up a free try.
+  // Checked after the request is valid, so a broken request never uses up a free message.
   const g = await guardAI();
   if ("error" in g) return g.error;
 
