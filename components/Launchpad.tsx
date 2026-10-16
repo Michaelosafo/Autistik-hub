@@ -9,8 +9,7 @@ type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean };
 type Turn = { role: "user" | "assistant"; content: string };
 type Done = { token: string; pair: string; hash: string; listed: boolean };
 
-const HELLO = "Hello, I'm Autistik. I will guide you through launching your token in a few short steps. First, which chain would you like to launch on: BNB Chain (PancakeSwap), Ethereum (Uniswap) or Robinhood Chain?";
-const STARTERS = ["Launch on BNB Chain", "Launch on Ethereum", "Launch on Robinhood Chain", "How does the liquidity lock work?", "Who can launch?"];
+const HELLO = "Hi, I'm Autistik. Which chain would you like to launch on: BNB Chain, Ethereum or Robinhood Chain?";
 
 /** Reads text out loud with the device's most natural male voice (see lib/voice.ts). */
 function speak(text: string, onState: (talking: boolean) => void) {
@@ -221,7 +220,6 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
               : <div key={i} className="msgrow"><Avatar /><div className={"msg ai" + (m.pending ? " muted" : "")}>{m.text}</div></div>
             )}
           </div>
-          {!msgs.length && <div className="starters">{STARTERS.map((s) => <button key={s} className="btn small" type="button" onClick={() => send(s)}>{s}</button>)}</div>}
           <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
             <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={signedIn ? "Message Autistik… (Enter to send)" : "Sign in to talk with Autistik"} aria-label="Message Autistik"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />

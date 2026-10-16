@@ -196,13 +196,10 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
           {voice.listening && <div className="msg me listening">🎙️ {voice.heard || "Listening… speak now"}</div>}
         </div>
 
-        {!list.length && (
-          <div className="starters">{c.starters.map((s) => <button key={s} className="chip" type="button" onClick={() => send(s)}>{s}</button>)}</div>
-        )}
         <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
           <button className="icon-btn" id="kaiDraw" type="button" aria-pressed={draw} onClick={() => setDraw(!draw)} title={draw ? "Picture mode is on: describe what to draw" : "Make a picture"}>🖼️<span className="sr-only">Make a picture</span></button>
           <textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)}
-            placeholder={!signedIn ? "Sign in to start chatting" : draw ? `Describe the picture for ${c.name} to draw…` : `Message ${c.name}…`} aria-label={`Message ${c.name}`}
+            placeholder={!signedIn ? "Sign in to chat" : draw ? `Describe the picture for ${c.name} to draw…` : `Message ${c.name}…`} aria-label={`Message ${c.name}`}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
           {voice.canListen && (
             <button className={"icon-btn" + (voice.listening ? " rec" : "")} type="button" aria-pressed={voice.listening} onClick={voiceNote} disabled={busy}

@@ -14,9 +14,8 @@ export default async function NewLaunchPage() {
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
       <div className="page-head">
-        <div className="label">Launch</div>
         <h1>Launch your own token</h1>
-        <p className="muted">Use the quick form, or let Autistik guide you by text or voice. Either way you sign one transaction and your token goes live on PancakeSwap, Uniswap or Robinhood Chain with its liquidity locked for 6 months, 1 year, or burned forever, then shows up on DexScreener. You need at least $20 of AUTISTIK in your wallet to launch.</p>
+        <p className="muted">Live in one step. You need $20 of AUTISTIK in your wallet.</p>
       </div>
       <Launchpad signedIn={!!user} />
       <p className="muted" style={{ fontSize: ".9em" }}>Already launched, or launched somewhere else? See <Link href="/launchpad">Trending</Link> to get your token listed and promoted.</p>
