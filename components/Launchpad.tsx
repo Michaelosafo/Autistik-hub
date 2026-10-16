@@ -8,7 +8,7 @@ type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean };
 type Turn = { role: "user" | "assistant"; content: string };
 type Done = { token: string; pair: string; hash: string; listed: boolean };
 
-const HELLO = "Hi, I'm Autistik. I'll help you launch your own token in a few steps. First question: which chain do you want, BNB Chain (PancakeSwap), Ethereum (Uniswap) or Robinhood Chain?";
+const HELLO = "Hello, I'm Autistik. I will guide you through launching your token in a few short steps. First, which chain would you like to launch on: BNB Chain (PancakeSwap), Ethereum (Uniswap) or Robinhood Chain?";
 const STARTERS = ["Launch on BNB Chain", "Launch on Ethereum", "Launch on Robinhood Chain", "How does the liquidity lock work?", "Who can launch?"];
 
 /** Reads text out loud with the browser's own voice. Links and addresses are skipped so it sounds natural. */
