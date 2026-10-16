@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import WatchButton from "@/components/WatchButton";
+import Clubhouse from "@/components/Clubhouse";
+import { insights } from "@/lib/analytics-insights";
 import { ACHAINS, checkToken, heldFor, isAChain } from "@/lib/analytics";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 
@@ -51,12 +53,14 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
     }
   }
 
-  const [{ data: holders }, { data: events }, { data: watch }, { data: wc }] = await Promise.all([
+  const [{ data: holders }, { data: events }, { data: watch }, { data: wc }, { data: links }] = await Promise.all([
     sb.from("token_holders").select("*").eq("chain", chain).eq("token", t.token).order("rank", { ascending: true, nullsFirst: false }),
     sb.from("holder_events").select("*").eq("chain", chain).eq("token", t.token).order("created_at", { ascending: false }).limit(60),
     user ? sb.from("launch_watchers").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] }),
     sb.from("launch_watch_counts").select("watchers").eq("chain", chain).eq("token", t.token).maybeSingle(),
+    sb.from("token_links").select("a,b,kind").eq("chain", chain).eq("token", t.token).limit(500),
   ]);
+  const signals = insights({ holders: (holders || []) as any, events: (events || []) as any, links: (links || []) as any, security: t.security, fullList: t.holder_source === "moralis" });
   const lastEvent = new Map<string, any>();
   for (const e of events || []) if (!lastEvent.has(e.wallet)) lastEvent.set(e.wallet, e);
   const top = (holders || []).filter((h: any) => h.in_top).slice(0, 40);
@@ -97,6 +101,20 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
           {flag(s.canTakeBack === false ? true : s.canTakeBack === true ? false : null, "Ownership can't be taken back", "Ownership can be taken back")}
         </div>
       </div>
+
+      <div className="card stack">
+        <h2>🏠 The club</h2>
+        <p className="muted" style={{ fontSize: ".86em" }}>Every person is one of the top wallets, sized by how much they hold. Sellers turn orange, and anyone who sells everything walks out the door.</p>
+        <Clubhouse holders={(holders || []) as any} events={(events || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
+      </div>
+
+      {signals.length > 0 && (
+        <div className="card stack">
+          <h2>💡 What buyers should know</h2>
+          <ul className="signals">{signals.map((s, i) => <li key={i} className={s.level}>{s.text}</li>)}</ul>
+          <p className="muted" style={{ fontSize: ".78em" }}>Worked out automatically from the blockchain. It&apos;s a guide, not financial advice.</p>
+        </div>
+      )}
 
       <div className={"card stack dev-card" + (devEvents.length ? " warn" : "")}>
         <h2>🧑‍💻 Dev wallet</h2>
