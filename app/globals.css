@@ -773,3 +773,11 @@ a.alert-row:hover{background:var(--surface-2)}
   background:radial-gradient(var(--surface) 58%,transparent 60%),conic-gradient(var(--c,var(--teal)) calc(var(--r)*1%),var(--line) 0)}
 .risk-ring.medium{--c:var(--sun-bright)} .risk-ring.high{--c:var(--alert)}
 .alert-row.suspect{align-items:center;text-decoration:none;color:inherit}
+.hold-split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.hold-split{grid-template-columns:1fr}}
+.hold-box{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:14px;background:var(--surface);border:2px solid var(--line)}
+.hold-box.good{border-color:var(--teal)} .hold-box.ok{border-color:var(--sun-bright)} .hold-box.weak{border-color:var(--alert)}
+.hold-box b{font-size:1.05em}
+.hold-box .signals li{font-size:.86em;padding:8px 10px}
+.fin-note{margin:0;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:.8em;font-weight:600;line-height:1.5}
+.site-note{max-width:1040px;margin:28px auto 0;padding:14px 16px;text-align:center;font-size:.8em;color:var(--muted);border-top:1px solid var(--line)}
