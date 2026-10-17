@@ -1,5 +1,6 @@
 "use client";
 import Tracker from "@/components/Tracker";
+import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -169,7 +170,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
           </div>
           <Tracker />
           <div className="page">{children}</div>
-          <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.</footer>
+          <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a></footer>
         </main>
       </div>
       <nav className="tabbar">

@@ -17,6 +17,8 @@ export const LINKS = {
   telegram: "https://t.me/asdcommunity001",
   x: "https://x.com/Autistik_",
   youtube: "https://youtube.com/@autistik-charity",
+  /** The team's official email. */
+  email: "team@autistik.io",
   pancakeswap: "https://pancakeswap.finance/swap?outputCurrency=0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9",
   bscscan: "https://bscscan.com/address/0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9",
   dexscreener: "https://dexscreener.com/bsc/0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9",
