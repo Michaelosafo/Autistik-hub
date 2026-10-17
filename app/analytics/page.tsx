@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import { ACHAINS, heldFor, isAChain } from "@/lib/analytics";
+import { SCAN_CHAINS } from "@/lib/analytics-chains";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ export default async function AnalyticsPage() {
       </div>
       <div className="card stack">
         <AnalyticsScan signedIn={!!user} />
-        <div className="chain-chips" aria-label="Chains you can scan">{["BNB Chain", "Ethereum", "Base", "Robinhood Chain", "Solana"].map((n) => <span key={n} className="badge v">{n}</span>)}</div>
+        <div className="chain-chips" aria-label="Chains you can scan">{SCAN_CHAINS.map((c) => <span key={c.key} className="badge v">{c.name}</span>)}</div>
         <p className="muted" style={{ fontSize: ".82em" }}>Tokens launched on AUTISTIK are tracked automatically. Scanning a token also turns on its sell alerts for you (🔔 at the top).</p>
       </div>
 

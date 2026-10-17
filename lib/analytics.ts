@@ -12,11 +12,15 @@
  *   logs. Tokens leaving the pool are buys, tokens going into it are sells. The pool comes from DexScreener.
  */
 import { createPublicClient, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem } from "viem";
-import { base, bsc, mainnet, robinhood } from "viem/chains";
+import { abstract, arbitrum, avalanche, base, berachain, blast, bsc, linea, mainnet, monad, optimism, polygon, robinhood, sonic, unichain } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
 import { isSolAddress, solBalances, solGoplus, solMeta } from "@/lib/analytics-solana";
 
+/** Another EVM chain, using viem's built-in network details (public node, explorer, multicall). */
+function evm(key: string, name: string, chain: any, goplus: string, moralis: string | null): AChainInfo {
+  return { key, name, kind: "evm", viem: chain, rpc: chain.rpcUrls.default.http[0], moralis, goplus, explorer: chain.blockExplorers.default.url, dex: key };
+}
 type AChainInfo = { key: string; name: string; kind: "evm" | "solana"; viem: any; rpc: string; moralis: string | null; goplus: string; explorer: string; dex: string };
 export const ACHAINS = {
   bsc: { key: "bsc", name: "BNB Chain", kind: "evm", viem: bsc, rpc: CHAINS.bsc.rpc, moralis: "bsc", goplus: "56", explorer: "https://bscscan.com", dex: "bsc" },
@@ -27,6 +31,17 @@ export const ACHAINS = {
     moralis: null, goplus: "4663", explorer: CHAINS.robinhood.explorer || "https://robinhoodchain.blockscout.com", dex: "robinhood",
   },
   solana: { key: "solana", name: "Solana", kind: "solana", viem: null, rpc: "", moralis: null, goplus: "solana", explorer: "https://solscan.io", dex: "solana" },
+  arbitrum: evm("arbitrum", "Arbitrum", arbitrum, "42161", "arbitrum"),
+  polygon: evm("polygon", "Polygon", polygon, "137", "polygon"),
+  avalanche: evm("avalanche", "Avalanche", avalanche, "43114", "avalanche"),
+  optimism: evm("optimism", "Optimism", optimism, "10", "optimism"),
+  sonic: evm("sonic", "Sonic", sonic, "146", null),
+  berachain: evm("berachain", "Berachain", berachain, "80094", null),
+  monad: evm("monad", "Monad", monad, "143", null),
+  unichain: evm("unichain", "Unichain", unichain, "130", null),
+  abstract: evm("abstract", "Abstract", abstract, "2741", null),
+  linea: evm("linea", "Linea", linea, "59144", "linea"),
+  blast: evm("blast", "Blast", blast, "81457", null),
 } satisfies Record<string, AChainInfo>;
 export type AChain = keyof typeof ACHAINS;
 export const isAChain = (c: unknown): c is AChain => typeof c === "string" && c in ACHAINS;
@@ -52,6 +67,17 @@ const LOG_RPC: Record<AChain, string> = {
   base: process.env.ANALYTICS_BASE_LOG_RPC || "https://base-rpc.publicnode.com",
   robinhood: process.env.ANALYTICS_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
   solana: "",
+  arbitrum: "https://arbitrum-one-rpc.publicnode.com",
+  polygon: "https://polygon-bor-rpc.publicnode.com",
+  avalanche: "https://avalanche-c-chain-rpc.publicnode.com",
+  optimism: "https://optimism-rpc.publicnode.com",
+  sonic: "https://sonic-rpc.publicnode.com",
+  berachain: "https://berachain-rpc.publicnode.com",
+  monad: "https://rpc.monad.xyz",
+  unichain: "https://unichain-rpc.publicnode.com",
+  abstract: "https://api.mainnet.abs.xyz",
+  linea: "https://linea-rpc.publicnode.com",
+  blast: "https://blast-rpc.publicnode.com",
 };
 const logClient = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem, transport: http(LOG_RPC[c], { timeout: 15_000 }) });
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
