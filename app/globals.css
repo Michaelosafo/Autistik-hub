@@ -341,7 +341,7 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 .fade{animation:fade .25s ease-out}
 @keyframes fade{from{opacity:.5}to{opacity:1}}
 
-@media (min-width:861px){ .kai.lp{grid-template-columns:minmax(0,1fr) 340px} }
+.kai.lp{grid-template-columns:minmax(0,1fr);max-width:880px;margin:0 auto;width:100%}
 @media (max-width:1020px){ .groups-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .gallery{grid-template-columns:repeat(3,minmax(0,1fr))} }
 @media (max-width:860px){
   .app{grid-template-columns:minmax(0,1fr)}
@@ -781,3 +781,14 @@ a.alert-row:hover{background:var(--surface-2)}
 .hold-box .signals li{font-size:.86em;padding:8px 10px}
 .fin-note{margin:0;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:.8em;font-weight:600;line-height:1.5}
 .site-note{max-width:1040px;margin:28px auto 0;padding:14px 16px;text-align:center;font-size:.8em;color:var(--muted);border-top:1px solid var(--line)}
+
+/* ===== Launch AI (Autistik), styled like Believer and Purity ===== */
+.chat.lux[data-c="autistik"]{--gold:#FFB347;--gold-2:#FF5A5F;--glow:#FFB84D}
+.chat.lux[data-c="autistik"] .lux-name{background:linear-gradient(90deg,#FFB347,#FF5A5F,#A86BFF);-webkit-background-clip:text;background-clip:text}
+.chat.lux.launch-ai{height:min(72vh,680px);min-height:520px}
+.lux-who button[tabindex="-1"]{cursor:default}
+.lux-icon:disabled{opacity:.5;cursor:default}
+.how-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.how-steps li{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:14px;background:var(--surface-2);font-size:.9em}
+.how-steps b{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#FFB347,#FF5A5F);color:#fff;font-size:.9em}
+@media (max-width:760px){.how-steps{grid-template-columns:1fr 1fr}}

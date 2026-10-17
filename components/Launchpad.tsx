@@ -5,6 +5,7 @@ import { createPublicClient, createWalletClient, custom, formatEther, getAddress
 import { maleUtterance } from "@/lib/voice";
 import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, type LiquidityLock } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
+import Art from "@/components/Art";
 
 type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean; born?: number };
 type Turn = { role: "user" | "assistant"; content: string };
@@ -22,8 +23,8 @@ function speak(text: string, onState: (talking: boolean) => void) {
   window.speechSynthesis.speak(u);
 }
 
-function Avatar() {
-  return <svg className="av" viewBox="0 0 48 24" aria-hidden="true"><use href="#i-inf" /></svg>;
+function Bot() {
+  return <Art kind="robot" who="autistik" mood="motivation" className="av" />;
 }
 const fmt = (n: string) => BigInt(n).toLocaleString("en-US");
 
@@ -206,27 +207,57 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
       </div>
       <div className="kai lp">
         {mode === "quick" ? <QuickLaunch disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
-        <div className="card chat" data-c="autistik">
-          <div className="chat-head">
-            <span className={talking ? "speaking" : undefined}><Avatar /></span>
-            <div className="grow"><b>Autistik</b><div className="muted" style={{ fontSize: ".82em" }}>{talking ? "Speaking…" : "Your launch agent. Asks the questions, you sign."}</div></div>
-            {canSpeak && <button className="btn small" type="button" aria-pressed={voice} onClick={toggleVoice} title="Autistik reads its questions out loud">{voice ? "🔊 Voice on" : "🔈 Voice off"}</button>}
-            {msgs.length > 0 && <button className="btn small" type="button" disabled={busy} onClick={() => { turns.current = []; newSession(); setMsgs([]); setPlan(null); setDone(null); setStatus(""); }}>Start over</button>}
+        <div className="card chat lux launch-ai" data-c="autistik" data-mood="motivation">
+          <div className="lux-top">
+            <div className="lux-who"><button type="button" aria-selected="true" tabIndex={-1}><Bot /><span>Autistik · Launch AI</span></button></div>
+            <span className="lux-online"><i />{talking ? "Speaking…" : "AI online"}</span>
+            {canSpeak && (
+              <button className="lux-icon" type="button" aria-pressed={voice} onClick={toggleVoice} title={voice ? "Autistik reads its questions aloud. Tap to turn off." : "Read questions aloud"}>
+                {talking ? "🔊" : voice ? "🔉" : "🔈"}<span className="sr-only">Read questions aloud</span>
+              </button>
+            )}
+            {msgs.length > 0 && (
+              <button className="lux-icon" type="button" disabled={busy} title="Start over" onClick={() => { turns.current = []; newSession(); setMsgs([]); setPlan(null); setDone(null); setStatus(""); }}>
+                ↺<span className="sr-only">Start over</span>
+              </button>
+            )}
           </div>
           <div className="msgs" ref={box} aria-live="polite">
-            <div className="msgrow"><Avatar /><div className="msg ai paper">{HELLO}</div></div>
+            <div className="lux-hero" data-small={msgs.length > 0 ? "1" : undefined}>
+              <div className="lux-ring"><Art kind="robot" who="autistik" mood="motivation" className="lux-bot" /></div>
+              <div className="lux-hello">
+                <h2>Hi, I&apos;m <span className="lux-name">Autistik</span></h2>
+                <p>Your launch AI. I ask a few quick questions, build your launch plan, and you sign. 🚀</p>
+                <span className="lux-here"><i />{sessionsLeft !== null ? `${sessionsLeft} of ${AI_LAUNCH_SESSIONS} launch chats left today` : "Ready to launch"}</span>
+              </div>
+            </div>
+            <div className="msgrow"><Bot /><div className="msg ai paper">{HELLO}</div></div>
             {msgs.map((m, i) =>
               m.kind === "me" ? <div key={i} className="msg me">{m.text}</div>
               : m.kind === "sys" ? <div key={i} className="msg sys">{m.text}</div>
-              : <div key={i} className="msgrow"><Avatar />{m.pending ? <WritingNote name="Autistik" /> : <Handwritten text={m.text} done fresh={!!m.born && Date.now() - m.born < 20_000} />}</div>
+              : <div key={i} className="msgrow"><Bot />{m.pending ? <WritingNote name="Autistik" /> : <Handwritten text={m.text} done fresh={!!m.born && Date.now() - m.born < 20_000} />}</div>
             )}
+            {listening && <div className="msg me listening">🎙️ {input || "Listening… speak now"}</div>}
           </div>
-          <form className="composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
-            <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={signedIn ? "Message Autistik… (Enter to send)" : "Sign in to talk with Autistik"} aria-label="Message Autistik"
+          {msgs.length === 0 && signedIn && (
+            <div className="lux-moods" role="group" aria-label="Pick a chain to start">
+              {Object.values(CHAINS).map((x) => (
+                <button key={x.key} type="button" onClick={() => send(x.name)} disabled={busy}>🚀<span>{x.name}</span></button>
+              ))}
+            </div>
+          )}
+          <form className="lux-composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
+            <textarea rows={1} value={input} onChange={(e) => setInput(e.target.value)} placeholder={signedIn ? "Answer Autistik…" : "Sign in to talk with Autistik"} aria-label="Message Autistik"
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
-            {canListen && <button className="btn" type="button" aria-pressed={listening} onClick={listen} title="Answer by speaking" disabled={busy}>{listening ? "⏹ Stop" : "🎤 Speak"}</button>}
-            <button className="btn c" type="submit" disabled={busy}>Send</button>
+            {canListen && (
+              <button className={"lux-mic" + (listening ? " rec" : "")} type="button" aria-pressed={listening} onClick={listen} disabled={busy} title={listening ? "Stop" : "Answer by speaking"}>
+                {listening ? <svg viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2" /></svg> : <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>}
+                <span className="sr-only">{listening ? "Stop" : "Answer by speaking"}</span>
+              </button>
+            )}
+            <button className="lux-send" type="submit" disabled={busy} title="Send"><svg viewBox="0 0 24 24"><path d="M4 12 20 4l-6 16-3-7z" /><path d="m11 13 9-9" /></svg><span className="sr-only">Send</span></button>
           </form>
+          <div className="lux-foot">Asks the questions · you sign · never asks for your seed phrase</div>
         </div>
         )}
 
@@ -270,15 +301,15 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
               {status && <span className="muted" style={{ fontSize: ".88em" }}>{status}</span>}
             </div>
           ) : (
-            <div className="card stack" style={{ fontSize: ".9em" }}>
-              <h3>How it works</h3>
-              <ol className="stack" style={{ margin: 0, paddingLeft: 18, gap: 6 }}>
-                <li>Fill in the quick form, or answer Autistik&apos;s questions by text or voice.</li>
-                <li>Check your launch plan.</li>
-                <li>Sign one transaction in your wallet.</li>
-                <li>Your token trades on {Object.values(CHAINS).filter(isLive).map((x) => x.dex).join(", ") || "the DEX"} and shows up on DexScreener.</li>
+            <div className="card stack how-launch">
+              <h3>📖 How it works</h3>
+              <ol className="how-steps">
+                <li><b>1</b><span>{mode === "ai" ? "Answer Autistik's questions (type or speak)." : "Fill in the short form above."}</span></li>
+                <li><b>2</b><span>Check your launch plan.</span></li>
+                <li><b>3</b><span>Sign once in your wallet.</span></li>
+                <li><b>4</b><span>🚀 Your token is live on {Object.values(CHAINS).filter(isLive).map((x) => x.dex).join(", ") || "the DEX"}.</span></li>
               </ol>
-              <p className="muted">Choose to lock the liquidity for 6 months, 1 year, or burn it forever, so holders know it can&apos;t be pulled early. Your wallet needs at least ${MIN_HOLD_USD} of AUTISTIK on BNB Chain to launch.</p>
+              <p className="muted" style={{ fontSize: ".86em" }}>You need ${MIN_HOLD_USD}+ of AUTISTIK on BNB Chain. Liquidity is locked (6 months or 1 year) or burned forever, so it can&apos;t be pulled.</p>
             </div>
           )}
           <div className="notice alert" style={{ fontSize: ".86em" }}><b>Never</b> share your seed phrase or private key. Autistik will never ask for it.</div>
