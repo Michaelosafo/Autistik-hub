@@ -102,6 +102,7 @@ export default function BuyPage() {
           <a className="btn" href={LINKS.telegram} target="_blank" rel="noopener noreferrer">Telegram</a>
           <a className="btn" href={LINKS.x} target="_blank" rel="noopener noreferrer">X</a>
           <a className="btn" href={LINKS.youtube} target="_blank" rel="noopener noreferrer">YouTube</a>
+          <a className="btn" href={`mailto:${LINKS.email}`}>✉️ {LINKS.email}</a>
           <a className="btn small" href={LINKS.dev} target="_blank" rel="noopener noreferrer">Dev on X</a>
           <a className="btn small" href={LINKS.coDev} target="_blank" rel="noopener noreferrer">Co-dev on X</a>
           <a className="btn small" href={LINKS.whitepaper} target="_blank" rel="noopener noreferrer">Whitepaper (PDF)</a>
