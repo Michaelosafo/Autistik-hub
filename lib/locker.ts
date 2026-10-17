@@ -2,7 +2,7 @@
  * AUTISTIK Locker (contracts/AutistikLocker.sol): lock liquidity or tokens until a date. Safe to use in the browser.
  * Where the locker lives on each chain is saved in the database (locker_contracts) when the admin deploys it.
  */
-import { parseAbi } from "viem";
+import { fallback, http, parseAbi } from "viem";
 import { arbitrum, avalanche, base, berachain, blast, bsc, linea, mainnet, monad, optimism, polygon, robinhood, sonic, unichain } from "viem/chains";
 
 export const LOCKER_ABI = parseAbi([
@@ -55,6 +55,20 @@ export const LOCKER_CHAINS = {
   blast: { name: "Blast", viem: blast, rpc: "https://blast-rpc.publicnode.com", explorer: blast.blockExplorers.default.url },
 } as const;
 export type LockerChain = keyof typeof LOCKER_CHAINS;
+
+// Backup nodes, so one busy or blocked node doesn't break locking.
+const MORE_RPCS: Partial<Record<LockerChain, string[]>> = {
+  bsc: ["https://bsc-rpc.publicnode.com", "https://bsc-dataseed1.defibit.io", "https://bsc-dataseed1.ninicoin.io"],
+  ethereum: ["https://eth.llamarpc.com"],
+  base: ["https://base-rpc.publicnode.com"],
+  arbitrum: ["https://arbitrum-one-rpc.publicnode.com"],
+};
+/** Reads that try the chain's nodes one after another. */
+export function lockerTransport(chain: LockerChain) {
+  const c = LOCKER_CHAINS[chain];
+  const urls = [...new Set([c.rpc, ...(MORE_RPCS[chain] || []), ...c.viem.rpcUrls.default.http])].filter(Boolean);
+  return fallback(urls.map((u) => http(u, { timeout: 10_000 })));
+}
 export const isLockerChain = (c: unknown): c is LockerChain => typeof c === "string" && c in LOCKER_CHAINS;
 
 /** A deployed locker, as the page passes it to the browser. */

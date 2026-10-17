@@ -1,9 +1,9 @@
 /**
  * Reading the AUTISTIK Locker on each chain, for pages and token scans. Server only.
  */
-import { createPublicClient, formatUnits, getAddress, http, isAddress } from "viem";
+import { createPublicClient, formatUnits, getAddress, isAddress } from "viem";
 import { supabaseService } from "@/lib/supabase/server";
-import { LOCKER_ABI, LOCKER_CHAINS, TOKEN_ABI, isLockerChain, type LockerChain, type LockerSite } from "@/lib/locker";
+import { LOCKER_ABI, LOCKER_CHAINS, TOKEN_ABI, isLockerChain, lockerTransport, type LockerChain, type LockerSite } from "@/lib/locker";
 
 let cache: { at: number; rows: LockerSite[] } | null = null;
 
@@ -22,7 +22,7 @@ export async function lockerOn(chain: string) {
 
 // Cast: viem's types misread optional fields when the project has `strict: false`.
 export const lockerClient = (chain: LockerChain): any =>
-  createPublicClient({ chain: LOCKER_CHAINS[chain].viem as any, transport: http(LOCKER_CHAINS[chain].rpc, { timeout: 10_000 }) });
+  createPublicClient({ chain: LOCKER_CHAINS[chain].viem as any, transport: lockerTransport(chain) });
 
 export type LockView = {
   chain: LockerChain; id: number; token: string; name: string; owner: string; amount: string; left: string; pctOfSupply: number | null;

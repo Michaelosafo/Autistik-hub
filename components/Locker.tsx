@@ -1,8 +1,8 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { createPublicClient, createWalletClient, custom, decodeEventLog, formatUnits, http, isAddress, parseUnits } from "viem";
-import { LOCK_PRESETS, LOCKER_ABI, LOCKER_CHAINS, LOCKER_ERRORS, TOKEN_ABI, short, untilText, type LockerChain, type LockerSite } from "@/lib/locker";
+import { createPublicClient, createWalletClient, custom, decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
+import { LOCK_PRESETS, LOCKER_ABI, LOCKER_CHAINS, LOCKER_ERRORS, TOKEN_ABI, lockerTransport, short, untilText, type LockerChain, type LockerSite } from "@/lib/locker";
 
 type TokenInfo = { address: `0x${string}`; name: string; decimals: number; isLp: boolean; balance: bigint | null };
 type MyLock = { id: bigint; name: string; decimals: number; left: bigint; free: bigint; unlockDate: number; vesting: boolean; isLp: boolean };
@@ -28,7 +28,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
   const site = sites.find((s) => s.chain === chain)!;
   const cfg = LOCKER_CHAINS[chain];
   // Cast: viem's types misread optional fields when the project has `strict: false`.
-  const pub = useMemo(() => createPublicClient({ chain: cfg.viem as any, transport: http(cfg.rpc) }) as any, [cfg]);
+  const pub = useMemo(() => createPublicClient({ chain: cfg.viem as any, transport: lockerTransport(chain) }) as any, [cfg, chain]);
   const [account, setAccount] = useState<`0x${string}` | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
