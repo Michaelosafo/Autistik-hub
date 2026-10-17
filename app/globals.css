@@ -826,3 +826,17 @@ a.alert-row:hover{background:var(--surface-2)}
 .pins-list{display:flex;flex-direction:column;gap:8px}
 .pin-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:var(--surface-2);text-decoration:none;color:inherit}
 .pin-row b{margin-right:auto}
+
+/* ===== Companion chat: more room for replies once you're talking ===== */
+/* The mood buttons shrink to one slim row, so replies get the space. */
+.lux-moods[data-compact]{display:flex;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:6px;padding:6px 14px 2px;scrollbar-width:none}
+.lux-moods[data-compact]::-webkit-scrollbar{display:none}
+.lux-moods[data-compact] button{flex:none;padding:5px 11px;font-size:.76em;gap:6px}
+.lux-moods[data-compact] button svg{width:15px;height:15px}
+@media (max-width:860px){
+  .lux-moods[data-compact]{display:flex;grid-template-columns:none}
+  /* The chat fills the screen exactly, so only the messages scroll, never the whole page. */
+  .chat.lux:not(.launch-ai){height:calc(100dvh - 164px);min-height:440px}
+  .lux-chips{padding-bottom:8px}
+}
+.page:has(.kai.companions) + .site-note{display:none}

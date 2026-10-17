@@ -17,7 +17,7 @@ const UTILITIES: [string, string, string, string, string][] = [
   ["i-rocket", "Launch Pad", "Launch your own token with Autistik, our launch agent. Liquidity locked or burned so buyers can trust it.", "/launchpad/new", "Launch a token"],
   ["i-trend", "Trending", "See the tokens people are buying and watching, with live prices. Pay to trend or list your token.", "/launchpad", "See trending"],
   ["i-com", "Community", "Two friendly groups: Spectrum Lounge to hang out, and Support & Questions for hard days and help.", "/community", "Find your group"],
-  ["i-kai", "AI companions", "Believer and Purity: two AI friends who talk, plan, explain social situations and draw pictures with you.", "/companions", "Start a chat"],
+  ["i-kai", "Companion assistants", "Believer and Purity: two assistant friends who talk, plan, explain social situations and draw pictures with you.", "/companions", "Start a chat"],
   ["i-ses", "Live sessions", "Talks, Q&As and support circles with practitioners the AUTISTIK team has checked.", "/sessions", "See sessions"],
   ["i-rew", "Rewards & airdrops", "Earn points by taking part. Link your wallet and claim $AUTISTIK airdrops each round.", "/rewards", "My rewards"],
   ["i-buy", "Buy $AUTISTIK", "The community token on BNB Chain. Holders support the Hub and get a say in what we build.", "/buy", "Buy $AUTISTIK"],
@@ -50,7 +50,7 @@ export default async function Home() {
           <div className="hero-copy">
             <div className="eyebrow">Autism awareness × Web3 community</div>
             <h1>Autism is not a disease. <span className="grad">It&apos;s a community.</span></h1>
-            <p>Autistic minds aren&apos;t broken and don&apos;t need a cure. They need understanding, connection and a place to belong. Here you&apos;ll find two friendly groups, two AI companions called Believer and Purity, live talks with practitioners, a launch pad for your own token, and airdrops for the people who show up.</p>
+            <p>Autistic minds aren&apos;t broken and don&apos;t need a cure. They need understanding, connection and a place to belong. Here you&apos;ll find two friendly groups, two companion assistants called Believer and Purity, live talks with practitioners, a launch pad for your own token, and airdrops for the people who show up.</p>
             <div className="row">
               <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
               <Link className="btn ghost" href="/autism">What is autism?</Link>
@@ -126,7 +126,7 @@ export default async function Home() {
       </div>
 
       <div className="card row" style={{ justifyContent: "space-between" }}>
-        <div><b>Need a friendly chat?</b><p className="muted" style={{ fontSize: ".9em" }}>Believer and Purity, our AI companions, are here to talk, plan or draw with you.</p></div>
+        <div><b>Need a friendly chat?</b><p className="muted" style={{ fontSize: ".9em" }}>Believer and Purity, our companion assistants, are here to talk, plan or draw with you.</p></div>
         <div className="row">
           <Link className="btn small" href="/companions?c=believer">Talk to Believer</Link>
           <Link className="btn small" href="/companions?c=purity">Talk to Purity</Link>

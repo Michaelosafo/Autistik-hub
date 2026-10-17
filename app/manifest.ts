@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "AUTISTIK Hub",
     short_name: "AUTISTIK",
-    description: "Autism is not a disease. It's a community. Groups, AI companions and live sessions for autistic adults.",
+    description: "Autism is not a disease. It's a community. Groups, companion assistants and live sessions for autistic adults.",
     id: "/",
     start_url: "/?source=app",
     scope: "/",

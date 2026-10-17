@@ -7,6 +7,7 @@ import { COMPANIONS, DRAW_RE, MOODS, isMood, type CompanionId, type Mood } from 
 import { cleanSvg } from "@/lib/svg-clean";
 import { useVoice } from "@/lib/voice";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
+import { useStickToBottom } from "@/lib/use-stick-bottom";
 
 type Msg =
   | { kind: "me"; text: string }
@@ -56,7 +57,9 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [sheet]);
-  useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs, who]);
+  useStickToBottom(box, [who]);
+  // Sending a message always jumps to the newest message.
+  useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs[who].length, who]);
 
   const push = (id: CompanionId, m: Msg) => setMsgs((all) => ({ ...all, [id]: [...all[id], m] }));
   const replaceLast = (id: CompanionId, m: Msg) => setMsgs((all) => ({ ...all, [id]: [...all[id].slice(0, -1), m] }));
@@ -172,7 +175,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
               </button>
             ))}
           </div>
-          <span className="lux-online"><i />AI online</span>
+          <span className="lux-online"><i />Assistant online</span>
           {voice.canSpeak && (
             <button className="lux-icon" type="button" aria-pressed={voice.autoRead} onClick={() => voice.setRead(!voice.autoRead)}
               title={voice.autoRead ? "Replies are read aloud. Tap to turn off." : "Read replies aloud"}>
@@ -222,7 +225,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
           {voice.listening && <div className="msg me listening">🎙️ {voice.heard || "Listening… speak now"}</div>}
         </div>
 
-        <div className="lux-moods" role="radiogroup" aria-label="How are you feeling?">
+        <div className="lux-moods" data-compact={list.length > 0 ? "1" : undefined} role="radiogroup" aria-label="How are you feeling?">
           {(Object.keys(MOODS) as Mood[]).map((k) => (
             <button key={k} type="button" role="radio" aria-checked={mood === k} data-m={k} onClick={() => pickMood(k)}>
               {MOOD_ICONS[k]}<span>{MOODS[k].label}</span>
@@ -249,7 +252,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         </form>
         <div className="lux-chips">
           {signedIn
-            ? <button type="button" onClick={() => setSheet("pass")} data-hot={needPass ? "1" : undefined}>🎟️ AI Pass</button>
+            ? <button type="button" onClick={() => setSheet("pass")} data-hot={needPass ? "1" : undefined}>🎟️ Assistant Pass</button>
             : <Link href="/login?next=/companions">🔑 Sign in to chat</Link>}
           <button type="button" onClick={() => setSheet("privacy")}>🔒 Privacy</button>
           <button type="button" onClick={() => setSheet("help")}>🆘 Help now</button>
@@ -258,7 +261,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
 
       {sheet && (
         <div className="sheet-back" onClick={() => setSheet(null)}>
-          <div className="sheet stack" role="dialog" aria-modal="true" aria-label={sheet === "pass" ? "AI Pass" : sheet === "privacy" ? "Privacy" : "Help now"} onClick={(e) => e.stopPropagation()}>
+          <div className="sheet stack" role="dialog" aria-modal="true" aria-label={sheet === "pass" ? "Assistant Pass" : sheet === "privacy" ? "Privacy" : "Help now"} onClick={(e) => e.stopPropagation()}>
             <button className="sheet-x" type="button" onClick={() => setSheet(null)} aria-label="Close">✕</button>
             {sheet === "pass" && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => { setNeedPass(false); setSheet(null); }} />}
             {sheet === "privacy" && (
@@ -272,7 +275,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
               <div className="card stack">
                 <h3>🆘 In danger right now?</h3>
                 <p>Call your local emergency number now, or find a free crisis line in your country at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</p>
-                <p className="muted">Believer and Purity are AIs, not doctors or therapists. Please also reach out to someone you trust.</p>
+                <p className="muted">Believer and Purity are assistants, not doctors or therapists. Please also reach out to someone you trust.</p>
               </div>
             )}
           </div>
