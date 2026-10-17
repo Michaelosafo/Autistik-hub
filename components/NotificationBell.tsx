@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { enablePush, hasPush } from "@/lib/push-client";
 
 type Note = { id: number; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null };
 
@@ -25,7 +26,8 @@ export function useAlerts(enabled: boolean) {
     const list = (data || []) as Note[];
     const top = list[0]?.id || 0;
     // Pop-up on the phone/computer for alerts that arrived since the last check.
-    if (newest.current && top > newest.current && popups) {
+    // With push on, the device already got these alerts; only pop them up here when push isn't available.
+    if (newest.current && top > newest.current && popups && !(await hasPush())) {
       for (const n of list.filter((x) => x.id > newest.current && !x.read_at).slice(0, 3)) {
         try {
           const reg = await navigator.serviceWorker?.getRegistration();
@@ -56,10 +58,11 @@ export function useAlerts(enabled: boolean) {
     await supabaseBrowser().from("notifications").update({ read_at: now }).in("id", ids);
   }, [notes]);
 
+  // Turns on alerts for this device: real push (even with the site closed) when possible, pop-ups otherwise.
   const enablePopups = useCallback(async () => {
     try {
-      const p = await Notification.requestPermission();
-      const on = p === "granted";
+      const res = await enablePush();
+      const on = res !== "denied";
       setPopups(on); localStorage.setItem("alert-popups", on ? "1" : "0");
     } catch {}
   }, []);
@@ -81,7 +84,7 @@ export function AlertsList({ alerts, onPick }: { alerts: ReturnType<typeof useAl
           </Link>
         ))}
       </div>
-      {canPopup && !popups && <button className="btn small" type="button" onClick={enablePopups}>📲 Also show pop-ups on this device</button>}
+      {canPopup && !popups && <button className="btn small" type="button" onClick={enablePopups}>📲 Get alerts on this device</button>}
     </div>
   );
 }

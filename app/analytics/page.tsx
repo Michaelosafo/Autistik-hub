@@ -17,6 +17,13 @@ export default async function AnalyticsPage() {
     sb.from("holder_events").select("*").in("kind", ["sell", "exit"]).order("created_at", { ascending: false }).limit(30),
     sb.from("tracked_tokens").select("chain,token,name,symbol,dev,holder_source,viewed_at").order("viewed_at", { ascending: false }).limit(30),
   ]);
+  // My pinned tokens and their latest signals.
+  const { data: pins } = user ? await sb.from("token_pins").select("chain,token").eq("user_id", user.id).order("created_at", { ascending: false }) : { data: [] as any[] };
+  const pinKeys = (pins || []).map((p: any) => p.token);
+  const [{ data: pinTokens }, { data: sigs }] = pinKeys.length
+    ? await Promise.all([sb.from("tracked_tokens").select("chain,token,name,symbol").in("token", pinKeys), sb.from("token_signals").select("chain,token,horizon,state,changed_at").in("token", pinKeys)])
+    : [{ data: [] as any[] }, { data: [] as any[] }];
+  const SIG: Record<string, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
   const names = new Map((tokens || []).map((t: any) => [`${t.chain}:${t.token}`, t]));
   const missing = [...new Set((events || []).map((e: any) => e.token).filter((tk: string) => ![...names.keys()].some((k) => k.endsWith(tk))))];
   if (missing.length) {
@@ -35,6 +42,29 @@ export default async function AnalyticsPage() {
         <div className="chain-chips" aria-label="Chains you can scan">{SCAN_CHAINS.map((c) => <span key={c.key} className="badge v">{c.name}</span>)}</div>
         <p className="muted" style={{ fontSize: ".82em" }}>Tokens launched on AUTISTIK are tracked automatically. Scanning a token also turns on its sell alerts for you (🔔 at the top).</p>
       </div>
+
+      {user && (
+        <div className="card stack">
+          <h2>📌 My pins</h2>
+          {!pins?.length && <div className="empty">Pin a token (📌 on its page) to get an alert when it&apos;s time to buy, take profit, sell or wait.</div>}
+          <div className="pins-list">
+            {(pins || []).map((p: any) => {
+              const t: any = (pinTokens || []).find((x: any) => x.chain === p.chain && x.token === p.token) || {};
+              const sig = (h: string) => (sigs || []).find((x: any) => x.chain === p.chain && x.token === p.token && x.horizon === h);
+              return (
+                <Link key={p.chain + p.token} href={`/analytics/${p.chain}/${p.token}`} className="pin-row">
+                  <b>{t.symbol || short(p.token)}</b>
+                  {(["short", "long"] as const).map((h) => {
+                    const x = sig(h);
+                    return <span key={h} className={"sig " + (x?.state || "")}>{h === "short" ? "⚡" : "📅"} {x ? SIG[x.state] : "Checking…"}</span>;
+                  })}
+                </Link>
+              );
+            })}
+          </div>
+          {!!pins?.length && <p className="muted" style={{ fontSize: ".8em" }}>⚡ day trade · 📅 long term. Checked every 10 minutes. A guide, not financial advice.</p>}
+        </div>
+      )}
 
       <div className="card stack">
         <h2>🚨 Live sell alerts</h2>
