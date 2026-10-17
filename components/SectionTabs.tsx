@@ -25,6 +25,7 @@ export const LAUNCH_TABS: SectionTab[] = [
   { href: "/launchpad/new", label: "🚀 Launch" },
   { href: "/launchpad", label: "Trending" },
   { href: "/perps", label: "Perps" },
+  { href: "/lockers", label: "🔒 Lockers" },
 ];
 
 export const TOKEN_TABS: SectionTab[] = [

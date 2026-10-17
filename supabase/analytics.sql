@@ -310,3 +310,8 @@ revoke all on function public.site_stats() from public, anon, authenticated;
 
 -- The token's logo (from DexScreener), saved when it's scanned.
 alter table public.tracked_tokens add column if not exists image_url text check (image_url is null or (image_url ~ '^https://' and length(image_url) < 600));
+
+-- AUTISTIK Locker: where the locker contract lives on each chain (saved by the admin's deploy, checked on-chain).
+create table if not exists public.locker_contracts (chain text primary key, address text not null check (address ~ '^0x[0-9a-fA-F]{40}$'), tx_hash text, verified boolean not null default false, deployed_at timestamptz not null default now());
+alter table public.locker_contracts enable row level security;
+create policy "locker contracts are public" on public.locker_contracts for select using (true);
