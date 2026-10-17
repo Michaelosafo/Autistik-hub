@@ -1,7 +1,10 @@
 "use client";
 import { useState } from "react";
-import { createPublicClient, createWalletClient, custom } from "viem";
+import { concat, createPublicClient, createWalletClient, custom, getContractAddress, keccak256, toHex } from "viem";
 import { LOCKER_CHAINS, type LockerChain, type LockerSite } from "@/lib/locker";
+
+const CREATE2_DEPLOYER = "0x4e59b44847b379578588920cA78FbF26c0B4956C";
+const SALT = keccak256(toHex("AUTISTIK Locker v1"));
 
 /** Admin only: put the AUTISTIK Locker on a chain from your own wallet, then verify its source on the explorer. */
 export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
@@ -32,14 +35,21 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
       const [account] = await w.requestAddresses();
       try { await w.switchChain({ id: cfg.viem.id }); } catch { await w.addChain({ chain: cfg.viem }); await w.switchChain({ id: cfg.viem.id }); }
       const { LOCKER_BYTECODE } = await import("@/lib/locker-build");
-      setMsg(`Confirm in your wallet. This puts the locker on ${cfg.name} (one network fee, usually a few dollars).`);
-      const h = await w.sendTransaction({ account, chain: cfg.viem, data: LOCKER_BYTECODE });
-      setHash(h);
+      // Deploy through the standard CREATE2 deployer that exists on almost every chain. It's a normal call, so it
+      // also works from smart wallets (which can't create contracts directly), and the locker gets the same address
+      // on every chain.
+      const address = getContractAddress({ opcode: "CREATE2", from: CREATE2_DEPLOYER, salt: SALT, bytecode: LOCKER_BYTECODE });
+      const [deployer, existing] = await Promise.all([pub.getCode({ address: CREATE2_DEPLOYER }), pub.getCode({ address })]);
+      if (existing && existing !== "0x") { await save(chain, address); return; }
+      if (!deployer || deployer === "0x") { setMsg(`${cfg.name} doesn't have the standard deployer, so the locker can't go on this chain from here yet.`); return; }
+      setMsg(`Confirm in your wallet. This puts the locker on ${cfg.name} (one network fee, usually under $1 on BNB Chain).`);
+      const h = await w.sendTransaction({ account, chain: cfg.viem, to: CREATE2_DEPLOYER, data: concat([SALT, LOCKER_BYTECODE]) });
       setMsg("Sent. Waiting for the network to confirm…");
       const r = await pub.waitForTransactionReceipt({ hash: h, timeout: 180_000 }).catch(() => null);
       if (r && r.status !== "success") { setMsg("The deployment failed. Only the network fee was spent."); return; }
-      // Save even if waiting failed: the server looks the transaction up itself.
-      await save(chain, h);
+      // Save even if waiting failed: the server checks the address on-chain itself.
+      setHash(address);
+      await save(chain, address);
     } catch (e: any) {
       setMsg(/reject|denied/i.test(String(e?.message)) ? "You cancelled in your wallet. Nothing happened." : e?.shortMessage || String(e?.message || e).split("\n")[0]);
     } finally { setBusy(false); }
