@@ -8,6 +8,7 @@ import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analyt
 import { getCandles, getPairStats } from "@/lib/market";
 import { zones } from "@/lib/analytics-zones";
 import ZoneCard from "@/components/ZoneCard";
+import TokenLogo from "@/components/TokenLogo";
 import ProCard from "@/components/ProCard";
 import { isPro } from "@/lib/pro-server";
 import { confluence, trackRecord, whales } from "@/lib/analytics-pro";
@@ -88,6 +89,11 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   const { groups, suspects } = whoMightSell(sigIn);
   const hold = holdOutlook(sigIn, call);
   const move = await movePromise;
+  // The token's logo: saved when it was scanned; tokens scanned before that get it the first time someone looks.
+  const logo: string | null = t.image_url || move?.imageUrl || null;
+  if (!t.image_url && move?.imageUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await supabaseService().from("tracked_tokens").update({ image_url: move.imageUrl }).eq("chain", chain).eq("token", t.token);
+  }
   const plans = tradingPlans(call, hold, move);
   const zoneBase = { move, call, long: hold.long, security: t.security, holders: (holders || []) as any };
   const zone = zones({
@@ -119,7 +125,10 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div>
             <div className="label">{c.name} · Analytics</div>
-            <h1>{t.symbol || short(t.token)} <span className="muted" style={{ fontSize: ".5em" }}>{t.name}</span></h1>
+            <div className="row" style={{ gap: 12, alignItems: "center", flexWrap: "nowrap" }}>
+              <TokenLogo src={logo} symbol={t.symbol || "?"} big />
+              <h1 style={{ margin: 0 }}>{t.symbol || short(t.token)} <span className="muted" style={{ fontSize: ".5em" }}>{t.name}</span></h1>
+            </div>
             <a className="mono muted" href={`${c.explorer}/token/${t.token}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: ".85em", overflowWrap: "anywhere" }}>{t.token}</a>
           </div>
           <div className="row" style={{ gap: 8 }}>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TokenLogo from "@/components/TokenLogo";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import PinButton from "@/components/PinButton";
 import PushButton from "@/components/PushButton";
@@ -25,7 +26,7 @@ export default async function PinsPage() {
   const { data: pins } = await sb.from("token_pins").select("chain,token,created_at").eq("user_id", user.id).order("created_at", { ascending: false });
   const keys = (pins || []).map((p: any) => p.token);
   const [{ data: toks }, { data: sigs }] = keys.length
-    ? await Promise.all([sb.from("tracked_tokens").select("chain,token,name,symbol").in("token", keys), sb.from("token_signals").select("chain,token,horizon,state,detail,changed_at").in("token", keys)])
+    ? await Promise.all([sb.from("tracked_tokens").select("chain,token,name,symbol,image_url").in("token", keys), sb.from("token_signals").select("chain,token,horizon,state,detail,changed_at").in("token", keys)])
     : [{ data: [] as any[] }, { data: [] as any[] }];
 
   return (
@@ -50,9 +51,10 @@ export default async function PinsPage() {
           const z: any = sig("zone")?.detail;
           return (
             <div key={p.chain + p.token} className="pin-card">
-              <Link href={`/analytics/${p.chain}/${p.token}`} style={{ textDecoration: "none", color: "inherit" }}>
-                <b>{t.symbol || short(p.token)}</b>
-                <small>{ACHAINS[p.chain as keyof typeof ACHAINS].name}</small>
+              <Link href={`/analytics/${p.chain}/${p.token}`} style={{ textDecoration: "none", color: "inherit", display: "flex", gap: 8, alignItems: "center" }}>
+                <TokenLogo src={t.image_url} symbol={t.symbol || "?"} />
+                <span><b>{t.symbol || short(p.token)}</b>
+                <small>{ACHAINS[p.chain as keyof typeof ACHAINS].name}</small></span>
               </Link>
               <Link href={`/analytics/${p.chain}/${p.token}`} style={{ textDecoration: "none", color: "inherit" }}>
                 {z ? (

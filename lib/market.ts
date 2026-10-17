@@ -87,7 +87,7 @@ export async function lookupToken(chain: ChainKey, token: string): Promise<{ pai
 /** Short-term price moves for one token's deepest pool: what a trading plan needs. */
 export type PairStats = {
   priceUsd: number | null; m5: number | null; h1: number | null; h6: number | null; h24: number | null;
-  buysH1: number; sellsH1: number; liquidityUsd: number | null; marketCap: number | null;
+  buysH1: number; sellsH1: number; liquidityUsd: number | null; marketCap: number | null; imageUrl: string | null;
 };
 
 /** `slug` is DexScreener's chain id (bsc, ethereum…). Cached for 30 seconds; returns null when unavailable. */
@@ -101,6 +101,8 @@ export async function getPairStats(slug: string, token: string): Promise<PairSta
     return {
       priceUsd: num(p.priceUsd), m5: num(c.m5), h1: num(c.h1), h6: num(c.h6), h24: num(c.h24),
       buysH1: num(t.buys) ?? 0, sellsH1: num(t.sells) ?? 0, liquidityUsd: num(p.liquidity?.usd), marketCap: num(p.marketCap) ?? num(p.fdv),
+      // The token's logo, when the project added one on DexScreener.
+      imageUrl: (pairs as any[]).map((x) => x?.info?.imageUrl).find((u) => typeof u === "string" && u.startsWith("https://") && u.length < 600) ?? null,
     };
   } catch { return null; }
 }

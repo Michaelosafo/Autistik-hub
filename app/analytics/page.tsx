@@ -1,4 +1,5 @@
 import Link from "next/link";
+import TokenLogo from "@/components/TokenLogo";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import { ACHAINS, heldFor, isAChain } from "@/lib/analytics";
 import { SCAN_CHAINS } from "@/lib/analytics-chains";
@@ -23,9 +24,9 @@ export default async function AnalyticsPage() {
   const mineTokens = [...new Set(mineKeys.map((k) => k.split(":")[1]))];
   const svc = supabaseService();
   const [{ data: myTokens }, { data: myEvents }, { data: allTokens }, { data: allEvents }] = await Promise.all([
-    mineTokens.length ? sb.from("tracked_tokens").select("chain,token,name,symbol,viewed_at").in("token", mineTokens.slice(0, 300)) : Promise.resolve({ data: [] as any[] }),
+    mineTokens.length ? sb.from("tracked_tokens").select("chain,token,name,symbol,viewed_at,image_url").in("token", mineTokens.slice(0, 300)) : Promise.resolve({ data: [] as any[] }),
     mineTokens.length ? sb.from("holder_events").select("*").in("token", mineTokens.slice(0, 300)).in("kind", ["sell", "exit"]).order("created_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] as any[] }),
-    admin ? svc.from("tracked_tokens").select("chain,token,name,symbol,viewed_at,added_by").order("viewed_at", { ascending: false }).limit(60) : Promise.resolve({ data: [] as any[] }),
+    admin ? svc.from("tracked_tokens").select("chain,token,name,symbol,viewed_at,added_by,image_url").order("viewed_at", { ascending: false }).limit(60) : Promise.resolve({ data: [] as any[] }),
     admin ? svc.from("holder_events").select("*").in("kind", ["sell", "exit"]).order("created_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] as any[] }),
   ]);
   const tokens = (myTokens || []).filter((t: any) => mineKeys.includes(`${t.chain}:${t.token}`)).sort((a: any, b: any) => Date.parse(b.viewed_at) - Date.parse(a.viewed_at));
@@ -34,7 +35,7 @@ export default async function AnalyticsPage() {
   const { data: pins } = user ? await sb.from("token_pins").select("chain,token").eq("user_id", user.id).order("created_at", { ascending: false }) : { data: [] as any[] };
   const pinKeys = (pins || []).map((p: any) => p.token);
   const [{ data: pinTokens }, { data: sigs }] = pinKeys.length
-    ? await Promise.all([sb.from("tracked_tokens").select("chain,token,name,symbol").in("token", pinKeys), sb.from("token_signals").select("chain,token,horizon,state,changed_at").in("token", pinKeys)])
+    ? await Promise.all([sb.from("tracked_tokens").select("chain,token,name,symbol,image_url").in("token", pinKeys), sb.from("token_signals").select("chain,token,horizon,state,changed_at").in("token", pinKeys)])
     : [{ data: [] as any[] }, { data: [] as any[] }];
   const SIG: Record<string, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
   const names = new Map([...(allTokens || []), ...tokens].map((t: any) => [`${t.chain}:${t.token}`, t]));
@@ -67,7 +68,7 @@ export default async function AnalyticsPage() {
               const sig = (h: string) => (sigs || []).find((x: any) => x.chain === p.chain && x.token === p.token && x.horizon === h);
               return (
                 <Link key={p.chain + p.token} href={`/analytics/${p.chain}/${p.token}`} className="pin-row">
-                  <b>{t.symbol || short(p.token)}</b>
+                  <TokenLogo src={t.image_url} symbol={t.symbol || "?"} /><b>{t.symbol || short(p.token)}</b>
                   {(["short", "long"] as const).map((h) => {
                     const x = sig(h);
                     return <span key={h} className={"sig " + (x?.state || "")}>{h === "short" ? "⚡" : "📅"} {x ? SIG[x.state] : "Checking…"}</span>;
@@ -107,7 +108,7 @@ export default async function AnalyticsPage() {
         <div className="tracked-grid">
           {tokens.filter((t: any) => isAChain(t.chain)).map((t: any) => (
             <Link key={t.chain + t.token} href={`/analytics/${t.chain}/${t.token}`} className="tracked">
-              <b>{t.symbol || short(t.token)}</b>
+              <span className="row" style={{ gap: 8, flexWrap: "nowrap" }}><TokenLogo src={t.image_url} symbol={t.symbol || "?"} /><b>{t.symbol || short(t.token)}</b></span>
               <span className="muted">{t.name || ACHAINS[t.chain as keyof typeof ACHAINS].name}</span>
               <span className="badge v">{ACHAINS[t.chain as keyof typeof ACHAINS].name}</span>
             </Link>
@@ -122,7 +123,7 @@ export default async function AnalyticsPage() {
           <div className="tracked-grid">
             {(allTokens || []).filter((t: any) => isAChain(t.chain)).map((t: any) => (
               <Link key={t.chain + t.token} href={`/analytics/${t.chain}/${t.token}`} className="tracked">
-                <b>{t.symbol || short(t.token)}</b>
+                <span className="row" style={{ gap: 8, flexWrap: "nowrap" }}><TokenLogo src={t.image_url} symbol={t.symbol || "?"} /><b>{t.symbol || short(t.token)}</b></span>
                 <span className="muted">{ago(t.viewed_at)}</span>
                 <span className="badge v">{ACHAINS[t.chain as keyof typeof ACHAINS].name}</span>
               </Link>

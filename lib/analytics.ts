@@ -16,6 +16,7 @@ import { abstract, arbitrum, avalanche, base, berachain, blast, bsc, linea, main
 import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
 import { notify } from "@/lib/push";
+import { getPairStats } from "@/lib/market";
 import { isSolAddress, solBalances, solGoplus, solMeta } from "@/lib/analytics-solana";
 
 /** Another EVM chain, using viem's built-in network details (public node, explorer, multicall). */
@@ -307,7 +308,7 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
   let m: Meta | null = null;
   try { m = sol ? await solMeta(token) : await meta(chain, token); } catch { return `Couldn't reach ${ACHAINS[chain].name} right now. Try again in a minute.`; }
   if (!m) return `That address isn't a token on ${ACHAINS[chain].name}.`;
-  const [gp, moralisTop] = await Promise.all([sol ? solGoplus(token) : goplus(chain, token), topHolders(chain, token)]);
+  const [gp, moralisTop, market] = await Promise.all([sol ? solGoplus(token) : goplus(chain, token), topHolders(chain, token), getPairStats(ACHAINS[chain].dex, token).catch(() => null)]);
   if (gp && "name" in gp) { m.name ||= gp.name; m.symbol ||= gp.symbol; }
   const list: Holder[] = moralisTop || gp?.holders || [];
   const dev = (opts.dev && isChainAddress(chain, opts.dev) ? norm(chain, opts.dev) : null) || existing?.dev || gp?.creator || m.owner || null;
@@ -315,6 +316,7 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
 
   await sb.from("tracked_tokens").upsert({
     chain, token, name: m.name, symbol: m.symbol, decimals: m.decimals, total_supply: m.supply, dev, dev_source: devSource,
+    image_url: market?.imageUrl ?? existing?.image_url ?? null,
     security: gp?.security ?? existing?.security ?? null, holder_source: moralisTop ? "moralis" : existing?.holder_source || (gp ? "goplus" : null),
     added_by: existing?.added_by ?? opts.userId ?? null, snapshot_at: list.length || !existing ? new Date().toISOString() : existing.snapshot_at,
     checked_at: new Date().toISOString(), viewed_at: new Date().toISOString(),
