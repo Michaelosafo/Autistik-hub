@@ -231,3 +231,95 @@ export function holdOutlook(input: Input, call: Verdict): { long: Outlook; short
     : { level: "weak", title: "Sellers in control for now", reasons: shortReasons };
   return { long, short };
 }
+
+export type Move = { priceUsd: number | null; m5: number | null; h1: number | null; h6: number | null; h24: number | null; buysH1: number; sellsH1: number; liquidityUsd: number | null };
+export type Target = { label: string; pct: number; price: number | null; note: string };
+export type Plan = {
+  key: "long" | "short"; outlook: Outlook;
+  entry: { level: "good" | "ok" | "weak"; title: string; reasons: Signal[] };
+  exit: { now: boolean; title: string; reasons: Signal[] };
+  targets: Target[]; price: number | null;
+};
+
+const at = (price: number | null, pct: number) => (price ? price * (1 + pct / 100) : null);
+const rate = (score: number, good: string, ok: string, weak: string) =>
+  score >= 65 ? { level: "good" as const, title: good } : score >= 45 ? { level: "ok" as const, title: ok } : { level: "weak" as const, title: weak };
+
+/**
+ * Two trading plans: long term (hold for weeks or months) and short term (a day trade). Each says whether now is a good
+ * entry, whether it's time to take profit, and gives simple price targets from the current price. `move` is the live
+ * price action from DexScreener and can be missing.
+ */
+export function tradingPlans(call: Verdict, hold: { long: Outlook; short: Outlook }, move: Move | null): { long: Plan; short: Plan } {
+  const m = move, price = m?.priceUsd ?? null;
+  const pc = (v: number | null | undefined) => `${v! > 0 ? "+" : ""}${Math.round(v!)}%`;
+  const drop = (v: number | null | undefined) => `${Math.abs(Math.round(v!))}%`;
+  const thinPool = m?.liquidityUsd != null && m.liquidityUsd < 10_000;
+  const unsafe = call.kind === "avoid";
+
+  // ---------- Short term: momentum and timing ----------
+  const se: Signal[] = [];
+  let ss = call.score;
+  if (m) {
+    if (m.h1 != null && m.h1 <= -8 && (m.m5 ?? 0) > 0 && m.buysH1 >= m.sellsH1) { ss += 15; se.push({ level: "good", text: `It dipped ${drop(m.h1)} in the last hour and buyers are stepping back in: a classic dip entry.` }); }
+    else if (m.h1 != null && m.h1 <= -15) { ss -= 10; se.push({ level: "bad", text: `Down ${drop(m.h1)} in the last hour and still falling. Wait for it to stop dropping.` }); }
+    if ((m.h1 ?? 0) >= 30 || (m.h6 ?? 0) >= 60) { ss -= 20; se.push({ level: "bad", text: `Already up ${pc(Math.max(m.h1 ?? 0, m.h6 ?? 0))} in a few hours. Chasing a pump is risky, so wait for a pullback.` }); }
+    else if ((m.h1 ?? 0) > 3 && m.buysH1 > m.sellsH1) { ss += 5; se.push({ level: "good", text: `Climbing (${pc(m.h1)} this hour) with more buys than sells.` }); }
+    if (m.buysH1 + m.sellsH1 >= 5) se.push({ level: m.buysH1 >= m.sellsH1 ? "good" : "warn", text: `Last hour: ${m.buysH1} buys and ${m.sellsH1} sells.` });
+    else { ss -= 5; se.push({ level: "warn", text: "Very few trades in the last hour. Day trading needs action." }); }
+  } else se.push({ level: "warn", text: "Live price data isn't available right now, so this is based on wallet activity only." });
+  if (thinPool) { ss -= 15; se.push({ level: "bad", text: `Small pool ($${Math.round(m!.liquidityUsd!).toLocaleString("en-US")}): prices jump a lot and big sells hurt.` }); }
+  for (const r of call.reasons.filter((x) => /dev sold|connected wallets is selling/i.test(x.text))) se.push(r);
+  ss = unsafe ? 0 : Math.max(0, Math.min(100, ss));
+
+  const sx: Signal[] = [];
+  let sNow = false;
+  if (m && ((m.h1 ?? 0) >= 20 || (m.h6 ?? 0) >= 40)) { sNow = true; sx.push({ level: "good", text: `Up ${pc(Math.max(m.h1 ?? 0, m.h6 ?? 0))} in a few hours. Good moment to lock in profit.` }); }
+  if (call.kind === "sell" || call.kind === "careful") { sNow = true; sx.push({ level: "bad", text: "Sellers are taking over. Don't let a winning trade turn into a loss." }); }
+  if (m && m.sellsH1 > m.buysH1 * 1.5 && m.sellsH1 >= 5) { sNow = true; sx.push({ level: "bad", text: `Sells are piling up (${m.sellsH1} sells vs ${m.buysH1} buys this hour).` }); }
+  if (!sNow) sx.push({ level: "good", text: "No sign to sell yet. Follow your targets below and keep your stop-loss." });
+
+  // ---------- Long term: loyalty and value ----------
+  const le: Signal[] = [];
+  let ls = hold.long.level === "good" ? 70 : hold.long.level === "ok" ? 52 : 30;
+  le.push({ level: hold.long.level === "good" ? "good" : hold.long.level === "ok" ? "warn" : "bad", text: `What holders say: ${hold.long.title.toLowerCase()}.` });
+  if (m?.h24 != null) {
+    if (m.h24 <= -20 && hold.long.level !== "weak") { ls += 10; le.push({ level: "good", text: `Down ${drop(m.h24)} today while holders stay loyal: a discount for long-term buyers.` }); }
+    else if (m.h24 >= 80) { ls -= 15; le.push({ level: "warn", text: `Up ${pc(m.h24)} in 24 h. Even long-term buyers get a better price after it cools down.` }); }
+  }
+  if (thinPool) { ls -= 10; le.push({ level: "warn", text: "The pool is small, so it's a very early, very risky coin. Only put in a little." }); }
+  for (const r of hold.long.reasons.filter((x) => x.level !== "warn").slice(0, 3)) le.push(r);
+  ls = unsafe ? 0 : Math.max(0, Math.min(100, ls));
+
+  const lx: Signal[] = [];
+  let lNow = false;
+  if (m && (m.h24 ?? 0) >= 100) { lNow = true; lx.push({ level: "good", text: `Up ${pc(m.h24)} today. Taking back your starting money now is smart, then let the rest ride.` }); }
+  if (hold.long.reasons.some((x) => /dev has sold/i.test(x.text))) { lNow = true; lx.push({ level: "bad", text: "The dev has sold. Long holds depend on a dev who stays, so think about leaving." }); }
+  if (hold.long.level === "weak") { lNow = true; lx.push({ level: "bad", text: "Holders are leaving. The long-term case is getting weaker." }); }
+  if (!lNow) lx.push({ level: "good", text: "Holders are steady. Keep holding and take profit in steps at the targets below." });
+
+  const avoid = { level: "weak" as const, title: "Not safe to buy" };
+  return {
+    short: {
+      key: "short", outlook: hold.short, price,
+      entry: { ...(unsafe ? avoid : rate(ss, "Good entry for a day trade", "Wait for a better entry", "Not a good entry now")), reasons: unsafe ? call.reasons : se },
+      exit: { now: sNow, title: sNow ? "Take profit now" : "Hold the trade for now", reasons: sx },
+      targets: [
+        { label: "Take profit 1", pct: 15, price: at(price, 15), note: "sell half" },
+        { label: "Take profit 2", pct: 30, price: at(price, 30), note: "sell the rest" },
+        { label: "Stop-loss", pct: -10, price: at(price, -10), note: "sell everything, no regrets" },
+      ],
+    },
+    long: {
+      key: "long", outlook: hold.long, price,
+      entry: { ...(unsafe ? avoid : rate(ls, "Good entry for a long hold", "Okay entry: buy in small parts", "Not a good entry now")), reasons: unsafe ? call.reasons : le },
+      exit: { now: lNow, title: lNow ? "Take some profit now" : "Keep holding", reasons: lx },
+      targets: [
+        { label: "2x", pct: 100, price: at(price, 100), note: "take back what you put in" },
+        { label: "3x", pct: 200, price: at(price, 200), note: "sell another quarter" },
+        { label: "5x+", pct: 400, price: at(price, 400), note: "sell some, keep a small bag for the long run" },
+        { label: "Exit if", pct: -50, price: at(price, -50), note: "it halves and holders are leaving" },
+      ],
+    },
+  };
+}

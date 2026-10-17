@@ -83,3 +83,24 @@ export async function lookupToken(chain: ChainKey, token: string): Promise<{ pai
     return null;
   }
 }
+
+/** Short-term price moves for one token's deepest pool: what a trading plan needs. */
+export type PairStats = {
+  priceUsd: number | null; m5: number | null; h1: number | null; h6: number | null; h24: number | null;
+  buysH1: number; sellsH1: number; liquidityUsd: number | null; marketCap: number | null;
+};
+
+/** `slug` is DexScreener's chain id (bsc, ethereum…). Cached for 30 seconds; returns null when unavailable. */
+export async function getPairStats(slug: string, token: string): Promise<PairStats | null> {
+  try {
+    const r = await fetch(`${API}/tokens/v1/${slug}/${token}`, { next: { revalidate: 30 }, signal: AbortSignal.timeout(5000) });
+    const pairs: any[] = r.ok ? await r.json() : [];
+    const p = (Array.isArray(pairs) ? pairs : []).sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0))[0];
+    if (!p) return null;
+    const c = p.priceChange || {}, t = p.txns?.h1 || {};
+    return {
+      priceUsd: num(p.priceUsd), m5: num(c.m5), h1: num(c.h1), h6: num(c.h6), h24: num(c.h24),
+      buysH1: num(t.buys) ?? 0, sellsH1: num(t.sells) ?? 0, liquidityUsd: num(p.liquidity?.usd), marketCap: num(p.marketCap) ?? num(p.fdv),
+    };
+  } catch { return null; }
+}
