@@ -63,6 +63,16 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
           <button type="button" className="btn primary" disabled={busy} onClick={deploy}>🚀 Deploy the locker</button>
         </div>
       )}
+      <details>
+        <summary className="muted">Deployed from Remix or another tool? Add it here</summary>
+        <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+          <select value={chain} onChange={(e) => setChain(e.target.value as LockerChain)} aria-label="Chain of the deployment">
+            {left.map((c) => <option key={c} value={c}>{LOCKER_CHAINS[c].name}</option>)}
+          </select>
+          <input value={hash} onChange={(e) => setHash(e.target.value.trim())} placeholder="Deploy transaction hash 0x…" style={{ flex: 1, minWidth: 180 }} spellCheck={false} />
+          <button type="button" className="btn small" disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(hash)} onClick={() => save(chain, hash)}>Add</button>
+        </div>
+      </details>
       {hash && !busy && msg && !msg.startsWith("✅") && (
         <button type="button" className="btn small" onClick={() => save(chain, hash)}>Try saving again</button>
       )}
