@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { SCAN_CHAINS } from "@/lib/analytics-chains";
 
 /** Paste a token address to see its top 40 wallets and dev, and get sell alerts. */
 export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixedToken, label = "Scan" }: { signedIn: boolean; chain?: string; token?: string; label?: string }) {
@@ -31,11 +32,7 @@ export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixe
   return (
     <form className="scan-form" onSubmit={scan}>
       <select value={chain} onChange={(e) => setChain(e.target.value)} aria-label="Chain">
-        <option value="bsc">BNB Chain</option>
-        <option value="ethereum">Ethereum</option>
-        <option value="base">Base</option>
-        <option value="robinhood">Robinhood Chain</option>
-        <option value="solana">Solana</option>
+        {SCAN_CHAINS.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
       </select>
       <input value={token} onChange={(e) => {
         const v = e.target.value;

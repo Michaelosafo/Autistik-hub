@@ -173,3 +173,7 @@ alter table public.token_holders drop constraint if exists token_holders_wallet_
 alter table public.token_holders add constraint token_holders_wallet_check check (wallet ~ '^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$');
 -- Solana keeps each wallet's tokens in a separate "token account"; remembering it makes balance checks one cheap read.
 alter table public.token_holders add column if not exists token_account text check (token_account is null or token_account ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$');
+
+-- ---------- even more chains ----------
+alter table public.tracked_tokens drop constraint if exists tracked_tokens_chain_check;
+alter table public.tracked_tokens add constraint tracked_tokens_chain_check check (chain in ('bsc','ethereum','base','robinhood','solana','arbitrum','polygon','avalanche','optimism','sonic','berachain','monad','unichain','abstract','linea','blast'));

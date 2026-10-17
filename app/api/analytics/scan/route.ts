@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   // A Solana address can't be on an 0x chain (and the other way round), so pick the right one for the member.
   let chain = body?.chain;
   if (isAChain(chain) && !isChainAddress(chain, token) && isChainAddress("solana", token)) chain = "solana";
-  if (!isAChain(chain)) return json({ error: "Pick a chain: BNB Chain, Ethereum, Base, Robinhood Chain or Solana." }, 400);
+  if (!isAChain(chain)) return json({ error: "Pick a chain from the list." }, 400);
   if (!isChainAddress(chain, token)) return json({ error: chain === "solana" ? "Paste the token's Solana address." : "Paste the token's contract address (it starts with 0x)." }, 400);
 
   const err = await scanToken(chain, token, { userId: user.id, force: body?.refresh === true });
