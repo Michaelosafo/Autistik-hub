@@ -3,10 +3,11 @@ import { rateLimit } from "@/lib/ratelimit";
 import { isAChain, isChainAddress } from "@/lib/analytics";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { checkSignals } from "@/lib/analytics-alerts";
+import { FREE_PINS, PRO_PINS } from "@/lib/pro";
+import { isPro } from "@/lib/pro-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
-const MAX_PINS = 20;
 
 // Pin or unpin a token. Pinned tokens send buy / take-profit / sell / wait alerts; pinning also watches the token
 // so it gets checked every 10 minutes and its sell alerts arrive too.
@@ -26,7 +27,9 @@ export async function POST(req: Request) {
   const { data: t } = await sb.from("tracked_tokens").select("token").eq("chain", chain).eq("token", token).maybeSingle();
   if (!t) return json({ error: "Scan this token first." }, 404);
   const { count } = await sb.from("token_pins").select("token", { count: "exact", head: true }).eq("user_id", user.id);
-  if ((count ?? 0) >= MAX_PINS) return json({ error: `You can pin up to ${MAX_PINS} tokens. Unpin one first.` }, 400);
+  const pro = await isPro(user.id);
+  const max = pro ? PRO_PINS : FREE_PINS;
+  if ((count ?? 0) >= max) return json({ error: pro ? `You can pin up to ${max} tokens. Unpin one first.` : `Free members can pin ${max} tokens. Get AUTISTIK Pro to pin up to ${PRO_PINS}, or unpin one first.`, needPro: !pro }, 400);
   await sb.from("token_pins").upsert({ user_id: user.id, chain, token }, { onConflict: "user_id,chain,token", ignoreDuplicates: true });
   await sb.from("launch_watchers").upsert({ user_id: user.id, chain, token }, { onConflict: "user_id,chain,token", ignoreDuplicates: true });
   // Work out the zone and signals now, so My pins shows them straight away (no alert for this first reading).

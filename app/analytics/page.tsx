@@ -39,6 +39,7 @@ export default async function AnalyticsPage() {
       </div>
       <div className="card stack">
         <AnalyticsScan signedIn={!!user} />
+        <Link href="/pro" className="pro-strip">💎 <b>AUTISTIK Pro</b>: 3 timeframes, whale radar, track record and an analyst report. Paid in $AUTISTIK →</Link>
         <div className="chain-chips" aria-label="Chains you can scan">{SCAN_CHAINS.map((c) => <span key={c.key} className="badge v">{c.name}</span>)}</div>
         <p className="muted" style={{ fontSize: ".82em" }}>Tokens launched on AUTISTIK are tracked automatically. Scanning a token also turns on its sell alerts for you (🔔 at the top).</p>
       </div>

@@ -8,6 +8,9 @@ import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analyt
 import { getCandles, getPairStats } from "@/lib/market";
 import { zones } from "@/lib/analytics-zones";
 import ZoneCard from "@/components/ZoneCard";
+import ProCard from "@/components/ProCard";
+import { isPro } from "@/lib/pro-server";
+import { confluence, trackRecord, whales } from "@/lib/analytics-pro";
 import TradePlans from "@/components/TradePlans";
 import PinButton from "@/components/PinButton";
 import { stateOf, type SignalState } from "@/lib/analytics-alerts";
@@ -86,11 +89,13 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   const hold = holdOutlook(sigIn, call);
   const move = await movePromise;
   const plans = tradingPlans(call, hold, move);
+  const zoneBase = { move, call, long: hold.long, security: t.security, holders: (holders || []) as any };
   const zone = zones({
     candles: await candlePromise, move, call, long: hold.long, security: t.security, holders: (holders || []) as any,
     devSold: (trades || []).some((x: any) => x.wallet === t.dev && x.side === "sell") || (events || []).some((e: any) => e.is_dev && e.kind !== "buy"),
   });
   const { data: pin } = await pinPromise;
+  const [pro, record] = await Promise.all([isPro(user?.id), trackRecord(chain, t.token)]);
   const LABEL: Record<SignalState, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
   const now = { short: stateOf(plans.short, call, "short"), long: stateOf(plans.long, call, "long") };
   const lastEvent = new Map<string, any>();
@@ -139,6 +144,9 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
 
       <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />
+      <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
+        frames={pro ? await confluence(chain, t.pair, zoneBase, zone) : undefined}
+        whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />
 
       <div className={"card stack verdict " + call.kind}>
         <div className="label">🧭 Buy or sell? The read right now</div>
