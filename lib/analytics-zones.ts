@@ -135,6 +135,13 @@ export function zones({ candles, move, call, long, security: s = {}, holders = [
   const top10 = holders.filter((x) => x.in_top && !x.is_contract).sort((a, b) => n(b.pct) - n(a.pct)).slice(0, 10).reduce((a, x) => a + n(x.pct), 0);
   if (top10 > 50) project.push({ lean: -1, text: `The 10 biggest wallets own ${Math.round(top10)}%. A few people can crash it.` });
   else if (top10 > 0 && top10 < 25) project.push({ lean: 1, text: `Well spread: the 10 biggest wallets own only ${Math.round(top10)}%.` });
+  // Liquidity that's locked or burned can't be pulled out from under buyers (no rug pull).
+  const lp = s.lp as { locked: number; burned: number } | null | undefined;
+  if (lp) {
+    const safe = Math.min(100, lp.locked + lp.burned);
+    if (safe >= 90) project.push({ lean: 1, text: `${Math.round(safe)}% of the liquidity is ${lp.burned > lp.locked ? "burned" : "locked"}: the dev can't pull the pool.` });
+    else if (safe < 50) project.push({ lean: -1, text: `Only ${Math.round(safe)}% of the liquidity is locked or burned: whoever holds the rest could pull the pool (rug pull).` });
+  }
   if (bundle?.level === "high") project.push({ lean: -1, text: `Highly bundled: ${bundle.bundledPct.toFixed(0)}% of the supply sits in linked wallets that can dump together. Manipulation risk.` });
   else if (bundle?.level === "some") project.push({ lean: 0, text: `Some bundling: ${bundle.bundledPct.toFixed(0)}% of the supply is in linked wallets.` });
   // Extreme bundling makes any price unsafe, like a honeypot.

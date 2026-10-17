@@ -17,6 +17,7 @@ import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
 import { notify } from "@/lib/push";
 import { getPairStats } from "@/lib/market";
+import { lockerOn, lpLockOf } from "@/lib/locker-server";
 import { isSolAddress, solBalances, solGoplus, solMeta } from "@/lib/analytics-solana";
 
 /** Another EVM chain, using viem's built-in network details (public node, explorer, multicall). */
@@ -98,18 +99,22 @@ async function goplus(chain: AChain, token: string): Promise<GoPlus | null> {
     const j = r.ok ? await r.json() : null;
     const x = j?.result?.[lower(token)];
     if (!x) return null;
+    const ours = (await lockerOn(chain).catch(() => null))?.address.toLowerCase();
     const addr = (a: unknown) => (typeof a === "string" && isAddress(a) && !SKIP.has(lower(a)) ? getAddress(a) : null);
     const flag = (v: unknown) => (v === "1" ? true : v === "0" ? false : null);
     return {
       creator: addr(x.creator_address),
       owner: addr(x.owner_address),
       holders: (Array.isArray(x.holders) ? x.holders : []).filter((h: any) => addr(h.address)).map((h: any) => ({
-        wallet: getAddress(h.address), balance: String(h.balance ?? "0"), isContract: h.is_contract === 1 || h.is_contract === "1", label: h.tag ? String(h.tag).slice(0, 40) : null,
+        wallet: getAddress(h.address), balance: String(h.balance ?? "0"), isContract: h.is_contract === 1 || h.is_contract === "1",
+        label: ours && lower(h.address) === ours ? "AUTISTIK Locker" : h.tag ? String(h.tag).slice(0, 40) : null,
       })),
       security: {
         honeypot: flag(x.is_honeypot), buyTax: x.buy_tax === "" ? null : num(x.buy_tax) * 100, sellTax: x.sell_tax === "" ? null : num(x.sell_tax) * 100,
         mintable: flag(x.is_mintable), openSource: flag(x.is_open_source), canTakeBack: flag(x.can_take_back_ownership),
         hiddenOwner: flag(x.hidden_owner), holderCount: x.holder_count ? num(x.holder_count) : null,
+        // How much of the pool's liquidity is locked or burned.
+        lp: lpLockOf(x.lp_holders, ours),
       },
     };
   } catch { return null; }

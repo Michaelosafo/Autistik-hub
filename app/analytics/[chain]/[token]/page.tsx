@@ -10,6 +10,8 @@ import { zones } from "@/lib/analytics-zones";
 import ZoneCard from "@/components/ZoneCard";
 import BundleCard from "@/components/BundleCard";
 import { bundleCheck } from "@/lib/analytics-bundle";
+import LockCard from "@/components/LockCard";
+import { locksFor, lockerOn, type LockView } from "@/lib/locker-server";
 import TokenLogo from "@/components/TokenLogo";
 import ProCard from "@/components/ProCard";
 import { isPro } from "@/lib/pro-server";
@@ -75,6 +77,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
   const movePromise = getPairStats(c.dex, t.token);
   const candlePromise = getCandles(chain, t.pair);
+  const lockPromise = Promise.all([locksFor(chain, t.token, t.pair), lockerOn(chain)]).catch(() => [[], null] as [LockView[], null]);
   const pinPromise = user ? sb.from("token_pins").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] });
   const [{ data: holders }, { data: events }, { data: watch }, { data: wc }, { data: links }, { data: trades }] = await Promise.all([
     sb.from("token_holders").select("*").eq("chain", chain).eq("token", t.token).order("rank", { ascending: true, nullsFirst: false }),
@@ -105,6 +108,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
     bundle,
   });
   const { data: pin } = await pinPromise;
+  const [myLocks, locker] = await lockPromise;
   const [pro, record] = await Promise.all([isPro(user?.id), trackRecord(chain, t.token)]);
   const LABEL: Record<SignalState, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
   const now = { short: stateOf(plans.short, call, "short"), long: stateOf(plans.long, call, "long") };
@@ -161,6 +165,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
       <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />
       <BundleCard b={bundle} explorer={c.explorer} token={t.token} />
+      <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />
       <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
         frames={pro ? await confluence(chain, t.pair, zoneBase, zone) : undefined}
         whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />
