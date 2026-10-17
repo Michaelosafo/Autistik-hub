@@ -1,4 +1,5 @@
 import { json } from "@/lib/ai";
+import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { isAChain, isChainAddress, scanToken } from "@/lib/analytics";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -25,9 +26,10 @@ export async function POST(req: Request) {
 
   const err = await scanToken(chain, token, { userId: user.id, force: body?.refresh === true });
   if (err) return json({ error: err }, 400);
-  const { data: t } = await supabaseService().from("tracked_tokens").select("token").eq("chain", chain)[chain === "solana" ? "eq" : "ilike"]("token", token).maybeSingle();
+  const { data: t } = await supabaseService().from("tracked_tokens").select("token,symbol").eq("chain", chain)[chain === "solana" ? "eq" : "ilike"]("token", token).maybeSingle();
   const addr = t?.token || token;
   // Watching the token is what sends the sell alerts.
   await supabaseService().from("launch_watchers").upsert({ user_id: user.id, chain, token: addr }, { onConflict: "user_id,chain,token", ignoreDuplicates: true });
+  logActivity(user.id, "search", `${t?.symbol || addr.slice(0, 8)} on ${chain}`, `/analytics/${chain}/${addr}`);
   return json({ path: `/analytics/${chain}/${addr}` });
 }

@@ -1,4 +1,5 @@
 import { rateLimit } from "@/lib/ratelimit";
+import { logActivity } from "@/lib/activity";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
 import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, isLive, type ChainKey } from "@/lib/launchpad";
@@ -68,5 +69,6 @@ export async function POST(req: Request) {
   if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
   // Analytics follows every token launched here: its top wallets and the creator as the dev.
   if (isAChain(chain.key)) await scanToken(chain.key, row.token, { dev: row.creator, userId: owner }).catch(() => null);
+  logActivity(owner, "launch", `Launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chain.key}/${row.token}`);
   return json({ launch: row });
 }

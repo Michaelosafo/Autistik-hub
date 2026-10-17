@@ -258,3 +258,52 @@ alter table public.signal_history enable row level security;
 drop policy if exists "history public" on public.signal_history;
 create policy "history public" on public.signal_history for select to anon, authenticated using (true);
 grant select on public.signal_history to anon, authenticated;
+
+-- ---------- site activity (admin only): visits and what members do ----------
+-- Visits store the page, a random visitor id (cookie), country and device type. No IP addresses.
+create table if not exists public.page_views (
+  id bigserial primary key,
+  at timestamptz not null default now(),
+  path text not null check (length(path) <= 300),
+  visitor text not null check (length(visitor) <= 64),
+  user_id uuid references auth.users on delete set null,
+  country text check (country is null or length(country) <= 8),
+  device text check (device in ('phone','tablet','computer')),
+  referrer text check (referrer is null or length(referrer) <= 200)
+);
+create index if not exists page_views_at on public.page_views (at desc);
+alter table public.page_views enable row level security;  -- no policies: only the server reads or writes it
+create table if not exists public.activity_log (
+  id bigserial primary key,
+  at timestamptz not null default now(),
+  user_id uuid references auth.users on delete set null,
+  kind text not null check (length(kind) <= 30),
+  label text check (label is null or length(label) <= 200),
+  link text check (link is null or link ~ '^/[A-Za-z0-9/_-]*$')
+);
+create index if not exists activity_log_at on public.activity_log (at desc);
+alter table public.activity_log enable row level security;  -- no policies: only the server reads or writes it
+
+-- The numbers for Admin → Site activity, counted in the database so they stay right at any size.
+create or replace function public.site_stats() returns jsonb
+language sql security definer set search_path = public as $$
+  with v as (select * from page_views where at > now() - interval '14 days'),
+  w as (select * from v where at > now() - interval '7 days'),
+  t as (select * from v where at > now() - interval '1 day'),
+  g as (select regexp_replace(regexp_replace(regexp_replace(path, '^/analytics/[a-z]+/[A-Za-z0-9]+$', '/analytics/(a token)'), '^/launchpad/[a-z]+/[A-Za-z0-9]+$', '/launchpad/(a token)'), '^/members/.+$', '/members/(a member)') p from w)
+  select jsonb_build_object(
+    'today_views', (select count(*) from t),
+    'today_people', (select count(distinct visitor) from t),
+    'week_views', (select count(*) from w),
+    'week_people', (select count(distinct visitor) from w),
+    'week_signed', (select count(distinct user_id) from w where user_id is not null),
+    'daily', (select coalesce(jsonb_agg(jsonb_build_object('d', d, 'views', c, 'people', p) order by d), '[]') from (
+       select gs::date::text d, (select count(*) from v where at::date = gs::date) c, (select count(distinct visitor) from v where at::date = gs::date) p
+       from generate_series((now() - interval '13 days')::date, now()::date, interval '1 day') gs) x),
+    'pages', (select coalesce(jsonb_agg(jsonb_build_array(p, c)), '[]') from (select p, count(*) c from g group by p order by c desc limit 10) x),
+    'countries', (select coalesce(jsonb_agg(jsonb_build_array(country, c)), '[]') from (select country, count(*) c from w where country is not null group by country order by c desc limit 8) x),
+    'devices', (select coalesce(jsonb_agg(jsonb_build_array(device, c)), '[]') from (select device, count(*) c from w where device is not null group by device order by c desc) x),
+    'referrers', (select coalesce(jsonb_agg(jsonb_build_array(referrer, c)), '[]') from (select referrer, count(*) c from w where referrer is not null group by referrer order by c desc limit 6) x)
+  );
+$$;
+revoke all on function public.site_stats() from public, anon, authenticated;

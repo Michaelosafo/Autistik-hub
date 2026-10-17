@@ -1,4 +1,5 @@
 import { createPublicClient, decodeFunctionData, erc20Abi, getAddress, http, parseEventLogs } from "viem";
+import { logActivity } from "@/lib/activity";
 import { json } from "@/lib/ai";
 import { rateLimit } from "@/lib/ratelimit";
 import { passTag } from "@/lib/aipass";
@@ -99,5 +100,6 @@ export async function POST(req: Request) {
     console.error("pro_passes insert failed:", error.message);
     return json({ error: "Your payment went through, but Pro didn't start. Contact an admin with your transaction link." }, 500);
   }
+  logActivity(user.id, "pro", `Paid for Pro until ${endsAt.slice(0, 10)}`, "/pro");
   return json({ proUntil: endsAt });
 }

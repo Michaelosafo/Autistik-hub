@@ -111,7 +111,10 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   return (
     <div className="stack" style={{ maxWidth: 1040 }}>
       <AutoRefresh seconds={60} />
-      <Link href="/analytics" className="muted">← Analytics</Link>
+      <div className="token-search">
+        <Link href="/analytics" className="muted">← My tokens</Link>
+        <AnalyticsScan signedIn={!!user} label="Search" />
+      </div>
       <div className="card stack an-head">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div>
