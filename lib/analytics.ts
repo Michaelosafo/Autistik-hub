@@ -15,6 +15,7 @@ import { createPublicClient, formatUnits, getAddress, http, isAddress, parseAbi,
 import { abstract, arbitrum, avalanche, base, berachain, blast, bsc, linea, mainnet, monad, optimism, polygon, robinhood, sonic, unichain } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
+import { notify } from "@/lib/push";
 import { isSolAddress, solBalances, solGoplus, solMeta } from "@/lib/analytics-solana";
 
 /** Another EVM chain, using viem's built-in network details (public node, explorer, multicall). */
@@ -47,7 +48,7 @@ export type AChain = keyof typeof ACHAINS;
 export const isAChain = (c: unknown): c is AChain => typeof c === "string" && c in ACHAINS;
 const isSol = (c: AChain) => ACHAINS[c].kind === "solana";
 /** A token or wallet address in the right format for the chain (0x… or a Solana address). */
-export const isChainAddress = (c: AChain, a: unknown): a is string => (isSol(c) ? isSolAddress(a) : typeof a === "string" && isAddress(a));
+export const isChainAddress = (c: AChain, a: unknown): a is string => (isSol(c) ? isSolAddress(a) : typeof a === "string" && isAddress(a, { strict: false }));
 const norm = (c: AChain, a: string) => (isSol(c) ? a : getAddress(a));
 
 const TOP = 40;
@@ -281,7 +282,7 @@ async function apply(chain: AChain, token: string, t: { symbol: string; supply: 
         body: `${fmtAmount(num(e.amount))} ${t.symbol} sold or moved out${held ? ` after holding for ${held}` : ""}.`, link: `/analytics/${chain}/${token}`,
       };
     }));
-    for (let i = 0; i < notes.length; i += 500) await sb.from("notifications").insert(notes.slice(i, i + 500));
+    await notify(notes);
   }
   return events;
 }
@@ -484,7 +485,7 @@ export async function syncTrades(chain: AChain, token: string, maxChunks = 8): P
         body: `${fmtAmount(num(x.amount))} ${t.symbol} sold${x.pct_after != null ? `. They now hold ${num(x.pct_after).toFixed(2)}%` : ""}.`,
         link: `/analytics/${chain}/${token}`,
       })));
-      for (let i = 0; i < notes.length; i += 500) await sb.from("notifications").insert(notes.slice(i, i + 500));
+      await notify(notes.map((n: any) => ({ ...n, strong: true })));
     }
   }
   await sb.from("tracked_tokens").update({ pair, last_block: Number(latest), trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token);

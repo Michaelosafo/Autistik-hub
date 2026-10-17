@@ -7,6 +7,8 @@ import { insights } from "@/lib/analytics-insights";
 import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analytics-signals";
 import { getPairStats } from "@/lib/market";
 import TradePlans from "@/components/TradePlans";
+import PinButton from "@/components/PinButton";
+import { stateOf, type SignalState } from "@/lib/analytics-alerts";
 import { ACHAINS, checkToken, heldFor, isAChain, isChainAddress, syncTrades } from "@/lib/analytics";
 import { walletUrl } from "@/lib/explorer";
 import AutoRefresh from "@/components/AutoRefresh";
@@ -64,6 +66,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   }
 
   const movePromise = getPairStats(c.dex, t.token);
+  const pinPromise = user ? sb.from("token_pins").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] });
   const [{ data: holders }, { data: events }, { data: watch }, { data: wc }, { data: links }, { data: trades }] = await Promise.all([
     sb.from("token_holders").select("*").eq("chain", chain).eq("token", t.token).order("rank", { ascending: true, nullsFirst: false }),
     sb.from("holder_events").select("*").eq("chain", chain).eq("token", t.token).order("created_at", { ascending: false }).limit(500),
@@ -79,6 +82,9 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   const { groups, suspects } = whoMightSell(sigIn);
   const hold = holdOutlook(sigIn, call);
   const plans = tradingPlans(call, hold, await movePromise);
+  const { data: pin } = await pinPromise;
+  const LABEL: Record<SignalState, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
+  const now = { short: stateOf(plans.short, call, "short"), long: stateOf(plans.long, call, "long") };
   const lastEvent = new Map<string, any>();
   for (const e of events || []) if (!lastEvent.has(e.wallet)) lastEvent.set(e.wallet, e);
   const top = (holders || []).filter((h: any) => h.in_top).slice(0, 40);
@@ -101,6 +107,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
             <a className="mono muted" href={`${c.explorer}/token/${t.token}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: ".85em", overflowWrap: "anywhere" }}>{t.token}</a>
           </div>
           <div className="row" style={{ gap: 8 }}>
+            <PinButton signedIn={!!user} chain={chain} token={t.token} pinned={!!pin?.length} />
             <WatchButton uid={user?.id ?? null} chain={chain} token={t.token} watching={!!watch?.length} count={(wc as any)?.watchers ?? 0} />
             <a className="btn small" href={`https://dexscreener.com/${c.dex}/${t.token}`} target="_blank" rel="noopener noreferrer">📈 Chart</a>
             <AnalyticsScan signedIn={!!user} chain={chain} token={t.token} label="Refresh" />
@@ -142,6 +149,12 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
           <summary>Why?</summary>
           <ul className="signals">{call.reasons.map((r, i) => <li key={i} className={r.level}>{r.text}</li>)}</ul>
         </details>
+        <div className="signal-now" aria-label="Signal right now">
+          <span className="label">Signal right now</span>
+          <span className={"sig " + now.short}>⚡ Day trade: <b>{LABEL[now.short]}</b></span>
+          <span className={"sig " + now.long}>📅 Long term: <b>{LABEL[now.long]}</b></span>
+          <small className="muted">📌 Pin this token to get an alert the moment these change.</small>
+        </div>
         <TradePlans plans={plans} symbol={t.symbol || "this token"} />
         <p className="fin-note">⚠️ Nothing stated here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Do your own research and never put in more than you can afford to lose.</p>
       </div>

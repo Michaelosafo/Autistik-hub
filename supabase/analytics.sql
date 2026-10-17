@@ -177,3 +177,44 @@ alter table public.token_holders add column if not exists token_account text che
 -- ---------- even more chains ----------
 alter table public.tracked_tokens drop constraint if exists tracked_tokens_chain_check;
 alter table public.tracked_tokens add constraint tracked_tokens_chain_check check (chain in ('bsc','ethereum','base','robinhood','solana','arbitrum','polygon','avalanche','optimism','sonic','berachain','monad','unichain','abstract','linea','blast'));
+
+-- ---------- pinned tokens: buy / take-profit / sell / wait alerts, and phone push ----------
+create table if not exists public.token_pins (
+  user_id uuid not null references auth.users on delete cascade,
+  chain text not null, token text not null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, chain, token),
+  foreign key (chain, token) references public.tracked_tokens on delete cascade
+);
+create index if not exists token_pins_token on public.token_pins (chain, token);
+create table if not exists public.token_signals (
+  chain text not null, token text not null,
+  horizon text not null check (horizon in ('short','long')),
+  state text not null check (state in ('buy','take_profit','sell','wait','avoid')),
+  reason text,
+  changed_at timestamptz not null default now(),
+  notified_at timestamptz,
+  primary key (chain, token, horizon),
+  foreign key (chain, token) references public.tracked_tokens on delete cascade
+);
+create table if not exists public.push_subscriptions (
+  id bigserial primary key,
+  user_id uuid not null references auth.users on delete cascade,
+  endpoint text not null unique check (endpoint ~ '^https://' and length(endpoint) < 1000),
+  p256dh text not null check (length(p256dh) < 200),
+  auth text not null check (length(auth) < 100),
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subscriptions_user on public.push_subscriptions (user_id);
+alter table public.token_pins enable row level security;
+alter table public.token_signals enable row level security;
+alter table public.push_subscriptions enable row level security;
+drop policy if exists "own pins" on public.token_pins;
+create policy "own pins" on public.token_pins for select to authenticated using (user_id = auth.uid());
+drop policy if exists "signals public" on public.token_signals;
+create policy "signals public" on public.token_signals for select to anon, authenticated using (true);
+-- Pins and devices are only written by the server (after sign-in checks); members can read their own pins.
+revoke all on public.token_pins, public.token_signals, public.push_subscriptions from anon, authenticated;
+grant select on public.token_pins to authenticated;
+grant select on public.token_signals to anon, authenticated;
+revoke all on sequence public.push_subscriptions_id_seq from anon, authenticated;
