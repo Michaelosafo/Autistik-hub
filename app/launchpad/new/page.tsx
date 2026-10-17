@@ -1,7 +1,7 @@
 import AdBar from "@/components/AdBar";
 import Launchpad from "@/components/Launchpad";
 import Link from "next/link";
-import SectionTabs, { LAUNCH_TABS } from "@/components/SectionTabs";
+import LaunchNav from "@/components/LaunchNav";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { currentUser } from "@/lib/supabase/server";
@@ -13,7 +13,7 @@ export default async function NewLaunchPage() {
   const [user, board] = await Promise.all([currentUser(), getBoard(60)]);
   return (
     <div className="stack">
-      <SectionTabs tabs={LAUNCH_TABS} active="/launchpad/new" label="Launch" />
+      <LaunchNav active="/launchpad/new" />
       <AdBar ads={toAds(ads(board))} />
       <div className="page-head">
         <h1>Launch your own token</h1>

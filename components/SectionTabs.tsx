@@ -20,15 +20,6 @@ export const COMMUNITY_TABS: SectionTab[] = [
   { href: "/sessions", label: "Live sessions" },
 ];
 
-// Launch: make a token, then everything about trading them.
-export const LAUNCH_TABS: SectionTab[] = [
-  { href: "/launchpad/new", label: "🚀 Launch" },
-  { href: "/launchpad", label: "Trending" },
-  { href: "/momentum", label: "🔥 Momentum" },
-  { href: "/perps", label: "Perps" },
-  { href: "/lockers", label: "🔒 Lockers" },
-];
-
 export const TOKEN_TABS: SectionTab[] = [
   { href: "/buy", label: "Buy $AUTISTIK" },
   { href: "/rewards", label: "Rewards & airdrops" },

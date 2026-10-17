@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAddress, isAddress } from "viem";
-import SectionTabs, { LAUNCH_TABS } from "@/components/SectionTabs";
+import LaunchNav from "@/components/LaunchNav";
 import Locker from "@/components/Locker";
 import LockerDeploy from "@/components/LockerDeploy";
 import LockCard from "@/components/LockCard";
@@ -29,7 +29,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
 
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
-      <SectionTabs tabs={LAUNCH_TABS} active="/lockers" label="Launch" />
+      <LaunchNav active="/lockers" />
       <div className="page-head">
         <div className="label">Lockers</div>
         <h1>🔒 Lock liquidity &amp; tokens</h1>
