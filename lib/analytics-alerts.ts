@@ -8,6 +8,7 @@ import { ACHAINS, isAChain, type AChain } from "@/lib/analytics";
 import { getCandles, getPairStats } from "@/lib/market";
 import { holdOutlook, tradeCall, tradingPlans, type Plan, type Verdict } from "@/lib/analytics-signals";
 import { notify } from "@/lib/push";
+import { bundleCheck } from "@/lib/analytics-bundle";
 import { proUsersOf } from "@/lib/pro-server";
 import { usd, zones, type ZoneKind, type Zones } from "@/lib/analytics-zones";
 
@@ -73,7 +74,8 @@ export async function analyse(chain: AChain, token: string) {
   const hold = holdOutlook(input, call);
   const plans = tradingPlans(call, hold, move);
   const devSold = !!t.dev && input.trades.some((x: any) => x.wallet === t.dev && x.side === "sell") || input.events.some((e: any) => e.is_dev && e.kind !== "buy");
-  const zone = zones({ candles, move, call, long: hold.long, security: t.security, holders: input.holders, devSold });
+  const bundle = bundleCheck({ holders: input.holders, trades: input.trades, links: input.links, dev: t.dev });
+  const zone = zones({ candles, move, call, long: hold.long, security: t.security, holders: input.holders, devSold, bundle });
   return { t, call, plans, zone, move, input, hold, candles };
 }
 

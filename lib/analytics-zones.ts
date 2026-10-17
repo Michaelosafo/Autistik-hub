@@ -60,9 +60,10 @@ export type ZoneInput = {
   candles: Candle[]; move: Move | null; call: Verdict; long: Outlook;
   security?: any; holders?: { is_contract: boolean; in_top: boolean; pct: any; is_dev: boolean; balance: any }[];
   devSold?: boolean;
+  bundle?: { level: "low" | "some" | "high"; bundledPct: number };
 };
 
-export function zones({ candles, move, call, long, security: s = {}, holders = [], devSold }: ZoneInput): Zones {
+export function zones({ candles, move, call, long, security: s = {}, holders = [], devSold, bundle }: ZoneInput): Zones {
   const people: Sign[] = [], chart: Sign[] = [], project: Sign[] = [];
   const price = move?.priceUsd ?? candles.at(-1)?.c ?? null;
 
@@ -134,7 +135,10 @@ export function zones({ candles, move, call, long, security: s = {}, holders = [
   const top10 = holders.filter((x) => x.in_top && !x.is_contract).sort((a, b) => n(b.pct) - n(a.pct)).slice(0, 10).reduce((a, x) => a + n(x.pct), 0);
   if (top10 > 50) project.push({ lean: -1, text: `The 10 biggest wallets own ${Math.round(top10)}%. A few people can crash it.` });
   else if (top10 > 0 && top10 < 25) project.push({ lean: 1, text: `Well spread: the 10 biggest wallets own only ${Math.round(top10)}%.` });
-  const unsafe = s.honeypot === true || n(s.sellTax) >= 25;
+  if (bundle?.level === "high") project.push({ lean: -1, text: `Highly bundled: ${bundle.bundledPct.toFixed(0)}% of the supply sits in linked wallets that can dump together. Manipulation risk.` });
+  else if (bundle?.level === "some") project.push({ lean: 0, text: `Some bundling: ${bundle.bundledPct.toFixed(0)}% of the supply is in linked wallets.` });
+  // Extreme bundling makes any price unsafe, like a honeypot.
+  const unsafe = s.honeypot === true || n(s.sellTax) >= 25 || (bundle?.bundledPct ?? 0) >= 40;
   if (s.honeypot === true) project.push({ lean: -1, text: "Honeypot warning: you may not be able to sell." });
   if (s.freezable === true) project.push({ lean: -1, text: "The owner can freeze wallets." });
   if (s.mintable === true) project.push({ lean: -1, text: "The owner can print more tokens." });
@@ -169,7 +173,7 @@ export function zones({ candles, move, call, long, security: s = {}, holders = [
     sell: ["🔴 In the SELL range", "The price is near its ceiling, where people usually take profit. Good time to sell some if you hold."],
     falling: ["⚠️ Falling below the floor", "Buyers aren't defending the floor yet. Wait for it to stop falling before buying."],
     breakout: ["🚀 Breaking out above the ceiling", "New highs with buyers in control. Ride it with a stop, and take profit in steps."],
-    avoid: ["🚫 Avoid", "The token itself looks unsafe, so no price is a good price."],
+    avoid: ["🚫 Avoid", (bundle?.bundledPct ?? 0) >= 40 && s.honeypot !== true ? "Most of the supply sits in linked wallets that can dump together. No price is a good price." : "The token itself looks unsafe, so no price is a good price."],
   };
   return { kind, title: TEXT[kind][0], summary: TEXT[kind][1], price, floor, ceiling, buy, sell, position, rsi: r, strength, people, chart, project };
 }
