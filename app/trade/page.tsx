@@ -1,4 +1,4 @@
-import SectionTabs, { TRENDING_TABS } from "@/components/SectionTabs";
+import SectionTabs, { LAUNCH_TABS } from "@/components/SectionTabs";
 import { usd } from "@/lib/market";
 import { EXCHANGES, MEMES, memePrices } from "@/lib/trade";
 
@@ -13,7 +13,7 @@ export default async function TradePage() {
   const anyRef = EXCHANGES.some((e) => e.ref);
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
-      <SectionTabs tabs={TRENDING_TABS} active="/trade" label="Trending" />
+      <SectionTabs tabs={LAUNCH_TABS} active="/trade" label="Launch" />
       <div className="page-head">
         <div className="label">Trending · Trade</div>
         <h1>Trade the top meme coins</h1>
