@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { createPublicClient, createWalletClient, custom, http } from "viem";
+import { createPublicClient, createWalletClient, custom } from "viem";
 import { LOCKER_CHAINS, type LockerChain, type LockerSite } from "@/lib/locker";
 
 /** Admin only: put the AUTISTIK Locker on a chain from your own wallet, then verify its source on the explorer. */
@@ -16,6 +16,7 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
     const r = await fetch("/api/lockers/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c, txHash }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) { setMsg(d.error || "Couldn't save the locker."); return; }
+    setHash("");
     setMsg(`✅ The AUTISTIK Locker is live on ${LOCKER_CHAINS[c].name} at ${d.address}. Refresh the page. Next: press "Verify source".`);
   }
 
@@ -26,7 +27,8 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
     try {
       const cfg = LOCKER_CHAINS[chain];
       const w = createWalletClient({ chain: cfg.viem as any, transport: custom(eth) }) as any;
-      const pub = createPublicClient({ chain: cfg.viem as any, transport: http(cfg.rpc) });
+      // Wait using the wallet's own connection to the chain (always reachable from here).
+      const pub = createPublicClient({ chain: cfg.viem as any, transport: custom(eth) });
       const [account] = await w.requestAddresses();
       try { await w.switchChain({ id: cfg.viem.id }); } catch { await w.addChain({ chain: cfg.viem }); await w.switchChain({ id: cfg.viem.id }); }
       const { LOCKER_BYTECODE } = await import("@/lib/locker-build");
@@ -34,8 +36,9 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
       const h = await w.sendTransaction({ account, chain: cfg.viem, data: LOCKER_BYTECODE });
       setHash(h);
       setMsg("Sent. Waiting for the network to confirm…");
-      const r = await pub.waitForTransactionReceipt({ hash: h, timeout: 180_000 });
-      if (r.status !== "success" || !r.contractAddress) { setMsg("The deployment failed. Only the network fee was spent."); return; }
+      const r = await pub.waitForTransactionReceipt({ hash: h, timeout: 180_000 }).catch(() => null);
+      if (r && r.status !== "success") { setMsg("The deployment failed. Only the network fee was spent."); return; }
+      // Save even if waiting failed: the server looks the transaction up itself.
       await save(chain, h);
     } catch (e: any) {
       setMsg(/reject|denied/i.test(String(e?.message)) ? "You cancelled in your wallet. Nothing happened." : e?.shortMessage || String(e?.message || e).split("\n")[0]);
@@ -64,13 +67,13 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
         </div>
       )}
       <details>
-        <summary className="muted">Deployed from Remix or another tool? Add it here</summary>
+        <summary className="muted">Already deployed (from here, Remix or another tool)? Add it here</summary>
         <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
           <select value={chain} onChange={(e) => setChain(e.target.value as LockerChain)} aria-label="Chain of the deployment">
             {left.map((c) => <option key={c} value={c}>{LOCKER_CHAINS[c].name}</option>)}
           </select>
-          <input value={hash} onChange={(e) => setHash(e.target.value.trim())} placeholder="Deploy transaction hash 0x…" style={{ flex: 1, minWidth: 180 }} spellCheck={false} />
-          <button type="button" className="btn small" disabled={busy || !/^0x[0-9a-fA-F]{64}$/.test(hash)} onClick={() => save(chain, hash)}>Add</button>
+          <input value={hash} onChange={(e) => setHash(e.target.value.trim())} placeholder="Locker address or deploy transaction 0x…" style={{ flex: 1, minWidth: 180 }} spellCheck={false} />
+          <button type="button" className="btn small" disabled={busy || !/^0x([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/.test(hash)} onClick={async () => { setBusy(true); try { await save(chain, hash); } finally { setBusy(false); } }}>Add</button>
         </div>
       </details>
       {hash && !busy && msg && !msg.startsWith("✅") && (
