@@ -161,3 +161,15 @@ drop policy if exists "trades public" on public.token_trades;
 create policy "trades public" on public.token_trades for select to anon, authenticated using (true);
 revoke all on public.token_trades from anon, authenticated;
 grant select on public.token_trades to anon, authenticated;
+
+-- ---------- more chains: Base, Robinhood Chain and Solana ----------
+alter table public.tracked_tokens drop constraint if exists tracked_tokens_chain_check;
+alter table public.tracked_tokens add constraint tracked_tokens_chain_check check (chain in ('bsc','ethereum','base','robinhood','solana'));
+alter table public.tracked_tokens drop constraint if exists tracked_tokens_token_check;
+alter table public.tracked_tokens add constraint tracked_tokens_token_check check (token ~ '^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$');
+alter table public.tracked_tokens drop constraint if exists tracked_tokens_dev_check;
+alter table public.tracked_tokens add constraint tracked_tokens_dev_check check (dev is null or dev ~ '^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$');
+alter table public.token_holders drop constraint if exists token_holders_wallet_check;
+alter table public.token_holders add constraint token_holders_wallet_check check (wallet ~ '^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$');
+-- Solana keeps each wallet's tokens in a separate "token account"; remembering it makes balance checks one cheap read.
+alter table public.token_holders add column if not exists token_account text check (token_account is null or token_account ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$');

@@ -7,7 +7,8 @@ import { insights } from "@/lib/analytics-insights";
 import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analytics-signals";
 import { getPairStats } from "@/lib/market";
 import TradePlans from "@/components/TradePlans";
-import { ACHAINS, checkToken, heldFor, isAChain, syncTrades } from "@/lib/analytics";
+import { ACHAINS, checkToken, heldFor, isAChain, isChainAddress, syncTrades } from "@/lib/analytics";
+import { walletUrl } from "@/lib/explorer";
 import AutoRefresh from "@/components/AutoRefresh";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 
@@ -31,7 +32,7 @@ function status(h: any, last: any) {
 }
 
 export default async function TokenAnalytics({ params }: { params: { chain: string; token: string } }) {
-  if (!isAChain(params.chain) || !/^0x[0-9a-fA-F]{40}$/.test(params.token)) notFound();
+  if (!isAChain(params.chain) || !isChainAddress(params.chain, params.token)) notFound();
   const chain = params.chain, c = ACHAINS[chain];
   const sb = supabaseServer();
   let { data: t } = await sb.from("tracked_tokens").select("*").eq("chain", chain).eq("token", params.token).maybeSingle();
@@ -117,6 +118,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
           {flag(s.openSource, "Code is public", "Code is hidden")}
           {flag(s.mintable === false ? true : s.mintable === true ? false : null, "No new tokens can be made", "Owner can make new tokens")}
           {flag(s.canTakeBack === false ? true : s.canTakeBack === true ? false : null, "Ownership can't be taken back", "Ownership can be taken back")}
+          {flag(s.freezable === false ? true : s.freezable === true ? false : null, "Wallets can't be frozen", "The owner can freeze your tokens")}
         </div>
       </div>
 
@@ -164,7 +166,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
                 <span className={"risk-pill " + g.risk.level}>{g.risk.level === "high" ? "Likely to sell" : g.risk.level === "medium" ? "Might sell" : "Calm"} · {g.risk.score}/100</span>
               </div>
               <div className="club-conn">
-                {g.wallets.map((w) => <a key={w} className="mono" href={`${c.explorer}/token/${t.token}?a=${w}`} target="_blank" rel="noopener noreferrer">{short(w)}{w === t.dev ? " (dev)" : ""}</a>)}
+                {g.wallets.map((w) => <a key={w} className="mono" href={walletUrl(c.explorer, t.token, w)} target="_blank" rel="noopener noreferrer">{short(w)}{w === t.dev ? " (dev)" : ""}</a>)}
               </div>
               <small className="muted">Why connected: {g.how.join("; ")}.</small>
               {g.risk.reasons.length > 0 && <small>Why they might sell: {g.risk.reasons.join("; ")}.</small>}
@@ -175,7 +177,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         {!suspects.length && <div className="empty">✓ No wallet looks likely to sell right now.</div>}
         <div className="alert-list">
           {suspects.slice(0, 8).map((x) => (
-            <a key={x.wallet} className="alert-row suspect" href={`${c.explorer}/token/${t.token}?a=${x.wallet}`} target="_blank" rel="noopener noreferrer">
+            <a key={x.wallet} className="alert-row suspect" href={walletUrl(c.explorer, t.token, x.wallet)} target="_blank" rel="noopener noreferrer">
               <span className={"risk-ring " + x.risk.level} style={{ ["--r" as any]: x.risk.score }}>{x.risk.score}</span>
               <span className="grow">
                 <span className="mono">{short(x.wallet)}</span>{x.isDev ? " (dev)" : ""} <span className="muted">· holds {pct(x.pct)}</span>
@@ -189,7 +191,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
       <div className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}><h2>⚡ Live trades</h2><span className="live-dot">LIVE · updates every minute</span></div>
-        {!trades?.length && <div className="empty">{t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
+        {!trades?.length && <div className="empty">{chain === "solana" ? "Live trades for Solana are coming soon. Sells by the top wallets and the dev are still caught by the balance checks every few minutes." : t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
         <div className="alert-list">
           {(trades || []).slice(0, 15).map((x: any) => (
             <a key={x.tx_hash + x.wallet + x.side} className={"alert-row trade " + x.side} href={`${c.explorer}/tx/${x.tx_hash}`} target="_blank" rel="noopener noreferrer">
@@ -218,7 +220,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         {!dev ? <p className="muted">We couldn&apos;t find who launched this token.</p> : (
           <>
             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-              <a className="mono" href={`${c.explorer}/token/${t.token}?a=${dev.wallet}`} target="_blank" rel="noopener noreferrer">{short(dev.wallet)}</a>
+              <a className="mono" href={walletUrl(c.explorer, t.token, dev.wallet)} target="_blank" rel="noopener noreferrer">{short(dev.wallet)}</a>
               <span className="badge v">{t.dev_source === "launchpad" ? "Launched on AUTISTIK" : t.dev_source === "creator" ? "Created the contract" : "Contract owner"}</span>
               <span>holds <b>{pct(dev.pct)}</b> of supply ({amt(dev.balance)} {t.symbol})</span>
               {(dev.acquired_at || dev.first_seen_at) && <span className="muted">· since {heldFor(dev.acquired_at || dev.first_seen_at)} ago</span>}
@@ -241,7 +243,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
               <div key={h.wallet} className={"an-row" + (h.is_dev ? " is-dev" : "")} role="row">
                 <span className="muted">{h.rank}</span>
                 <span className="an-wallet">
-                  <a className="mono" href={`${c.explorer}/token/${t.token}?a=${h.wallet}`} target="_blank" rel="noopener noreferrer">{short(h.wallet)}</a>
+                  <a className="mono" href={walletUrl(c.explorer, t.token, h.wallet)} target="_blank" rel="noopener noreferrer">{short(h.wallet)}</a>
                   {h.is_dev && <span className="badge gold">DEV</span>}
                   {h.is_contract && <span className="badge">{h.label || "Contract / pool"}</span>}
                   {!h.is_contract && h.label && <span className="badge">{h.label}</span>}

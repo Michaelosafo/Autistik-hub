@@ -1,4 +1,5 @@
 "use client";
+import { walletUrl } from "@/lib/explorer";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { seatOf, sellRisk, type EventRow, type HolderRow, type LinkRow, type Risk } from "@/lib/analytics-insights";
 
@@ -227,7 +228,7 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
           <div className="stack" style={{ gap: 6 }}>
             <div>
               <b>{picked.h.is_dev ? "👑 Dev · " : ""}{pickedPiece ? `${GLYPH[pickedPiece.side][pickedPiece.kind]} ${pickedPiece.side === "buy" ? "Holder" : "Seller"} ${NAME[pickedPiece.kind]}` : "🪑 On the bench"}</b>{" "}
-              <a className="mono" href={`${explorer}/token/${token}?a=${picked.h.wallet}`} target="_blank" rel="noopener noreferrer">{short(picked.h.wallet)}</a>
+              <a className="mono" href={walletUrl(explorer, token, picked.h.wallet)} target="_blank" rel="noopener noreferrer">{short(picked.h.wallet)}</a>
             </div>
             <div className="hold-grid">
               <div><span>Holds</span><b>{pct(n(picked.h.pct))}</b><small>of the supply</small></div>

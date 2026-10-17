@@ -89,7 +89,7 @@ export function whoMightSell(input: Input): { groups: Group[]; suspects: Suspect
     if (pct >= 5) { score += 10; reasons.push(`together they hold ${p(pct)}, enough to move the price`); }
     if (inside.some((l) => l.kind === "same-block")) reasons.push("they bought at the exact same moment, which bots and bundlers do");
     score = Math.min(95, score);
-    return { wallets: ws, pct, how, withDev, soldRecently: !!sold, risk: { score, level: score >= 55 ? "high" : score >= 30 ? "medium" : "low", reasons } };
+    return { wallets: ws, pct, how, withDev, soldRecently: !!sold, risk: { score, level: (score >= 55 ? "high" : score >= 30 ? "medium" : "low") as Risk["level"], reasons } };
   }).sort((a, b) => b.risk.score - a.risk.score || b.pct - a.pct);
 
   return { groups, suspects: suspects.filter((s) => s.risk.level !== "low") };
@@ -154,6 +154,7 @@ export function tradeCall(input: Input & { supply?: number }): Verdict {
   const top10 = input.holders.filter((x) => x.in_top && !x.is_contract).sort((a, b) => n(b.pct) - n(a.pct)).slice(0, 10).reduce((a, x) => a + n(x.pct), 0);
   if (top10 > 50) { score -= 10; reasons.push({ level: "bad", text: `The 10 biggest wallets hold ${p(top10)}: a few people can crash the price.` }); }
   if (n(s.sellTax) > 10) { score -= 10; reasons.push({ level: "bad", text: `Sell tax is ${Math.round(n(s.sellTax))}%.` }); }
+  if (s.freezable === true) { score -= 15; reasons.push({ level: "bad", text: "The owner can freeze wallets, so you might not be able to sell." }); }
 
   score = Math.max(0, Math.min(100, score));
   const base = { score, reasons: reasons.sort((a, b) => ({ bad: 0, warn: 1, good: 2 }[a.level] - { bad: 0, warn: 1, good: 2 }[b.level])) };
@@ -212,6 +213,7 @@ export function holdOutlook(input: Input, call: Verdict): { long: Outlook; short
   const top10 = input.holders.filter((x) => x.in_top && !x.is_contract).sort((a, b) => n(b.pct) - n(a.pct)).slice(0, 10).reduce((a, x) => a + n(x.pct), 0);
   if (top10 > 50) { score -= 10; r.push({ level: "bad", text: `The 10 biggest wallets hold ${p(top10)}. If they leave, the price falls hard.` }); }
   if (s.honeypot === true) { score -= 40; r.push({ level: "bad", text: "Honeypot warning: you may never be able to sell." }); }
+  if (s.freezable === true) { score -= 15; r.push({ level: "bad", text: "The owner can freeze wallets. A long hold could get stuck." }); }
   if (s.mintable === true) { score -= 10; r.push({ level: "warn", text: "The owner can make new tokens, which can water down your bag over time." }); }
   const week = input.trades.filter((t) => within(t.at, 7 * DAY, now));
   const wb = new Set(week.filter((t) => t.side === "buy").map((t) => t.wallet)).size, ws = new Set(week.filter((t) => t.side === "sell").map((t) => t.wallet)).size;

@@ -33,8 +33,17 @@ export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixe
       <select value={chain} onChange={(e) => setChain(e.target.value)} aria-label="Chain">
         <option value="bsc">BNB Chain</option>
         <option value="ethereum">Ethereum</option>
+        <option value="base">Base</option>
+        <option value="robinhood">Robinhood Chain</option>
+        <option value="solana">Solana</option>
       </select>
-      <input value={token} onChange={(e) => setToken(e.target.value)} placeholder="Paste a token address (0x…)" aria-label="Token address" spellCheck={false} autoComplete="off" />
+      <input value={token} onChange={(e) => {
+        const v = e.target.value;
+        setToken(v);
+        // Pasted a Solana address? Switch to Solana. Pasted an 0x address while on Solana? Switch back.
+        if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.trim())) setChain("solana");
+        else if (/^0x/i.test(v.trim()) && chain === "solana") setChain("bsc");
+      }} placeholder={chain === "solana" ? "Paste a Solana token address" : "Paste a token address (0x…)"} aria-label="Token address" spellCheck={false} autoComplete="off" />
       <button className="btn primary" type="submit" disabled={busy || !token.trim()}>{busy ? "Scanning…" : "🔎 " + label}</button>
       {err && <p className="scan-err" role="alert">{err}</p>}
     </form>

@@ -31,6 +31,7 @@ export default async function AnalyticsPage() {
       </div>
       <div className="card stack">
         <AnalyticsScan signedIn={!!user} />
+        <div className="chain-chips" aria-label="Chains you can scan">{["BNB Chain", "Ethereum", "Base", "Robinhood Chain", "Solana"].map((n) => <span key={n} className="badge v">{n}</span>)}</div>
         <p className="muted" style={{ fontSize: ".82em" }}>Tokens launched on AUTISTIK are tracked automatically. Scanning a token also turns on its sell alerts for you (🔔 at the top).</p>
       </div>
 
