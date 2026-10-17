@@ -1,4 +1,5 @@
 import { json } from "@/lib/ai";
+import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { isAChain, isChainAddress } from "@/lib/analytics";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
   const sb = supabaseService();
   if (body?.on === false) {
     await sb.from("token_pins").delete().eq("user_id", user.id).eq("chain", chain).eq("token", token);
+    logActivity(user.id, "unpin", `${token.slice(0, 8)}… on ${chain}`, `/analytics/${chain}/${token}`);
     return json({ pinned: false });
   }
   const { data: t } = await sb.from("tracked_tokens").select("token").eq("chain", chain).eq("token", token).maybeSingle();
@@ -34,5 +36,6 @@ export async function POST(req: Request) {
   await sb.from("launch_watchers").upsert({ user_id: user.id, chain, token }, { onConflict: "user_id,chain,token", ignoreDuplicates: true });
   // Work out the zone and signals now, so My pins shows them straight away (no alert for this first reading).
   await checkSignals(chain, token, []).catch(() => 0);
+  logActivity(user.id, "pin", `${token.slice(0, 8)}… on ${chain}`, `/analytics/${chain}/${token}`);
   return json({ pinned: true });
 }

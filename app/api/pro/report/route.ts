@@ -1,4 +1,5 @@
 import { anthropic, aiErrorMessage, cheap, json, logCost, MODEL } from "@/lib/ai";
+import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { isAChain, isChainAddress, ACHAINS } from "@/lib/analytics";
 import { analyse } from "@/lib/analytics-alerts";
@@ -62,6 +63,7 @@ export async function POST(req: Request) {
     } as any);
     logCost(MODEL, "chat", msg.usage);
     const report = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
+    logActivity(user.id, "report", `Analyst report: ${t.symbol || token.slice(0, 8)}`, `/analytics/${chain}/${token}`);
     return json({ report: report || "Couldn't write a report right now. Try again in a minute." });
   } catch (e) {
     return json({ error: aiErrorMessage(e, "The analyst") }, 502);

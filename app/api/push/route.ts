@@ -1,4 +1,5 @@
 import { json } from "@/lib/ai";
+import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { pushKey } from "@/lib/push";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
   const { data: mine } = await sb.from("push_subscriptions").select("id").eq("user_id", user.id).order("created_at", { ascending: false });
   if ((mine || []).length >= 10) await sb.from("push_subscriptions").delete().in("id", mine!.slice(9).map((r: any) => r.id));
   await sb.from("push_subscriptions").upsert({ user_id: user.id, endpoint, p256dh, auth }, { onConflict: "endpoint" });
+  logActivity(user.id, "alerts", "Turned on phone alerts");
   return json({ ok: true });
 }
 

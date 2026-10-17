@@ -898,3 +898,16 @@ a.alert-row:hover{background:var(--surface-2)}
 .pro-hero .muted{color:rgba(246,236,210,.75)}
 .pro-price{font-size:1.05em}
 .pro-strip{display:block;padding:10px 12px;border-radius:12px;background:linear-gradient(90deg,rgba(233,182,90,.18),rgba(233,182,90,.05));border:1px solid rgba(201,162,39,.5);color:inherit;text-decoration:none;font-size:.9em}
+.admin-only{border:2px dashed var(--violet)}
+
+/* ===== Admin: site activity ===== */
+.vbars{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:4px;height:120px;align-items:end}
+.vbar{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+.vbar span{width:100%;min-height:2px;border-radius:6px 6px 2px 2px;background:var(--violet)}
+.vbar small{font-size:.66em;color:var(--muted)}
+.sa-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media (max-width:860px){.sa-grid{grid-template-columns:1fr}}
+.sa-list{margin:6px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.sa-list li{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:var(--surface-2);font-size:.86em;overflow-wrap:anywhere}
+.token-search{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:14px;background:var(--surface)}
+.token-search .scan-form{margin:0}
