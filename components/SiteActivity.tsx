@@ -30,8 +30,8 @@ export default async function SiteActivity() {
       <h2>📈 Site activity <span className="badge">Admin only</span></h2>
       <div className="an-stats">
         <div><span>Visits today</span><b>{x.today_views ?? 0}</b></div>
-        <div><span>Visitors today</span><b>{x.today_people ?? 0}</b></div>
-        <div><span>Visitors this week</span><b>{x.week_people ?? 0}</b></div>
+        <div><span>Real people today</span><b>{x.today_people ?? 0}</b></div>
+        <div><span>Real people this week</span><b>{x.week_people ?? 0}</b></div>
         <div><span>Signed-in this week</span><b>{x.week_signed ?? 0}</b></div>
       </div>
       <div className="an-stats">
@@ -41,10 +41,12 @@ export default async function SiteActivity() {
         <div><span>Visits this week</span><b>{x.week_views ?? 0}</b></div>
       </div>
 
+      <small className="muted">Real people = different internet connections (IP addresses), so the same person on several browsers or tabs counts once. Bots aren&apos;t counted. People sharing one Wi-Fi count as one. Browsers this week: {x.week_browsers ?? "–"}.</small>
+
       <b>Visits, last 14 days</b>
       <div className="vbars" aria-label="Visits per day">
         {days.map((d) => (
-          <div key={d.d} className="vbar" title={`${d.d}: ${d.views} visits, ${d.people} visitors`}>
+          <div key={d.d} className="vbar" title={`${d.d}: ${d.views} visits, ${d.people} real people`}>
             <span style={{ height: `${(d.views / peak) * 100}%` }} />
             <small>{d.d.slice(8)}</small>
           </div>
@@ -53,8 +55,8 @@ export default async function SiteActivity() {
 
       <div className="sa-grid">
         <section><b>Top pages (7 days)</b><ol className="sa-list">{(x.pages || []).map(([k, c]: [string, number]) => <li key={k}><span className="mono">{k}</span><b>{c}</b></li>)}</ol></section>
-        <section><b>Countries (7 days)</b><ol className="sa-list">{(x.countries || []).map(([k, c]: [string, number]) => <li key={k}><span>{k}</span><b>{c}</b></li>)}</ol></section>
-        <section><b>Devices (7 days)</b><ol className="sa-list">{(x.devices || []).map(([k, c]: [string, number]) => <li key={k}><span>{k === "phone" ? "📱 Phone" : k === "tablet" ? "📲 Tablet" : "💻 Computer"}</span><b>{Math.round((c / total) * 100)}%</b></li>)}</ol>
+        <section><b>Countries (7 days, people)</b><ol className="sa-list">{(x.countries || []).map(([k, c]: [string, number]) => <li key={k}><span>{k}</span><b>{c}</b></li>)}</ol></section>
+        <section><b>Devices (7 days)</b><ol className="sa-list">{(x.devices || []).map(([k, c]: [string, number]) => <li key={k}><span>{k === "phone" ? "📱 Phone" : k === "tablet" ? "📲 Tablet" : "💻 Computer"}</span><b>{Math.round((c / Math.max(1, x.week_people || total)) * 100)}%</b></li>)}</ol>
           <b style={{ display: "block", marginTop: 10 }}>Came from (7 days)</b>
           <ol className="sa-list">{(x.referrers || []).map(([k, c]: [string, number]) => <li key={k}><span>{k}</span><b>{c}</b></li>)}</ol>
         </section>
