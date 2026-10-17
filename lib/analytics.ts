@@ -68,18 +68,21 @@ const LOG_RPC: Record<AChain, string> = {
   base: process.env.ANALYTICS_BASE_LOG_RPC || "https://base-rpc.publicnode.com",
   robinhood: process.env.ANALYTICS_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
   solana: "",
-  arbitrum: "https://arbitrum-one-rpc.publicnode.com",
+  arbitrum: "https://arb1.arbitrum.io/rpc",
   polygon: "https://polygon-bor-rpc.publicnode.com",
   avalanche: "https://avalanche-c-chain-rpc.publicnode.com",
-  optimism: "https://optimism-rpc.publicnode.com",
+  optimism: "https://mainnet.optimism.io",
   sonic: "https://sonic-rpc.publicnode.com",
   berachain: "https://berachain-rpc.publicnode.com",
-  monad: "https://rpc.monad.xyz",
-  unichain: "https://unichain-rpc.publicnode.com",
+  // Free Monad nodes only allow 100 blocks per log read, too little to follow trades; set a paid node to turn it on.
+  monad: process.env.ANALYTICS_MONAD_RPC || "",
+  unichain: "https://mainnet.unichain.org",
   abstract: "https://api.mainnet.abs.xyz",
-  linea: "https://linea-rpc.publicnode.com",
+  linea: "https://rpc.linea.build",
   blast: "https://blast-rpc.publicnode.com",
 };
+/** Whether live trades can be read for this chain (Solana and chains without a usable log node can't). */
+export const hasLiveTrades = (c: AChain) => !isSol(c) && !!LOG_RPC[c];
 const logClient = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem, transport: http(LOG_RPC[c], { timeout: 15_000 }) });
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const num = (v: unknown) => { const n = Number(v); return isFinite(n) ? n : 0; };
@@ -396,7 +399,7 @@ export async function syncTrades(chain: AChain, token: string, maxChunks = 8): P
   if (!pair) return 0;
   if (!t.pair) await sb.from("tracked_tokens").update({ pair }).eq("chain", chain).eq("token", token);
   // Solana trades aren't read from logs; its sells are caught by the balance checks instead.
-  if (isSol(chain)) { await sb.from("tracked_tokens").update({ trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
+  if (!hasLiveTrades(chain)) { await sb.from("tracked_tokens").update({ trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
   const lc = logClient(chain);
   const head = await lc.getBlockNumber();
   let from = t.last_block ? BigInt(t.last_block) + 1n : head - LOOKBACK;

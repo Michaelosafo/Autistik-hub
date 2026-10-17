@@ -9,7 +9,7 @@ import { getPairStats } from "@/lib/market";
 import TradePlans from "@/components/TradePlans";
 import PinButton from "@/components/PinButton";
 import { stateOf, type SignalState } from "@/lib/analytics-alerts";
-import { ACHAINS, checkToken, heldFor, isAChain, isChainAddress, syncTrades } from "@/lib/analytics";
+import { ACHAINS, checkToken, hasLiveTrades, heldFor, isAChain, isChainAddress, syncTrades } from "@/lib/analytics";
 import { walletUrl } from "@/lib/explorer";
 import AutoRefresh from "@/components/AutoRefresh";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -204,7 +204,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
       <div className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}><h2>⚡ Live trades</h2><span className="live-dot">LIVE · updates every minute</span></div>
-        {!trades?.length && <div className="empty">{chain === "solana" ? "Live trades for Solana are coming soon. Sells by the top wallets and the dev are still caught by the balance checks every few minutes." : t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
+        {!trades?.length && <div className="empty">{!hasLiveTrades(chain) ? `Live trades for ${c.name} are coming soon. Sells by the top wallets and the dev are still caught by the balance checks every few minutes.` : t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
         <div className="alert-list">
           {(trades || []).slice(0, 15).map((x: any) => (
             <a key={x.tx_hash + x.wallet + x.side} className={"alert-row trade " + x.side} href={`${c.explorer}/tx/${x.tx_hash}`} target="_blank" rel="noopener noreferrer">
