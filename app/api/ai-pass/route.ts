@@ -53,7 +53,7 @@ export async function GET() {
 // Turns a confirmed BNB payment to the treasury into an AI Pass for the signed-in account.
 // Everything is checked on BNB Chain; only the transaction hash comes from the request.
 export async function POST(req: Request) {
-  if (!TREASURY) return json({ error: "AI Passes aren't on sale yet." }, 503);
+  if (!TREASURY) return json({ error: "Assistant Passes aren't on sale yet." }, 503);
   const user = await signedInUser();
   if (!user) return json({ error: "Please sign in." }, 401);
   const slow = await rateLimit(req, "ai-pass", 10, 600, user.id);
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   if (!tx.to || getAddress(tx.to) !== getAddress(TREASURY)) return json({ error: "That payment didn't go to the AUTISTIK wallet." }, 400);
   if (Date.now() / 1000 - Number(block.timestamp) > MAX_AGE_SECONDS) return json({ error: "That payment is more than 2 days old." }, 400);
   // The payment carries this account's id, so a payment can't be claimed by someone else.
-  if ((tx.input || "0x").toLowerCase() !== passTag(user.id)) return json({ error: "That payment wasn't made from this account's AI Pass button. Use the Pay button while signed in." }, 400);
+  if ((tx.input || "0x").toLowerCase() !== passTag(user.id)) return json({ error: "That payment wasn't made from this account's Assistant Pass button. Use the Pay button while signed in." }, 400);
 
   const price = await bnbPriceUsd();
   if (!price) return json({ error: "Couldn't get the BNB price right now. Try again in a minute." }, 502);

@@ -6,6 +6,7 @@ import { maleUtterance } from "@/lib/voice";
 import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, type LiquidityLock } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
+import { useStickToBottom } from "@/lib/use-stick-bottom";
 
 type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean; born?: number };
 type Turn = { role: "user" | "assistant"; content: string };
@@ -54,7 +55,8 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
   const newSession = () => { session.current = (crypto as any).randomUUID?.() || Math.random().toString(36).slice(2) + Date.now().toString(36); };
   if (!session.current) newSession();
 
-  useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs]);
+  useStickToBottom(box, [mode]);
+  useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [msgs.length]);
   useEffect(() => {
     setCanSpeak("speechSynthesis" in window);
     setCanListen(!!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));
@@ -199,18 +201,18 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
     <div className="stack">
       <div className="launch-modes" role="tablist" aria-label="How do you want to launch?">
         <button type="button" role="tab" aria-selected={mode === "quick"} onClick={() => pickMode("quick")}>
-          <b>⚡ Quick launch</b><span>Fill in one short form. No AI, free and unlimited.</span>
+          <b>⚡ Quick launch</b><span>Fill in one short form. No assistant, free and unlimited.</span>
         </button>
         <button type="button" role="tab" aria-selected={mode === "ai"} onClick={() => pickMode("ai")}>
-          <b>🤖 Launch with Autistik</b><span>Autistik asks the questions by text or voice. {AI_LAUNCH_SESSIONS} AI sessions a day{sessionsLeft !== null ? ` · ${sessionsLeft} left today` : ""}.</span>
+          <b>🤖 Launch with Autistik</b><span>Autistik asks the questions by text or voice. {AI_LAUNCH_SESSIONS} assistant sessions a day{sessionsLeft !== null ? ` · ${sessionsLeft} left today` : ""}.</span>
         </button>
       </div>
       <div className="kai lp">
         {mode === "quick" ? <QuickLaunch disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
         <div className="card chat lux launch-ai" data-c="autistik" data-mood="motivation">
           <div className="lux-top">
-            <div className="lux-who"><button type="button" aria-selected="true" tabIndex={-1}><Bot /><span>Autistik · Launch AI</span></button></div>
-            <span className="lux-online"><i />{talking ? "Speaking…" : "AI online"}</span>
+            <div className="lux-who"><button type="button" aria-selected="true" tabIndex={-1}><Bot /><span>Autistik · Launch Assistant</span></button></div>
+            <span className="lux-online"><i />{talking ? "Speaking…" : "Assistant online"}</span>
             {canSpeak && (
               <button className="lux-icon" type="button" aria-pressed={voice} onClick={toggleVoice} title={voice ? "Autistik reads its questions aloud. Tap to turn off." : "Read questions aloud"}>
                 {talking ? "🔊" : voice ? "🔉" : "🔈"}<span className="sr-only">Read questions aloud</span>
@@ -227,7 +229,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
               <div className="lux-ring"><Art kind="robot" who="autistik" mood="motivation" className="lux-bot" /></div>
               <div className="lux-hello">
                 <h2>Hi, I&apos;m <span className="lux-name">Autistik</span></h2>
-                <p>Your launch AI. I ask a few quick questions, build your launch plan, and you sign. 🚀</p>
+                <p>Your launch assistant. I ask a few quick questions, build your launch plan, and you sign. 🚀</p>
                 <span className="lux-here"><i />{sessionsLeft !== null ? `${sessionsLeft} of ${AI_LAUNCH_SESSIONS} launch chats left today` : "Ready to launch"}</span>
               </div>
             </div>

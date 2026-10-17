@@ -95,7 +95,7 @@ export async function POST(req: Request) {
     return json({
       limit: true, sessionsLeft: turn.sessions_left ?? 0,
       error: turn.reason === "messages"
-        ? "This AI session has reached its 30-message limit. Use the Quick launch form, or press Start over to begin a new AI session."
+        ? "This assistant session has reached its 30-message limit. Use the Quick launch form, or press Start over to begin a new assistant session."
         : `You've used today's ${AI_LAUNCH_SESSIONS} AI launch sessions. The Quick launch form has no limit, or come back tomorrow.`,
     }, 429);
   }

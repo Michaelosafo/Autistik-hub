@@ -9,7 +9,7 @@ type Status = {
 };
 
 /**
- * AI Pass card: shows free messages left today or when the pass ends, and lets a member pay in BNB from their wallet.
+ * Assistant Pass card: shows free messages left today or when the pass ends, and lets a member pay in BNB from their wallet.
  * `refreshKey` reloads the status (the chat bumps it after each message). `highlight` makes it stand out when
  * today's free messages have just run out.
  */
@@ -34,7 +34,7 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
     const res = await fetch("/api/ai-pass", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ txHash: hash }) });
     const d = await res.json().catch(() => ({}));
     if (!res.ok) { setMsg(d.error || "Couldn't start your pass. Contact an admin with your transaction link."); return; }
-    setMsg(`✅ Your AI Pass is active until ${new Date(d.passUntil).toLocaleDateString()}. Enjoy!`);
+    setMsg(`✅ Your Assistant Pass is active until ${new Date(d.passUntil).toLocaleDateString()}. Enjoy!`);
     setTxHash("");
     load();
     onPaid?.();
@@ -52,7 +52,7 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
       try { await wallet.switchChain({ id: bsc.chainId }); } catch { await wallet.addChain({ chain: vchain }); await wallet.switchChain({ id: bsc.chainId }); }
       // Latest price, so the amount is right at the moment you pay.
       const fresh: Status = await fetch("/api/ai-pass", { cache: "no-store" }).then((r) => r.json());
-      if (!fresh.onSale || !fresh.wei || !fresh.treasury) { setMsg("AI Passes aren't on sale right now. Try again later."); return; }
+      if (!fresh.onSale || !fresh.wei || !fresh.treasury) { setMsg("Assistant Passes aren't on sale right now. Try again later."); return; }
       const value = BigInt(fresh.wei);
       setMsg(`Confirm ${formatEther(value)} BNB in your wallet…`);
       // Your account id rides along with the payment, so only your account can use it.
@@ -72,11 +72,11 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
     try { await navigator.clipboard.writeText(s.treasury); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
 
-  if (s.admin) return <div className="card stack" style={{ fontSize: ".9em" }}><h3>AI Pass</h3><p className="muted">You&apos;re an admin, so the AI is free for you.</p></div>;
+  if (s.admin) return <div className="card stack" style={{ fontSize: ".9em" }}><h3>Assistant Pass</h3><p className="muted">You&apos;re an admin, so the assistant is free for you.</p></div>;
 
   return (
     <div className="card stack" id="ai-pass" style={{ fontSize: ".9em", ...(highlight && !active ? { outline: "2px solid var(--accent, #7c5cff)" } : {}) }}>
-      <h3>🎟️ AI Pass</h3>
+      <h3>🎟️ Assistant Pass</h3>
       {active ? (
         <p>Your pass is active until <b>{new Date(s.passUntil!).toLocaleDateString()}</b>. Paying again adds {s.days} more days.</p>
       ) : (
@@ -90,7 +90,7 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
         <tr><th>Pay on</th><td>BNB Chain, from your wallet</td></tr>
       </tbody></table>
       {!s.onSale ? (
-        <div className="notice warn" style={{ fontSize: ".9em" }}>AI Passes aren&apos;t on sale yet. Check back soon.</div>
+        <div className="notice warn" style={{ fontSize: ".9em" }}>Assistant Passes aren&apos;t on sale yet. Check back soon.</div>
       ) : (
         <>
           <button className="btn primary" type="button" disabled={busy} onClick={pay}>{busy ? "Working…" : `${active ? "Add" : "Get"} ${s.days} days for $${s.usd} in BNB`}</button>
@@ -113,7 +113,7 @@ export default function AIPass({ refreshKey = 0, highlight = false, onPaid }: { 
         </>
       )}
       {msg && <span className="muted" role="status">{msg}</span>}
-      <p className="muted" style={{ fontSize: ".85em" }}>With a pass: up to {s.dailyLimit} messages a day and the more advanced AI model. A picture counts as 5 messages. Autistik on the Launch page is free (2 sessions a day). Passes aren&apos;t refundable.</p>
+      <p className="muted" style={{ fontSize: ".85em" }}>With a pass: up to {s.dailyLimit} messages a day and the more advanced assistant. A picture counts as 5 messages. Autistik on the Launch page is free (2 sessions a day). Passes aren&apos;t refundable.</p>
     </div>
   );
 }
