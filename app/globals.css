@@ -922,3 +922,15 @@ a.alert-row:hover{background:var(--surface-2)}
 .bubble-map a circle{transition:stroke-width .15s}
 .bubble-map a:hover circle,.bubble-map a:focus circle{stroke-width:4}
 .bubble-map figcaption{font-size:.8em}
+
+/* Momentum */
+.chips .chip[aria-current="page"]{border-color:var(--teal);background:var(--teal-soft);font-weight:700}
+.mo-card.hot{border-color:var(--sun);box-shadow:0 0 0 1px var(--sun-soft)}
+.mo-score{font-size:1.6em;font-weight:800;line-height:1;padding:8px 12px;border-radius:12px;background:var(--surface-2);text-align:center;font-variant-numeric:tabular-nums;flex-shrink:0}
+.mo-score small{font-size:.45em;font-weight:600;color:var(--muted)}
+.mo-score.hot{background:var(--sun-soft)} .mo-score.building{background:var(--teal-soft)} .mo-score.avoid{background:var(--alert-soft)}
+.mo-stats{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.88em}
+.mo-plan{border-radius:10px;padding:10px 12px;background:var(--teal-soft);display:flex;flex-direction:column;gap:6px}
+.mo-plan.dip,.mo-plan.wait{background:var(--sun-soft)} .mo-plan.avoid{background:var(--alert-soft)}
+.mo-levels{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.9em}
+.mo-why{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px;font-size:.9em}

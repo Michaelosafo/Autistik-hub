@@ -14,7 +14,7 @@ type NavItem = { href: string; name: string; short?: string; icon: string; railO
 // Each menu item is one section. Sections with several pages show tabs at the top (components/SectionTabs).
 const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
-  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/trade", "/perps", "/lockers"] },
+  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/trade", "/perps", "/lockers", "/momentum"] },
   { href: "/analytics", name: "Analytics", short: "Stats", icon: "i-stats" },
   { href: "/companions", name: "Chat & Community", short: "Chat", icon: "i-kai", match: ["/companions", "/community", "/sessions"] },
   { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"] },

@@ -315,3 +315,21 @@ alter table public.tracked_tokens add column if not exists image_url text check 
 create table if not exists public.locker_contracts (chain text primary key, address text not null check (address ~ '^0x[0-9a-fA-F]{40}$'), tx_hash text, verified boolean not null default false, deployed_at timestamptz not null default now());
 alter table public.locker_contracts enable row level security;
 create policy "locker contracts are public" on public.locker_contracts for select using (true);
+
+-- Momentum: fast movers, their 48-hour track record, and members' momentum alerts (server-only tables).
+create table if not exists public.momentum_picks (id bigserial primary key, chain text not null, pool text not null, token text not null, symbol text, score int, entry numeric not null, peak numeric not null, low numeric not null, tp1_at timestamptz, tp2_at timestamptz, stop_at timestamptz, picked_at timestamptz not null default now());
+create index if not exists momentum_picks_at on public.momentum_picks (picked_at desc);
+create table if not exists public.momentum_alerts (user_id uuid primary key references auth.users(id) on delete cascade, enabled boolean not null default true, chains text[] not null default '{bsc,base,solana}', min_score int not null default 70 check (min_score between 0 and 100), min_liquidity numeric not null default 30000, max_mcap numeric, follow_ups boolean not null default true, updated_at timestamptz not null default now());
+create table if not exists public.momentum_sent (user_id uuid not null references auth.users(id) on delete cascade, chain text not null, pool text not null, kind text not null check (kind in ('new','tp1','tp2','stop')), sent_at timestamptz not null default now(), primary key (user_id, chain, pool, kind));
+create table if not exists public.momentum_state (id int primary key default 1 check (id = 1), last_run timestamptz not null default 'epoch');
+insert into public.momentum_state (id) values (1) on conflict do nothing;
+alter table public.momentum_picks enable row level security;
+alter table public.momentum_alerts enable row level security;
+alter table public.momentum_sent enable row level security;
+alter table public.momentum_state enable row level security;
+create or replace function public.momentum_lease(p_seconds integer) returns boolean language sql security definer set search_path to 'public' as $$
+  update public.momentum_state set last_run = now() where id = 1 and last_run < now() - make_interval(secs => p_seconds) returning true;
+$$;
+revoke all on function public.momentum_lease(integer) from public, anon, authenticated;
+grant execute on function public.momentum_lease(integer) to service_role;
+select cron.schedule('autistik-momentum', '*/5 * * * *', $$ select net.http_get('https://autistik.io/api/momentum/cron') $$);
