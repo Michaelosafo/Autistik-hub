@@ -8,6 +8,8 @@ import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analyt
 import { getCandles, getPairStats } from "@/lib/market";
 import { zones } from "@/lib/analytics-zones";
 import ZoneCard from "@/components/ZoneCard";
+import BundleCard from "@/components/BundleCard";
+import { bundleCheck } from "@/lib/analytics-bundle";
 import TokenLogo from "@/components/TokenLogo";
 import ProCard from "@/components/ProCard";
 import { isPro } from "@/lib/pro-server";
@@ -96,9 +98,11 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   }
   const plans = tradingPlans(call, hold, move);
   const zoneBase = { move, call, long: hold.long, security: t.security, holders: (holders || []) as any };
+  const bundle = bundleCheck({ holders: (holders || []) as any, trades: (trades || []) as any, links: (links || []) as any, dev: t.dev });
   const zone = zones({
     candles: await candlePromise, move, call, long: hold.long, security: t.security, holders: (holders || []) as any,
     devSold: (trades || []).some((x: any) => x.wallet === t.dev && x.side === "sell") || (events || []).some((e: any) => e.is_dev && e.kind !== "buy"),
+    bundle,
   });
   const { data: pin } = await pinPromise;
   const [pro, record] = await Promise.all([isPro(user?.id), trackRecord(chain, t.token)]);
@@ -156,6 +160,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
 
       <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />
+      <BundleCard b={bundle} explorer={c.explorer} token={t.token} />
       <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
         frames={pro ? await confluence(chain, t.pair, zoneBase, zone) : undefined}
         whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />

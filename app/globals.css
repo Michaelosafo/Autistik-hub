@@ -911,3 +911,14 @@ a.alert-row:hover{background:var(--surface-2)}
 .sa-list li{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;background:var(--surface-2);font-size:.86em;overflow-wrap:anywhere}
 .token-search{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:14px;background:var(--surface)}
 .token-search .scan-form{margin:0}
+
+/* ===== Bundle check + bubble map ===== */
+.bundle-card{border:2px solid var(--line)}
+.bundle-card.high{border-color:var(--alert);background:linear-gradient(180deg,var(--alert-soft),var(--surface) 45%)}
+.bundle-card.some{border-color:var(--sun-bright);background:linear-gradient(180deg,var(--sun-soft),var(--surface) 45%)}
+.bundle-card.low{border-color:var(--teal)}
+.bubble-map{margin:0;display:flex;flex-direction:column;gap:6px}
+.bubble-map svg{width:100%;height:auto;border-radius:14px;background:var(--surface)}
+.bubble-map a circle{transition:stroke-width .15s}
+.bubble-map a:hover circle,.bubble-map a:focus circle{stroke-width:4}
+.bubble-map figcaption{font-size:.8em}
