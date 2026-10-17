@@ -8,6 +8,7 @@ import { ACHAINS, isAChain, type AChain } from "@/lib/analytics";
 import { getCandles, getPairStats } from "@/lib/market";
 import { holdOutlook, tradeCall, tradingPlans, type Plan, type Verdict } from "@/lib/analytics-signals";
 import { notify } from "@/lib/push";
+import { proUsersOf } from "@/lib/pro-server";
 import { usd, zones, type ZoneKind, type Zones } from "@/lib/analytics-zones";
 
 export type SignalState = "buy" | "take_profit" | "sell" | "wait" | "avoid";
@@ -57,7 +58,7 @@ export function zoneMessage(symbol: string, z: Zones) {
 export async function analyse(chain: AChain, token: string) {
   const sb = supabaseService();
   const [{ data: t }, { data: holders }, { data: events }, { data: links }, { data: trades }, move] = await Promise.all([
-    sb.from("tracked_tokens").select("symbol,dev,security,pair").eq("chain", chain).eq("token", token).maybeSingle(),
+    sb.from("tracked_tokens").select("symbol,dev,security,pair,total_supply").eq("chain", chain).eq("token", token).maybeSingle(),
     sb.from("token_holders").select("*").eq("chain", chain).eq("token", token),
     sb.from("holder_events").select("*").eq("chain", chain).eq("token", token).order("created_at", { ascending: false }).limit(500),
     sb.from("token_links").select("a,b,kind").eq("chain", chain).eq("token", token).limit(500),
@@ -73,7 +74,7 @@ export async function analyse(chain: AChain, token: string) {
   const plans = tradingPlans(call, hold, move);
   const devSold = !!t.dev && input.trades.some((x: any) => x.wallet === t.dev && x.side === "sell") || input.events.some((e: any) => e.is_dev && e.kind !== "buy");
   const zone = zones({ candles, move, call, long: hold.long, security: t.security, holders: input.holders, devSold });
-  return { t, call, plans, zone };
+  return { t, call, plans, zone, move, input, hold, candles };
 }
 
 /**
@@ -82,16 +83,39 @@ export async function analyse(chain: AChain, token: string) {
  */
 export async function checkSignals(chain: AChain, token: string, users: string[]) {
   const sb = supabaseService();
-  const [a, { data: prev }] = await Promise.all([analyse(chain, token), sb.from("token_signals").select("horizon,state,notified_at").eq("chain", chain).eq("token", token)]);
+  const [a, { data: prev }] = await Promise.all([analyse(chain, token), sb.from("token_signals").select("horizon,state,notified_at,detail").eq("chain", chain).eq("token", token)]);
   if (!a) return 0;
-  const { t, call, plans, zone } = a;
+  const { t, call, plans, zone, move, input } = a;
   const z = zone;
+  const oldZone: any = (prev || []).find((x: any) => x.horizon === "zone");
+  const checkedAt = new Date().toISOString();
   const rows = [
     { horizon: "zone" as const, state: ZONE_STATE[z.kind], msg: zoneMessage(t.symbol || "TOKEN", z),
-      detail: { kind: z.kind, title: z.title, price: z.price, buy: z.buy, sell: z.sell, strength: z.strength, rsi: z.rsi } },
+      detail: { kind: z.kind, title: z.title, price: z.price, buy: z.buy, sell: z.sell, strength: z.strength, rsi: z.rsi, liq: move?.liquidityUsd ?? null, checkedAt } },
     ...(["short", "long"] as const).map((h) => { const st = stateOf(plans[h], call, h); return { horizon: h, state: st, msg: message(t.symbol || "TOKEN", h, st, plans[h]), detail: null }; }),
   ];
+  // Track record: remember each new zone with its price, and grade the ones from 24 hours ago with today's price.
+  if (z.price && oldZone?.detail?.kind !== z.kind) await sb.from("signal_history").insert({ chain, token, kind: z.kind, price: z.price });
+  if (z.price) await sb.from("signal_history").update({ outcome_price: z.price, outcome_at: checkedAt })
+    .eq("chain", chain).eq("token", token).is("outcome_price", null).lt("at", new Date(Date.now() - 86_400_000).toISOString());
+
   let sent = 0;
+  // Pro alerts: a whale moving 1%+ of the supply since the last check, or the pool's money dropping fast.
+  const pros = await proUsersOf(users);
+  if (pros.length && oldZone?.detail) {
+    const sym = t.symbol || "TOKEN", link = `/analytics/${chain}/${token}`, supply = Number(t.total_supply) || 0;
+    const prevLiq = Number(oldZone.detail.liq) || 0, liq = move?.liquidityUsd ?? 0;
+    const pro: { title: string; body: string }[] = [];
+    if (prevLiq > 0 && liq > 0 && liq < prevLiq * 0.8) {
+      pro.push({ title: `🚨 $${sym}: pool money dropped ${Math.round((1 - liq / prevLiq) * 100)}%`, body: `Liquidity went from ${usd(prevLiq)} to ${usd(liq)} in minutes. This can be a rug pull or a big holder leaving. Protect your money. Not financial advice.` });
+    }
+    const since = Date.parse(oldZone.detail.checkedAt || 0) || Date.now() - 600_000;
+    for (const x of (input.trades as any[]).filter((x) => Date.parse(x.at) > since && supply && Number(x.amount) >= supply * 0.01).slice(0, 2)) {
+      const pct = ((Number(x.amount) / supply) * 100).toFixed(2);
+      pro.push({ title: `🐋 Whale ${x.side === "buy" ? "bought" : "sold"} ${pct}% of $${sym}`, body: `${x.wallet.slice(0, 6)}…${x.wallet.slice(-4)} ${x.side === "buy" ? "bought" : "sold"} ${pct}% of the supply. ${x.side === "buy" ? "Big buyers often lead the next move up." : "Big sellers can push the price down."} Not financial advice.` });
+    }
+    for (const m of pro) { await notify(pros.map((user_id) => ({ user_id, title: m.title, body: m.body, link, strong: true }))); sent += pros.length; }
+  }
   for (const r of rows) {
     const old = (prev || []).find((x: any) => x.horizon === r.horizon);
     const now = new Date().toISOString();

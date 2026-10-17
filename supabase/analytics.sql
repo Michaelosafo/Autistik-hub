@@ -223,3 +223,38 @@ revoke all on sequence public.push_subscriptions_id_seq from anon, authenticated
 alter table public.token_signals drop constraint if exists token_signals_horizon_check;
 alter table public.token_signals add constraint token_signals_horizon_check check (horizon in ('short','long','zone'));
 alter table public.token_signals add column if not exists detail jsonb;  -- price, buy range, sell range, strength
+
+-- ---------- AUTISTIK Pro (paid in $AUTISTIK) and the signal track record ----------
+create table if not exists public.pro_passes (
+  id bigserial primary key,
+  user_id uuid not null references auth.users on delete cascade,
+  tx_hash text not null unique check (tx_hash ~ '^0x[0-9a-f]{64}$'),
+  payer text not null,
+  amount numeric not null,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists pro_passes_user on public.pro_passes (user_id, ends_at desc);
+alter table public.pro_passes enable row level security;
+drop policy if exists "own pro" on public.pro_passes;
+create policy "own pro" on public.pro_passes for select to authenticated using (user_id = auth.uid());
+grant select on public.pro_passes to authenticated;
+
+-- Every buy/sell zone change with its price; graded with the price 24 hours later.
+create table if not exists public.signal_history (
+  id bigserial primary key,
+  chain text not null, token text not null,
+  kind text not null check (kind in ('buy','sell','falling','middle','breakout','avoid')),
+  price numeric not null,
+  at timestamptz not null default now(),
+  outcome_price numeric,
+  outcome_at timestamptz,
+  foreign key (chain, token) references public.tracked_tokens on delete cascade
+);
+create index if not exists signal_history_token on public.signal_history (chain, token, at desc);
+create index if not exists signal_history_open on public.signal_history (at) where outcome_price is null;
+alter table public.signal_history enable row level security;
+drop policy if exists "history public" on public.signal_history;
+create policy "history public" on public.signal_history for select to anon, authenticated using (true);
+grant select on public.signal_history to anon, authenticated;

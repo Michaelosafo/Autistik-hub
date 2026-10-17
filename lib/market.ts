@@ -112,12 +112,16 @@ const GT: Record<string, string> = {
   abstract: "abstract", linea: "linea", blast: "blast",
 };
 
-/** The last 3 days of hourly candles for a pool, oldest first. Cached for 5 minutes; empty when unavailable. */
-export async function getCandles(chain: string, pool: string | null | undefined) {
+// Candle sizes: 15 minutes (last day), 1 hour (last 3 days), 4 hours (last 10 days).
+const FRAMES = { "15m": "minute?aggregate=15&limit=96", "1h": "hour?limit=72", "4h": "hour?aggregate=4&limit=60" } as const;
+export type Frame = keyof typeof FRAMES;
+
+/** Candles for a pool, oldest first (hourly by default). Cached for 5 minutes; empty when unavailable. */
+export async function getCandles(chain: string, pool: string | null | undefined, frame: Frame = "1h") {
   const net = GT[chain];
   if (!net || !pool) return [];
   try {
-    const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${pool}/ohlcv/hour?limit=72`, {
+    const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${pool}/ohlcv/${FRAMES[frame]}`, {
       next: { revalidate: 300 }, signal: AbortSignal.timeout(5000), headers: { accept: "application/json" },
     });
     const list: any[] = r.ok ? (await r.json())?.data?.attributes?.ohlcv_list || [] : [];

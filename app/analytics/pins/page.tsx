@@ -39,6 +39,7 @@ export default async function PinsPage() {
         <b>Pin a token</b>
         <AnalyticsScan signedIn label="Pin" pin />
         <PushButton />
+        <Link href="/pro" className="pro-strip">💎 Free members can pin 3 tokens. <b>AUTISTIK Pro</b> lets you pin 30 and adds whale and rug alerts →</Link>
       </div>
 
       {!pins?.length && <div className="empty">No pins yet. Paste a token address above, or press 📌 on any token&apos;s page.</div>}
