@@ -5,7 +5,7 @@ import Link from "next/link";
 import { SCAN_CHAINS } from "@/lib/analytics-chains";
 
 /** Paste a token address to see its top 40 wallets and dev, and get sell alerts. */
-export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixedToken, label = "Scan" }: { signedIn: boolean; chain?: string; token?: string; label?: string }) {
+export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixedToken, label = "Scan", pin }: { signedIn: boolean; chain?: string; token?: string; label?: string; pin?: boolean }) {
   const router = useRouter();
   const [chain, setChain] = useState(fixedChain || "bsc");
   const [token, setToken] = useState(fixedToken || "");
@@ -19,6 +19,16 @@ export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixe
     const d = await r.json().catch(() => ({}));
     setBusy(false);
     if (!r.ok) { setErr(d.error || "Couldn't scan that token. Try again."); return; }
+    if (pin) {
+      // Pin it straight away and stay on My pins.
+      const [, , ch, tk] = String(d.path).split("/");
+      setBusy(true);
+      const pr = await fetch("/api/analytics/pin", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: ch, token: tk, on: true }) });
+      const pd = await pr.json().catch(() => ({}));
+      setBusy(false);
+      if (!pr.ok) { setErr(pd.error || "Couldn't pin it. Try again."); return; }
+      setToken(""); router.refresh(); return;
+    }
     router.push(d.path); router.refresh();
   }
 
@@ -41,7 +51,7 @@ export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixe
         if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.trim())) setChain("solana");
         else if (/^0x/i.test(v.trim()) && chain === "solana") setChain("bsc");
       }} placeholder={chain === "solana" ? "Paste a Solana token address" : "Paste a token address (0x…)"} aria-label="Token address" spellCheck={false} autoComplete="off" />
-      <button className="btn primary" type="submit" disabled={busy || !token.trim()}>{busy ? "Scanning…" : "🔎 " + label}</button>
+      <button className="btn primary" type="submit" disabled={busy || !token.trim()}>{busy ? (pin ? "Pinning…" : "Scanning…") : (pin ? "📌 " : "🔎 ") + label}</button>
       {err && <p className="scan-err" role="alert">{err}</p>}
     </form>
   );

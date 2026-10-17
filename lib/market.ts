@@ -104,3 +104,26 @@ export async function getPairStats(slug: string, token: string): Promise<PairSta
     };
   } catch { return null; }
 }
+
+// GeckoTerminal's names for our chains (free price history, no key).
+const GT: Record<string, string> = {
+  bsc: "bsc", ethereum: "eth", base: "base", robinhood: "robinhood", solana: "solana", arbitrum: "arbitrum", polygon: "polygon_pos",
+  avalanche: "avax", optimism: "optimism", sonic: "sonic", berachain: "berachain", monad: "monad", unichain: "unichain",
+  abstract: "abstract", linea: "linea", blast: "blast",
+};
+
+/** The last 3 days of hourly candles for a pool, oldest first. Cached for 5 minutes; empty when unavailable. */
+export async function getCandles(chain: string, pool: string | null | undefined) {
+  const net = GT[chain];
+  if (!net || !pool) return [];
+  try {
+    const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${pool}/ohlcv/hour?limit=72`, {
+      next: { revalidate: 300 }, signal: AbortSignal.timeout(5000), headers: { accept: "application/json" },
+    });
+    const list: any[] = r.ok ? (await r.json())?.data?.attributes?.ohlcv_list || [] : [];
+    return list
+      .map((x) => ({ t: Number(x[0]), o: Number(x[1]), h: Number(x[2]), l: Number(x[3]), c: Number(x[4]), v: Number(x[5]) }))
+      .filter((c) => [c.o, c.h, c.l, c.c].every((v) => isFinite(v) && v > 0))
+      .sort((a, b) => a.t - b.t);
+  } catch { return []; }
+}

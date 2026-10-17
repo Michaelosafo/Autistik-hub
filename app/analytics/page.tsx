@@ -45,7 +45,7 @@ export default async function AnalyticsPage() {
 
       {user && (
         <div className="card stack">
-          <h2>📌 My pins</h2>
+          <div className="row" style={{ justifyContent: "space-between" }}><h2>📌 My pins</h2><Link className="btn small" href="/analytics/pins">Open My pins →</Link></div>
           {!pins?.length && <div className="empty">Pin a token (📌 on its page) to get an alert when it&apos;s time to buy, take profit, sell or wait.</div>}
           <div className="pins-list">
             {(pins || []).map((p: any) => {

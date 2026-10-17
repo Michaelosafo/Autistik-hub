@@ -22,7 +22,7 @@ export default function PinButton({ signedIn, chain, token, pinned }: { signedIn
       setNote(res === "push" ? "📲 Alerts will reach this device, even with the site closed."
         : res === "local" ? "Alerts show in 🔔 and as pop-ups while the site is open. Add the Hub to your home screen for phone alerts."
         : "Notifications are blocked. Turn them on in your browser settings to get alerts.");
-    } else if (!on) setNote("📲 Pinned. You'll get an alert when it's time to buy, take profit, sell or wait.");
+    } else if (!on) setNote("📲 Pinned. You'll get an alert when it enters the buy range or reaches the sell range. See all your pins on Stats → My pins.");
   }
   return (
     <span className="stack" style={{ gap: 4 }}>

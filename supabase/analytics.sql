@@ -218,3 +218,8 @@ revoke all on public.token_pins, public.token_signals, public.push_subscriptions
 grant select on public.token_pins to authenticated;
 grant select on public.token_signals to anon, authenticated;
 revoke all on sequence public.push_subscriptions_id_seq from anon, authenticated;
+
+-- ---------- buy / sell zones for pinned tokens ----------
+alter table public.token_signals drop constraint if exists token_signals_horizon_check;
+alter table public.token_signals add constraint token_signals_horizon_check check (horizon in ('short','long','zone'));
+alter table public.token_signals add column if not exists detail jsonb;  -- price, buy range, sell range, strength
