@@ -13,13 +13,17 @@ export default function SectionTabs({ tabs, active, label }: { tabs: SectionTab[
   );
 }
 
+// Chat & Community: talking to Believer and Purity comes first, then the groups and live sessions.
 export const COMMUNITY_TABS: SectionTab[] = [
+  { href: "/companions", label: "💬 Chat" },
   { href: "/community", label: "Groups" },
   { href: "/sessions", label: "Live sessions" },
 ];
 
-export const TRENDING_TABS: SectionTab[] = [
-  { href: "/launchpad", label: "Trending tokens" },
+// Launch: make a token, then everything about trading them.
+export const LAUNCH_TABS: SectionTab[] = [
+  { href: "/launchpad/new", label: "🚀 Launch" },
+  { href: "/launchpad", label: "Trending" },
   { href: "/trade", label: "Trade" },
   { href: "/perps", label: "Perps" },
 ];
