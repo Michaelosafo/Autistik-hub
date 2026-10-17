@@ -24,7 +24,6 @@ export const COMMUNITY_TABS: SectionTab[] = [
 export const LAUNCH_TABS: SectionTab[] = [
   { href: "/launchpad/new", label: "🚀 Launch" },
   { href: "/launchpad", label: "Trending" },
-  { href: "/trade", label: "Trade" },
   { href: "/perps", label: "Perps" },
 ];
 
