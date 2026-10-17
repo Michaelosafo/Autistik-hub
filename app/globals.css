@@ -840,3 +840,30 @@ a.alert-row:hover{background:var(--surface-2)}
   .lux-chips{padding-bottom:8px}
 }
 .page:has(.kai.companions) + .site-note{display:none}
+
+/* ===== Buy / sell zone card ===== */
+.zone-card{border:2px solid var(--line)}
+.zone-card.buy,.zone-card.breakout{border-color:var(--teal);background:linear-gradient(180deg,var(--teal-soft),var(--surface) 55%)}
+.zone-card.sell,.zone-card.falling,.zone-card.avoid{border-color:var(--alert);background:linear-gradient(180deg,var(--alert-soft),var(--surface) 55%)}
+.zone-card.middle{border-color:var(--sun-bright);background:linear-gradient(180deg,var(--sun-soft),var(--surface) 55%)}
+.zone-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.zone-top h2{margin:0;font-size:1.45em}
+.zone-strength{font-size:.8em;font-weight:800;padding:5px 12px;border-radius:999px;background:var(--surface-2)}
+.zone-strength.strong{background:var(--teal-soft);color:var(--teal)} .zone-strength.weak{background:var(--alert-soft);color:var(--alert)}
+.ladder{position:relative;height:16px;margin:28px 4px 8px;border-radius:999px;background:var(--surface-2)}
+.ladder .lz{position:absolute;top:0;bottom:0;border-radius:999px;opacity:.85}
+.ladder .lz.buy{background:var(--teal)} .ladder .lz.sell{background:var(--alert)}
+.ladder .lp{position:absolute;top:-6px;width:4px;height:28px;border-radius:2px;background:var(--ink);transform:translateX(-50%)}
+.ladder .lp b{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:.74em;padding:2px 8px;border-radius:999px;background:var(--ink);color:var(--surface)}
+.zone-ranges{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.zr{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px}
+.zr span{font-size:.78em;font-weight:800} .zr b{font-family:var(--f-mono);font-size:.92em}
+.zr.buy{background:var(--teal-soft)} .zr.sell{background:var(--alert-soft)}
+.zone-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+@media (max-width:860px){.zone-grid{grid-template-columns:1fr}}
+.zone-box{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--surface)}
+.zone-box .signals li{font-size:.84em;padding:7px 10px}
+.pin-card{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:12px;border-radius:14px;background:var(--surface-2);text-decoration:none;color:inherit}
+.pin-card .pz{font-weight:800}
+.pin-card small{display:block;color:var(--muted)}
+@media (max-width:560px){.pin-card{grid-template-columns:1fr}}

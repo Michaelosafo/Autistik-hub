@@ -4,10 +4,11 @@
  * who pinned it (🔔 list + phone push). A guide only, never financial advice.
  */
 import { supabaseService } from "@/lib/supabase/server";
-import { ACHAINS, isAChain } from "@/lib/analytics";
-import { getPairStats } from "@/lib/market";
+import { ACHAINS, isAChain, type AChain } from "@/lib/analytics";
+import { getCandles, getPairStats } from "@/lib/market";
 import { holdOutlook, tradeCall, tradingPlans, type Plan, type Verdict } from "@/lib/analytics-signals";
 import { notify } from "@/lib/push";
+import { usd, zones, type ZoneKind, type Zones } from "@/lib/analytics-zones";
 
 export type SignalState = "buy" | "take_profit" | "sell" | "wait" | "avoid";
 const COOLDOWN_MS = 30 * 60_000; // at most one alert per token and time frame every 30 minutes
@@ -40,6 +41,74 @@ export function message(symbol: string, horizon: "short" | "long", state: Signal
   };
 }
 
+/** What a zone means as an alert state. */
+export const ZONE_STATE: Record<ZoneKind, SignalState> = { buy: "buy", sell: "take_profit", falling: "sell", middle: "wait", breakout: "wait", avoid: "avoid" };
+
+/** Alert text for a new buy / sell zone. */
+export function zoneMessage(symbol: string, z: Zones) {
+  const why = (z.kind === "buy" ? [...z.people, ...z.chart].find((x) => x.lean > 0) : [...z.people, ...z.chart].find((x) => x.lean < 0))?.text || z.summary;
+  const range = z.kind === "buy" && z.buy ? ` Buy range ${usd(z.buy[0])}–${usd(z.buy[1])}.` : z.kind === "sell" && z.sell ? ` Sell range ${usd(z.sell[0])}–${usd(z.sell[1])}.` : "";
+  const title = z.kind === "buy" ? `🟢 $${symbol} is in the BUY range` : z.kind === "sell" ? `🔴 $${symbol} reached the SELL range`
+    : z.kind === "falling" ? `⚠️ $${symbol} is falling below its floor` : z.kind === "avoid" ? `🚫 $${symbol}: avoid` : `🟡 $${symbol} is back in the middle`;
+  return { title, body: `Price ${usd(z.price)}.${range} ${why} Strength: ${z.strength.label} (${z.strength.agree} of ${z.strength.total} signs agree). Not financial advice.`, strong: z.kind !== "middle" && z.kind !== "breakout" };
+}
+
+/** Everything the analysis needs for one token, worked out the same way as its page. */
+export async function analyse(chain: AChain, token: string) {
+  const sb = supabaseService();
+  const [{ data: t }, { data: holders }, { data: events }, { data: links }, { data: trades }, move] = await Promise.all([
+    sb.from("tracked_tokens").select("symbol,dev,security,pair").eq("chain", chain).eq("token", token).maybeSingle(),
+    sb.from("token_holders").select("*").eq("chain", chain).eq("token", token),
+    sb.from("holder_events").select("*").eq("chain", chain).eq("token", token).order("created_at", { ascending: false }).limit(500),
+    sb.from("token_links").select("a,b,kind").eq("chain", chain).eq("token", token).limit(500),
+    sb.from("token_trades").select("wallet,side,amount,balance_after,pct_after,at,block").eq("chain", chain).eq("token", token)
+      .gt("at", new Date(Date.now() - 7 * 86_400_000).toISOString()).order("at", { ascending: false }).limit(1000),
+    getPairStats(ACHAINS[chain].dex, token),
+  ]);
+  if (!t) return null;
+  const candles = await getCandles(chain, t.pair);
+  const input = { holders: (holders || []) as any, events: (events || []) as any, trades: (trades || []) as any, links: (links || []) as any, dev: t.dev, security: t.security };
+  const call = tradeCall(input);
+  const hold = holdOutlook(input, call);
+  const plans = tradingPlans(call, hold, move);
+  const devSold = !!t.dev && input.trades.some((x: any) => x.wallet === t.dev && x.side === "sell") || input.events.some((e: any) => e.is_dev && e.kind !== "buy");
+  const zone = zones({ candles, move, call, long: hold.long, security: t.security, holders: input.holders, devSold });
+  return { t, call, plans, zone };
+}
+
+/**
+ * Works out a token's signals and saves them. When one changes, everyone in `users` gets an alert (at most once per
+ * token and time frame every 30 minutes; the first reading is only remembered). Returns how many alerts were sent.
+ */
+export async function checkSignals(chain: AChain, token: string, users: string[]) {
+  const sb = supabaseService();
+  const [a, { data: prev }] = await Promise.all([analyse(chain, token), sb.from("token_signals").select("horizon,state,notified_at").eq("chain", chain).eq("token", token)]);
+  if (!a) return 0;
+  const { t, call, plans, zone } = a;
+  const z = zone;
+  const rows = [
+    { horizon: "zone" as const, state: ZONE_STATE[z.kind], msg: zoneMessage(t.symbol || "TOKEN", z),
+      detail: { kind: z.kind, title: z.title, price: z.price, buy: z.buy, sell: z.sell, strength: z.strength, rsi: z.rsi } },
+    ...(["short", "long"] as const).map((h) => { const st = stateOf(plans[h], call, h); return { horizon: h, state: st, msg: message(t.symbol || "TOKEN", h, st, plans[h]), detail: null }; }),
+  ];
+  let sent = 0;
+  for (const r of rows) {
+    const old = (prev || []).find((x: any) => x.horizon === r.horizon);
+    const now = new Date().toISOString();
+    if (old?.state === r.state) {
+      // Same signal: just keep the prices fresh.
+      if (r.detail) await sb.from("token_signals").update({ detail: r.detail }).eq("chain", chain).eq("token", token).eq("horizon", r.horizon);
+      continue;
+    }
+    const due = !!old && users.length > 0 && (!old.notified_at || Date.now() - Date.parse(old.notified_at) > COOLDOWN_MS);
+    await sb.from("token_signals").upsert({ chain, token, horizon: r.horizon, state: r.state, reason: r.msg.body.slice(0, 300), detail: r.detail, changed_at: now, notified_at: due ? now : old?.notified_at ?? null }, { onConflict: "chain,token,horizon" });
+    if (!due) continue;
+    await notify(users.map((user_id) => ({ user_id, title: r.msg.title, body: r.msg.body, link: `/analytics/${chain}/${token}`, strong: r.msg.strong })));
+    sent += users.length;
+  }
+  return sent;
+}
+
 export async function runSignals(deadlineMs: number) {
   const sb = supabaseService();
   const { data: pins } = await sb.from("token_pins").select("user_id,chain,token").limit(5000);
@@ -54,36 +123,8 @@ export async function runSignals(deadlineMs: number) {
   for (const { chain, token, users } of byToken.values()) {
     if (Date.now() > deadlineMs) break;
     if (!isAChain(chain)) continue;
-    try {
-      const [{ data: t }, { data: holders }, { data: events }, { data: links }, { data: trades }, { data: prev }, move] = await Promise.all([
-        sb.from("tracked_tokens").select("symbol,dev,security").eq("chain", chain).eq("token", token).maybeSingle(),
-        sb.from("token_holders").select("*").eq("chain", chain).eq("token", token),
-        sb.from("holder_events").select("*").eq("chain", chain).eq("token", token).order("created_at", { ascending: false }).limit(500),
-        sb.from("token_links").select("a,b,kind").eq("chain", chain).eq("token", token).limit(500),
-        sb.from("token_trades").select("wallet,side,amount,balance_after,pct_after,at,block").eq("chain", chain).eq("token", token)
-          .gt("at", new Date(Date.now() - 7 * 86_400_000).toISOString()).order("at", { ascending: false }).limit(1000),
-        sb.from("token_signals").select("horizon,state,notified_at").eq("chain", chain).eq("token", token),
-        getPairStats(ACHAINS[chain].dex, token),
-      ]);
-      if (!t) continue;
-      const input = { holders: (holders || []) as any, events: (events || []) as any, trades: (trades || []) as any, links: (links || []) as any, dev: t.dev, security: t.security };
-      const call = tradeCall(input);
-      const plans = tradingPlans(call, holdOutlook(input, call), move);
-      checked++;
-      for (const horizon of ["short", "long"] as const) {
-        const state = stateOf(plans[horizon], call, horizon);
-        const old = (prev || []).find((r: any) => r.horizon === horizon);
-        if (old?.state === state) continue;
-        const now = new Date().toISOString();
-        // The first reading is just remembered; alerts start from the first change.
-        const due = !!old && (!old.notified_at || Date.now() - Date.parse(old.notified_at) > COOLDOWN_MS);
-        const msg = message(t.symbol || "TOKEN", horizon, state, plans[horizon]);
-        await sb.from("token_signals").upsert({ chain, token, horizon, state, reason: msg.body.slice(0, 300), changed_at: now, ...(due ? { notified_at: now } : { notified_at: old?.notified_at ?? null }) }, { onConflict: "chain,token,horizon" });
-        if (!due) continue;
-        await notify(users.map((user_id) => ({ user_id, title: msg.title, body: msg.body, link: `/analytics/${chain}/${token}`, strong: msg.strong })));
-        sent += users.length;
-      }
-    } catch (e) { console.error("signals failed", chain, token, (e as Error).message); }
+    try { sent += await checkSignals(chain, token, users); checked++; }
+    catch (e) { console.error("signals failed", chain, token, (e as Error).message); }
   }
   return { pinned: byToken.size, checked, sent };
 }

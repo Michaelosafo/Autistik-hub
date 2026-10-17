@@ -5,7 +5,9 @@ import WatchButton from "@/components/WatchButton";
 import Arena from "@/components/Arena";
 import { insights } from "@/lib/analytics-insights";
 import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analytics-signals";
-import { getPairStats } from "@/lib/market";
+import { getCandles, getPairStats } from "@/lib/market";
+import { zones } from "@/lib/analytics-zones";
+import ZoneCard from "@/components/ZoneCard";
 import TradePlans from "@/components/TradePlans";
 import PinButton from "@/components/PinButton";
 import { stateOf, type SignalState } from "@/lib/analytics-alerts";
@@ -66,6 +68,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   }
 
   const movePromise = getPairStats(c.dex, t.token);
+  const candlePromise = getCandles(chain, t.pair);
   const pinPromise = user ? sb.from("token_pins").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] });
   const [{ data: holders }, { data: events }, { data: watch }, { data: wc }, { data: links }, { data: trades }] = await Promise.all([
     sb.from("token_holders").select("*").eq("chain", chain).eq("token", t.token).order("rank", { ascending: true, nullsFirst: false }),
@@ -81,7 +84,12 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
   const call = tradeCall(sigIn);
   const { groups, suspects } = whoMightSell(sigIn);
   const hold = holdOutlook(sigIn, call);
-  const plans = tradingPlans(call, hold, await movePromise);
+  const move = await movePromise;
+  const plans = tradingPlans(call, hold, move);
+  const zone = zones({
+    candles: await candlePromise, move, call, long: hold.long, security: t.security, holders: (holders || []) as any,
+    devSold: (trades || []).some((x: any) => x.wallet === t.dev && x.side === "sell") || (events || []).some((e: any) => e.is_dev && e.kind !== "buy"),
+  });
   const { data: pin } = await pinPromise;
   const LABEL: Record<SignalState, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
   const now = { short: stateOf(plans.short, call, "short"), long: stateOf(plans.long, call, "long") };
@@ -129,6 +137,8 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         </div>
       </div>
 
+
+      <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />
 
       <div className={"card stack verdict " + call.kind}>
         <div className="label">🧭 Buy or sell? The read right now</div>
