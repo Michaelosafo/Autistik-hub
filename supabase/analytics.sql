@@ -333,3 +333,7 @@ $$;
 revoke all on function public.momentum_lease(integer) from public, anon, authenticated;
 grant execute on function public.momentum_lease(integer) to service_role;
 select cron.schedule('autistik-momentum', '*/5 * * * *', $$ select net.http_get('https://autistik.io/api/momentum/cron') $$);
+
+-- Visits: one person = one IP address, stored only as a secret hash (see app/api/track/route.ts).
+alter table public.page_views add column if not exists ip_hash text;
+-- site_stats() counts distinct coalesce(ip_hash, 'c:' || visitor); see the live definition in the database.
