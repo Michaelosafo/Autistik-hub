@@ -6,7 +6,7 @@ type Kind =
   | { kind: "session"; type: string }
   | { kind: "portrait"; person: string; bg: string }
   | { kind: "believer" } | { kind: "purity" }
-  | { kind: "robot"; who: "believer" | "purity"; mood?: string };
+  | { kind: "robot"; who: "believer" | "purity" | "autistik"; mood?: string };
 
 function svgFor(p: Kind): string {
   switch (p.kind) {
