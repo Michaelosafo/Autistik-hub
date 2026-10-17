@@ -12,16 +12,28 @@
  *   logs. Tokens leaving the pool are buys, tokens going into it are sells. The pool comes from DexScreener.
  */
 import { createPublicClient, formatUnits, getAddress, http, isAddress, parseAbi, parseAbiItem } from "viem";
-import { bsc, mainnet } from "viem/chains";
+import { base, bsc, mainnet, robinhood } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
+import { isSolAddress, solBalances, solGoplus, solMeta } from "@/lib/analytics-solana";
 
+type AChainInfo = { key: string; name: string; kind: "evm" | "solana"; viem: any; rpc: string; moralis: string | null; goplus: string; explorer: string; dex: string };
 export const ACHAINS = {
-  bsc: { key: "bsc", name: "BNB Chain", viem: bsc, rpc: CHAINS.bsc.rpc, moralis: "bsc", goplus: "56", explorer: "https://bscscan.com", dex: "bsc" },
-  ethereum: { key: "ethereum", name: "Ethereum", viem: mainnet, rpc: CHAINS.ethereum.rpc, moralis: "eth", goplus: "1", explorer: "https://etherscan.io", dex: "ethereum" },
-} as const;
+  bsc: { key: "bsc", name: "BNB Chain", kind: "evm", viem: bsc, rpc: CHAINS.bsc.rpc, moralis: "bsc", goplus: "56", explorer: "https://bscscan.com", dex: "bsc" },
+  ethereum: { key: "ethereum", name: "Ethereum", kind: "evm", viem: mainnet, rpc: CHAINS.ethereum.rpc, moralis: "eth", goplus: "1", explorer: "https://etherscan.io", dex: "ethereum" },
+  base: { key: "base", name: "Base", kind: "evm", viem: base, rpc: process.env.ANALYTICS_BASE_RPC || "https://mainnet.base.org", moralis: "base", goplus: "8453", explorer: "https://basescan.org", dex: "base" },
+  robinhood: {
+    key: "robinhood", name: "Robinhood Chain", kind: "evm", viem: robinhood, rpc: CHAINS.robinhood.rpc || "https://rpc.mainnet.chain.robinhood.com",
+    moralis: null, goplus: "4663", explorer: CHAINS.robinhood.explorer || "https://robinhoodchain.blockscout.com", dex: "robinhood",
+  },
+  solana: { key: "solana", name: "Solana", kind: "solana", viem: null, rpc: "", moralis: null, goplus: "solana", explorer: "https://solscan.io", dex: "solana" },
+} satisfies Record<string, AChainInfo>;
 export type AChain = keyof typeof ACHAINS;
 export const isAChain = (c: unknown): c is AChain => typeof c === "string" && c in ACHAINS;
+const isSol = (c: AChain) => ACHAINS[c].kind === "solana";
+/** A token or wallet address in the right format for the chain (0x… or a Solana address). */
+export const isChainAddress = (c: AChain, a: unknown): a is string => (isSol(c) ? isSolAddress(a) : typeof a === "string" && isAddress(a));
+const norm = (c: AChain, a: string) => (isSol(c) ? a : getAddress(a));
 
 const TOP = 40;
 const MEMBERSHIP_HOURS = 6; // how often the top-40 list itself is refreshed
@@ -32,18 +44,21 @@ const ERC20 = parseAbi([
   "function totalSupply() view returns (uint256)", "function balanceOf(address) view returns (uint256)", "function owner() view returns (address)",
 ]);
 
-const client = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem as any, transport: http(ACHAINS[c].rpc, { timeout: 10_000 }) });
+const client = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem, transport: http(ACHAINS[c].rpc, { timeout: 10_000 }) });
 // Reading trade logs needs a node that allows it; the default public BNB node refuses big log requests.
 const LOG_RPC: Record<AChain, string> = {
   bsc: process.env.ANALYTICS_BSC_RPC || "https://bsc-rpc.publicnode.com",
   ethereum: process.env.ANALYTICS_ETH_RPC || "https://ethereum-rpc.publicnode.com",
+  base: process.env.ANALYTICS_BASE_LOG_RPC || "https://base-rpc.publicnode.com",
+  robinhood: process.env.ANALYTICS_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
+  solana: "",
 };
-const logClient = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem as any, transport: http(LOG_RPC[c], { timeout: 15_000 }) });
+const logClient = (c: AChain) => createPublicClient({ chain: ACHAINS[c].viem, transport: http(LOG_RPC[c], { timeout: 15_000 }) });
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 const num = (v: unknown) => { const n = Number(v); return isFinite(n) ? n : 0; };
 const lower = (a: string) => a.toLowerCase();
 
-type Holder = { wallet: string; balance: string; isContract?: boolean; label?: string | null };
+type Holder = { wallet: string; balance: string; isContract?: boolean; label?: string | null; tokenAccount?: string };
 type GoPlus = { creator: string | null; owner: string | null; holders: Holder[]; security: Record<string, unknown> };
 
 async function goplus(chain: AChain, token: string): Promise<GoPlus | null> {
@@ -85,7 +100,7 @@ async function moralis(path: string): Promise<any> {
 }
 
 async function topHolders(chain: AChain, token: string): Promise<Holder[] | null> {
-  if (!(await budget(1))) return null;
+  if (!ACHAINS[chain].moralis || !(await budget(1))) return null;
   try {
     const j = await moralis(`/erc20/${token}/owners?chain=${ACHAINS[chain].moralis}&order=DESC&limit=${TOP}`);
     return (j?.result || []).filter((h: any) => isAddress(h.owner_address) && !SKIP.has(lower(h.owner_address))).map((h: any) => ({
@@ -123,7 +138,7 @@ async function people(chain: AChain, token: string) {
 
 /** Recent transfers of the token between followed wallets (one paid call). */
 async function recentLinks(chain: AChain, token: string) {
-  if (!(await budget(1))) return;
+  if (!ACHAINS[chain].moralis || !(await budget(1))) return;
   try {
     const j = await moralis(`/erc20/${token}/transfers?chain=${ACHAINS[chain].moralis}&limit=100`);
     const ppl = await people(chain, token);
@@ -161,6 +176,12 @@ async function balances(chain: AChain, token: string, decimals: number, wallets:
   return out;
 }
 
+/** Balances on any chain. On Solana it also returns newly found token accounts, to be saved with the wallet. */
+async function freshBalances(chain: AChain, token: string, decimals: number, wallets: string[], accts: Map<string, string>) {
+  if (!isSol(chain)) return { balances: await balances(chain, token, decimals, wallets), found: new Map<string, string>() };
+  return solBalances(token, wallets, accts);
+}
+
 const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 const fmtAmount = (n: number) => Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(n);
 export function heldFor(since: string | null | undefined, until = Date.now()) {
@@ -175,7 +196,7 @@ export function heldFor(since: string | null | undefined, until = Date.now()) {
  * Saves new balances and turns drops into events. Rows that aren't in `fresh` keep their old balance.
  * Liquidity pools and other contracts change all the time with trading, so they never raise alerts.
  */
-async function apply(chain: AChain, token: string, t: { symbol: string; supply: number }, rows: any[], fresh: Map<string, string>, top?: Map<string, Holder & { rank: number }>) {
+async function apply(chain: AChain, token: string, t: { symbol: string; supply: number }, rows: any[], fresh: Map<string, string>, top?: Map<string, Holder & { rank: number }>, accts?: Map<string, string>) {
   const sb = supabaseService();
   const now = new Date().toISOString();
   const events: any[] = [];
@@ -193,6 +214,8 @@ async function apply(chain: AChain, token: string, t: { symbol: string; supply: 
       chain, token, wallet, balance: bal, pct: t.supply ? (now$ / t.supply) * 100 : null, peak_balance: Math.max(now$, num(row?.peak_balance)),
       is_contract: isContract, is_dev: row?.is_dev ?? false,
     };
+    const acct = accts?.get(wallet) ?? h?.tokenAccount;
+    if (acct) u.token_account = acct;
     if (h) Object.assign(u, { rank: h.rank, in_top: true, label: h.label ?? row?.label ?? null });
     else if (top) Object.assign(u, { in_top: false });
     if (row && old > 0 && Math.abs(now$ - old) > old * MOVE && Math.abs(now$ - old) > t.supply * 1e-6) {
@@ -242,8 +265,9 @@ async function apply(chain: AChain, token: string, t: { symbol: string; supply: 
  * Returns an error message, or null when done.
  */
 export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?: string | null; dev?: string | null; force?: boolean } = {}): Promise<string | null> {
-  if (!isAddress(tokenIn)) return "That isn't a token address.";
-  const token = getAddress(tokenIn);
+  if (!isChainAddress(chain, tokenIn)) return `That isn't a ${ACHAINS[chain].name} token address.`;
+  const token = norm(chain, tokenIn);
+  const sol = isSol(chain);
   const sb = supabaseService();
   const { data: existing } = await sb.from("tracked_tokens").select("*").eq("chain", chain).eq("token", token).maybeSingle();
   if (existing && !opts.force && existing.snapshot_at && Date.now() - Date.parse(existing.snapshot_at) < 10 * 60_000) {
@@ -251,11 +275,12 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
     return null;
   }
   let m: Meta | null = null;
-  try { m = await meta(chain, token); } catch { return `Couldn't reach ${ACHAINS[chain].name} right now. Try again in a minute.`; }
+  try { m = sol ? await solMeta(token) : await meta(chain, token); } catch { return `Couldn't reach ${ACHAINS[chain].name} right now. Try again in a minute.`; }
   if (!m) return `That address isn't a token on ${ACHAINS[chain].name}.`;
-  const [gp, moralisTop] = await Promise.all([goplus(chain, token), topHolders(chain, token)]);
-  const list = moralisTop || gp?.holders || [];
-  const dev = (opts.dev && isAddress(opts.dev) ? getAddress(opts.dev) : null) || existing?.dev || gp?.creator || m.owner || null;
+  const [gp, moralisTop] = await Promise.all([sol ? solGoplus(token) : goplus(chain, token), topHolders(chain, token)]);
+  if (gp && "name" in gp) { m.name ||= gp.name; m.symbol ||= gp.symbol; }
+  const list: Holder[] = moralisTop || gp?.holders || [];
+  const dev = (opts.dev && isChainAddress(chain, opts.dev) ? norm(chain, opts.dev) : null) || existing?.dev || gp?.creator || m.owner || null;
   const devSource = opts.dev ? "launchpad" : existing?.dev_source || (gp?.creator ? "creator" : m.owner ? "owner" : null);
 
   await sb.from("tracked_tokens").upsert({
@@ -274,8 +299,9 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
   if (dev) await sb.from("token_holders").update({ is_dev: false }).eq("chain", chain).eq("token", token).neq("wallet", dev).eq("is_dev", true);
   const { data: rows2 } = await sb.from("token_holders").select("*").eq("chain", chain).eq("token", token);
   const all = [...new Set([...(rows2 || []).map((r: any) => r.wallet), ...top.keys()])];
-  const fresh = await balances(chain, token, m.decimals, all).catch(() => new Map<string, string>());
-  await apply(chain, token, { symbol: m.symbol, supply: m.supply }, (rows2 || []).map((r: any) => (r.wallet === dev ? { ...r, is_dev: true } : r)), fresh, list.length ? top : undefined);
+  const accts = new Map<string, string>([...(rows2 || []).filter((r: any) => r.token_account).map((r: any) => [r.wallet, r.token_account] as [string, string]), ...list.filter((h) => h.tokenAccount).map((h) => [h.wallet, h.tokenAccount!] as [string, string])]);
+  const { balances: fresh, found } = await freshBalances(chain, token, m.decimals, all, accts).catch(() => ({ balances: new Map<string, string>(), found: new Map<string, string>() }));
+  await apply(chain, token, { symbol: m.symbol, supply: m.supply }, (rows2 || []).map((r: any) => (r.wallet === dev ? { ...r, is_dev: true } : r)), fresh, list.length ? top : undefined, found);
   await fillHoldingTimes(chain, token, 12);
   if (list.length) await recentLinks(chain, token);
   await syncTrades(chain, token).catch((e) => console.error("trades failed", token, (e as Error).message));
@@ -284,7 +310,7 @@ export async function scanToken(chain: AChain, tokenIn: string, opts: { userId?:
 
 /** Looks up when wallets first got the token, a few at a time (each lookup is a paid call). */
 async function fillHoldingTimes(chain: AChain, token: string, max: number) {
-  if (!process.env.MORALIS_API_KEY) return;
+  if (!process.env.MORALIS_API_KEY || !ACHAINS[chain].moralis) return;
   const sb = supabaseService();
   const { data } = await sb.from("token_holders").select("wallet").eq("chain", chain).eq("token", token).is("acquired_at", null).eq("is_contract", false)
     .or("in_top.eq.true,is_dev.eq.true").order("rank", { ascending: true, nullsFirst: false }).limit(max);
@@ -309,8 +335,9 @@ export async function checkToken(chain: AChain, token: string) {
   if (!t) return [];
   const { data: rows } = await sb.from("token_holders").select("*").eq("chain", chain).eq("token", token);
   if (!rows?.length) return [];
-  const fresh = await balances(chain, token, t.decimals, rows.map((r: any) => r.wallet));
-  const ev = await apply(chain, token, { symbol: t.symbol || "", supply: num(t.total_supply) }, rows, fresh);
+  const accts = new Map<string, string>(rows.filter((r: any) => r.token_account).map((r: any) => [r.wallet, r.token_account]));
+  const { balances: fresh, found } = await freshBalances(chain, token, t.decimals, rows.map((r: any) => r.wallet), accts);
+  const ev = await apply(chain, token, { symbol: t.symbol || "", supply: num(t.total_supply) }, rows, fresh, undefined, found);
   await sb.from("tracked_tokens").update({ checked_at: new Date().toISOString() }).eq("chain", chain).eq("token", token);
   await fillHoldingTimes(chain, token, 4);
   return ev;
@@ -321,9 +348,9 @@ async function findPair(chain: AChain, token: string): Promise<string | null> {
   try {
     const r = await fetch(`https://api.dexscreener.com/latest/dex/tokens/${token}`, { signal: AbortSignal.timeout(8000), cache: "no-store" });
     const j = r.ok ? await r.json() : null;
-    const pairs = (j?.pairs || []).filter((p: any) => p?.chainId === ACHAINS[chain].dex && isAddress(p?.pairAddress));
+    const pairs = (j?.pairs || []).filter((p: any) => p?.chainId === ACHAINS[chain].dex && isChainAddress(chain, p?.pairAddress));
     pairs.sort((a: any, b: any) => num(b?.liquidity?.usd) - num(a?.liquidity?.usd));
-    return pairs[0] ? getAddress(pairs[0].pairAddress) : null;
+    return pairs[0] ? norm(chain, pairs[0].pairAddress) : null;
   } catch { return null; }
 }
 
@@ -341,6 +368,8 @@ export async function syncTrades(chain: AChain, token: string, maxChunks = 8): P
   const pair = t.pair || (await findPair(chain, token));
   if (!pair) return 0;
   if (!t.pair) await sb.from("tracked_tokens").update({ pair }).eq("chain", chain).eq("token", token);
+  // Solana trades aren't read from logs; its sells are caught by the balance checks instead.
+  if (isSol(chain)) { await sb.from("tracked_tokens").update({ trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
   const lc = logClient(chain);
   const head = await lc.getBlockNumber();
   let from = t.last_block ? BigInt(t.last_block) + 1n : head - LOOKBACK;

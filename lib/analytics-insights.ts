@@ -45,6 +45,7 @@ export function insights(input: {
   // Safety first.
   if (s.honeypot === true) out.push({ level: "bad", text: "Honeypot warning: buyers may not be able to sell this token." });
   if (n(s.sellTax) > 10) out.push({ level: "bad", text: `High sell tax (${Math.round(n(s.sellTax))}%): you lose that much every time you sell.` });
+  if (s.freezable === true) out.push({ level: "bad", text: "The owner can freeze wallets, which would stop you from selling." });
   if (s.mintable === true) out.push({ level: "warn", text: "The owner can create new tokens, which can lower the value of everyone's tokens." });
   if (s.openSource === false) out.push({ level: "warn", text: "The contract's code is hidden, so nobody can check what it does." });
 

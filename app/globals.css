@@ -813,3 +813,4 @@ a.alert-row:hover{background:var(--surface-2)}
 .plan-row.stop{background:var(--alert-soft)}
 .plan-row small{color:var(--muted)}
 @media (max-width:520px){.plan-row{grid-template-columns:70px 50px 1fr}.plan-row small{grid-column:1/-1}}
+.chain-chips{display:flex;flex-wrap:wrap;gap:6px}
