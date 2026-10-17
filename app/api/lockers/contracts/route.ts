@@ -8,6 +8,9 @@ import { logActivity } from "@/lib/activity";
 
 export const dynamic = "force-dynamic";
 const json = (body: unknown, status = 200) => Response.json(body, { status });
+// The build fingerprint at the end of the code (its length is in the last 2 bytes) changes with file names, e.g. when
+// deployed from the single-file version in Remix. Everything before it must match exactly.
+const body = (hex: string) => { const h = hex.toLowerCase().replace(/^0x/, ""); const n = parseInt(h.slice(-4), 16); return isFinite(n) && (n + 2) * 2 < h.length ? h.slice(0, h.length - (n + 2) * 2) : h; };
 
 /** Admin only: saves a locker the admin just deployed, after checking on-chain that it is exactly our contract. */
 export async function POST(req: Request) {
@@ -23,7 +26,7 @@ export async function POST(req: Request) {
     address = getAddress(r.contractAddress);
   } catch { return json({ error: `Couldn't find that transaction on ${LOCKER_CHAINS[chain].name} yet. Wait a minute and press "Try saving again".` }, 404); }
   const code = await c.getCode({ address }).catch(() => null);
-  if (!code || code.toLowerCase() !== LOCKER_RUNTIME.toLowerCase()) return json({ error: "That contract isn't the AUTISTIK Locker (its code doesn't match), so it wasn't saved." }, 400);
+  if (!code || body(code) !== body(LOCKER_RUNTIME)) return json({ error: "That contract isn't the AUTISTIK Locker (its code doesn't match), so it wasn't saved." }, 400);
   const { error } = await supabaseService().from("locker_contracts").upsert({ chain, address, tx_hash: txHash, verified: false, deployed_at: new Date().toISOString() }, { onConflict: "chain" });
   if (error) return json({ error: "Couldn't save it. Try again." }, 500);
   await lockerSites(true);
