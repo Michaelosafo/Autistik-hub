@@ -18,6 +18,13 @@ export const COMMUNITY_CARDS: SectionCard[] = [
   { href: "/sessions", icon: "🎙️", name: "Live sessions", blurb: "Join talks & events live", tone: "coral" },
 ];
 
+// $AUTISTIK: buy the token, earn airdrops, and the community fund.
+export const TOKEN_CARDS: SectionCard[] = [
+  { href: "/buy", icon: "💰", name: "Buy $AUTISTIK", blurb: "Official contract & how to buy", tone: "sun" },
+  { href: "/rewards", icon: "🎁", name: "Rewards", blurb: "Points & airdrops", tone: "violet" },
+  { href: "/fund", icon: "💚", name: "AUTISTIK Fund", blurb: "Support for individuals", tone: "teal" },
+];
+
 /** A section's pages as big cards, so every part is easy to find. The current page is highlighted. */
 export default function SectionCards({ items, active, label }: { items: SectionCard[]; active: string; label: string }) {
   return (

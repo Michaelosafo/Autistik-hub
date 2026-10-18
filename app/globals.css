@@ -1020,3 +1020,35 @@ a.alert-row:hover{background:var(--surface-2)}
 .scan-form.pro .scan-row .btn.primary{background:#5eead4;color:#0b1020;border-color:#5eead4}
 .scan-form.pro .scan-row .btn.primary:disabled{opacity:.55}
 @media (max-width:560px){ .scan-form.pro .scan-row{flex-direction:column} .scan-form.pro .scan-row .btn{width:100%} .an-sigs{flex-direction:column;align-items:flex-end;gap:4px} .an-sigs .sig{font-size:.78em} }
+/* Pro header tones and shared pieces for every main page. */
+.an-hero{--glow1:rgba(92,225,255,.14);--glow2:rgba(164,142,255,.18);--kick:#7FE3FF}
+.an-hero.tone-violet{--glow1:rgba(164,142,255,.22);--glow2:rgba(255,124,214,.14);--kick:#C3B4FF}
+.an-hero.tone-gold{--glow1:rgba(247,197,79,.20);--glow2:rgba(255,140,60,.12);--kick:#F7D27A}
+.an-hero.tone-coral{--glow1:rgba(255,124,102,.20);--glow2:rgba(247,197,79,.12);--kick:#FFAE9E}
+.an-hero.tone-green{--glow1:rgba(62,229,143,.16);--glow2:rgba(92,225,255,.12);--kick:#8CF5C4}
+.an-hero.tone-rose{--glow1:rgba(255,124,180,.18);--glow2:rgba(164,142,255,.14);--kick:#FFB3D3}
+.an-hero{background:radial-gradient(1000px 300px at 0% 0%,var(--glow1),transparent 60%),radial-gradient(800px 280px at 100% 0%,var(--glow2),transparent 60%),linear-gradient(160deg,#0B0F1F,#111833 60%,#0B0F1F)}
+.an-kicker{color:var(--kick,#7FE3FF)}
+.an-metrics{grid-template-columns:repeat(var(--n,4),minmax(0,1fr))}
+.an-hero .an-actions{display:flex;gap:8px;flex-wrap:wrap}
+.an-hero .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:#fff}
+.an-hero .btn:hover{background:rgba(255,255,255,.12)}
+.an-hero .btn.primary{background:var(--kick,#7FE3FF);border-color:var(--kick,#7FE3FF);color:#0b1020}
+.an-hero a:not(.btn):not(.an-pro){color:var(--kick,#7FE3FF)}
+@media (max-width:760px){ .an-metrics{grid-template-columns:repeat(2,minmax(0,1fr))} .an-metrics div:last-child:nth-child(odd){grid-column:1/-1} .an-hero h1{font-size:1.65em} }
+/* Section cards: dark glass console to match the pro headers. */
+.launch-nav{padding:8px;border-radius:18px;background:linear-gradient(160deg,#0B0F1F,#141B3A);border:1px solid rgba(124,140,255,.22)}
+.ln-card{background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);color:#E9ECF8}
+.ln-card.coral{--c:#FF8C76} .ln-card.violet{--c:#B4A2FF} .ln-card.sun{--c:#F7C54F} .ln-card.teal{--c:#4FDCCB} .ln-card.ink{--c:#9FB4FF}
+.ln-card .ln-icon{background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.ln-card .ln-text b{color:#fff}
+.ln-card .ln-text small{color:rgba(233,236,248,.6)}
+.ln-card:hover{border-color:var(--c);box-shadow:0 0 0 1px var(--c),0 8px 22px rgba(0,0,0,.3)}
+.ln-card[aria-current="page"]{background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.02));border-color:var(--c);box-shadow:0 0 0 1px var(--c),0 0 22px -6px var(--c)}
+.ln-card[aria-current="page"] .ln-icon{background:rgba(255,255,255,.12)}
+.ln-card[aria-current="page"] .ln-text b{color:var(--c)}
+/* Home: live numbers under the hero text, and the grid texture. */
+.hero::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(180deg,#000,transparent 80%)}
+.hero > *{position:relative;z-index:1}
+.hero .an-metrics{margin-top:22px}
+.an-hero .muted{color:rgba(233,236,248,.65)}

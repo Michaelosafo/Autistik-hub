@@ -1,5 +1,6 @@
 import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import PerpsVenues from "@/components/PerpsVenues";
+import ProHero from "@/components/ProHero";
 import { usd } from "@/lib/market";
 import { PERP_COINS, PERP_VENUES, perpPrices } from "@/lib/perps";
 
@@ -16,10 +17,9 @@ export default async function PerpsPage() {
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
       <SectionCards items={LAUNCH_CARDS} active="/perps" label="Launch" />
-      <div className="page-head">
-        <h1>Perps</h1>
-        <p className="muted">Trade futures: bet on a coin going up (long) or down (short). Leverage makes wins and losses bigger.</p>
-      </div>
+      <ProHero tone="cyan" kicker="AUTISTIK · PERPETUAL FUTURES" title="⚡ Perps" live={source === "futures" ? "Live" : false}
+        text="Trade futures: bet on a coin going up (long) or down (short). Leverage makes wins and losses bigger."
+        stats={[[PERP_COINS.length, "markets"], [PERP_VENUES.length, "exchanges"], [source === "futures" ? "Hyperliquid" : "CoinGecko", "price feed"], ["1 min", "refresh"]]} />
 
       <div className="card stack">
         <h2>Live futures prices</h2>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import CopyCA from "@/components/CopyCA";
-import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
+import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
+import ProHero from "@/components/ProHero";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import { LINKS } from "@/lib/site";
 
@@ -34,12 +35,15 @@ const ROADMAP = [
 export default function BuyPage() {
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
-      <SectionTabs tabs={TOKEN_TABS} active="/buy" label="$AUTISTIK" />
-      <div className="page-head">
-        <div className="label">$AUTISTIK · BNB Smart Chain</div>
-        <h1>How to buy $AUTISTIK</h1>
-        <p className="muted">Six steps, about ten minutes. Take your time, and ask in our Telegram if you get stuck.</p>
-      </div>
+      <SectionCards items={TOKEN_CARDS} active="/buy" label="$AUTISTIK" />
+      <ProHero tone="gold" kicker="$AUTISTIK · BNB SMART CHAIN" title="How to buy $AUTISTIK"
+        text="Six steps, about ten minutes. Take your time, and ask in our Telegram if you get stuck."
+        stats={[["100M", "total supply"], ["30%", "burned at launch"], ["3% / 4%", "buy / sell tax"], ["🔒 Locked", "liquidity"]]}>
+        <div className="an-actions">
+          <a className="btn primary" href={LINKS.pancakeswap} target="_blank" rel="noopener noreferrer">Buy on PancakeSwap</a>
+          <a className="btn" href={LINKS.dexscreener} target="_blank" rel="noopener noreferrer">📈 Chart</a>
+        </div>
+      </ProHero>
 
       <div className="card stack">
         <h2>Official contract address</h2>

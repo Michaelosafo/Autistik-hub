@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ProPay from "@/components/ProPay";
+import ProHero from "@/components/ProHero";
 import { FREE_PINS, PRO_FEATURES, PRO_PINS, PRO_USD, PRO_DAYS } from "@/lib/pro";
 import { trackRecord } from "@/lib/analytics-pro";
 
@@ -12,13 +13,11 @@ export default async function ProPage() {
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
       <Link href="/analytics" className="muted">← Stats</Link>
-      <div className="card stack pro-hero">
-        <div className="label" style={{ color: "#E9B65A" }}>💎 AUTISTIK Pro</div>
-        <h1 style={{ margin: 0 }}>Better information, better decisions</h1>
-        <p className="muted">Everything on Stats, plus the advanced reads serious traders use. Paid in $AUTISTIK: ${PRO_USD} for {PRO_DAYS} days.</p>
-        {all?.total ? <p><b>Our track record:</b> buy and sell signals were right {Math.round((all.right / all.total) * 100)}% of the time after 24 hours ({all.right} of {all.total}).</p> : null}
+      <ProHero tone="gold" kicker="💎 AUTISTIK PRO" title="Better information, better decisions"
+        text={<>Everything on Stats, plus the advanced reads serious traders use. Paid in $AUTISTIK: ${PRO_USD} for {PRO_DAYS} days.</>}
+        stats={[[`$${PRO_USD}`, `${PRO_DAYS} days`], [PRO_PINS, "pins"], [all?.total ? `${Math.round((all.right / all.total) * 100)}%` : "–", "signals right after 24h"]]}>
         <ProPay />
-      </div>
+      </ProHero>
       <div className="card stack">
         <h2>What you get</h2>
         <ul className="pro-feats">{PRO_FEATURES.map((f) => <li key={f.name}><b>{f.icon} {f.name}</b><span>{f.text}</span></li>)}</ul>

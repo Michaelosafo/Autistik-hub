@@ -1,5 +1,6 @@
 import FundForm from "@/components/FundForm";
-import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
+import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
+import ProHero from "@/components/ProHero";
 
 export const metadata = {
   title: "AUTISTIK Fund · AUTISTIK Hub",
@@ -19,12 +20,10 @@ const FAQ = [
 export default function FundPage() {
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
-      <SectionTabs tabs={TOKEN_TABS} active="/fund" label="$AUTISTIK" />
-      <div className="page-head">
-        <div className="label">AUTISTIK Fund · BNB Chain</div>
-        <h1>Funded by the community, built for individuals</h1>
-        <p className="muted">A portion of $AUTISTIK trading activity is set aside to support people on the autism spectrum with therapy, equipment, education and everyday essentials.</p>
-      </div>
+      <SectionCards items={TOKEN_CARDS} active="/fund" label="$AUTISTIK" />
+      <ProHero tone="green" kicker="AUTISTIK FUND · BNB CHAIN" title="Funded by the community, built for individuals"
+        text="A portion of $AUTISTIK trading activity is set aside to support people on the autism spectrum with therapy, equipment, education and everyday essentials."
+        stats={[["Soon", "opens"], ["Individuals", "who it's for"], ["On-chain", "funded by trading"]]} />
 
       <div className="notice warn">The fund is <b>not open yet</b> for donations or applications. You can register your interest below.</div>
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import WalletLink from "@/components/WalletLink";
-import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
+import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
+import ProHero from "@/components/ProHero";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -24,12 +25,10 @@ export default async function Rewards() {
 
   return (
     <div className="stack">
-      <SectionTabs tabs={TOKEN_TABS} active="/rewards" label="$AUTISTIK" />
-      <div className="page-head">
-        <div className="label">$AUTISTIK · Rewards · {settings?.round_name || "Round 1"}</div>
-        <h1>Community airdrops</h1>
-        <p className="muted">$AUTISTIK airdrops reward taking part, and holding. You never need to share anything about your health to qualify.</p>
-      </div>
+      <SectionCards items={TOKEN_CARDS} active="/rewards" label="$AUTISTIK" />
+      <ProHero tone="violet" kicker={`$AUTISTIK · REWARDS · ${(settings?.round_name || "Round 1").toUpperCase()}`} title="Community airdrops" live="Round open"
+        text="$AUTISTIK airdrops reward taking part, and holding. You never need to share anything about your health to qualify."
+        stats={user ? [[pts, "your points"], [need, "to qualify"], [rank ? `#${rank}` : "–", "your rank"], [board.length, "members earning"]] : [[need, "points to qualify"], ["Posts", "earn points"], ["Seats", "earn points"]]} />
       {!user ? (
         <div className="joincta" data-g="learn"><div><b>Sign in to earn points</b><p className="muted" style={{ fontSize: ".9em" }}>Points come from posting, saving seats at sessions and getting support from others.</p></div><Link className="btn g" href="/login">Sign in / Join</Link></div>
       ) : (

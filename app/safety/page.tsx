@@ -1,11 +1,14 @@
 import { LINKS } from "@/lib/site";
+import ProHero from "@/components/ProHero";
 
 export const metadata = { title: "Safety & privacy · AUTISTIK Hub" };
 
 export default function Safety() {
   return (
     <div className="stack" style={{ maxWidth: 740 }}>
-      <div className="page-head"><div className="label">Safety &amp; privacy</div><h1>How the Hub keeps you safe</h1></div>
+      <ProHero tone="green" kicker="SAFETY & PRIVACY" title="How the Hub keeps you safe"
+        text="Your health stays private, your name stays hidden, and nobody from AUTISTIK will ever ask for your seed phrase."
+        stats={[["0", "health data on-chain"], ["Hub names", "no real names"], ["18+", "adults only"]]} />
       <div className="card stack">
         <h2>Our promises</h2>
         <ul className="stack" style={{ margin: 0, paddingLeft: 20, gap: 8 }}>
