@@ -1,6 +1,6 @@
 import Link from "next/link";
 import AdBar from "@/components/AdBar";
-import LaunchNav from "@/components/LaunchNav";
+import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import TokenBoard from "@/components/TokenBoard";
 import TrendingPay from "@/components/TrendingPay";
 import { ads, getBoard, mostWatched, trending } from "@/lib/board";
@@ -14,7 +14,7 @@ export default async function LaunchpadPage() {
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
-      <LaunchNav active="/launchpad" />
+      <SectionCards items={LAUNCH_CARDS} active="/launchpad" label="Launch" />
       <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
         <div className="page-head">
           <div className="label">Trending</div>
