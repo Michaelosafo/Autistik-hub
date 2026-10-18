@@ -200,11 +200,13 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
   return (
     <div className="stack">
       <div className="launch-modes" role="tablist" aria-label="How do you want to launch?">
-        <button type="button" role="tab" aria-selected={mode === "quick"} onClick={() => pickMode("quick")}>
-          <b>⚡ Quick launch</b><span>Fill in one short form. No assistant, free and unlimited.</span>
+        <button type="button" role="tab" className="sun" aria-selected={mode === "quick"} onClick={() => pickMode("quick")}>
+          <span className="ln-icon" aria-hidden="true">⚡</span>
+          <span className="ln-text"><b>Quick launch</b><small>One short form. Free and unlimited.</small></span>
         </button>
-        <button type="button" role="tab" aria-selected={mode === "ai"} onClick={() => pickMode("ai")}>
-          <b>🤖 Launch with Autistik</b><span>Autistik asks the questions by text or voice. {AI_LAUNCH_SESSIONS} assistant sessions a day{sessionsLeft !== null ? ` · ${sessionsLeft} left today` : ""}.</span>
+        <button type="button" role="tab" className="violet" aria-selected={mode === "ai"} onClick={() => pickMode("ai")}>
+          <span className="ln-icon" aria-hidden="true">🤖</span>
+          <span className="ln-text"><b>Launch with Autistik</b><small>Answer a few questions by text or voice. {AI_LAUNCH_SESSIONS} a day{sessionsLeft !== null ? ` · ${sessionsLeft} left today` : ""}.</small></span>
         </button>
       </div>
       <div className="kai lp">
@@ -225,7 +227,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             )}
           </div>
           <div className="msgs" ref={box} aria-live="polite">
-            <div className="lux-hero" data-small={msgs.length > 0 ? "1" : undefined}>
+            <div className="lux-hero launch-hello" data-small="1">
               <div className="lux-ring"><Art kind="robot" who="autistik" mood="motivation" className="lux-bot" /></div>
               <div className="lux-hello">
                 <h2>Hi, I&apos;m <span className="lux-name">Autistik</span></h2>

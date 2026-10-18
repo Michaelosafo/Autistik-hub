@@ -294,9 +294,13 @@ td.num{font-variant-numeric:tabular-nums;text-align:right}
 @media (max-width:860px){ .kai.companions{grid-template-columns:minmax(0,1fr)} .kai.companions .side{position:static} .who-switch small{display:none} }
 /* ---------- Launch: quick form or Autistik ---------- */
 .launch-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.launch-modes button{all:unset;cursor:pointer;box-sizing:border-box;display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:var(--r);background:var(--surface);border:1.5px solid var(--line)}
-.launch-modes button span{font-size:.86em;color:var(--muted)}
-.launch-modes button[aria-selected="true"]{border-color:var(--violet);box-shadow:0 0 0 2px var(--violet);background:var(--violet-soft)}
+.launch-modes button{all:unset;cursor:pointer;box-sizing:border-box;--c:var(--violet);--s:var(--violet-soft);display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px;background:var(--surface);border:2px solid var(--line);transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease;min-width:0}
+.launch-modes button.sun{--c:var(--sun);--s:var(--sun-soft)}
+.launch-modes button:hover{transform:translateY(-2px);border-color:var(--c);box-shadow:0 6px 18px rgba(0,0,0,.08)}
+.launch-modes button .ln-text b{font-size:1.08em}
+.launch-modes button .ln-text small{font-size:.84em}
+.launch-modes button[aria-selected="true"]{border-color:var(--c);box-shadow:0 0 0 1px var(--c);background:var(--s)}
+.launch-modes button[aria-selected="true"] .ln-icon{background:var(--surface)}
 .launch-modes button:focus-visible{outline:3px solid var(--sun-bright)}
 .quick-launch{align-self:start}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
@@ -526,6 +530,11 @@ a.btn.primary{color:var(--bg)}
 .lux-hero[data-small] h2{font-size:1.15em;margin:0}
 .lux-hero[data-small] p{font-size:.85em}
 .lux-hero[data-small] .lux-here{display:none}
+/* Launch assistant: one tidy greeting row with a small robot, nothing to crop */
+.lux-hero.launch-hello{padding:14px 6px 10px;margin:0 auto;max-width:520px;justify-content:flex-start}
+.lux-hero.launch-hello .lux-ring{width:64px;height:64px;flex:none}
+.lux-hero.launch-hello h2{font-size:1.35em}
+.lux-hero.launch-hello p{font-size:.88em;max-width:none;margin:0}
 .chat.lux .msgrow .av{width:32px;height:32px;background:rgba(255,255,255,.08);border-radius:50%;padding:2px}
 .chat.lux .msg.me{background:linear-gradient(135deg,#F3C969,#D99A2B);color:#1B1206;font-weight:600}
 .chat.lux .msg.sys{color:rgba(233,236,248,.6)}
@@ -785,7 +794,7 @@ a.alert-row:hover{background:var(--surface-2)}
 /* ===== Launch AI (Autistik), styled like Believer and Purity ===== */
 .chat.lux[data-c="autistik"]{--gold:#FFB347;--gold-2:#FF5A5F;--glow:#FFB84D}
 .chat.lux[data-c="autistik"] .lux-name{background:linear-gradient(90deg,#FFB347,#FF5A5F,#A86BFF);-webkit-background-clip:text;background-clip:text}
-.chat.lux.launch-ai{height:min(72vh,680px);min-height:520px}
+.chat.lux.launch-ai{height:min(62vh,600px);min-height:460px}
 .lux-who button[tabindex="-1"]{cursor:default}
 .lux-icon:disabled{opacity:.5;cursor:default}
 .how-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
