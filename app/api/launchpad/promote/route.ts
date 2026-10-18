@@ -1,7 +1,8 @@
 import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
-import { CHAINS, LAUNCHPAD_ABI, isLive, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, LAUNCHPAD_ABI, type ChainKey } from "@/lib/launchpad";
+import { padOn } from "@/lib/launchpad-server";
 import { supabaseService } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -16,7 +17,8 @@ export async function POST(req: Request) {
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");
   if (!chain) return json({ error: "Unknown chain." }, 400);
-  if (!isLive(chain)) return json({ error: `${chain.name} isn't open yet.` }, 400);
+  const pad = await padOn(chain.key);
+  if (!pad) return json({ error: `${chain.name} isn't open yet.` }, 400);
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
 
   const client = createPublicClient({ transport: http(chain.rpc) });
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
   }
   if (receipt.status !== "success") return json({ error: "That payment failed on-chain." }, 400);
   const event = parseEventLogs({ abi: LAUNCHPAD_ABI, logs: receipt.logs, eventName: "Promoted" }).find(
-    (l) => getAddress(l.address) === getAddress(chain.launchpad!)
+    (l) => getAddress(l.address) === pad
   );
   if (!event) return json({ error: "That transaction isn't a trending payment." }, 400);
   const { token, payer, planId, price, duration } = event.args;

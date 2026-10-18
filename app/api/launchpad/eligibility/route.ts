@@ -2,7 +2,8 @@ import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http, keccak256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { json } from "@/lib/ai";
-import { CHAINS, MIN_HOLD_USD, isLive, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
+import { padOn } from "@/lib/launchpad-server";
 import { getMarkets } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -28,7 +29,8 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const wallet = String(body?.wallet || "");
-  if (!chain || !isLive(chain)) return json({ error: "That chain isn't open for launches." }, 400);
+  const pad = chain ? await padOn(chain.key) : null;
+  if (!chain || !pad) return json({ error: "That chain isn't open for launches." }, 400);
   if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return json({ error: "That isn't a wallet address." }, 400);
   const creator = getAddress(wallet);
 
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
   // Must match AutistikLaunchpad.permitHash: keccak256(abi.encode(launchpad, chainId, creator, deadline)).
   const hash = keccak256(encodeAbiParameters(
     [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "uint256" }],
-    [chain.launchpad!, BigInt(chain.chainId), creator, deadline],
+    [pad, BigInt(chain.chainId), creator, deadline],
   ));
   const signature = await privateKeyToAccount(key as `0x${string}`).signMessage({ message: { raw: hash } });
   return json({ checked: true, deadline: deadline.toString(), signature, holdUsd, needTokens });

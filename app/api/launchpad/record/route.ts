@@ -2,7 +2,9 @@ import { rateLimit } from "@/lib/ratelimit";
 import { logActivity } from "@/lib/activity";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
-import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, isLive, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, type ChainKey } from "@/lib/launchpad";
+import { padOn } from "@/lib/launchpad-server";
+import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { isAChain, scanToken } from "@/lib/analytics";
 
@@ -17,7 +19,8 @@ export async function POST(req: Request) {
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");
   if (!chain) return json({ error: "Unknown chain." }, 400);
-  if (!isLive(chain)) return json({ error: `${chain.name} launches aren't open yet.` }, 400);
+  const pad = await padOn(chain.key);
+  if (!pad) return json({ error: `${chain.name} launches aren't open yet.` }, 400);
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
 
   const client = createPublicClient({ transport: http(chain.rpc) });
@@ -29,17 +32,17 @@ export async function POST(req: Request) {
   }
   if (receipt.status !== "success") return json({ error: "That transaction failed on-chain." }, 400);
 
-  const event = parseEventLogs({ abi: LAUNCHPAD_ABI, logs: receipt.logs, eventName: "Launched" }).find(
-    (l) => getAddress(l.address) === getAddress(chain.launchpad!)
-  );
+  const event = parseEventLogs({ abi: LAUNCHPAD_ABI, logs: receipt.logs, eventName: "Launched" }).find((l) => getAddress(l.address) === pad);
   if (!event) return json({ error: "That transaction isn't an AUTISTIK Launch Pad launch." }, 400);
-  const { token, pair, creator, supply } = event.args;
-  const locked = parseEventLogs({ abi: LAUNCHPAD_ABI, logs: receipt.logs, eventName: "LiquidityLocked" }).find(
-    (l) => getAddress(l.address) === getAddress(chain.launchpad!) && getAddress(l.args.token) === getAddress(token)
-  );
-  const unlockAt = locked ? Number(locked.args.unlockAt) : 0;
-  // The contract only allows 182 or 365 days, so the length tells us which option was picked.
-  const lockDays = locked ? Math.round((unlockAt - Number((await client.getBlock({ blockNumber: receipt.blockNumber })).timestamp)) / 86400) : 0;
+  const { token, pair, creator, lockOption, lockId } = event.args;
+  const supply = (await client.readContract({ address: token, abi: LAUNCH_TOKEN_ABI, functionName: "totalSupply" } as any)) as bigint;
+  // Locked liquidity sits in the AUTISTIK Locker: its unlock date comes from the lock itself.
+  let unlockAt = 0;
+  if (lockOption !== 0) {
+    const locker = (await client.readContract({ address: pad, abi: LAUNCHPAD_ABI, functionName: "locker" } as any)) as `0x${string}`;
+    const l = (await client.readContract({ address: locker, abi: LOCKER_ABI, functionName: "getLockById", args: [lockId] } as any)) as any;
+    unlockAt = Number(l.tgeDate);
+  }
 
   // Cast: viem's types misread optional fields when the project has `strict: false`.
   const read = (functionName: "name" | "symbol") => client.readContract({ address: token, abi: ERC20_META_ABI, functionName } as any) as Promise<string>;
@@ -61,8 +64,8 @@ export async function POST(req: Request) {
     symbol: String(symbol).slice(0, 24),
     supply: (supply / 10n ** 18n).toString(),
     tx_hash: txHash.toLowerCase(),
-    lp_lock: !locked ? "burn" : lockDays > 200 ? "1y" : "6m",
-    lp_unlock_at: locked ? new Date(unlockAt * 1000).toISOString() : null,
+    lp_lock: lockOption === 0 ? "burn" : lockOption === 2 ? "1y" : "6m",
+    lp_unlock_at: lockOption !== 0 ? new Date(unlockAt * 1000).toISOString() : null,
     user_id: owner,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });

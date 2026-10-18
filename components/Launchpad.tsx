@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
-import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, type LiquidityLock } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
@@ -12,7 +12,7 @@ type Msg = { kind: "me" | "ai" | "sys"; text: string; pending?: boolean; born?: 
 type Turn = { role: "user" | "assistant"; content: string };
 type Done = { token: string; pair: string; hash: string; listed: boolean };
 
-const HELLO = "Hi, I'm Autistik. Which chain would you like to launch on: BNB Chain, Ethereum or Robinhood Chain?";
+const HELLO = "Hi, I'm Autistik. Which chain would you like to launch on?";
 
 /** Reads text out loud with the device's most natural male voice (see lib/voice.ts). */
 function speak(text: string, onState: (talking: boolean) => void) {
@@ -29,7 +29,7 @@ function Bot() {
 }
 const fmt = (n: string) => BigInt(n).toLocaleString("en-US");
 
-export default function Launchpad({ signedIn }: { signedIn: boolean }) {
+export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads: Pads }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const turns = useRef<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -37,6 +37,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
   const [plan, setPlan] = useState<LaunchPlan | null>(null);
   const [fee, setFee] = useState<bigint | null>(null);
   const [minLiq, setMinLiq] = useState<bigint | null>(null);
+  const [maxWl, setMaxWl] = useState<bigint>(0n);
   const [agree, setAgree] = useState(false);
   const [status, setStatus] = useState("");
   const [launching, setLaunching] = useState(false);
@@ -98,9 +99,9 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
   useEffect(() => {
     setFee(null); setMinLiq(null);
     const c = plan && CHAINS[plan.chain];
-    if (!c || !isLive(c)) return;
-    readLimits(createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any, c)
-      .then(({ fee, minLiquidity }) => { setFee(fee); setMinLiq(minLiquidity); }).catch(() => {});
+    if (!c || !isLive(c, pads)) return;
+    readLimits(createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any, pads[c.key]!)
+      .then(({ fee, minLiquidity, maxWhitelistNative }) => { setFee(fee); setMinLiq(minLiquidity); setMaxWl(maxWhitelistNative); }).catch(() => {});
   }, [plan?.chain]);
 
   async function send(text: string) {
@@ -148,9 +149,12 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
       const [account] = await wallet.requestAddresses();
       try { await wallet.switchChain({ id: c.chainId }); } catch { await wallet.addChain({ chain }); await wallet.switchChain({ id: c.chainId }); }
 
-      const { fee: f, minLiquidity: m } = await readLimits(pub as any, c);
+      const pad = pads[c.key]!;
+      const { fee: f, minLiquidity: m, maxWhitelistNative } = await readLimits(pub as any, pad);
+      // The liquidity amount includes the small launch contribution (about $3), which comes out of it.
       const liquidity = parseEther(plan.liquidity);
-      if (liquidity < m) { setStatus(`The pool needs at least ${formatEther(m)} ${c.coin}. Ask Autistik to change the amount.`); return; }
+      const devBuy = parseEther(plan.devBuy || "0");
+      if (liquidity < f + m) { setStatus(`The pool needs at least ${formatEther(f + m)} ${c.coin} (including the ${formatEther(f)} ${c.coin} launch contribution).`); return; }
 
       // The Hub checks this wallet holds $20+ of AUTISTIK on BNB Chain and gives a 5-minute, one-use permit the contract checks.
       setStatus(`Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
@@ -160,15 +164,19 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
 
       setStatus("Confirm the launch in your wallet…");
       const call = {
-        account, address: c.launchpad!, abi: LAUNCHPAD_ABI, functionName: "launch",
+        account, address: pad, abi: LAUNCHPAD_ABI, functionName: "launch",
         args: [{
           name: plan.name, symbol: plan.symbol, supply: BigInt(plan.supply) * 10n ** 18n,
-          creatorBps: BigInt(Math.round(plan.creatorPercent * 100)), lockOption: LOCKS[plan.lock].option,
+          creatorBps: BigInt(Math.round(plan.creatorPercent * 100)), devBuyNative: devBuy,
+          buyTax: BigInt(Math.round(plan.buyTax * 100)), sellTax: BigInt(Math.round(plan.sellTax * 100)),
+          taxWallet: (plan.taxWallet || "0x0000000000000000000000000000000000000000") as `0x${string}`,
+          whitelist: plan.whitelist as `0x${string}`[], whitelistNative: plan.whitelist.length ? maxWhitelistNative : 0n,
+          lockOption: LOCKS[plan.lock].option,
           permitDeadline: BigInt(permit.deadline || 0),
-          // The fee shown now is the most this launch will pay, and it must happen within 20 minutes.
+          // The contribution shown now is the most this launch will pay, and it must happen within 20 minutes.
           maxFeeAccepted: f, deadline: BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
         }, (permit.signature || "0x") as `0x${string}`],
-        value: f + liquidity,
+        value: liquidity + devBuy,
       } as const;
       // A launch creates two contracts in one go; some mobile wallets underestimate that, so add 25% headroom.
       const gas = ((await pub.estimateContractGas(call as any)) * 125n) / 100n;
@@ -189,7 +197,9 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
       const reason = String(e?.shortMessage || e?.message || "");
       setStatus(/NotEligible|PermitExpired|PermitUsed/.test(reason)
         ? `The launch was refused: this wallet must hold at least $${MIN_HOLD_USD} of AUTISTIK. Press Launch again to re-check.`
-        : /FeeTooHigh|TooLate/.test(reason) ? "The launch fee changed or the launch took too long. Nothing was launched. Press Launch again."
+        : /FeeTooHigh|TooLate/.test(reason) ? "The launch contribution changed or the launch took too long. Nothing was launched. Press Launch again."
+        : /CreatorShareTooHigh/.test(reason) ? `Your share plus your first buy would be over ${MAX_CREATOR_PERCENT}% of the supply. Lower one of them.`
+        : /WhitelistTooBig/.test(reason) ? "The whitelist limit just changed. Press Launch again."
         : e?.shortMessage || "You cancelled in your wallet. Nothing was launched.");
     } finally { setLaunching(false); }
   }
@@ -210,7 +220,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
         </button>
       </div>
       <div className="kai lp">
-        {mode === "quick" ? <QuickLaunch disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
+        {mode === "quick" ? <QuickLaunch pads={pads} disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
         <div className="card chat lux launch-ai" data-c="autistik" data-mood="motivation">
           <div className="lux-top">
             <div className="lux-who"><button type="button" aria-selected="true" tabIndex={-1}><Bot /><span>Autistik · Launch Assistant</span></button></div>
@@ -245,7 +255,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
           </div>
           {msgs.length === 0 && signedIn && (
             <div className="lux-moods" role="group" aria-label="Pick a chain to start">
-              {Object.values(CHAINS).map((x) => (
+              {liveChains(pads).map((x) => (
                 <button key={x.key} type="button" onClick={() => send(x.name)} disabled={busy}>🚀<span>{x.name}</span></button>
               ))}
             </div>
@@ -272,6 +282,7 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
             <div className="card stack">
               <h3>🚀 {plan?.symbol} is live!</h3>
               <p className="muted" style={{ fontSize: ".9em" }}>Liquidity: {plan ? LOCKS[plan.lock].short.toLowerCase() : "locked"}. DexScreener usually shows the pair within a few minutes of the first trade.</p>
+              <StartTrading c={c} token={done.token} />
               <div className="field"><span>Token address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{done.token}</span></div>
               <div className="row" style={{ gap: 6 }}>
                 <a className="btn small" href={dexscreenerUrl(c, done.pair, done.token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
@@ -291,16 +302,21 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
                 <tr><th>Token</th><td>{plan.name} (${plan.symbol})</td></tr>
                 <tr><th>Supply</th><td className="num">{fmt(plan.supply)}</td></tr>
                 <tr><th>You keep</th><td className="num">{plan.creatorPercent}% · {creatorTokens.toLocaleString("en-US")}</td></tr>
-                <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {plan.liquidity} {c.coin}</td></tr>
+                {Number(plan.devBuy) > 0 && <tr><th>Your first buy</th><td className="num">{plan.devBuy} {c.coin}, before anyone else (you + first buy max {MAX_CREATOR_PERCENT}%)</td></tr>}
+                <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {fee === null ? plan.liquidity : formatEther(parseEther(plan.liquidity) - fee)} {c.coin}</td></tr>
                 <tr><th>Liquidity</th><td>{LOCKS[plan.lock].label}</td></tr>
+                <tr><th>Tax</th><td>{plan.buyTax || plan.sellTax ? `${plan.buyTax}% buy · ${plan.sellTax}% sell → ${plan.taxWallet.slice(0, 6)}…${plan.taxWallet.slice(-4)} (can only be lowered later)` : "No tax"}</td></tr>
+                <tr><th>Whitelist</th><td>{plan.whitelist.length ? `${plan.whitelist.length} wallet${plan.whitelist.length > 1 ? "s" : ""} may buy up to ${maxWl ? formatEther(maxWl) : "…"} ${c.coin} (≈$40) each before trading opens` : "None"}</td></tr>
+                <tr><th>Trading</th><td>Starts when you press Start trading (opens by itself after 24h). First 5 minutes: max 1% of supply per buy.</td></tr>
                 <tr><th>You must hold</th><td>${MIN_HOLD_USD}+ of AUTISTIK (BNB Chain), same wallet</td></tr>
-                <tr><th>Launch fee</th><td className="num">{fee === null ? "…" : fee === 0n ? "Free" : `${formatEther(fee)} ${c.coin}`}</td></tr>
+                <tr><th>Launch</th><td className="num">Free · {fee === null ? "…" : `${formatEther(fee)} ${c.coin}`} (≈$3) comes out of your liquidity</td></tr>
+                <tr><th>Trade fee</th><td>0.3% on buys and sells, supports AUTISTIK</td></tr>
               </tbody></table>
-              {minLiq !== null && parseEther(plan.liquidity) < minLiq && <div className="notice alert">The pool needs at least {formatEther(minLiq)} {c.coin}. Ask Autistik to change it.</div>}
+              {minLiq !== null && fee !== null && parseEther(plan.liquidity) < minLiq + fee && <div className="notice alert">The pool needs at least {formatEther(minLiq + fee)} {c.coin}. Change the liquidity amount.</div>}
               <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS[plan.lock].explain} Token prices can go to zero.</div>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand {plan.lock === "burn" ? "the liquidity is burned forever" : `the liquidity is ${LOCKS[plan.lock].short.toLowerCase()}`}, my wallet must hold ${MIN_HOLD_USD}+ of AUTISTIK, and this is not financial advice.</span></label>
               <button className="btn primary" type="button" disabled={!agree || launching || fee === null} onClick={launch}>
-                {launching ? "Launching…" : `Launch for ${fee === null ? "…" : formatEther(fee + parseEther(plan.liquidity))} ${c.coin} + gas`}
+                {launching ? "Launching…" : `Launch for ${formatEther(parseEther(plan.liquidity) + parseEther(plan.devBuy || "0"))} ${c.coin} + gas`}
               </button>
               {status && <span className="muted" style={{ fontSize: ".88em" }}>{status}</span>}
             </div>
@@ -311,9 +327,9 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
                 <li><b>1</b><span>{mode === "ai" ? "Answer Autistik's questions (type or speak)." : "Fill in the short form above."}</span></li>
                 <li><b>2</b><span>Check your launch plan.</span></li>
                 <li><b>3</b><span>Sign once in your wallet.</span></li>
-                <li><b>4</b><span>🚀 Your token is live on {Object.values(CHAINS).filter(isLive).map((x) => x.dex).join(", ") || "the DEX"}.</span></li>
+                <li><b>4</b><span>🚀 Press Start trading. Your token is live on {[...new Set(liveChains(pads).map((x) => x.dex))].join(", ") || "the DEX"}.</span></li>
               </ol>
-              <p className="muted" style={{ fontSize: ".86em" }}>You need ${MIN_HOLD_USD}+ of AUTISTIK on BNB Chain. Liquidity is locked (6 months or 1 year) or burned forever, so it can&apos;t be pulled.</p>
+              <p className="muted" style={{ fontSize: ".86em" }}>Free to launch. You need ${MIN_HOLD_USD}+ of AUTISTIK on BNB Chain. Liquidity is locked in the AUTISTIK Locker (6 months or 1 year) or burned forever, so it can&apos;t be pulled. No blacklist, tax max {MAX_TAX_PERCENT}%, anti-sniper protection.</p>
             </div>
           )}
           <div className="notice alert" style={{ fontSize: ".86em" }}><b>Never</b> share your seed phrase or private key. Autistik will never ask for it.</div>
@@ -324,11 +340,12 @@ export default function Launchpad({ signedIn }: { signedIn: boolean }) {
 }
 
 /** The launch form without AI: the same plan Autistik would prepare, filled in directly. */
-function QuickLaunch({ onPlan, disabled }: { onPlan: (p: LaunchPlan) => void; disabled?: boolean }) {
-  const live = Object.values(CHAINS).filter(isLive);
+function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => void; disabled?: boolean; pads: Pads }) {
+  const live = liveChains(pads);
   const [f, setF] = useState({
     chain: (live[0]?.key ?? "bsc") as LaunchPlan["chain"], name: "", symbol: "", supply: "1000000000", creatorPercent: "5",
     liquidity: live[0]?.suggestedLiquidity ?? "0.5", lock: "burn" as LiquidityLock, description: "", website: "", x: "", telegram: "",
+    buyTax: "0", sellTax: "0", taxWallet: "", wl1: "", wl2: "", wl3: "", devBuy: "0",
   });
   const [err, setErr] = useState("");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -336,7 +353,7 @@ function QuickLaunch({ onPlan, disabled }: { onPlan: (p: LaunchPlan) => void; di
 
   function review(e: React.FormEvent) {
     e.preventDefault();
-    const r = checkPlan({ ...f, creatorPercent: Number(f.creatorPercent) });
+    const r = checkPlan({ ...f, creatorPercent: Number(f.creatorPercent), buyTax: Number(f.buyTax || 0), sellTax: Number(f.sellTax || 0), whitelist: [f.wl1, f.wl2, f.wl3] }, pads);
     if ("error" in r) { setErr(r.error); return; }
     setErr("");
     onPlan(r.plan);
@@ -356,9 +373,29 @@ function QuickLaunch({ onPlan, disabled }: { onPlan: (p: LaunchPlan) => void; di
         <label className="field"><span>Token name</span><input value={f.name} onChange={set("name")} maxLength={32} placeholder="e.g. Calm Otter" required /></label>
         <label className="field"><span>Ticker</span><input value={f.symbol} onChange={set("symbol")} maxLength={13} placeholder="e.g. OTTER" required /></label>
         <label className="field"><span>Total supply</span><input value={f.supply} onChange={set("supply")} inputMode="numeric" required /></label>
-        <label className="field"><span>Your share (0–{MAX_CREATOR_PERCENT}%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
-        <label className="field"><span>Liquidity ({coin})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" required /></label>
+        <label className="field"><span>Your free share (0–20%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
+        <label className="field"><span>Liquidity ({coin}, incl. ≈$3 launch contribution)</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" required /></label>
       </div>
+      <fieldset className="stack" style={{ gap: 8, border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px" }}>
+        <legend style={{ padding: "0 6px" }}><b>Tax</b> <span className="muted" style={{ fontSize: ".85em" }}>optional, max {MAX_TAX_PERCENT}%, can only be lowered later</span></legend>
+        <div className="form-grid">
+          <label className="field"><span>Buy tax %</span><input value={f.buyTax} onChange={set("buyTax")} inputMode="decimal" /></label>
+          <label className="field"><span>Sell tax %</span><input value={f.sellTax} onChange={set("sellTax")} inputMode="decimal" /></label>
+          <label className="field" style={{ gridColumn: "1 / -1" }}><span>Tax wallet (receives the tax)</span><input value={f.taxWallet} onChange={set("taxWallet")} placeholder="0x…" spellCheck={false} /></label>
+        </div>
+      </fieldset>
+      <details>
+        <summary><b>Whitelist & first buy</b> <span className="muted" style={{ fontSize: ".85em" }}>optional</span></summary>
+        <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+          <p className="muted" style={{ margin: 0, fontSize: ".86em" }}>Up to 3 wallets may buy (about $40 each) before trading opens. Your first buy happens at launch, before anyone else. Your share + first buy can be at most {MAX_CREATOR_PERCENT}% of the supply.</p>
+          <div className="form-grid">
+            <label className="field"><span>Whitelist wallet 1</span><input value={f.wl1} onChange={set("wl1")} placeholder="0x…" spellCheck={false} /></label>
+            <label className="field"><span>Whitelist wallet 2</span><input value={f.wl2} onChange={set("wl2")} placeholder="0x…" spellCheck={false} /></label>
+            <label className="field"><span>Whitelist wallet 3</span><input value={f.wl3} onChange={set("wl3")} placeholder="0x…" spellCheck={false} /></label>
+            <label className="field"><span>Your first buy ({coin})</span><input value={f.devBuy} onChange={set("devBuy")} inputMode="decimal" /></label>
+          </div>
+        </div>
+      </details>
       <fieldset className="lock-pick">
         <legend>Liquidity</legend>
         {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
@@ -377,5 +414,35 @@ function QuickLaunch({ onPlan, disabled }: { onPlan: (p: LaunchPlan) => void; di
       {err && <div className="notice warn">{err}</div>}
       <button className="btn primary" type="submit" disabled={disabled}>Review launch plan</button>
     </form>
+  );
+}
+
+/** After launch: the creator opens trading (it also opens by itself after 24 hours). */
+function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  async function start() {
+    const eth = (window as any).ethereum;
+    if (!eth) { setMsg("Open this page in your wallet's browser."); return; }
+    setBusy(true); setMsg("Confirm in your wallet…");
+    try {
+      const chain = viemChain(c);
+      const wallet = createWalletClient({ chain, transport: custom(eth) });
+      const pub = createPublicClient({ chain, transport: custom(eth) });
+      const [account] = await wallet.requestAddresses();
+      const hash = await wallet.writeContract({ account, chain, address: token as `0x${string}`, abi: LAUNCH_TOKEN_ABI, functionName: "openTrading" } as any);
+      await pub.waitForTransactionReceipt({ hash });
+      setOpen(true); setMsg("✅ Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots.");
+    } catch (e: any) {
+      setMsg(/AlreadyOpen/.test(String(e?.message)) ? "Trading is already open." : /NotOwner/.test(String(e?.message)) ? "Only the wallet that launched the token can start trading." : e?.shortMessage || "You cancelled in your wallet.");
+    } finally { setBusy(false); }
+  }
+  return (
+    <div className="notice" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <span><b>Next: start trading.</b> Until you do, only your whitelisted wallets can buy. It opens by itself after 24 hours.</span>
+      {!open && <button className="btn primary" type="button" disabled={busy} onClick={start}>{busy ? "Starting…" : "▶ Start trading"}</button>}
+      {msg && <small className="muted">{msg}</small>}
+    </div>
   );
 }
