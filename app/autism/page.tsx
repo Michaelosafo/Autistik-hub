@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ProHero from "@/components/ProHero";
 
 export const metadata = {
   title: "Understanding autism · AUTISTIK Hub",
@@ -32,11 +33,9 @@ const TRAITS = ["Communication style", "Sensory processing", "Focus and interest
 export default function AutismPage() {
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
-      <div className="page-head">
-        <div className="label">Understanding autism</div>
-        <h1>Different wavelength. Same channel.</h1>
-        <p className="muted">A plain-language guide to what autism is, common misconceptions, and how to be supportive. For anyone who wants to understand.</p>
-      </div>
+      <ProHero tone="rose" kicker="UNDERSTANDING AUTISM" title="Different wavelength. Same channel."
+        text="A plain-language guide to what autism is, common misconceptions, and how to be supportive. For anyone who wants to understand."
+        stats={[["~1 in 100", "children (WHO)"], ["Lifelong", "not an illness"], ["Spectrum", "not a scale"]]} />
 
       <div className="card stack">
         <h2>What autism actually is</h2>

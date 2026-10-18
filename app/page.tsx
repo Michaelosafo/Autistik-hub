@@ -30,7 +30,7 @@ const STEPS: [string, string, string, string][] = [
   ["spark", "3. Trade & trend", "Your token goes live on PancakeSwap or Uniswap, shows on DexScreener, and can trend here for everyone to see.", "🔥"],
 ];
 
-const SAFE = ["Liquidity locked 6 months, 1 year, or burned", "No tax, no minting, no owner keys", "Every launch checked on-chain", "Listed on DexScreener automatically"];
+const SAFE = ["Liquidity locked 6 months, 1 year, or burned", "Tax capped at 10%, no minting", "Every launch checked on-chain", "Listed on DexScreener automatically"];
 
 export default async function Home() {
   const sb = supabaseServer();
@@ -54,6 +54,12 @@ export default async function Home() {
             <div className="row">
               <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
               <Link className="btn ghost" href="/autism">What is autism?</Link>
+            </div>
+            <div className="an-metrics">
+              <div><b>{board.length}</b><span>tokens trending</span></div>
+              <div><b>{GROUPS.length}</b><span>groups</span></div>
+              <div><b>2</b><span>AI companions</span></div>
+              <div><b>24/7</b><span>live</span></div>
             </div>
           </div>
           <div className="hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>

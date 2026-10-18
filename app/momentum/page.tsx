@@ -5,6 +5,7 @@ import TokenLogo from "@/components/TokenLogo";
 import PinButton from "@/components/PinButton";
 import MomentumAlerts from "@/components/MomentumAlerts";
 import AutoRefresh from "@/components/AutoRefresh";
+import ProHero from "@/components/ProHero";
 import { MOMENTUM_CHAINS, chainName, isMomentumChain, usd, type Pick } from "@/lib/momentum";
 import { momentum, trackRecord } from "@/lib/momentum-server";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
@@ -34,11 +35,9 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
     <div className="stack" style={{ maxWidth: 980 }}>
       <AutoRefresh seconds={120} />
       <SectionCards items={LAUNCH_CARDS} active="/momentum" label="Launch" />
-      <div className="page-head">
-        <div className="label">Momentum</div>
-        <h1>🚀 Fast movers</h1>
-        <p className="muted">Tokens where volume and buying are suddenly much higher than normal, scored for how likely a quick move up (like 2x) is, with a suggested buy range, take-profit steps and a stop. Updated every 2 minutes.</p>
-      </div>
+      <ProHero tone="gold" kicker="AUTISTIK · MOMENTUM SCANNER" title="🚀 Fast movers" live="Scanning"
+        text="Tokens where volume and buying are suddenly much higher than normal, scored for how likely a quick move up (like 2x) is, with a suggested buy range, take-profit steps and a stop."
+        stats={[[picks.filter((p) => p.level === "hot").length, "hot now"], [picks.filter((p) => p.level === "building").length, "building"], [record && record.picks ? `${Math.round((record.hit2x / record.picks) * 100)}%` : "–", "hot picks hit 2x (7d)"], ["2 min", "refresh"]]} />
       <div className="notice warn" style={{ fontSize: ".9em" }}>
         ⚠️ <b>Suggestions only, not financial advice.</b> Fast movers are the riskiest tokens there are: many drop as fast as they rise. Only use money you can afford to lose, take profit in steps and always use a stop.
       </div>
