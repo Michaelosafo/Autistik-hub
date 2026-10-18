@@ -2,12 +2,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { SCAN_CHAINS } from "@/lib/analytics-chains";
 
 /** Paste a token address to see its top 40 wallets and dev, and get sell alerts. */
 export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixedToken, label = "Scan", pin }: { signedIn: boolean; chain?: string; token?: string; label?: string; pin?: boolean }) {
   const router = useRouter();
-  const [chain, setChain] = useState(fixedChain || "bsc");
+  // "auto" finds the network from the address; BNB Chain and Solana can also be picked by hand.
+  const [chain, setChain] = useState(fixedChain || "auto");
   const [token, setToken] = useState(fixedToken || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -39,19 +39,22 @@ export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixe
       {err && <span className="muted" style={{ fontSize: ".8em" }}>{err}</span>}
     </span>
   );
+  const NETS = [{ key: "auto", name: "⚡ Auto" }, { key: "bsc", name: "BNB Chain" }, { key: "solana", name: "Solana" }];
   return (
-    <form className="scan-form" onSubmit={scan}>
-      <select value={chain} onChange={(e) => setChain(e.target.value)} aria-label="Chain">
-        {SCAN_CHAINS.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
-      </select>
-      <input value={token} onChange={(e) => {
-        const v = e.target.value;
-        setToken(v);
-        // Pasted a Solana address? Switch to Solana. Pasted an 0x address while on Solana? Switch back.
-        if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.trim())) setChain("solana");
-        else if (/^0x/i.test(v.trim()) && chain === "solana") setChain("bsc");
-      }} placeholder={chain === "solana" ? "Paste a Solana token address" : "Paste a token address (0x…)"} aria-label="Token address" spellCheck={false} autoComplete="off" />
-      <button className="btn primary" type="submit" disabled={busy || !token.trim()}>{busy ? (pin ? "Pinning…" : "Scanning…") : (pin ? "📌 " : "🔎 ") + label}</button>
+    <form className="scan-form pro" onSubmit={scan}>
+      <div className="net-pills" role="radiogroup" aria-label="Network">
+        {NETS.map((n) => <button key={n.key} type="button" role="radio" aria-checked={chain === n.key} className={"net-pill" + (chain === n.key ? " on" : "")} onClick={() => setChain(n.key)}>{n.name}</button>)}
+      </div>
+      <div className="scan-row">
+        <input value={token} onChange={(e) => {
+          const v = e.target.value;
+          setToken(v);
+          // A pasted Solana address can only be Solana; an 0x address goes back to auto-detect.
+          if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v.trim())) setChain("solana");
+          else if (/^0x/i.test(v.trim()) && chain === "solana") setChain("auto");
+        }} placeholder="Paste any token address: we detect the network" aria-label="Token address" spellCheck={false} autoComplete="off" />
+        <button className="btn primary" type="submit" disabled={busy || !token.trim()}>{busy ? (chain === "auto" ? "Detecting…" : pin ? "Pinning…" : "Scanning…") : (pin ? "📌 " : "🔎 ") + label}</button>
+      </div>
       {err && <p className="scan-err" role="alert">{err}</p>}
     </form>
   );
