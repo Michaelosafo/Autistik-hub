@@ -296,8 +296,8 @@ contract AutistikTokenDeployer {
  * burns the LP tokens or locks them in the AUTISTIK Locker for 6 months or 1 year.
  * Locked liquidity: nobody can touch it before the unlock date. After it, the creator asks the AUTISTIK team, who
  * releases it to the creator (and only to the creator).
- * Platform fee from trades is split 30% marketing, 30% AUTISTIK buy-and-burn, 40% team. The launch fee goes to
- * marketing.
+ * Launching is free: a small contribution (about $3) comes out of the coin sent with the launch and goes to
+ * marketing. Platform fee from trades is split 30% marketing, 30% AUTISTIK buy-and-burn, 40% team.
  */
 contract AutistikLaunchpadV2 is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -386,6 +386,7 @@ contract AutistikLaunchpadV2 is ReentrancyGuard {
     }
 
     struct Config {
+        address owner; // the AUTISTIK team wallet (set explicitly so the launchpad can be deployed by any deployer)
         address router;
         address locker;
         address stablecoin;
@@ -401,7 +402,7 @@ contract AutistikLaunchpadV2 is ReentrancyGuard {
     }
 
     constructor(Config memory c) {
-        if (c.router == address(0) || c.locker == address(0) || c.stablecoin == address(0) || c.team == address(0) || c.marketing == address(0) || c.burner == address(0)) revert ZeroAddress();
+        if (c.owner == address(0) || c.router == address(0) || c.locker == address(0) || c.stablecoin == address(0) || c.team == address(0) || c.marketing == address(0) || c.burner == address(0)) revert ZeroAddress();
         if (c.launchFee > c.maxLaunchFee || c.platformFee > MAX_PLATFORM_FEE) revert FeeTooHigh();
         router = IV2Router(c.router);
         factory = IV2Factory(router.factory());
@@ -421,8 +422,8 @@ contract AutistikLaunchpadV2 is ReentrancyGuard {
         uint256 usd = 10 ** IERC20Metadata(c.stablecoin).decimals();
         plans[0] = Plan(30 * usd, 5 hours);
         plans[1] = Plan(200 * usd, 1 days);
-        owner = msg.sender;
-        emit OwnershipTransferred(address(0), msg.sender);
+        owner = c.owner;
+        emit OwnershipTransferred(address(0), c.owner);
     }
 
     struct LaunchParams {
@@ -442,7 +443,8 @@ contract AutistikLaunchpadV2 is ReentrancyGuard {
         uint256 deadline;
     }
 
-    /// @dev msg.value = launchFee + liquidity + devBuyNative.
+    /// @dev msg.value = launchFee + liquidity + devBuyNative. The site shows the creator one "liquidity" amount and
+    ///      the small launch contribution comes out of it.
     function launch(LaunchParams calldata p, bytes calldata permitSig) external payable nonReentrant returns (address token) {
         (uint256 fee, uint256 liquidityNative) = _validate(p, permitSig);
         token = _deploy(p, liquidityNative);
@@ -628,6 +630,14 @@ contract AutistikLaunchpadV2 is ReentrancyGuard {
 
     function setMaxWhitelistNative(uint256 amount) external onlyOwner {
         maxWhitelistNative = amount;
+        emit SettingsChanged();
+    }
+
+    /// @notice Keeps the dollar amounts right as the coin's price moves: the launch contribution (about $3, taken
+    ///         from the liquidity) and the whitelist buy limit (about $40). One transaction from the team.
+    function syncPrices(uint256 launchFee_, uint256 maxWhitelistNative_) external onlyOwner {
+        if (launchFee_ > maxLaunchFee) revert FeeTooHigh();
+        (launchFee, maxWhitelistNative) = (launchFee_, maxWhitelistNative_);
         emit SettingsChanged();
     }
 

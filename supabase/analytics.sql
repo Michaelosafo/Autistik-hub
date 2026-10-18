@@ -337,3 +337,7 @@ select cron.schedule('autistik-momentum', '*/5 * * * *', $$ select net.http_get(
 -- Visits: one person = one IP address, stored only as a secret hash (see app/api/track/route.ts).
 alter table public.page_views add column if not exists ip_hash text;
 -- site_stats() counts distinct coalesce(ip_hash, 'c:' || visitor); see the live definition in the database.
+
+-- Launch Pad v2: where it's deployed on each chain (saved by the admin's deploy, checked on-chain). Server-only.
+create table if not exists public.launchpad_contracts (chain text primary key, address text not null check (address ~ '^0x[0-9a-fA-F]{40}$'), burner text, tx_hash text, deployed_at timestamptz not null default now());
+alter table public.launchpad_contracts enable row level security;
