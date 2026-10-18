@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Community from "@/components/Community";
-import SectionTabs, { COMMUNITY_TABS } from "@/components/SectionTabs";
+import SectionCards, { COMMUNITY_CARDS } from "@/components/SectionCards";
 import { currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +10,7 @@ export default async function CommunityPage({ searchParams }: { searchParams: { 
   const user = await currentUser();
   return (
     <div className="stack">
-      <SectionTabs tabs={COMMUNITY_TABS} active="/community" label="Community" />
+      <SectionCards items={COMMUNITY_CARDS} active="/community" label="Chat and community" />
       <div className="page-head">
         <div className="label">Community · Groups</div>
         <h1>Two groups. One community.</h1>

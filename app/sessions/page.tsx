@@ -2,7 +2,7 @@ import { adminState } from "@/lib/admin";
 import Art from "@/components/Art";
 import SessionCard from "@/components/SessionCard";
 import SessionForms from "@/components/SessionForms";
-import SectionTabs, { COMMUNITY_TABS } from "@/components/SectionTabs";
+import SectionCards, { COMMUNITY_CARDS } from "@/components/SectionCards";
 import { PHOTOS } from "@/lib/site";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -22,7 +22,7 @@ export default async function SessionsPage() {
   }
   return (
     <div className="stack">
-      <SectionTabs tabs={COMMUNITY_TABS} active="/sessions" label="Community" />
+      <SectionCards items={COMMUNITY_CARDS} active="/sessions" label="Chat and community" />
       <Art kind="stage" className="stage art" photo={PHOTOS.stage.src} alt={PHOTOS.stage.alt} />
       <div className="page-head">
         <div className="label">Community · Live sessions</div>

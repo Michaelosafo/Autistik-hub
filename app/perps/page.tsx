@@ -1,4 +1,4 @@
-import LaunchNav from "@/components/LaunchNav";
+import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import PerpsVenues from "@/components/PerpsVenues";
 import { usd } from "@/lib/market";
 import { PERP_COINS, PERP_VENUES, perpPrices } from "@/lib/perps";
@@ -15,7 +15,7 @@ export default async function PerpsPage() {
   const { source, prices } = await perpPrices();
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
-      <LaunchNav active="/perps" />
+      <SectionCards items={LAUNCH_CARDS} active="/perps" label="Launch" />
       <div className="page-head">
         <h1>Perps</h1>
         <p className="muted">Trade futures: bet on a coin going up (long) or down (short). Leverage makes wins and losses bigger.</p>

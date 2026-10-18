@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getAddress } from "viem";
-import LaunchNav from "@/components/LaunchNav";
+import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import TokenLogo from "@/components/TokenLogo";
 import PinButton from "@/components/PinButton";
 import MomentumAlerts from "@/components/MomentumAlerts";
@@ -33,7 +33,7 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
       <AutoRefresh seconds={120} />
-      <LaunchNav active="/momentum" />
+      <SectionCards items={LAUNCH_CARDS} active="/momentum" label="Launch" />
       <div className="page-head">
         <div className="label">Momentum</div>
         <h1>🚀 Fast movers</h1>
