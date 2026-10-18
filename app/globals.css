@@ -1052,3 +1052,9 @@ a.alert-row:hover{background:var(--surface-2)}
 .hero > *{position:relative;z-index:1}
 .hero .an-metrics{margin-top:22px}
 .an-hero .muted{color:rgba(233,236,248,.65)}
+/* Clean header: no grid texture and no boxes behind the numbers, just a row of stats with thin dividers. */
+.an-hero::after,.hero::after{content:none}
+.an-metrics{gap:0}
+.an-metrics div{background:none;border:0;border-left:1px solid rgba(255,255,255,.12);border-radius:0;padding:2px 14px}
+.an-metrics div:first-child{border-left:0;padding-left:0}
+@media (max-width:760px){ .an-metrics{row-gap:12px} .an-metrics div:nth-child(odd){border-left:0;padding-left:0} .an-metrics div:last-child:nth-child(odd){grid-column:auto} }
