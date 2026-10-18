@@ -18,6 +18,7 @@ import { isPro } from "@/lib/pro-server";
 import { confluence, trackRecord, whales } from "@/lib/analytics-pro";
 import TradePlans from "@/components/TradePlans";
 import PinButton from "@/components/PinButton";
+import { isWChain } from "@/lib/wallet-chains";
 import { stateOf, type SignalState } from "@/lib/analytics-alerts";
 import { ACHAINS, checkToken, hasLiveTrades, heldFor, isAChain, isChainAddress, syncTrades } from "@/lib/analytics";
 import { walletUrl } from "@/lib/explorer";
@@ -140,6 +141,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
             <a className="mono muted" href={`${c.explorer}/token/${t.token}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: ".85em", overflowWrap: "anywhere" }}>{t.token}</a>
           </div>
           <div className="row" style={{ gap: 8 }}>
+            {isWChain(chain) && <Link className="btn small primary" href={`/wallet?chain=${chain}&buy=${t.token}`}>💳 Buy in wallet</Link>}
             <PinButton signedIn={!!user} chain={chain} token={t.token} pinned={!!pin?.length} />
             <WatchButton uid={user?.id ?? null} chain={chain} token={t.token} watching={!!watch?.length} count={(wc as any)?.watchers ?? 0} />
             <a className="btn small" href={`https://dexscreener.com/${c.dex}/${t.token}`} target="_blank" rel="noopener noreferrer">📈 Chart</a>
