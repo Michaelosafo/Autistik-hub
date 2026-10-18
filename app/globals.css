@@ -1058,3 +1058,58 @@ a.alert-row:hover{background:var(--surface-2)}
 .an-metrics div{background:none;border:0;border-left:1px solid rgba(255,255,255,.12);border-radius:0;padding:2px 14px}
 .an-metrics div:first-child{border-left:0;padding-left:0}
 @media (max-width:760px){ .an-metrics{row-gap:12px} .an-metrics div:nth-child(odd){border-left:0;padding-left:0} .an-metrics div:last-child:nth-child(odd){grid-column:auto} }
+/* AUTISTIK Wallet */
+.aw-top{gap:12px}
+.aw-total{font-family:var(--f-mono);font-size:clamp(2em,6vw,2.6em);font-weight:700;color:#fff;line-height:1.1;margin:4px 0 2px}
+.aw-addr{all:unset;cursor:pointer;font-family:var(--f-mono);color:rgba(233,236,248,.8)}
+.aw-addr:hover{color:#fff}
+.aw-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.aw-act{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 2px;border-radius:12px;font-size:.78em;font-weight:700;color:rgba(233,236,248,.8);text-align:center}
+.aw-act span{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.08);font-size:1.25em;color:#fff}
+.aw-act.on{color:#8CF5C4} .aw-act.on span{background:#3EE58F;color:#0b1020}
+.aw-act:focus-visible{outline:2px solid #8CF5C4}
+.aw-why{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.aw-why p{font-size:.88em;margin:4px 0 0}
+.aw-row{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px;border-radius:12px;box-sizing:border-box;width:100%}
+.aw-row:hover,.aw-row:focus-visible{background:var(--surface-2)}
+.aw-row .grow{flex:1;min-width:0;display:flex;flex-direction:column}
+.aw-row small{color:var(--muted);font-size:.78em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aw-num{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--f-mono)}
+.aw-num small{font-family:inherit}
+.aw-logo{border-radius:50%;flex:none;object-fit:cover;background:var(--surface-2)}
+.aw-logo.ph{display:grid;place-items:center;font-size:.7em;font-weight:800;color:var(--muted)}
+.aw-add{display:flex;gap:8px;margin-top:6px} .aw-add input{flex:1;min-width:0}
+.aw-swap{position:relative}
+.aw-box{background:var(--surface-2);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.aw-box-top,.aw-box-mid{justify-content:space-between;gap:10px;align-items:center;flex-wrap:nowrap}
+.aw-box-mid input,.aw-out{flex:1;min-width:0;font-size:1.7em;font-family:var(--f-mono);font-weight:700;border:0;background:transparent;padding:0;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.aw-box-mid input:focus{outline:none}
+.aw-out .muted{font-size:.55em;font-family:var(--f-body,inherit)}
+.aw-flip{all:unset;cursor:pointer;align-self:center;margin:-18px 0;z-index:1;width:36px;height:36px;display:grid;place-items:center;border-radius:12px;background:var(--surface);border:3px solid var(--bg,#f4f5fa);font-weight:800}
+.aw-pick{all:unset;cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 10px 6px 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line);white-space:nowrap;flex:none}
+.aw-link{all:unset;cursor:pointer;font-size:.78em;color:var(--teal);font-weight:700}
+.aw-details{display:flex;flex-direction:column;gap:6px;font-size:.88em}
+.aw-details > div{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.aw-details span:first-child{color:var(--muted)}
+.aw-details b{text-align:right}
+.aw-slip{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.aw-slip button{all:unset;cursor:pointer;font-size:.8em;padding:3px 8px;border-radius:999px;border:1px solid var(--line)}
+.aw-slip button.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.aw-risk{border-radius:12px;padding:10px 12px;font-size:.88em;background:var(--surface-2)}
+.aw-risk ul{margin:4px 0 0;padding-left:18px}
+.aw-risk.ok{background:var(--teal-soft)} .aw-risk.warn{background:var(--sun-soft)} .aw-risk.danger{background:var(--coral-soft)}
+.aw-ack{gap:8px;align-items:center;font-size:.9em}
+.aw-go{width:100%;padding:14px;font-size:1.05em;justify-content:center;text-align:center}
+.aw-review{border:2px solid var(--teal);border-radius:16px;padding:12px;gap:10px}
+.aw-step{display:flex;gap:10px;align-items:center;font-weight:700}
+.aw-spin{width:16px;height:16px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--teal);animation:awspin .8s linear infinite}
+@keyframes awspin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.aw-spin{animation:none}}
+.aw-sheet{position:fixed;inset:0;z-index:80;background:rgba(5,8,20,.55);display:flex;align-items:flex-end;justify-content:center}
+.aw-sheet-in{background:var(--surface);width:min(520px,100%);max-height:80dvh;border-radius:20px 20px 0 0;padding:16px;display:flex;flex-direction:column;gap:10px}
+@media (min-width:700px){ .aw-sheet{align-items:center} .aw-sheet-in{border-radius:20px} }
+.aw-list{overflow-y:auto;display:flex;flex-direction:column}
+.aw-break{word-break:break-all;font-family:var(--f-mono);font-size:.85em}
+.aw-qr{border-radius:12px;background:#fff;padding:6px}
+.aw-sec{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:.92em}
+@media (max-width:640px){ .aw-why{grid-template-columns:1fr} .aw-act{font-size:.7em} .aw-act span{width:34px;height:34px} }

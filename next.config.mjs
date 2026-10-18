@@ -9,7 +9,8 @@ const CSP = [
   "font-src 'self' data: https://fonts.gstatic.com https://vercel.live",
   "img-src 'self' data: blob: https:",
   `connect-src 'self' https: wss:${dev ? " ws: http://localhost:*" : ""}`,
-  "frame-src https://challenges.cloudflare.com https://vercel.live",
+  // The built-in wallet (Privy) keeps keys in its own secure frame.
+  "frame-src https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "media-src 'self' data: blob:",
@@ -26,6 +27,11 @@ const nextConfig = {
   // Keeps first deploys smooth; run `npx tsc --noEmit` locally to see type hints.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // Optional add-ons of the wallet library (Privy) that the Hub doesn't use: left out of the bundle.
+  webpack(config) {
+    config.resolve.alias = { ...config.resolve.alias, "@farcaster/mini-app-solana": false, "@abstract-foundation/agw-client": false };
+    return config;
+  },
   // Old autistikk.com addresses keep working after the switch to the Hub.
   async redirects() {
     return [

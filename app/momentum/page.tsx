@@ -6,6 +6,7 @@ import PinButton from "@/components/PinButton";
 import MomentumAlerts from "@/components/MomentumAlerts";
 import AutoRefresh from "@/components/AutoRefresh";
 import ProHero from "@/components/ProHero";
+import { isWChain } from "@/lib/wallet-chains";
 import { MOMENTUM_CHAINS, chainName, isMomentumChain, usd, type Pick } from "@/lib/momentum";
 import { momentum, trackRecord } from "@/lib/momentum-server";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
@@ -104,6 +105,7 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
               {p.risks.map((r, i) => <li key={"r" + i} className="down">⚠ {r}</li>)}
             </ul>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
+              {isWChain(p.chain) && <Link className="btn small primary" href={`/wallet?chain=${p.chain}&buy=${token}`}>💳 Buy</Link>}
               <Link className="btn small" href={`/analytics/${p.chain}/${token}`}>📊 Full analysis</Link>
               <PinButton signedIn={!!user} chain={p.chain} token={token} pinned={pinned.has(`${p.chain}:${token.toLowerCase()}`)} />
               <a className="btn small" href={`https://dexscreener.com/${p.chain}/${p.pool}`} target="_blank" rel="noopener noreferrer">DexScreener ↗</a>

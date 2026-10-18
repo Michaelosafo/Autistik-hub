@@ -17,10 +17,11 @@ const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/trade", "/perps", "/lockers", "/momentum"] },
   { href: "/analytics", name: "Analytics", short: "Stats", icon: "i-stats" },
+  { href: "/wallet", name: "Wallet", icon: "i-wallet" },
   { href: "/companions", name: "Chat & Community", short: "Chat", icon: "i-kai", match: ["/companions", "/community", "/sessions"] },
   { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"] },
   { href: "/autism", name: "About autism", icon: "i-learn", railOnly: true },
-  { href: "/safety", name: "Safety", icon: "i-safe" },
+  { href: "/safety", name: "Safety", icon: "i-safe", railOnly: true },
 ];
 
 function Icon({ id }: { id: string }) {
@@ -170,7 +171,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
           </div>
           <Tracker />
           <div className="page">{children}</div>
-          <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a></footer>
+          <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety &amp; privacy</Link></footer>
         </main>
       </div>
       <nav className="tabbar">
@@ -196,6 +197,7 @@ function Sprites() {
   <symbol id="i-fund" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/><path d="M3 21h18"/></symbol>
   <symbol id="i-learn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 7h6M9 11h5"/></symbol>
   <symbol id="i-trend" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+  <symbol id="i-wallet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7a2 2 0 0 1 2-2h11v4"/><path d="M4 7v11a2 2 0 0 0 2 2h14V9H6a2 2 0 0 1-2-2z"/><circle cx="16" cy="14.5" r="1.2" fill="currentColor"/></symbol>
   <symbol id="i-safe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
   <symbol id="i-stats" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/><circle cx="16" cy="9" r="1.6"/></symbol>
   <symbol id="i-calm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8.5 5.5-14 15-15-.8 9.8-6.5 15-15 15z"/><path d="M5 19l8-8"/></symbol>
