@@ -5,7 +5,7 @@ import { TOKEN_ADDRESS } from "@/lib/groups";
 import { NATIVE, WCHAINS } from "@/lib/wallet-chains";
 
 const CREATE2 = "0x4e59b44847b379578588920cA78FbF26c0B4956C" as const;
-const SALT = keccak256(toHex("AUTISTIK Staking v1"));
+const SALT = keccak256(toHex("AUTISTIK Staking v2"));
 const c = WCHAINS.bsc;
 const WEEK = 7n * 86400n;
 
@@ -59,8 +59,8 @@ export default function StakeAdmin() {
     try {
       const { w, pub, account } = await wallet();
       const { STAKING_ABI } = await import("@/lib/staking-build");
-      setMsg("Confirm in your wallet: Official pool, stake AUTISTIK, earn BNB, 7-day lock, rewards paid over 7 days.");
-      const hash = await w.sendTransaction({ account, chain: c.viem, to: getAddress(info!.contracts.bsc), data: encodeFunctionData({ abi: STAKING_ABI, functionName: "createPool", args: [getAddress(TOKEN_ADDRESS), NATIVE, WEEK, WEEK] }) });
+      setMsg("Confirm in your wallet: Official pool, stake AUTISTIK, earn BNB, rewards paid over 7 days (members pick their own lock for a boost).");
+      const hash = await w.sendTransaction({ account, chain: c.viem, to: getAddress(info!.contracts.bsc), data: encodeFunctionData({ abi: STAKING_ABI, functionName: "createPool", args: [getAddress(TOKEN_ADDRESS), NATIVE, WEEK] }) });
       setMsg("Sent. Waiting for the network…");
       await pub.waitForTransactionReceipt({ hash, timeout: 180_000 }).catch(() => null);
       setMsg("The Official pool is open. Reload the page, then use Add rewards on its card to share fees (in BNB).");

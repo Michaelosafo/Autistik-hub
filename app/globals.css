@@ -1397,3 +1397,10 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 /* Four section cards ($AUTISTIK: Buy, Stake, Rewards, Fund): 4 across, 2×2 on phones */
 .launch-nav.n4{grid-template-columns:repeat(4,minmax(0,1fr))}
 @media (max-width:640px){ .launch-nav.n4{grid-template-columns:repeat(2,minmax(0,1fr))} .launch-nav.n4 .ln-card{justify-content:center;text-align:center} }
+.stk-tiers{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:6px}
+.stk-tiers button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;border:1px solid #2b2f36;background:#0b0e11;color:#EAECEF;cursor:pointer;font-size:.82em}
+.stk-tiers button b{font-size:1em}
+.stk-tiers button span{font-weight:800;color:var(--gold,#F0B90B)}
+.stk-tiers button small{color:#0ECB81}
+.stk-tiers button.on{border-color:var(--gold,#F0B90B);background:rgba(240,185,11,.14)}
+@media (max-width:420px){ .stk-tiers{grid-template-columns:repeat(3,minmax(0,1fr))} }
