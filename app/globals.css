@@ -1208,3 +1208,5 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
   .tx-tr{grid-template-columns:1.3fr 1fr 1fr} .tx-tr.tx-orders{grid-template-columns:1.3fr .9fr 1.1fr .6fr}
 }
 @media (max-width:860px){ .tx .hide-sm{display:none} }
+.tx-net,.tx-quote,.tx-inline select{width:auto;flex:none}
+.tx .tx-field input{border:0 !important;background:transparent !important;box-shadow:none;padding:2px 0}

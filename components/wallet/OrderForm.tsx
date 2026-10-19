@@ -18,6 +18,8 @@ async function post<T = any>(action: string, body: unknown): Promise<T> {
 }
 const WRAP_ABI = parseAbi(["function deposit() payable"]);
 const fix = (n: number, d: number) => (isFinite(n) && n > 0 ? n.toFixed(Math.min(d, 12)) : "0");
+/** A price as plain digits (never "7.3e-7"), with about 5 significant figures. */
+const plain = (n: number) => (!isFinite(n) || n <= 0 ? "" : n >= 1 ? String(Number(n.toPrecision(6))) : n.toFixed(Math.min(18, -Math.floor(Math.log10(n)) + 4)).replace(/0+$/, ""));
 
 /**
  * Limit and stop-loss orders. Signing an order is free; the only transactions are approving the exact amount (and, for
@@ -37,7 +39,7 @@ export default function OrderForm({ c, signer, owner, side, kind, base, quote, m
   const [step, setStep] = useState(""); const [err, setErr] = useState(""); const [ok, setOk] = useState("");
 
   useEffect(() => { if (c.kind === "evm") contracts().then((m) => setContract(m[c.key] ?? null)); }, [c]);
-  useEffect(() => { if (marketPrice && !price) setPrice(String(Number(marketPrice.toPrecision(6)))); }, [marketPrice]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (marketPrice && !price) setPrice(plain(marketPrice)); }, [marketPrice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (c.kind === "solana") return <div className="tx-note">Limit and stop-loss orders on Solana are coming next. Market orders work now.</div>;
   if (contract === undefined) return <div className="tx-dim">Loading…</div>;
@@ -108,7 +110,7 @@ export default function OrderForm({ c, signer, owner, side, kind, base, quote, m
   return (
     <div className="stack tx-form" style={{ gap: 10 }}>
       <div className="tx-field">
-        <div className="row tx-field-top"><span>{kind === "limit" ? "Limit price" : "Stop price"} ({quote.symbol})</span>{marketPrice && <button type="button" className="aw-link" onClick={() => setPrice(String(Number(marketPrice.toPrecision(6))))}>Market {Number(marketPrice.toPrecision(5))}</button>}</div>
+        <div className="row tx-field-top"><span>{kind === "limit" ? "Limit price" : "Stop price"} ({quote.symbol})</span>{marketPrice && <button type="button" className="aw-link" onClick={() => setPrice(plain(marketPrice))}>Market {plain(marketPrice)}</button>}</div>
         <div className="row tx-field-mid"><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(",", ".").replace(/[^\d.]/g, ""))} placeholder="0.00" aria-label="Price" /><span className="tx-unit">{quote.symbol}</span></div>
         {vs != null && <small className={instant ? "down" : "tx-dim"}>{vs >= 0 ? "+" : ""}{vs.toFixed(2)}% vs market{instant ? (kind === "limit" ? ": fills right away" : ": would trigger right away") : ""}</small>}
       </div>
@@ -164,7 +166,7 @@ export function OpenOrders({ c, signer, owner }: { c: WChain; signer: Signer; ow
         {rows.map((o) => (
           <div key={o.id} className="tx-tr tx-orders" role="row">
             <span><b className={o.side === "buy" ? "up" : "down"}>{o.kind === "limit" ? "Limit" : "Stop"} {o.side === "buy" ? "buy" : "sell"}</b><br /><small className="tx-dim">{o.side === "sell" ? `${o.symbol_in}/${o.symbol_out}` : `${o.symbol_out}/${o.symbol_in}`}</small></span>
-            <span className="n">{Number(o.price).toPrecision(5)}</span>
+            <span className="n">{plain(Number(o.price))}</span>
             <span className="n hide-sm">{amt(raw2num(o.amount_in, o.decimals_in))} {o.symbol_in}</span>
             <span><b>{o.status === "open" ? "Open" : o.status === "filling" ? "Filling" : o.status === "filled" ? "Filled" : o.status === "cancelled" ? "Cancelled" : o.status === "expired" ? "Expired" : "Failed"}</b>
               {o.status === "filled" && o.out_amount ? <><br /><small className="up">{amt(raw2num(o.out_amount, o.decimals_out))} {o.symbol_out}</small></> : o.note && o.status === "open" ? <><br /><small className="tx-dim">{o.note}</small></> : null}</span>
