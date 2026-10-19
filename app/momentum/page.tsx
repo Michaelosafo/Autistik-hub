@@ -40,7 +40,7 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
       <ProHero tone="gold" kicker="AUTISTIK · MOMENTUM SCANNER" title="Fast movers" live="Scanning"
         text="Tokens where volume and buying are suddenly much higher than normal, scored for how likely a quick move up (like 2x) is, with a suggested buy range, take-profit steps and a stop."
         stats={[[picks.filter((p) => p.level === "hot").length, "hot now"], [picks.filter((p) => p.level === "building").length, "building"], [record && record.picks ? `${Math.round((record.hit2x / record.picks) * 100)}%` : "–", "hot picks hit 2x (7d)"], ["2 min", "refresh"]]} />
-      <Guide id="momentum" title="Use Momentum, in 3 steps" steps={[
+      <Guide id="momentum" action={{ href: "/wallet", label: "Open my wallet" }} title="Use Momentum, in 3 steps" steps={[
         <>These coins suddenly have much more buying than normal. <b>Hot</b> means the strongest signs right now.</>,
         <>Read the suggestion: a <b>buy range</b>, two <b>take-profit</b> prices (sell a part at each) and a <b>stop</b> (get out if it falls there).</>,
         <>Tap <b>Buy</b> to open the Wallet, or turn on alerts to get a message when a coin heats up.</>,

@@ -30,7 +30,7 @@ export default async function Rewards() {
       <ProHero tone="violet" kicker={`$AUTISTIK · REWARDS · ${(settings?.round_name || "Round 1").toUpperCase()}`} title="Community airdrops" live="Round open"
         text="$AUTISTIK airdrops reward taking part, and holding. You never need to share anything about your health to qualify."
         stats={user ? [[pts, "your points"], [need, "to qualify"], [rank ? `#${rank}` : "–", "your rank"], [board.length, "members earning"]] : [[need, "points to qualify"], ["Posts", "earn points"], ["Seats", "earn points"]]} />
-      <Guide id="rewards" title="Earn airdrops, in 3 steps" steps={[
+      <Guide id="rewards" action={{ href: "/community", label: "Start earning: join a group" }} title="Earn airdrops, in 3 steps" steps={[
         <>Take part: post in a group, save a seat at a live session, help others.</>,
         <>Link your BNB Chain wallet below (a free signature, no money moves).</>,
         <>Reach the points to qualify. When the round closes, $AUTISTIK is sent to your wallet.</>,

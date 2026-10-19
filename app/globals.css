@@ -1277,3 +1277,32 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .start-words dt{font-weight:800}
 .start-words dd{margin:2px 0 0;color:var(--muted);font-size:.9em}
 .topbar .start-btn{font-size:.8em;font-weight:800;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);text-decoration:none}
+/* One accent everywhere: AUTISTIK gold (the Wallet's yellow). Main buttons, active menus, tabs and guides. */
+:root{--gold:#F0B90B;--gold-ink:#14151a;--gold-soft:rgba(240,185,11,.14)}
+.btn.primary,a.btn.primary,.an-hero .btn.primary,.scan-form.pro .scan-row .btn.primary,.hero .btn.primary{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+.btn.primary:hover,a.btn.primary:hover{filter:brightness(1.06);opacity:1}
+.btn.g{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+.nav a[aria-current="page"]{box-shadow:inset 3px 0 0 var(--gold);color:var(--gold)}
+.tabbar a[aria-current="page"]{color:var(--gold)}
+.tabbar a[aria-current="page"] svg{color:var(--gold)}
+.topbar .start-btn{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+/* Section cards: gold line on the page you're on. */
+.ln-card[aria-current="page"]{--c:var(--gold);border-color:var(--gold);box-shadow:inset 3px 0 0 var(--gold),0 0 0 1px var(--gold),0 0 22px -8px var(--gold)}
+.ln-card[aria-current="page"] .ln-text b{color:var(--gold)}
+.ln-card:hover{border-color:var(--gold);box-shadow:inset 3px 0 0 var(--c),0 0 0 1px var(--gold)}
+/* Header panels: gold labels and pills. */
+.an-kicker{color:var(--gold)}
+.net-pill.on{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+.chips .chip[aria-current="page"]{border-color:var(--gold);background:var(--gold-soft)}
+.section-tab[aria-current="page"]{box-shadow:inset 0 -2px 0 var(--gold)}
+/* Guides and Start here. */
+.guide{border-left-color:var(--gold)}
+.guide-n{background:var(--gold);color:var(--gold-ink)}
+.guide-pill::before{background:var(--gold);color:var(--gold-ink)}
+.guide-more{color:var(--ink)}
+.guide-go{align-self:flex-start;background:var(--gold);color:var(--gold-ink);border-radius:10px;padding:11px 18px;font-weight:800;text-decoration:none}
+.guide-go:hover{filter:brightness(1.06)}
+.start-card{box-shadow:inset 3px 0 0 var(--gold)}
+.start-card:hover{border-color:var(--gold)}
+.start-card em{color:var(--ink);text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px;text-underline-offset:3px}
+.joincta .btn,.joincta .btn.g{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}

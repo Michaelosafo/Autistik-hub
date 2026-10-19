@@ -45,7 +45,7 @@ export default function BuyPage() {
           <a className="btn" href={LINKS.dexscreener} target="_blank" rel="noopener noreferrer">Chart</a>
         </div>
       </ProHero>
-      <Guide id="buy" title="The easiest way to buy $AUTISTIK" steps={[
+      <Guide id="buy" action={{ href: "/wallet?chain=bsc", label: "Buy $AUTISTIK in the Wallet" }} title="The easiest way to buy $AUTISTIK" steps={[
         <>Get some <b>BNB</b> on an exchange like Binance and send it to your wallet on <b>BNB Smart Chain</b>.</>,
         <>Open the <Link href="/wallet">Wallet</Link> (Simple mode), pick BNB Chain and search <b>AUTISTIK</b>.</>,
         <>Choose an amount and tap Buy. Or follow the full PancakeSwap steps below.</>,

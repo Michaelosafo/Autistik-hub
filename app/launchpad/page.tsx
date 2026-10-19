@@ -23,7 +23,7 @@ export default async function LaunchpadPage() {
         stats={[[board.length, "tokens on the board"], [board.filter((t) => t.promotedUntil).length, "promoted now"], [usd(board.reduce((s, t) => s + (t.market?.volume24h ?? 0), 0)), "24h volume"]]}>
         <div className="an-actions"><Link className="btn primary" href="/analytics">Analytics: top wallets</Link><Link className="btn" href="/launchpad/new">Launch a token</Link></div>
       </ProHero>
-      <Guide id="trending" title="Use Trending, in 3 steps" steps={[
+      <Guide id="trending" action={{ href: "/wallet", label: "Buy a coin" }} title="Use Trending, in 3 steps" steps={[
         <>Browse <b>Trending</b>, <b>Most watched</b> or <b>New</b>. Coins launched here have locked liquidity.</>,
         <>Tap a coin to see its chart, holders and safety checks.</>,
         <>Like it? Buy it in one tap from the <Link href="/wallet">Wallet</Link>. Start small.</>,
