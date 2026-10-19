@@ -50,7 +50,7 @@ export default async function Home() {
           <div className="hero-copy">
             <div className="eyebrow">Autism awareness × Web3 community</div>
             <h1>Autism is not a disease. <span className="grad">It&apos;s a community.</span></h1>
-            <p>Autistic minds aren&apos;t broken and don&apos;t need a cure. They need understanding, connection and a place to belong. Here you&apos;ll find two friendly groups, two companion assistants called Believer and Purity, live talks with practitioners, a launch pad for your own token, and airdrops for the people who show up.</p>
+            <p>A friendly home for autistic people and supporters, with simple, safe tools to buy, launch and lock coins.</p>
             <div className="row">
               <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
               <Link className="btn ghost" href="/start">New here? Start here</Link>

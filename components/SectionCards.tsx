@@ -31,7 +31,7 @@ export default function SectionCards({ items, active, label }: { items: SectionC
     <nav className={`launch-nav n${items.length}`} aria-label={label}>
       {items.map((i) => (
         <Link key={i.href} href={i.href} className={`ln-card ${i.tone}`} aria-current={i.href === active ? "page" : undefined}>
-          <span className="ln-text"><b>{i.name}</b><small>{i.blurb}</small></span>
+          <span className="ln-text"><b>{i.name}</b></span>
         </Link>
       ))}
     </nav>

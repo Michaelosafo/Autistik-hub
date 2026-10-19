@@ -17,7 +17,6 @@ export default function ProHero({ kicker, title, text, tone = "cyan", live, stat
         <div>
           <div className="an-kicker">{kicker}</div>
           <h1>{title}</h1>
-          {text && <p>{text}</p>}
         </div>
         {live && <div className="an-live"><i />{live}</div>}
       </div>
