@@ -54,7 +54,7 @@ export default function WalletPicker() {
 
   const RowBtn = ({ r }: { r: Row }) => (
     <button type="button" className="wp-row" disabled={!!s.busy} onClick={r.go}>
-      {r.logo ? <img src={r.logo} alt="" width={40} height={40} /> : <span className="wp-ph">{r.name.slice(0, 1)}</span>}
+      {r.logo ? <img src={r.logo} alt="" width={40} height={40} loading="lazy" decoding="async" /> : <span className="wp-ph">{r.name.slice(0, 1)}</span>}
       <span className="wp-row-t"><b>{r.name}</b><small>{s.busy === r.name ? "Check your wallet…" : r.sub}</small></span>
       {r.badge && <span className={"wp-badge" + (r.badge === "Last used" ? " gold" : "")}>{r.badge}</span>}
       <i className="wp-chev" aria-hidden="true" />
