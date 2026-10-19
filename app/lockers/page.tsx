@@ -31,7 +31,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
       <SectionCards items={LAUNCH_CARDS} active="/lockers" label="Launch" />
-      <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="🔒 Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
+      <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
         text={<>Lock your pool&apos;s liquidity so it can&apos;t be pulled (no rug pull), or lock team tokens so they can&apos;t be dumped. Nobody, not even the AUTISTIK team, can touch a lock before its date.</>}
         stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["No", "early unlock"]]} />
 
@@ -41,7 +41,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
       {admin && <LockerDeploy sites={sites} />}
 
       <div className="card stack" style={{ gap: 10 }}>
-        <h2 style={{ margin: 0 }}>🔎 Check a token&apos;s locks</h2>
+        <h2 style={{ margin: 0 }}>Check a token&apos;s locks</h2>
         <form className="row" style={{ gap: 8, flexWrap: "wrap" }} action="/lockers">
           <select name="chain" defaultValue={qChain} aria-label="Chain">
             {Object.entries(LOCKER_CHAINS).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}

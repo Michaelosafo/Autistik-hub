@@ -1113,3 +1113,9 @@ a.alert-row:hover{background:var(--surface-2)}
 .aw-qr{border-radius:12px;background:#fff;padding:6px}
 .aw-sec{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:.92em}
 @media (max-width:640px){ .aw-why{grid-template-columns:1fr} .aw-act{font-size:.7em} .aw-act span{width:34px;height:34px} }
+/* Section cards: simple text tabs with a colour line, no icons. */
+.ln-card{padding:12px 14px;box-shadow:inset 3px 0 0 var(--c)}
+.ln-card .ln-text b{font-size:1em;letter-spacing:.01em}
+.ln-card[aria-current="page"]{box-shadow:inset 3px 0 0 var(--c),0 0 0 1px var(--c),0 0 22px -8px var(--c)}
+.launch-nav.n3 .ln-card{padding:10px 8px}
+@media (max-width:700px){ .ln-card{padding:10px 12px} .launch-nav.n3 .ln-text small{display:none} }

@@ -38,11 +38,12 @@ export const WCHAINS: Record<WChainKey, WChain> = {
     native: t(NATIVE, "BNB", "BNB", 18),
     v2Router: "0x10ED43C718714eb63d5aA57B78B54704E256024E", wrapped: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
     tokens: [
-      t(TOKEN_ADDRESS, "AUTISTIK", "AUTISTIK", 18),
+      t(TOKEN_ADDRESS, "AUTISTIK", "AUTISTIK", 9),
       t("0x55d398326f99059fF775485246999027B3197955", "USDT", "Tether USD", 18),
       t("0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", "USDC", "USD Coin", 18),
       t("0x2170Ed0880ac9A755fd29B2688956BD959F933F8", "ETH", "Ethereum", 18),
       t("0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", "BTCB", "Bitcoin", 18),
+      t("0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", "WBNB", "Wrapped BNB", 18),
     ],
   },
   base: {
@@ -52,6 +53,7 @@ export const WCHAINS: Record<WChainKey, WChain> = {
     tokens: [
       t("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "USDC", "USD Coin", 6),
       t("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", "cbBTC", "Coinbase Bitcoin", 8),
+      t("0x4200000000000000000000000000000000000006", "WETH", "Wrapped Ether", 18),
     ],
   },
   ethereum: {
@@ -63,15 +65,17 @@ export const WCHAINS: Record<WChainKey, WChain> = {
       t("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "USDC", "USD Coin", 6),
       t("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "WBTC", "Wrapped Bitcoin", 8),
       t("0x6982508145454Ce325dDbE47a25d4ec3d2311933", "PEPE", "Pepe", 18),
+      t("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", "WETH", "Wrapped Ether", 18),
     ],
   },
   arbitrum: {
     key: "arbitrum", name: "Arbitrum", short: "ARB", kind: "evm", chainId: 42161, viem: arbitrum, kyber: "arbitrum",
     rpc: process.env.NEXT_PUBLIC_ARBITRUM_RPC || "https://arb1.arbitrum.io/rpc", explorer: "https://arbiscan.io",
-    native: eth(), tokens: [
+    native: eth(), wrapped: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", tokens: [
       t("0xaf88d065e77c8cC2239327C5EDb3A432268e5831", "USDC", "USD Coin", 6),
       t("0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", "USDT", "Tether USD", 6),
       t("0x912CE59144191C1204E64559FE8253a0e49E6548", "ARB", "Arbitrum", 18),
+      t("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1", "WETH", "Wrapped Ether", 18),
     ],
   },
   solana: {

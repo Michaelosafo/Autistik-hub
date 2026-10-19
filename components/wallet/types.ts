@@ -10,6 +10,14 @@ export type Signer = {
   /** Signs a base64 Solana transaction and returns it signed (base64). */
   sol: { address: string; sign: (txBase64: string) => Promise<string> } | null;
   login: () => void;
+  /** Built-in wallet: sign in with email or a passkey. Connect: MetaMask, Trust, Phantom and others. */
+  loginEmbedded?: () => void;
+  loginExternal?: () => void;
+  /** Which kind of wallet is in use right now. */
+  using?: "embedded" | "external";
+  /** When the member has both, switch between the built-in wallet and their own. */
+  switchTo?: (kind: "embedded" | "external") => void;
+  canSwitch?: boolean;
   logout: () => void;
   /** Opens the provider's secure screen to copy the private key (built-in wallet only). */
   exportKey?: (kind: "evm" | "solana") => void;

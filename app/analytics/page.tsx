@@ -75,7 +75,7 @@ export default async function AnalyticsPage() {
 
       <div className="an-grid">
         <section className="card stack">
-          <div className="row" style={{ justifyContent: "space-between" }}><h2>🕘 Recent searches</h2><span className="muted" style={{ fontSize: ".8em" }}>last 5 · only you</span></div>
+          <div className="row" style={{ justifyContent: "space-between" }}><h2>Recent searches</h2><span className="muted" style={{ fontSize: ".8em" }}>last 5 · only you</span></div>
           {!recent?.length && <div className="empty">{user ? "Search a token above. Your last 5 show here." : "Sign in to keep your recent searches."}</div>}
           <div className="an-list">
             {(recent || []).filter((r: any) => isAChain(r.chain)).map((r: any) => {
@@ -92,7 +92,7 @@ export default async function AnalyticsPage() {
         </section>
 
         <section className="card stack">
-          <div className="row" style={{ justifyContent: "space-between" }}><h2>📌 My pins</h2>{user && <Link className="btn small" href="/analytics/pins">All →</Link>}</div>
+          <div className="row" style={{ justifyContent: "space-between" }}><h2>My pins</h2>{user && <Link className="btn small" href="/analytics/pins">All →</Link>}</div>
           {!pins?.length && <div className="empty">Pin a token (📌 on its page) for buy, take-profit, sell and wait alerts.</div>}
           <div className="an-list">
             {(pins || []).slice(0, 6).map((p: any) => {
@@ -112,7 +112,7 @@ export default async function AnalyticsPage() {
 
       {admin && (
         <section className="card stack admin-only">
-          <h2>🛡️ All tokens on the site <span className="badge">Admin only</span></h2>
+          <h2>All tokens on the site <span className="badge">Admin only</span></h2>
           <div className="an-list cols">
             {(allTokens || []).filter((t: any) => isAChain(t.chain)).map((t: any) => (
               <Link key={t.chain + t.token} href={`/analytics/${t.chain}/${t.token}`} className="an-item">

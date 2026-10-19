@@ -36,7 +36,7 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
     <div className="stack" style={{ maxWidth: 980 }}>
       <AutoRefresh seconds={120} />
       <SectionCards items={LAUNCH_CARDS} active="/momentum" label="Launch" />
-      <ProHero tone="gold" kicker="AUTISTIK · MOMENTUM SCANNER" title="🚀 Fast movers" live="Scanning"
+      <ProHero tone="gold" kicker="AUTISTIK · MOMENTUM SCANNER" title="Fast movers" live="Scanning"
         text="Tokens where volume and buying are suddenly much higher than normal, scored for how likely a quick move up (like 2x) is, with a suggested buy range, take-profit steps and a stop."
         stats={[[picks.filter((p) => p.level === "hot").length, "hot now"], [picks.filter((p) => p.level === "building").length, "building"], [record && record.picks ? `${Math.round((record.hit2x / record.picks) * 100)}%` : "–", "hot picks hit 2x (7d)"], ["2 min", "refresh"]]} />
       <div className="notice warn" style={{ fontSize: ".9em" }}>
@@ -105,8 +105,8 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
               {p.risks.map((r, i) => <li key={"r" + i} className="down">⚠ {r}</li>)}
             </ul>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
-              {isWChain(p.chain) && <Link className="btn small primary" href={`/wallet?chain=${p.chain}&buy=${token}`}>💳 Buy</Link>}
-              <Link className="btn small" href={`/analytics/${p.chain}/${token}`}>📊 Full analysis</Link>
+              {isWChain(p.chain) && <Link className="btn small primary" href={`/wallet?chain=${p.chain}&buy=${token}`}>Buy</Link>}
+              <Link className="btn small" href={`/analytics/${p.chain}/${token}`}>Full analysis</Link>
               <PinButton signedIn={!!user} chain={p.chain} token={token} pinned={pinned.has(`${p.chain}:${token.toLowerCase()}`)} />
               <a className="btn small" href={`https://dexscreener.com/${p.chain}/${p.pool}`} target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
             </div>

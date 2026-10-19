@@ -4,7 +4,7 @@
  * tokens back to that same wallet. Server only.
  */
 import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http, isAddress, parseAbi } from "viem";
-import { address as solAddress, appendTransactionMessageInstructions, compileTransaction, createTransactionMessage,
+import { address as solAddress, appendTransactionMessageInstructions, compileTransaction, createNoopSigner, createTransactionMessage,
   getBase64EncodedWireTransaction, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash } from "@solana/kit";
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, findAssociatedTokenPda, getCreateAssociatedTokenIdempotentInstruction, getTransferCheckedInstruction } from "@solana-program/token";
 import { getTransferSolInstruction } from "@solana-program/system";
@@ -135,6 +135,28 @@ async function jupTokens(mints: string[]): Promise<Record<string, JupToken>> {
   return out;
 }
 
+// ---------------------------------------------------------------- Market data for the trade screen
+
+export type Market = {
+  pair: string | null; dex: string | null; priceUsd: number | null; priceNative: number | null; change24: number | null; change1h: number | null;
+  volume24: number | null; liquidity: number | null; mcap: number | null; buys24: number | null; sells24: number | null; logo: string | null;
+};
+
+/** The token's busiest pool on DexScreener: price, 24h change, volume and the pool address for the chart. */
+export async function market(c: WChain, token: string): Promise<Market> {
+  const addr = isNative(c, token) ? (c.kind === "solana" ? WSOL : c.wrapped || token) : token;
+  const empty: Market = { pair: null, dex: null, priceUsd: null, priceNative: null, change24: null, change1h: null, volume24: null, liquidity: null, mcap: null, buys24: null, sells24: null, logo: null };
+  try {
+    const pairs: any[] = await getJson(`https://api.dexscreener.com/token-pairs/v1/${DEX_CHAIN[c.key]}/${addr}`, { timeout: 8000, next: { revalidate: 30 } } as any);
+    const mine = (pairs || []).filter((p) => String(p?.baseToken?.address || "").toLowerCase() === addr.toLowerCase());
+    const p = (mine.length ? mine : pairs || []).sort((a, b) => num(b?.liquidity?.usd) - num(a?.liquidity?.usd))[0];
+    if (!p) return empty;
+    const n = (v: unknown) => (v == null || !isFinite(Number(v)) ? null : Number(v));
+    return { pair: p.pairAddress, dex: p.dexId, priceUsd: n(p.priceUsd), priceNative: n(p.priceNative), change24: n(p.priceChange?.h24), change1h: n(p.priceChange?.h1),
+      volume24: n(p.volume?.h24), liquidity: n(p.liquidity?.usd), mcap: n(p.marketCap ?? p.fdv), buys24: n(p.txns?.h24?.buys), sells24: n(p.txns?.h24?.sells), logo: p.info?.imageUrl || null };
+  } catch { return empty; }
+}
+
 // ---------------------------------------------------------------- Balances
 
 export type Holding = WToken & { raw: string; amount: number; priceUsd: number | null; valueUsd: number | null };
@@ -152,9 +174,11 @@ export async function balances(c: WChain, owner: string, extra: string[]): Promi
   }
   const tokens = [...known.values()];
   const who = getAddress(owner);
-  const [native, bals, prices, np] = await Promise.all([
+  const [native, bals, decs, prices, np] = await Promise.all([
     pc.getBalance({ address: who }),
     pc.multicall({ allowFailure: true, contracts: tokens.map((t) => ({ address: t.address as `0x${string}`, abi: erc20Abi, functionName: "balanceOf", args: [who] } as const)) }),
+    // Decimals from the token itself, so a wrong number in the starter list can never show a wrong balance.
+    pc.multicall({ allowFailure: true, contracts: tokens.map((t) => ({ address: t.address as `0x${string}`, abi: erc20Abi, functionName: "decimals" } as const)) }),
     dexPrices(c, tokens.map((t) => t.address)),
     nativePrice(c),
   ]);
@@ -166,7 +190,8 @@ export async function balances(c: WChain, owner: string, extra: string[]): Promi
   tokens.forEach((t, i) => {
     const raw = bals[i].status === "success" ? (bals[i].result as bigint) : 0n;
     const p = prices[t.address.toLowerCase()];
-    list.push(row(t, raw, p?.price ?? null, p?.logo));
+    const decimals = decs[i].status === "success" ? Number(decs[i].result) : t.decimals;
+    list.push(row({ ...t, decimals }, raw, p?.price ?? null, p?.logo));
   });
   return list;
 }
@@ -215,15 +240,15 @@ export async function quote(c: WChain, tokenIn: string, tokenOut: string, amount
   }
 }
 
-async function kyberQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint): Promise<Quote> {
+async function kyberQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true): Promise<Quote> {
   const q = new URLSearchParams({ tokenIn, tokenOut, amountIn: amountIn.toString(), gasInclude: "true", source: "autistik-hub" });
-  if (TREASURY) q.set("feeAmount", String(FEE_BPS)), q.set("isInBps", "true"), q.set("chargeFeeBy", feeSide(c, tokenIn)), q.set("feeReceiver", TREASURY);
+  if (TREASURY && withFee) q.set("feeAmount", String(FEE_BPS)), q.set("isInBps", "true"), q.set("chargeFeeBy", feeSide(c, tokenIn)), q.set("feeReceiver", TREASURY);
   const j = await getJson(`${KYBER}/${c.kyber}/api/v1/routes?${q}`, { headers: KYBER_HEADERS });
   const s = j?.data?.routeSummary;
   if (!s || j.code !== 0) throw new Error(j?.message || "No route found for this pair.");
   const inUsd = num(s.amountInUsd) || null, outUsd = num(s.amountOutUsd) || null;
   return { kind: "kyber", chain: c.key, tokenIn, tokenOut, amountIn: String(s.amountIn), amountOut: String(s.amountOut), inUsd, outUsd,
-    impact: inUsd && outUsd ? Math.max(0, ((inUsd - outUsd) / inUsd) * 100) : null, feeBps: TREASURY ? FEE_BPS : 0, gasUsd: num(s.gasUsd) || null, route: s };
+    impact: inUsd && outUsd ? Math.max(0, ((inUsd - outUsd) / inUsd) * 100) : null, feeBps: TREASURY && withFee ? FEE_BPS : 0, gasUsd: num(s.gasUsd) || null, route: s };
 }
 
 const V2_ABI = parseAbi([
@@ -320,7 +345,8 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
 export async function solTransfer(from: string, to: string, mint: string, raw: bigint, decimals: number): Promise<SolTx> {
   if (!SOL_RE.test(from) || !SOL_RE.test(to)) throw new Error("That isn't a Solana address.");
   const owner = solAddress(from), dest = solAddress(to);
-  const signer = { address: owner } as any;
+  // Only a placeholder for the fee payer: the member signs in their own wallet.
+  const signer = createNoopSigner(owner);
   const { value: bh } = await solRpc("getLatestBlockhash", [{ commitment: "confirmed" }]);
   let ixs: any[];
   if (mint === WSOL) ixs = [getTransferSolInstruction({ source: signer, destination: dest, amount: raw })];
@@ -358,3 +384,23 @@ export async function solStatus(sig: string): Promise<"pending" | "done" | "fail
 
 export const feeConfigured = { evm: !!TREASURY, solana: !!SOL_TREASURY };
 export { NATIVE };
+
+// ---------------------------------------------------------------- For the order keeper
+
+/** A route with no aggregator fee (the order contract takes its own), paying out to `recipient`. */
+export async function kyberRoute(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, sender: string, recipient: string, slippageBps: number) {
+  const q = await kyberQuote(c, tokenIn, tokenOut, amountIn, false);
+  const j = await getJson(`${KYBER}/${c.kyber}/api/v1/route/build`, { method: "POST", headers: KYBER_HEADERS, timeout: 15_000, body: JSON.stringify({
+    routeSummary: q.route, sender, recipient, slippageTolerance: slippageBps, source: "autistik-hub", enableGasEstimation: false,
+  }) });
+  const d = j?.data;
+  if (j?.code !== 0 || !d?.data) throw new Error(j?.message || "No route.");
+  if (getAddress(d.routerAddress) !== getAddress(KYBER_ROUTER)) throw new Error("Unexpected router.");
+  return { amountOut: BigInt(q.amountOut), data: d.data as `0x${string}` };
+}
+/** Expected output of a direct V2 swap along `path`. */
+export async function v2AmountOut(c: WChain, amountIn: bigint, path: string[]): Promise<bigint> {
+  const a = await client(c).readContract({ address: c.v2Router!, abi: V2_ABI, functionName: "getAmountsOut", args: [amountIn, path.map((x) => getAddress(x))] });
+  return a[a.length - 1];
+}
+export { client as walletChainClient };

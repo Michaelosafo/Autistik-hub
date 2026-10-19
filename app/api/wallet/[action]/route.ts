@@ -1,14 +1,14 @@
 import { json } from "@/lib/ai";
 import { rateLimit } from "@/lib/ratelimit";
 import { MAX_SLIPPAGE_BPS, WCHAINS, isTokenAddress, isWChain } from "@/lib/wallet-chains";
-import { balances, build, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
+import { balances, build, market, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const LIMITS: Record<string, [number, number]> = {
-  token: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60],
+  token: [60, 60], market: [90, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60],
 };
 
 /**
@@ -30,6 +30,10 @@ export async function POST(req: Request, { params }: { params: { action: string 
         if (!isTokenAddress(chain!, b.address)) return json({ error: `That isn't a ${chain!.name} token address.` }, 400);
         const t = await tokenInfo(chain!, b.address);
         return t ? json({ token: t }) : json({ error: `No token found at that address on ${chain!.name}.` }, 404);
+      }
+      case "market": {
+        if (!isTokenAddress(chain!, b.token)) return json({ error: "Pick a token." }, 400);
+        return json({ market: await market(chain!, b.token) });
       }
       case "balances": {
         if (!isTokenAddress(chain!, b.owner)) return json({ error: "That isn't a wallet address." }, 400);

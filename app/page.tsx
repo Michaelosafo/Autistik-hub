@@ -93,8 +93,8 @@ export default async function Home() {
           <h2>Launch your token in minutes. <span className="grad">Liquidity locked.</span></h2>
           <p>Tell Autistik your token&apos;s name and ticker, sign once in your wallet, and it goes live on PancakeSwap or Uniswap with its liquidity locked, so buyers can trust it. Simple, honest, and built by an autism community.</p>
           <div className="row">
-            <Link className="btn primary" href="/launchpad/new">🚀 Launch a token</Link>
-            <Link className="btn ghost" href="/launchpad">🔥 See trending</Link>
+            <Link className="btn primary" href="/launchpad/new">Launch a token</Link>
+            <Link className="btn ghost" href="/launchpad">See trending</Link>
           </div>
         </div>
       </div>
