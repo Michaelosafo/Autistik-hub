@@ -1338,3 +1338,6 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .chess-help{background:var(--surface-2);border-radius:12px;padding:10px 14px}
 .chess-help summary{cursor:pointer;font-weight:800}
 .chess-help ul{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:.92em}
+/* Coin analytics sections use the same cards as the Launch menu. */
+.launch-nav.n5{grid-template-columns:repeat(5,minmax(0,1fr))}
+@media (max-width:700px){ .launch-nav.an-cards{grid-template-columns:repeat(3,minmax(0,1fr))} }

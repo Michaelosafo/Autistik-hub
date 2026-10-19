@@ -168,8 +168,11 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         </div>
       </div>
 
-      <nav className="an-tabs" aria-label="Sections">
-        {VIEWS.map(([k, name]) => <Link key={k} href={`/analytics/${chain}/${t.token}${k === "overview" ? "" : `?view=${k}`}`} aria-current={view === k ? "page" : undefined} scroll={false}>{name}</Link>)}
+      <nav className="launch-nav n5 an-cards" aria-label="Sections">
+        {VIEWS.map(([k, name], i) => (
+          <Link key={k} href={`/analytics/${chain}/${t.token}${k === "overview" ? "" : `?view=${k}`}`} aria-current={view === k ? "page" : undefined} scroll={false}
+            className={"ln-card " + (["coral", "violet", "sun", "teal", "ink"] as const)[i]}><span className="ln-text"><b>{name}</b></span></Link>
+        ))}
       </nav>
 
       {view === "overview" && <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />}
