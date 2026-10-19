@@ -1331,3 +1331,10 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .ln-card{padding:11px 14px;justify-content:center}
 .launch-nav .ln-text{align-items:center;text-align:center}
 @media (max-width:700px){ .launch-nav{grid-template-columns:repeat(3,minmax(0,1fr))} .ln-card:last-child:nth-child(odd){grid-column:auto} .ln-card{padding:9px 6px} .ln-text b{font-size:.85em;white-space:nowrap} }
+/* Token analytics: simple tabs instead of one long page. */
+.an-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px}
+.an-tabs a{flex:none;padding:9px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;font-size:.9em;text-decoration:none}
+.an-tabs a[aria-current="page"]{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+.chess-help{background:var(--surface-2);border-radius:12px;padding:10px 14px}
+.chess-help summary{cursor:pointer;font-weight:800}
+.chess-help ul{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:.92em}

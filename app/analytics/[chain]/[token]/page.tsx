@@ -44,7 +44,11 @@ function status(h: any, last: any) {
   return { cls: "", text: "Holding" };
 }
 
-export default async function TokenAnalytics({ params }: { params: { chain: string; token: string } }) {
+const VIEWS = [["overview", "Overview"], ["chess", "Chess battle"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
+type View = (typeof VIEWS)[number][0];
+
+export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string } }) {
+  const view: View = (VIEWS.find(([k]) => k === searchParams.view)?.[0]) ?? "overview";
   if (!isAChain(params.chain) || !isChainAddress(params.chain, params.token)) notFound();
   const chain = params.chain, c = ACHAINS[chain];
   const sb = supabaseServer();
@@ -164,15 +168,18 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         </div>
       </div>
 
+      <nav className="an-tabs" aria-label="Sections">
+        {VIEWS.map(([k, name]) => <Link key={k} href={`/analytics/${chain}/${t.token}${k === "overview" ? "" : `?view=${k}`}`} aria-current={view === k ? "page" : undefined} scroll={false}>{name}</Link>)}
+      </nav>
 
-      <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />
-      <BundleCard b={bundle} explorer={c.explorer} token={t.token} />
-      <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />
-      <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
+      {view === "overview" && <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />}
+      {view === "safety" && <BundleCard b={bundle} explorer={c.explorer} token={t.token} />}
+      {view === "safety" && <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />}
+      {view === "overview" && <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
         frames={pro ? await confluence(chain, t.pair, zoneBase, zone) : undefined}
-        whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />
+        whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />}
 
-      <div className={"card stack verdict " + call.kind}>
+      {view === "overview" && <div className={"card stack verdict " + call.kind}>
         <div className="label">Buy or sell? The read right now</div>
         <div className="verdict-top">
           <span className="verdict-emoji" aria-hidden>{call.emoji}</span>
@@ -199,16 +206,28 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         </div>
         <TradePlans plans={plans} symbol={t.symbol || "this token"} />
         <p className="fin-note">⚠️ Nothing stated here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Do your own research and never put in more than you can afford to lose.</p>
-      </div>
+      </div>}
 
-      <div className="card stack">
-        <h2>The battle: holders vs sellers</h2>
-        <p className="muted" style={{ fontSize: ".86em" }}>Holders defend from the bottom, sellers attack from the top. The bigger the bag (or the sale), the stronger the piece. Pick a time frame and tap any piece to see its holdings.</p>
-        <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
-      </div>
+      {view === "chess" && (
+        <div className="card stack">
+          <h2>Chess battle: buyers vs sellers</h2>
+          <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
+          <details className="chess-help">
+            <summary>How to read the board</summary>
+            <ul>
+              <li><b>White pieces (bottom) are buyers and holders.</b> <b>Black pieces (top) are sellers.</b></li>
+              <li><b>Bigger wallet, stronger piece:</b> the biggest buyer or seller is the King, then Queen, Rooks, Bishops, Knights, and smaller wallets are Pawns.</li>
+              <li><b>Who&apos;s winning?</b> The side with more buying or selling in the time frame pushes its pawns forward. A side in &quot;check&quot; is losing badly.</li>
+              <li><b>The bench</b> shows holders who didn&apos;t move. Their colour shows how likely they are to sell (green calm, yellow maybe, red likely).</li>
+              <li>Pick a time frame (1H to All) and tap any piece to see that wallet.</li>
+              <li><b>Simple rule:</b> lots of strong black pieces and white pawns falling back means selling pressure; be careful.</li>
+            </ul>
+          </details>
+        </div>
+      )}
 
 
-      <div className="card stack">
+      {view === "wallets" && <div className="card stack">
         <h2>Connected wallets &amp; who might sell next</h2>
         <p className="muted" style={{ fontSize: ".86em" }}>Wallets that sent tokens to each other or bought at the exact same moment are often the same person. Tap a wallet to see it on the explorer.</p>
         <h3>Connected groups</h3>
@@ -242,9 +261,9 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
           ))}
         </div>
         <p className="muted" style={{ fontSize: ".78em" }}>The number is the chance-to-sell score (0 to 100), worked out from past sells, holding time, links to the dev and bag size. A guide, not a promise.</p>
-      </div>
+      </div>}
 
-      <div className="card stack">
+      {view === "trades" && <div className="card stack">
         <div className="row" style={{ justifyContent: "space-between" }}><h2>Live trades</h2><span className="live-dot">LIVE · updates every minute</span></div>
         {!trades?.length && <div className="empty">{!hasLiveTrades(chain) ? `Live trades for ${c.name} are coming soon. Sells by the top wallets and the dev are still caught by the balance checks every few minutes.` : t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
         <div className="alert-list">
@@ -260,9 +279,9 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
             </a>
           ))}
         </div>
-      </div>
+      </div>}
 
-      {signals.length > 0 && (
+      {view === "overview" && signals.length > 0 && (
         <div className="card stack">
           <h2>What buyers should know</h2>
           <ul className="signals">{signals.map((s, i) => <li key={i} className={s.level}>{s.text}</li>)}</ul>
@@ -270,7 +289,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         </div>
       )}
 
-      <div className={"card stack dev-card" + (devEvents.length ? " warn" : "")}>
+      {view === "safety" && <div className={"card stack dev-card" + (devEvents.length ? " warn" : "")}>
         <h2>Dev wallet</h2>
         {!dev ? <p className="muted">We couldn&apos;t find who launched this token.</p> : (
           <>
@@ -285,9 +304,9 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
               : <p className="muted">✓ No sells by the dev since we started tracking.</p>}
           </>
         )}
-      </div>
+      </div>}
 
-      <div className="card stack">
+      {view === "wallets" && <div className="card stack">
         <h2>Top {top.length || 40} wallets</h2>
         {t.holder_source === "goplus" && <p className="muted" style={{ fontSize: ".82em" }}>Showing the top 10 for now. The full top 40 needs the Moralis key (see GO-LIVE.md).</p>}
         <div role="table" aria-label="Top wallets" className="an-table">
@@ -311,9 +330,9 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
           })}
         </div>
         <p className="muted" style={{ fontSize: ".8em" }}>&quot;Holding for&quot; counts from the wallet&apos;s first purchase when known, otherwise from when we started tracking it. Pools and contracts are shown but never raise alerts.</p>
-      </div>
+      </div>}
 
-      <div className="card stack">
+      {view === "trades" && <div className="card stack">
         <h2>Recent activity</h2>
         {!events?.length && <div className="empty">No moves yet. Checked every 10 minutes.</div>}
         <div className="alert-list">
@@ -328,7 +347,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
             </div>
           ))}
         </div>
-      </div>
+      </div>}
       <p className="muted" style={{ fontSize: ".8em" }}>Safety checks from GoPlus. Data comes straight from the blockchain. Nothing here is financial advice.</p>
     </div>
   );
