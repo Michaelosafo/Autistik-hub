@@ -13,6 +13,7 @@ type Detected = { info: WalletInfo; provider: any };
 
 /** Top wallets, in the order shown. `rdns` matches what the wallet announces when installed. */
 export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string }[] = [
+  // Logos live in /public/wallets/<id>.svg.
   { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "trust", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
   { id: "binance", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet" },
@@ -88,7 +89,7 @@ export function closePicker() {
 
 function choose(name: string, provider: any) {
   set({ current: { name, provider }, open: false, busy: "", error: "" });
-  try { sessionStorage.setItem("aw-wallet", name); } catch { /* private mode */ }
+  try { sessionStorage.setItem("aw-wallet", name); localStorage.setItem("aw-last-wallet", name); } catch { /* private mode */ }
   resolver?.(provider); resolver = null;
   try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: name })); } catch { /* old browsers */ }
 }
@@ -158,3 +159,6 @@ export async function restoreWallet(): Promise<any | null> {
 }
 
 export const isMobile = () => typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+/** The wallet used last time on this device (for a "Last used" badge). */
+export const lastWalletName = () => { try { return localStorage.getItem("aw-last-wallet") || ""; } catch { return ""; } };

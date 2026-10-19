@@ -43,7 +43,7 @@ export default async function Home() {
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/autism">About autism</Link>
         </nav>
-        <Link href="/swap" className="lp-launch">Launch App</Link>
+        <Link href="/swap" className="lp-launch">Open App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></Link>
       </header>
 
       <section className="lp-hero">
@@ -52,7 +52,7 @@ export default async function Home() {
           <h1>Autism is not a disease. <span>It&apos;s a community.</span></h1>
           <p>AUTISTIK is a home for autistic people and supporters, with its own token and simple, safe tools to swap, stake, lock and launch coins.</p>
           <div className="lp-ctas">
-            <Link href="/swap" className="lp-btn gold">Launch App</Link>
+            <Link href="/swap" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
             <Link href="/community" className="lp-btn ghost">Join the community</Link>
           </div>
@@ -115,7 +115,7 @@ export default async function Home() {
       <section className="lp-band">
         <h2>Ready to start?</h2>
         <p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p>
-        <div className="lp-ctas"><Link href="/swap" className="lp-btn gold">Launch App</Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
+        <div className="lp-ctas"><Link href="/swap" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
       </section>
 
       <footer className="lp-foot">
