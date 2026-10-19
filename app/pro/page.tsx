@@ -13,7 +13,7 @@ export default async function ProPage() {
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
       <Link href="/analytics" className="muted">← Stats</Link>
-      <ProHero tone="gold" kicker="💎 AUTISTIK PRO" title="Better information, better decisions"
+      <ProHero tone="gold" kicker="AUTISTIK PRO" title="Better information, better decisions"
         text={<>Everything on Stats, plus the advanced reads serious traders use. Paid in $AUTISTIK: ${PRO_USD} for {PRO_DAYS} days.</>}
         stats={[[`$${PRO_USD}`, `${PRO_DAYS} days`], [PRO_PINS, "pins"], [all?.total ? `${Math.round((all.right / all.total) * 100)}%` : "–", "signals right after 24h"]]}>
         <ProPay />

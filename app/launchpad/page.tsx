@@ -20,7 +20,7 @@ export default async function LaunchpadPage() {
       <ProHero tone="violet" kicker="AUTISTIK · TRENDING" title="Trending on AUTISTIK" live="Live"
         text={<>Tokens launched here have their liquidity locked or burned, so it can&apos;t be pulled early. Tokens marked Listed launched elsewhere and paid to be listed.</>}
         stats={[[board.length, "tokens on the board"], [board.filter((t) => t.promotedUntil).length, "promoted now"], [usd(board.reduce((s, t) => s + (t.market?.volume24h ?? 0), 0)), "24h volume"]]}>
-        <div className="an-actions"><Link className="btn primary" href="/analytics">📊 Analytics: top wallets</Link><Link className="btn" href="/launchpad/new">🚀 Launch a token</Link></div>
+        <div className="an-actions"><Link className="btn primary" href="/analytics">Analytics: top wallets</Link><Link className="btn" href="/launchpad/new">Launch a token</Link></div>
       </ProHero>
       <TokenBoard lists={{ trending: trending(board), watched: mostWatched(board), new: board }} />
       <TrendingPay />

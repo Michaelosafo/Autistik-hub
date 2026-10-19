@@ -10,7 +10,7 @@ const CSP = [
   "img-src 'self' data: blob: https:",
   `connect-src 'self' https: wss:${dev ? " ws: http://localhost:*" : ""}`,
   // The built-in wallet (Privy) keeps keys in its own secure frame.
-  "frame-src https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io",
+  "frame-src https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io https://dexscreener.com",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "media-src 'self' data: blob:",

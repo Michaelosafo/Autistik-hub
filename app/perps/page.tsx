@@ -17,7 +17,7 @@ export default async function PerpsPage() {
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
       <SectionCards items={LAUNCH_CARDS} active="/perps" label="Launch" />
-      <ProHero tone="cyan" kicker="AUTISTIK · PERPETUAL FUTURES" title="⚡ Perps" live={source === "futures" ? "Live" : false}
+      <ProHero tone="cyan" kicker="AUTISTIK · PERPETUAL FUTURES" title="Perps" live={source === "futures" ? "Live" : false}
         text="Trade futures: bet on a coin going up (long) or down (short). Leverage makes wins and losses bigger."
         stats={[[PERP_COINS.length, "markets"], [PERP_VENUES.length, "exchanges"], [source === "futures" ? "Hyperliquid" : "CoinGecko", "price feed"], ["1 min", "refresh"]]} />
 

@@ -1,5 +1,6 @@
 "use client";
-import { PrivyProvider, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
+import { useState } from "react";
+import { PrivyProvider, useConnectWallet, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useExportWallet as useSolExport, useSignTransaction, useWallets as useSolWallets } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { arbitrum, base, bsc, mainnet } from "viem/chains";
@@ -21,7 +22,7 @@ export default function PrivyWallet({ appId, start }: { appId: string; start: { 
     <PrivyProvider appId={appId} config={{
       loginMethods: ["email", "passkey", "wallet"],
       appearance: { theme: "dark", accentColor: "#3EE58F", logo: "/icon.svg", landingHeader: "AUTISTIK Wallet", walletChainType: "ethereum-and-solana" },
-      embeddedWallets: { ethereum: { createOnLogin: "all-users" }, solana: { createOnLogin: "all-users" }, showWalletUIs: true },
+      embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, solana: { createOnLogin: "users-without-wallets" }, showWalletUIs: true },
       supportedChains: [bsc, base, mainnet, arbitrum],
       defaultChain: bsc,
       solana: { rpcs: { "solana:mainnet": { rpc: createSolanaRpc(SOL_RPC), rpcSubscriptions: createSolanaRpcSubscriptions(SOL_RPC.replace(/^http/, "ws")), blockExplorerUrl: "https://solscan.io" } } },
@@ -31,26 +32,49 @@ export default function PrivyWallet({ appId, start }: { appId: string; start: { 
   );
 }
 
+const typedJson = (typed: { domain: any; types: any; primaryType: string; message: any }) => JSON.stringify({
+  types: { EIP712Domain: [{ name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }], ...typed.types },
+  domain: typed.domain, primaryType: typed.primaryType, message: typed.message,
+}, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
+
 function Inner({ start }: { start: { chain?: string; buy?: string } }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
+  const { connectWallet } = useConnectWallet();
   const { wallets } = useWallets();
   const { wallets: solWallets } = useSolWallets();
   const { signTransaction } = useSignTransaction();
   const { exportWallet } = useExportWallet();
   const { exportWallet: exportSol } = useSolExport();
-  // Prefer the built-in wallets; a connected outside wallet (like MetaMask or Phantom) works too.
-  const ev: any = wallets.find((w) => w.walletClientType === "privy") || wallets[0];
-  const sw: any = solWallets.find((w: any) => /privy/i.test(w?.standardWallet?.name || "")) || solWallets[0];
+  const [prefer, setPrefer] = useState<"embedded" | "external" | null>(null);
+  // The built-in wallet, or a wallet the member connected (MetaMask, Trust, Phantom…). They pick which one trades.
+  const evmEmbedded: any = wallets.find((w) => w.walletClientType === "privy");
+  const evmExternal: any = wallets.find((w) => w.walletClientType !== "privy");
+  const solEmbedded: any = solWallets.find((w: any) => /privy/i.test(w?.standardWallet?.name || ""));
+  const solExternal: any = solWallets.find((w: any) => !/privy/i.test(w?.standardWallet?.name || ""));
+  const using: "embedded" | "external" = prefer ?? (evmExternal || solExternal ? "external" : "embedded");
+  const ev: any = using === "external" ? evmExternal || evmEmbedded : evmEmbedded || evmExternal;
+  const sw: any = using === "external" ? solExternal || solEmbedded : solEmbedded || solExternal;
 
   const signer: Signer = {
-    mode: "privy", ready, active: ready && authenticated,
+    mode: "privy", ready, active: ready && authenticated && (!!ev || !!sw),
     label: user?.email?.address || null,
+    using, canSwitch: !!(evmEmbedded || solEmbedded) && !!(evmExternal || solExternal), switchTo: setPrefer,
     evm: ev ? {
       address: ev.address,
       async send(chainId, tx) {
         await ev.switchChain(chainId);
         const p = await ev.getEthereumProvider();
         return p.request({ method: "eth_sendTransaction", params: [{ from: ev.address, to: tx.to, data: tx.data, value: "0x" + BigInt(tx.value).toString(16) }] });
+      },
+      async signTyped(chainId, typed) {
+        await ev.switchChain(chainId);
+        const p = await ev.getEthereumProvider();
+        return p.request({ method: "eth_signTypedData_v4", params: [ev.address, typedJson(typed)] });
+      },
+      async signMessage(message) {
+        const p = await ev.getEthereumProvider();
+        return p.request({ method: "personal_sign", params: [hexMsg(message), ev.address] });
       },
     } : null,
     sol: sw ? {
@@ -60,8 +84,11 @@ function Inner({ start }: { start: { chain?: string; buy?: string } }) {
         return toB64(signedTransaction);
       },
     } : null,
-    login, logout,
-    exportKey: (kind) => { (kind === "evm" ? exportWallet({ address: ev?.address }) : exportSol({ address: sw?.address })).catch(() => {}); },
+    login,
+    loginEmbedded: () => { setPrefer("embedded"); login({ loginMethods: ["email", "passkey"] }); },
+    loginExternal: () => { setPrefer("external"); if (authenticated) connectWallet(); else login({ loginMethods: ["wallet"] }); },
+    logout: () => { setPrefer(null); logout(); },
+    exportKey: (kind) => { (kind === "evm" ? exportWallet({ address: evmEmbedded?.address }) : exportSol({ address: solEmbedded?.address })).catch(() => {}); },
   };
   return <WalletApp signer={signer} start={start} />;
 }

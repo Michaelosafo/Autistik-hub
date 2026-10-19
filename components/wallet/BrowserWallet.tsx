@@ -4,6 +4,11 @@ import { WCHAIN_LIST } from "@/lib/wallet-chains";
 import WalletApp from "./WalletApp";
 import type { Signer } from "./types";
 
+const typedJson = (address: string, typed: { domain: any; types: any; primaryType: string; message: any }) => JSON.stringify({
+  types: { EIP712Domain: [{ name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }], ...typed.types },
+  domain: typed.domain, primaryType: typed.primaryType, message: typed.message,
+}, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 /** Before the built-in wallet is switched on: use a wallet the member already has (MetaMask, Trust, OKX…). EVM only. */
 export default function BrowserWallet({ start }: { start: { chain?: string; buy?: string } }) {
   const [address, setAddress] = useState<`0x${string}` | null>(null);
@@ -38,8 +43,11 @@ export default function BrowserWallet({ start }: { start: { chain?: string; buy?
         await switchTo(chainId);
         return eth().request({ method: "eth_sendTransaction", params: [{ from: address, to: tx.to, data: tx.data, value: "0x" + BigInt(tx.value).toString(16) }] });
       },
+      async signTyped(chainId, typed) { await switchTo(chainId); return eth().request({ method: "eth_signTypedData_v4", params: [address, typedJson(address, typed)] }); },
+      async signMessage(message) { return eth().request({ method: "personal_sign", params: [hexMsg(message), address] }); },
     } : null,
     sol: null,
+    loginExternal: undefined,
     login: () => {
       const p = eth();
       if (!p) { alert("No wallet found in this browser. Open this page in your wallet app's browser (Trust Wallet, MetaMask), or install MetaMask."); return; }

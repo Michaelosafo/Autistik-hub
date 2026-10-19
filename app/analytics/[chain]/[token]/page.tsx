@@ -141,10 +141,10 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
             <a className="mono muted" href={`${c.explorer}/token/${t.token}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: ".85em", overflowWrap: "anywhere" }}>{t.token}</a>
           </div>
           <div className="row" style={{ gap: 8 }}>
-            {isWChain(chain) && <Link className="btn small primary" href={`/wallet?chain=${chain}&buy=${t.token}`}>💳 Buy in wallet</Link>}
+            {isWChain(chain) && <Link className="btn small primary" href={`/wallet?chain=${chain}&buy=${t.token}`}>Buy in wallet</Link>}
             <PinButton signedIn={!!user} chain={chain} token={t.token} pinned={!!pin?.length} />
             <WatchButton uid={user?.id ?? null} chain={chain} token={t.token} watching={!!watch?.length} count={(wc as any)?.watchers ?? 0} />
-            <a className="btn small" href={`https://dexscreener.com/${c.dex}/${t.token}`} target="_blank" rel="noopener noreferrer">📈 Chart</a>
+            <a className="btn small" href={`https://dexscreener.com/${c.dex}/${t.token}`} target="_blank" rel="noopener noreferrer">Chart</a>
             <AnalyticsScan signedIn={!!user} chain={chain} token={t.token} label="Refresh" />
           </div>
         </div>
@@ -173,7 +173,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
         whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />
 
       <div className={"card stack verdict " + call.kind}>
-        <div className="label">🧭 Buy or sell? The read right now</div>
+        <div className="label">Buy or sell? The read right now</div>
         <div className="verdict-top">
           <span className="verdict-emoji" aria-hidden>{call.emoji}</span>
           <div className="grow">
@@ -202,14 +202,14 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
       </div>
 
       <div className="card stack">
-        <h2>♟️ The battle: holders vs sellers</h2>
+        <h2>The battle: holders vs sellers</h2>
         <p className="muted" style={{ fontSize: ".86em" }}>Holders defend from the bottom, sellers attack from the top. The bigger the bag (or the sale), the stronger the piece. Pick a time frame and tap any piece to see its holdings.</p>
         <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
       </div>
 
 
       <div className="card stack">
-        <h2>🕸️ Connected wallets &amp; who might sell next</h2>
+        <h2>Connected wallets &amp; who might sell next</h2>
         <p className="muted" style={{ fontSize: ".86em" }}>Wallets that sent tokens to each other or bought at the exact same moment are often the same person. Tap a wallet to see it on the explorer.</p>
         <h3>Connected groups</h3>
         {!groups.length && <div className="empty">No connected wallets found yet. We keep checking every trade.</div>}
@@ -245,7 +245,7 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
       </div>
 
       <div className="card stack">
-        <div className="row" style={{ justifyContent: "space-between" }}><h2>⚡ Live trades</h2><span className="live-dot">LIVE · updates every minute</span></div>
+        <div className="row" style={{ justifyContent: "space-between" }}><h2>Live trades</h2><span className="live-dot">LIVE · updates every minute</span></div>
         {!trades?.length && <div className="empty">{!hasLiveTrades(chain) ? `Live trades for ${c.name} are coming soon. Sells by the top wallets and the dev are still caught by the balance checks every few minutes.` : t.pair ? "No buys or sells in the last few hours. New ones show here within a minute." : "Looking for this token's trading pool… If it has no pool on DexScreener yet, trades can't be shown."}</div>}
         <div className="alert-list">
           {(trades || []).slice(0, 15).map((x: any) => (
@@ -264,14 +264,14 @@ export default async function TokenAnalytics({ params }: { params: { chain: stri
 
       {signals.length > 0 && (
         <div className="card stack">
-          <h2>💡 What buyers should know</h2>
+          <h2>What buyers should know</h2>
           <ul className="signals">{signals.map((s, i) => <li key={i} className={s.level}>{s.text}</li>)}</ul>
           <p className="muted" style={{ fontSize: ".78em" }}>Worked out automatically from the blockchain. It&apos;s a guide, not financial advice.</p>
         </div>
       )}
 
       <div className={"card stack dev-card" + (devEvents.length ? " warn" : "")}>
-        <h2>🧑‍💻 Dev wallet</h2>
+        <h2>Dev wallet</h2>
         {!dev ? <p className="muted">We couldn&apos;t find who launched this token.</p> : (
           <>
             <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
