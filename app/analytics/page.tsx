@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Guide from "@/components/Guide";
 import TokenLogo from "@/components/TokenLogo";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import { ACHAINS, heldFor, isAChain } from "@/lib/analytics";
@@ -64,6 +65,11 @@ export default async function AnalyticsPage() {
         </div>
         <Link href="/pro" className="an-pro">💎 <b>Pro</b> · 3 timeframes, whale radar, track record &amp; analyst report →</Link>
       </section>
+      <Guide id="analytics" title="Check a coin, in 3 steps" steps={[
+        <>Paste a coin&apos;s address in the box above. We find its network for you.</>,
+        <>See who holds it, the developer&apos;s wallet, taxes, liquidity locks and a buy or sell read in plain words.</>,
+        <>Pin it to get an alert when big holders sell or it reaches a buy or sell zone.</>,
+      ]} />
 
       {user && latest && (
         <Link href={`/analytics/${latest.chain}/${latest.token}`} className={"an-notify" + (latest.is_dev ? " dev" : "")}>

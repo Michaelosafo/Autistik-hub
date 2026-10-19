@@ -1,4 +1,5 @@
 import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
+import Guide from "@/components/Guide";
 import PerpsVenues from "@/components/PerpsVenues";
 import ProHero from "@/components/ProHero";
 import { usd } from "@/lib/market";
@@ -20,6 +21,11 @@ export default async function PerpsPage() {
       <ProHero tone="cyan" kicker="AUTISTIK · PERPETUAL FUTURES" title="Perps" live={source === "futures" ? "Live" : false}
         text="Trade futures: bet on a coin going up (long) or down (short). Leverage makes wins and losses bigger."
         stats={[[PERP_COINS.length, "markets"], [PERP_VENUES.length, "exchanges"], [source === "futures" ? "Hyperliquid" : "CoinGecko", "price feed"], ["1 min", "refresh"]]} />
+      <Guide id="perps" title="Perps, in 3 steps" steps={[
+        <><b>Long</b> means you win if the price goes up; <b>short</b> means you win if it goes down.</>,
+        <>Pick an exchange below and open an account there (Aster works with your own wallet).</>,
+        <>Start tiny, use low leverage (2x to 3x) and always set a <b>stop-loss</b>.</>,
+      ]} tip="With leverage you can lose your whole deposit fast. Most people who trade futures lose money." />
 
       <div className="card stack">
         <h2>Live futures prices</h2>
