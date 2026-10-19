@@ -1,7 +1,7 @@
 import dynamicImport from "next/dynamic";
 import ProHero from "@/components/ProHero";
 import Guide from "@/components/Guide";
-import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
+import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import { adminState } from "@/lib/admin";
 
@@ -22,7 +22,7 @@ export default async function StakePage({ searchParams }: { searchParams: { pool
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
       <ProHero kicker="AUTISTIK Staking" title="Stake" tone="gold" />
-      <SectionCards items={TOKEN_CARDS} active="/stake" label="$AUTISTIK" />
+      <SectionCards items={EARN_CARDS} active="/stake" label="Earn" />
       <Guide id="stake" title="How staking works" tip="Rewards come only from what each pool's team adds. APR changes as people join and leave." steps={[
         "Pick a pool. The Official pool: stake $AUTISTIK, earn BNB from the platform's trading fees.",
         "Tap Stake, type an amount and confirm twice in your wallet (allow, then stake).",

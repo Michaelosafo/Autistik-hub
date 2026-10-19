@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Guide from "@/components/Guide";
 import WalletLink from "@/components/WalletLink";
-import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
+import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
 import ProHero from "@/components/ProHero";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -26,7 +26,7 @@ export default async function Rewards() {
 
   return (
     <div className="stack">
-      <SectionCards items={TOKEN_CARDS} active="/rewards" label="$AUTISTIK" />
+      <SectionCards items={EARN_CARDS} active="/rewards" label="Earn" />
       <ProHero tone="violet" kicker={`$AUTISTIK · REWARDS · ${(settings?.round_name || "Round 1").toUpperCase()}`} title="Community airdrops" live="Round open"
         text="$AUTISTIK airdrops reward taking part, and holding. You never need to share anything about your health to qualify."
         stats={user ? [[pts, "your points"], [need, "to qualify"], [rank ? `#${rank}` : "–", "your rank"], [board.length, "members earning"]] : [[need, "points to qualify"], ["Posts", "earn points"], ["Seats", "earn points"]]} />

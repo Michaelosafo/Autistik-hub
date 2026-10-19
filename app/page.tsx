@@ -41,7 +41,7 @@ export default async function Home() {
       <header className="lp-bar">
         <Link href="/" className="lp-logo" aria-label="AUTISTIK home"><svg width="44" height="22" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b></Link>
         <nav className="lp-nav" aria-label="Website">
-          <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/autism">About autism</Link>
+          <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
         <Link href="/swap" className="lp-launch">Open App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></Link>
       </header>
@@ -109,6 +109,15 @@ export default async function Home() {
           {COMMUNITY.map(([title, text, href]) => (
             <Link key={href} href={href} className="lp-product soft"><b>{title}</b><p>{text}</p><span className="lp-open">Open →</span></Link>
           ))}
+        </div>
+      </section>
+
+      <section className="lp-sec lp-fund">
+        <div>
+          <div className="lp-eyebrow">AUTISTIK Fund</div>
+          <h2>Funded by the community, built for individuals</h2>
+          <p>A portion of $AUTISTIK trading activity is set aside to support people on the autism spectrum with therapy, equipment, education and everyday essentials. The Fund opens soon: register your interest now (you can do it for someone you care for).</p>
+          <div className="lp-ctas"><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
         </div>
       </section>
 

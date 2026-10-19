@@ -1629,3 +1629,7 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .lp-launch:hover,.lp-btn.gold:hover{transform:translateY(-1px)}
 .lp-btn.xl{padding:16px 26px;font-size:1.08em;border-radius:18px}
 .lp-launch small{font-size:.7em;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(25,19,38,.18)}
+.lp-fund>div{padding:28px;border-radius:28px;background:linear-gradient(140deg,rgba(49,208,170,.16),#27262C 55%);border:1px solid rgba(49,208,170,.35)}
+.lp-fund h2{font-family:var(--f-display);font-size:clamp(1.5em,3vw,2.2em);margin:6px 0 8px}
+.lp-fund p{color:#B8ADD2;max-width:720px}
+.lp-fund .lp-eyebrow{color:#31D0AA}
