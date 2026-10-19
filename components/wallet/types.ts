@@ -6,7 +6,13 @@ export type Signer = {
   /** Signed in (Privy) or connected (browser wallet). */
   active: boolean;
   label?: string | null;
-  evm: { address: `0x${string}`; send: (chainId: number, tx: EvmTxRequest) => Promise<`0x${string}`> } | null;
+  evm: {
+    address: `0x${string}`;
+    send: (chainId: number, tx: EvmTxRequest) => Promise<`0x${string}`>;
+    /** Free signatures: an order (typed data) or a short message (cancelling). No transaction, no gas. */
+    signTyped: (chainId: number, typed: { domain: any; types: any; primaryType: string; message: any }) => Promise<`0x${string}`>;
+    signMessage: (message: string) => Promise<`0x${string}`>;
+  } | null;
   /** Signs a base64 Solana transaction and returns it signed (base64). */
   sol: { address: string; sign: (txBase64: string) => Promise<string> } | null;
   login: () => void;
