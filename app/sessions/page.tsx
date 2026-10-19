@@ -1,4 +1,5 @@
 import { adminState } from "@/lib/admin";
+import Guide from "@/components/Guide";
 import SessionCard from "@/components/SessionCard";
 import SessionForms from "@/components/SessionForms";
 import SectionCards, { COMMUNITY_CARDS } from "@/components/SectionCards";
@@ -25,6 +26,11 @@ export default async function SessionsPage() {
       <ProHero tone="coral" kicker="AUTISTIK · LIVE SESSIONS" title="Talks, Q&amp;As and support circles" live={sessions?.some((s: any) => new Date(s.starts_at).getTime() <= Date.now()) ? "On now" : false}
         text="Hosted by practitioners the AUTISTIK team has checked. Save your seat to earn participation points."
         stats={[[sessions?.length ?? 0, "coming up"], ["Checked", "hosts"], ["+ points", "for every seat"]]} />
+      <Guide id="sessions" title="Live sessions, in 3 steps" steps={[
+        <>Pick a talk, Q&amp;A or support circle below.</>,
+        <>Press <b>Save my seat</b>. You earn reward points for it.</>,
+        <>Come back at the time and join from the session card.</>,
+      ]} />
       {!sessions?.length && <div className="empty">{admin ? "No sessions yet. Add the first one with the form below." : "No sessions scheduled yet. Check back soon."}</div>}
       {sessions?.map((s) => <SessionCard key={s.id} s={s} seats={user ? seats[s.id] || 0 : undefined} admin={admin} />)}
       <SessionForms signedIn={!!user} admin={admin} />

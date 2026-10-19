@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Guide from "@/components/Guide";
 import CopyCA from "@/components/CopyCA";
 import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
 import ProHero from "@/components/ProHero";
@@ -44,6 +45,11 @@ export default function BuyPage() {
           <a className="btn" href={LINKS.dexscreener} target="_blank" rel="noopener noreferrer">Chart</a>
         </div>
       </ProHero>
+      <Guide id="buy" title="The easiest way to buy $AUTISTIK" steps={[
+        <>Get some <b>BNB</b> on an exchange like Binance and send it to your wallet on <b>BNB Smart Chain</b>.</>,
+        <>Open the <Link href="/wallet">Wallet</Link> (Simple mode), pick BNB Chain and search <b>AUTISTIK</b>.</>,
+        <>Choose an amount and tap Buy. Or follow the full PancakeSwap steps below.</>,
+      ]} tip="Only use the official contract address on this page. Fake coins copy the name." />
 
       <div className="card stack">
         <h2>Official contract address</h2>

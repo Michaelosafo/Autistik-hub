@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Guide from "@/components/Guide";
 import { getAddress, isAddress } from "viem";
 import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import Locker from "@/components/Locker";
@@ -34,6 +35,11 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
       <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
         text={<>Lock your pool&apos;s liquidity so it can&apos;t be pulled (no rug pull), or lock team tokens so they can&apos;t be dumped. Nobody, not even the AUTISTIK team, can touch a lock before its date.</>}
         stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["No", "early unlock"]]} />
+      <Guide id="lockers" title="How to lock, in 3 steps" steps={[
+        <>Connect your wallet below and pick the network your coin is on.</>,
+        <>Choose what to lock: your pool&apos;s <b>LP token</b> (proves the liquidity can&apos;t be pulled) or <b>team tokens</b>. Paste its address and the amount.</>,
+        <>Pick the unlock date and confirm in your wallet (approve, then lock). Nobody can unlock it early, not even you.</>,
+      ]} tip={<>Just checking a coin? Paste its address in <b>Check a token&apos;s locks</b> further down. Your LP token address is the &quot;Pair&quot; address on DexScreener.</>} />
 
       {sites.length ? <Locker sites={sites} /> : (
         <div className="notice warn">🔒 The AUTISTIK Locker opens very soon. You can already check any token&apos;s locks below.</div>

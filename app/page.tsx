@@ -53,6 +53,7 @@ export default async function Home() {
             <p>Autistic minds aren&apos;t broken and don&apos;t need a cure. They need understanding, connection and a place to belong. Here you&apos;ll find two friendly groups, two companion assistants called Believer and Purity, live talks with practitioners, a launch pad for your own token, and airdrops for the people who show up.</p>
             <div className="row">
               <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
+              <Link className="btn ghost" href="/start">New here? Start here</Link>
               <Link className="btn ghost" href="/autism">What is autism?</Link>
             </div>
             <div className="an-metrics">
