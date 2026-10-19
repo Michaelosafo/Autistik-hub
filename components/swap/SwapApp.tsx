@@ -63,7 +63,9 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
     <div className="sw">
       <div className="sw-card">
         <div className="sw-head">
-          <div><h1>Swap</h1><small>Trade tokens in an instant</small></div>
+          <div><h1>Swap</h1><small>Trade tokens in an instant</small>
+            <div className="sw-badges"><span className="g">Best price</span><span>Your keys</span><span>5 networks</span></div>
+          </div>
           <select className="sw-net" value={chainKey} onChange={(e) => switchChain(e.target.value as WChainKey)} aria-label="Network">
             {chains.map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
           </select>

@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
-import { disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
+import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
 export const APP_PATHS = ["/swap", "/wallet", "/stake", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
@@ -76,7 +76,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="ax">
       <header className="ax-bar" ref={bar}>
         <Link href="/" className="ax-logo" aria-label="AUTISTIK home">
-          <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b>
+          <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b><small>APP</small>
         </Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
@@ -94,7 +94,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <span className="ax-chain" title="Network"><i />BNB Chain</span>
           {acct ? (
             <div className="ax-acct">
-              <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}><i />{short(acct)}</button>
+              <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>
+                {(() => { const w = TOP_WALLETS.find((x) => wallet?.name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0])); return w ? <img src={`/wallets/${w.id}.svg`} alt="" /> : wallet?.name === "WalletConnect" ? <img src="/wallets/walletconnect.svg" alt="" /> : <i />; })()}
+                {short(acct)}
+              </button>
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
                   <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{wallet?.name}</small></Link>

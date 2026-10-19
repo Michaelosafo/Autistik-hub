@@ -1405,28 +1405,6 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .stk-tiers button.on{border-color:var(--gold,#F0B90B);background:rgba(240,185,11,.14)}
 @media (max-width:420px){ .stk-tiers{grid-template-columns:repeat(3,minmax(0,1fr))} }
 
-/* Connect a wallet (shared picker) */
-.wp-bg{position:fixed;inset:0;z-index:200;background:rgba(5,7,12,.62);display:flex;align-items:flex-end;justify-content:center;padding:0}
-@media (min-width:640px){ .wp-bg{align-items:center;padding:16px} }
-.wp{width:100%;max-width:460px;max-height:88dvh;overflow:auto;background:#14161c;color:#EAECEF;border:1px solid #2b2f36;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
-@media (min-width:640px){ .wp{border-radius:20px} }
-.wp-head{display:flex;justify-content:space-between;align-items:center;font-size:1.1em}
-.wp-x{background:#2b2f36;color:#EAECEF;border:0;border-radius:99px;width:32px;height:32px;font-size:1.3em;line-height:1;cursor:pointer}
-.wp-label{font-size:.75em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9aa0aa;margin-top:4px}
-.wp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.wp-w{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:14px;border:1px solid #2b2f36;background:#0b0e11;color:#EAECEF;cursor:pointer;text-align:center;min-width:0}
-.wp-w:hover:not(:disabled),.wp-wc:hover:not(:disabled){border-color:var(--gold,#F0B90B)}
-.wp-w:disabled,.wp-wc:disabled{opacity:.6;cursor:wait}
-.wp-w img{width:36px;height:36px;border-radius:10px}
-.wp-w b{font-size:.82em;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
-.wp-w small{font-size:.7em;color:#9aa0aa}
-.wp-ph{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#2b2f36;color:#fff;font-weight:800}
-.wp-wc{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;border:1px solid #3b99fc;background:rgba(59,153,252,.1);color:#EAECEF;cursor:pointer;text-align:left}
-.wp-wc b,.wp-wc small{display:block}
-.wp-wc small{color:#9aa0aa;font-size:.78em}
-.wp-wc-logo{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#3b99fc;color:#fff;flex:none}
-.wp-err{padding:10px 12px;border-radius:12px;background:rgba(246,70,93,.12);color:#ff8a98;font-size:.88em}
-.wp-note{margin:0;font-size:.78em;color:#9aa0aa}
 
 /* ===================== The App (PancakeSwap-style frame) ===================== */
 .ax{--bg:#0B0A12;--surface:#27262C;--surface-2:#372F47;--ink:#F4EEFF;--muted:#B8ADD2;--line:#383241;
@@ -1565,3 +1543,89 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
   .lp-foot-cols{grid-template-columns:1fr 1fr}
 }
 .ax-main>*{margin-left:auto;margin-right:auto}
+
+/* ===================== Connect a wallet ===================== */
+.wp-bg{position:fixed;inset:0;z-index:200;background:rgba(6,5,12,.7);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center;animation:wpFade .18s ease}
+@keyframes wpFade{from{opacity:0}to{opacity:1}}
+@keyframes wpUp{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+.wp{display:grid;grid-template-columns:1fr;width:100%;max-width:760px;max-height:90dvh;overflow:hidden;color:#F4EEFF;border-radius:28px 28px 0 0;
+  border:1px solid transparent;background:linear-gradient(#17141f,#17141f) padding-box,linear-gradient(135deg,rgba(240,185,11,.7),rgba(118,69,217,.6),rgba(49,208,170,.5)) border-box;
+  box-shadow:0 30px 90px rgba(0,0,0,.6),0 0 60px rgba(240,185,11,.08);animation:wpUp .22s ease}
+@media (min-width:720px){ .wp-bg{align-items:center;padding:16px} .wp{grid-template-columns:1.25fr .9fr;border-radius:28px} }
+.wp-main{display:flex;flex-direction:column;gap:10px;padding:18px;overflow:auto;max-height:90dvh;padding-bottom:calc(18px + env(safe-area-inset-bottom))}
+.wp-head{display:flex;justify-content:space-between;align-items:flex-start}
+.wp-head b{display:block;font-family:var(--f-display);font-size:1.2em}
+.wp-head small{color:#B8ADD2}
+.wp-x{background:#2a2537;color:#F4EEFF;border:0;border-radius:99px;width:34px;height:34px;font-size:1.3em;line-height:1;cursor:pointer}
+.wp-search{width:100%;padding:11px 14px;border-radius:14px;border:1px solid #3a3350;background:#0f0d16;color:#F4EEFF;font:inherit}
+.wp-search:focus{outline:2px solid rgba(240,185,11,.6);outline-offset:1px}
+.wp-list{display:flex;flex-direction:column;gap:6px}
+.wp-label{font-size:.72em;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8f86a8;margin:6px 4px 0}
+.wp-row,.wp-wc{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border-radius:16px;border:1px solid #2a2537;background:#1e1a29;color:#F4EEFF;cursor:pointer;text-align:left;font:inherit;transition:border-color .15s,transform .15s,background .15s}
+.wp-row:hover:not(:disabled),.wp-wc:hover:not(:disabled){border-color:rgba(240,185,11,.7);background:#241f31;transform:translateY(-1px)}
+.wp-row:disabled,.wp-wc:disabled{opacity:.6;cursor:wait}
+.wp-row img,.wp-wc img{width:40px;height:40px;border-radius:12px;flex:none;background:#fff1}
+.wp-row-t{flex:1;min-width:0}
+.wp-row-t b,.wp-wc b{display:block;font-size:.98em}
+.wp-row-t small,.wp-wc small{display:block;color:#B8ADD2;font-size:.78em}
+.wp-ph{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#2a2537;color:#fff;font-weight:800;flex:none}
+.wp-badge{font-size:.7em;font-weight:800;padding:3px 8px;border-radius:99px;background:rgba(49,208,170,.15);color:#31D0AA;flex:none}
+.wp-badge.gold{background:rgba(240,185,11,.16);color:#F0B90B}
+.wp-chev{width:8px;height:8px;border-right:2px solid #6f6688;border-bottom:2px solid #6f6688;transform:rotate(-45deg);flex:none;margin-right:4px}
+.wp-wc{margin-top:4px;border-color:rgba(59,153,252,.5);background:linear-gradient(90deg,rgba(59,153,252,.14),#1e1a29)}
+.wp-empty{padding:14px;color:#B8ADD2;font-size:.9em;text-align:center}
+.wp-err{padding:10px 12px;border-radius:12px;background:rgba(237,75,158,.12);color:#ff8ac4;font-size:.88em}
+.wp-side{display:none}
+@media (min-width:720px){
+  .wp-side{display:flex;flex-direction:column;gap:10px;padding:26px 22px;border-left:1px solid #2a2537;
+    background:radial-gradient(120% 80% at 100% 0%,rgba(240,185,11,.16),transparent 60%),radial-gradient(120% 80% at 0% 100%,rgba(118,69,217,.22),transparent 60%),#121019}
+  .wp-side b{font-family:var(--f-display);font-size:1.15em}
+  .wp-side p{margin:0;color:#B8ADD2;font-size:.9em}
+  .wp-side strong{display:block;color:#F4EEFF}
+  .wp-side-art{display:grid;place-items:center;height:96px;border-radius:20px;background:#0f0d16;border:1px solid #2a2537}
+  .wp-safe{padding:10px 12px;border-radius:12px;background:rgba(240,185,11,.1);color:#F0B90B !important;font-weight:700}
+  .wp-get{margin-top:auto;align-self:flex-start;padding:10px 16px;border-radius:14px;background:#2a2537;color:#F4EEFF;text-decoration:none;font-weight:800}
+}
+
+/* ===================== App: AUTISTIK signature look (on top of the exchange layout) ===================== */
+.ax{background:#0B0A12;position:relative;isolation:isolate}
+.ax::before{content:"";position:fixed;inset:-20%;z-index:-1;pointer-events:none;
+  background:radial-gradient(40% 35% at 20% 15%,rgba(118,69,217,.28),transparent 70%),radial-gradient(35% 30% at 85% 10%,rgba(240,185,11,.18),transparent 70%),radial-gradient(40% 35% at 60% 95%,rgba(49,208,170,.12),transparent 70%);
+  animation:axAurora 24s ease-in-out infinite alternate}
+@keyframes axAurora{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(-3%,2%,0) scale(1.08)}}
+:root[data-calm="on"] .ax::before{animation:none}
+@media (prefers-reduced-motion:reduce){ .ax::before{animation:none} }
+.ax-bar{background:rgba(14,12,22,.72);backdrop-filter:blur(14px) saturate(1.3);border-bottom:0}
+.ax-bar::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--spectrum);opacity:.85}
+.ax-logo b{background:linear-gradient(90deg,#fff,#F0B90B);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ax-logo small{font-size:.62em;font-weight:800;padding:2px 7px;border-radius:99px;background:rgba(240,185,11,.16);color:#F0B90B;letter-spacing:.06em}
+.ax-nav{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:4px;flex:0 1 auto;margin-left:10px}
+.ax-dd>button{padding:8px 14px;border-radius:12px}
+.ax-dd>button.on{background:linear-gradient(135deg,rgba(240,185,11,.22),rgba(240,185,11,.08));color:#F0B90B}
+.ax-dd>button.on::after{display:none}
+.ax-menu{border:1px solid transparent;background:linear-gradient(#1c1928,#1c1928) padding-box,linear-gradient(135deg,rgba(240,185,11,.5),rgba(118,69,217,.45)) border-box}
+.ax-connect{position:relative;overflow:hidden;background:linear-gradient(135deg,#FFD84D,#F0B90B 45%,#E8A400);box-shadow:0 6px 20px rgba(240,185,11,.25),0 -2px 0 rgba(0,0,0,.18) inset}
+.ax-connect::after,.lp-launch::after,.lp-btn.gold::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);transform:translateX(-120%);animation:axShine 3.5s ease-in-out infinite}
+@keyframes axShine{0%,60%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+:root[data-calm="on"] .ax-connect::after,:root[data-calm="on"] .lp-launch::after,:root[data-calm="on"] .lp-btn.gold::after{animation:none;display:none}
+@media (prefers-reduced-motion:reduce){ .ax-connect::after,.lp-launch::after,.lp-btn.gold::after{animation:none;display:none} }
+.ax-connect.on{background:#231f30;box-shadow:none;border:1px solid #3a3350}
+.ax-connect.on::after{display:none}
+.ax .card,.sw-card,.stk-card,.lp-product,.lp-stats div{border:1px solid transparent !important;
+  background:linear-gradient(#1c1928,#1c1928) padding-box,linear-gradient(135deg,rgba(240,185,11,.35),rgba(118,69,217,.35),rgba(255,255,255,.06)) border-box !important}
+.sw-card{box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 80px rgba(118,69,217,.12)}
+.sw-field{background:#100e18;border:1px solid #2a2537}
+.sw-flip{width:42px;height:42px;padding:0;border-radius:14px;border:4px solid #1c1928;background:#2a2537;margin:-16px auto;position:relative;z-index:1}
+.sw-flip:hover{transform:rotate(180deg);transition:transform .25s}
+.sw-head h1{background:linear-gradient(90deg,#fff,#F0B90B);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sw-badges{display:flex;gap:6px;flex-wrap:wrap}
+.sw-badges span{font-size:.72em;font-weight:800;padding:4px 9px;border-radius:99px;background:rgba(49,208,170,.12);color:#31D0AA}
+.sw-badges span.g{background:rgba(240,185,11,.14);color:#F0B90B}
+.ax-acct img{width:18px;height:18px;border-radius:5px}
+
+/* Enter-the-App buttons */
+.lp-launch,.lp-btn.gold{position:relative;overflow:hidden;gap:8px;background:linear-gradient(135deg,#FFD84D,#F0B90B 45%,#E8A400);box-shadow:0 8px 26px rgba(240,185,11,.3),0 -3px 0 rgba(0,0,0,.18) inset}
+.lp-launch svg,.lp-btn.gold svg{width:18px;height:18px}
+.lp-launch:hover,.lp-btn.gold:hover{transform:translateY(-1px)}
+.lp-btn.xl{padding:16px 26px;font-size:1.08em;border-radius:18px}
+.lp-launch small{font-size:.7em;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(25,19,38,.18)}
