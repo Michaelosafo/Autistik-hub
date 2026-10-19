@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPublicClient, createWalletClient, custom, formatEther, http, isAddress } from "viem";
@@ -44,8 +45,8 @@ export default function TrendingPay({ chain: fixedChain, token: fixedToken, prom
 
   async function pay() {
     if (!quote || !tokenOk) return;
-    const eth = (window as any).ethereum;
-    if (!eth) { setStatus("No wallet found. Open this page in the browser inside MetaMask or Trust Wallet, or send the BNB yourself and paste the transaction below."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setStatus("Check your wallet app…");
     try {
       const vchain = viemChain(bsc);

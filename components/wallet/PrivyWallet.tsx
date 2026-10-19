@@ -5,6 +5,7 @@ import { useExportWallet as useSolExport, useSignTransaction, useWallets as useS
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { arbitrum, base, bsc, mainnet } from "viem/chains";
 import { WCHAINS } from "@/lib/wallet-chains";
+import { WALLETCONNECT_ID } from "@/lib/connect";
 import WalletApp from "./WalletApp";
 import StakeApp from "@/components/stake/StakeApp";
 import type { Start } from "./types";
@@ -23,7 +24,12 @@ export default function PrivyWallet({ appId, start, app }: { appId: string; star
   return (
     <PrivyProvider appId={appId} config={{
       loginMethods: ["email", "google", "apple", "passkey", "wallet"],
-      appearance: { theme: "dark", accentColor: "#3EE58F", logo: "/icon.svg", landingHeader: "AUTISTIK Wallet", walletChainType: "ethereum-and-solana" },
+      appearance: {
+        theme: "dark", accentColor: "#F0B90B", logo: "/icon.svg", landingHeader: "AUTISTIK Wallet", walletChainType: "ethereum-and-solana",
+        // "Connect my wallet": wallets on this device first, then the top wallets, then WalletConnect for the rest.
+        walletList: ["detected_ethereum_wallets", "metamask", "binance", "okx_wallet", "coinbase_wallet", "bitget_wallet", "rainbow", "phantom", "detected_solana_wallets", "wallet_connect"],
+      },
+      ...(WALLETCONNECT_ID ? { walletConnectCloudProjectId: WALLETCONNECT_ID } : {}),
       embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, solana: { createOnLogin: "users-without-wallets" }, showWalletUIs: true },
       supportedChains: [bsc, base, mainnet, arbitrum],
       defaultChain: bsc,

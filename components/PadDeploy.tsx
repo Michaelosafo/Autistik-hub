@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, encodeAbiParameters, formatEther, getContractAddress, keccak256, parseEther, toHex } from "viem";
 import { CHAINS, LAUNCHPAD_ABI, deployable, viemChain, type ChainKey, type LaunchChain } from "@/lib/launchpad";
@@ -31,8 +32,8 @@ export default function PadDeploy() {
   useEffect(load, [chain]);
 
   async function wallet(c: LaunchChain) {
-    const eth = (window as any).ethereum;
-    if (!eth) throw new Error("No wallet found. Open this page in your wallet's browser.");
+    const eth = await pickWallet();
+    if (!eth) throw new Error("No wallet chosen.");
     const vc = viemChain(c);
     const w = createWalletClient({ chain: vc, transport: custom(eth) }) as any;
     const [account] = await w.requestAddresses();

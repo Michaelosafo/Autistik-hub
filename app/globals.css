@@ -1404,3 +1404,26 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .stk-tiers button small{color:#0ECB81}
 .stk-tiers button.on{border-color:var(--gold,#F0B90B);background:rgba(240,185,11,.14)}
 @media (max-width:420px){ .stk-tiers{grid-template-columns:repeat(3,minmax(0,1fr))} }
+
+/* Connect a wallet (shared picker) */
+.wp-bg{position:fixed;inset:0;z-index:200;background:rgba(5,7,12,.62);display:flex;align-items:flex-end;justify-content:center;padding:0}
+@media (min-width:640px){ .wp-bg{align-items:center;padding:16px} }
+.wp{width:100%;max-width:460px;max-height:88dvh;overflow:auto;background:#14161c;color:#EAECEF;border:1px solid #2b2f36;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+@media (min-width:640px){ .wp{border-radius:20px} }
+.wp-head{display:flex;justify-content:space-between;align-items:center;font-size:1.1em}
+.wp-x{background:#2b2f36;color:#EAECEF;border:0;border-radius:99px;width:32px;height:32px;font-size:1.3em;line-height:1;cursor:pointer}
+.wp-label{font-size:.75em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9aa0aa;margin-top:4px}
+.wp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.wp-w{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 6px;border-radius:14px;border:1px solid #2b2f36;background:#0b0e11;color:#EAECEF;cursor:pointer;text-align:center;min-width:0}
+.wp-w:hover:not(:disabled),.wp-wc:hover:not(:disabled){border-color:var(--gold,#F0B90B)}
+.wp-w:disabled,.wp-wc:disabled{opacity:.6;cursor:wait}
+.wp-w img{width:36px;height:36px;border-radius:10px}
+.wp-w b{font-size:.82em;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.wp-w small{font-size:.7em;color:#9aa0aa}
+.wp-ph{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#2b2f36;color:#fff;font-weight:800}
+.wp-wc{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;border:1px solid #3b99fc;background:rgba(59,153,252,.1);color:#EAECEF;cursor:pointer;text-align:left}
+.wp-wc b,.wp-wc small{display:block}
+.wp-wc small{color:#9aa0aa;font-size:.78em}
+.wp-wc-logo{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:#3b99fc;color:#fff;flex:none}
+.wp-err{padding:10px 12px;border-radius:12px;background:rgba(246,70,93,.12);color:#ff8a98;font-size:.88em}
+.wp-note{margin:0;font-size:.78em;color:#9aa0aa}
