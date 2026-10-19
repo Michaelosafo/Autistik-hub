@@ -52,7 +52,6 @@ export default async function AnalyticsPage() {
           <div>
             <div className="an-kicker">AUTISTIK · ON-CHAIN ANALYTICS</div>
             <h1>Token intelligence</h1>
-            <p>Top wallets, the dev, bundles, liquidity locks, buy &amp; sell zones and live trades for any token. Paste an address: the network is detected for you.</p>
           </div>
           <div className="an-live"><i />Live</div>
         </div>

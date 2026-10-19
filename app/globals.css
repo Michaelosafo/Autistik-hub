@@ -1306,3 +1306,28 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .start-card:hover{border-color:var(--gold)}
 .start-card em{color:var(--ink);text-decoration:underline;text-decoration-color:var(--gold);text-decoration-thickness:2px;text-underline-offset:3px}
 .joincta .btn,.joincta .btn.g{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
+/* Menus that open: a list of page names in the side menu, a small pop-up on phones. */
+.nav-group > button{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:10px;font-weight:700}
+.nav-group > button svg{width:20px;height:20px;flex:none}
+.nav-group > button:hover{background:var(--rail-2);color:var(--rail-hi)}
+.nav-group > button:focus-visible{outline:3px solid var(--gold)}
+.nav-group > button[aria-current="page"]{color:var(--gold)}
+.nav-caret{margin-left:auto;width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .15s;opacity:.7}
+.nav-group.open .nav-caret{transform:rotate(-135deg)}
+.nav-sub{display:flex;flex-direction:column;margin:2px 0 6px 31px;border-left:1px solid var(--rail-2)}
+.nav .nav-sub a{padding:7px 12px;font-weight:600;font-size:.93em;border-radius:0 8px 8px 0;gap:0}
+.nav .nav-sub a[aria-current="page"]{color:var(--gold);background:var(--rail-2);box-shadow:inset 2px 0 0 var(--gold)}
+.tabbar button[aria-current="page"]{color:var(--gold)}
+.tabbar button[aria-expanded="true"]{background:var(--rail-2);color:var(--gold)}
+.nav-sheet{display:none}
+@media (max-width:860px){
+  .nav-sheet{display:block;position:fixed;inset:0;z-index:4;background:rgba(5,8,20,.45)}
+  .nav-sheet-in{position:absolute;left:10px;right:10px;bottom:calc(74px + env(safe-area-inset-bottom,0px));background:var(--rail);border:1px solid var(--rail-2);border-radius:16px;padding:8px;display:flex;flex-direction:column;box-shadow:0 -10px 30px rgba(0,0,0,.35)}
+  .nav-sheet-in b{color:var(--rail-ink);font-size:.75em;letter-spacing:.08em;text-transform:uppercase;padding:6px 10px}
+  .nav-sheet-in a{color:var(--rail-hi);text-decoration:none;font-weight:700;padding:13px 12px;border-radius:10px}
+  .nav-sheet-in a[aria-current="page"]{color:var(--gold);background:var(--rail-2)}
+}
+/* Section cards: names only. */
+.ln-card{padding:11px 14px;justify-content:center}
+.launch-nav .ln-text{align-items:center;text-align:center}
+@media (max-width:700px){ .launch-nav{grid-template-columns:repeat(3,minmax(0,1fr))} .ln-card:last-child:nth-child(odd){grid-column:auto} .ln-card{padding:9px 6px} .ln-text b{font-size:.85em;white-space:nowrap} }

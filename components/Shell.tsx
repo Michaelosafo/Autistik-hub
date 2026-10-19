@@ -10,17 +10,23 @@ import { AlertsList, useAlerts } from "@/components/NotificationBell";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 
-type NavItem = { href: string; name: string; short?: string; icon: string; railOnly?: boolean; match?: string[]; not?: string[] };
+type NavItem = { href: string; name: string; short?: string; icon: string; railOnly?: boolean; match?: string[]; not?: string[]; children?: { href: string; name: string }[] };
 
 // Each menu item is one section. Sections with several pages show tabs at the top (components/SectionTabs).
 const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
   { href: "/start", name: "Start here", icon: "i-learn", railOnly: true },
-  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/trade", "/perps", "/lockers", "/momentum"] },
+  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/trade", "/perps", "/lockers", "/momentum"], children: [
+    { href: "/launchpad/new", name: "Launch a coin" }, { href: "/launchpad", name: "Trending" }, { href: "/momentum", name: "Momentum" }, { href: "/lockers", name: "Lockers" }, { href: "/perps", name: "Perps" },
+  ] },
   { href: "/analytics", name: "Analytics", short: "Stats", icon: "i-stats" },
   { href: "/wallet", name: "Wallet", icon: "i-wallet" },
-  { href: "/companions", name: "Chat & Community", short: "Chat", icon: "i-kai", match: ["/companions", "/community", "/sessions"] },
-  { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"] },
+  { href: "/companions", name: "Chat & Community", short: "Chat", icon: "i-kai", match: ["/companions", "/community", "/sessions"], children: [
+    { href: "/companions", name: "Chat" }, { href: "/community", name: "Groups" }, { href: "/sessions", name: "Live sessions" },
+  ] },
+  { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/rewards", "/fund"], children: [
+    { href: "/buy", name: "Buy $AUTISTIK" }, { href: "/rewards", name: "Rewards" }, { href: "/fund", name: "AUTISTIK Fund" },
+  ] },
   { href: "/autism", name: "About autism", icon: "i-learn", railOnly: true },
   { href: "/safety", name: "Safety", icon: "i-safe", railOnly: true },
 ];
@@ -56,6 +62,10 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     try { localStorage.setItem("calm", calm ? "1" : "0"); localStorage.setItem("big", big ? "1" : "0"); } catch {}
   }, [calm, big]);
 
+  // Menus with several pages open when tapped: a list in the side menu, a small pop-up on phones.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [sheet, setSheet] = useState<NavItem | null>(null);
+  useEffect(() => { setSheet(null); setOpenGroup(null); }, [path]);
   const nav: NavItem[] = me?.is_admin ? [...NAV, { href: "/admin", name: "Admin", icon: "i-adm" }] : NAV;
   const isOn = (n: NavItem) => {
     if (n.href === "/") return path === "/";
@@ -106,9 +116,18 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             <div><b>AUTISTIK HUB</b><small>Different wavelength. Same channel.</small></div>
           </Link>
           <nav className="nav">
-            {nav.map((n) => (
-              <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>
-            ))}
+            {nav.map((n) => {
+              if (!n.children) return <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>;
+              const open = openGroup === n.href || (openGroup === null && isOn(n));
+              return (
+                <div key={n.href} className={"nav-group" + (open ? " open" : "")}>
+                  <button type="button" aria-expanded={open} aria-current={isOn(n) ? "page" : undefined} onClick={() => setOpenGroup(open ? "" : n.href)}>
+                    <Icon id={n.icon} /><span>{n.name}</span><i className="nav-caret" aria-hidden="true" />
+                  </button>
+                  {open && <div className="nav-sub">{n.children.map((c) => <Link key={c.href} href={c.href} aria-current={path === c.href ? "page" : undefined}>{c.name}</Link>)}</div>}
+                </div>
+              );
+            })}
           </nav>
           <div className="rail-pick" aria-label="Talk to a companion">
             <Link href="/companions?c=believer" title="Talk to Believer" data-c="believer"><Art kind="believer" className="" />Believer</Link>
@@ -177,10 +196,18 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
         </main>
       </div>
       <nav className="tabbar">
-        {nav.filter((n) => !n.railOnly && !(me?.is_admin && n.href === "/safety")).map((n) => (
-          <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.short || n.name}</span></Link>
-        ))}
+        {nav.filter((n) => !n.railOnly && !(me?.is_admin && n.href === "/safety")).map((n) => n.children
+          ? <button key={n.href} type="button" aria-current={isOn(n) ? "page" : undefined} aria-expanded={sheet?.href === n.href} onClick={() => setSheet(sheet?.href === n.href ? null : n)}><Icon id={n.icon} /><span>{n.short || n.name}</span></button>
+          : <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.short || n.name}</span></Link>)}
       </nav>
+      {sheet?.children && (
+        <div className="nav-sheet" onClick={(e) => e.target === e.currentTarget && setSheet(null)}>
+          <div className="nav-sheet-in" role="menu" aria-label={sheet.name}>
+            <b>{sheet.name}</b>
+            {sheet.children.map((c) => <Link key={c.href} role="menuitem" href={c.href} aria-current={path === c.href ? "page" : undefined} onClick={() => setSheet(null)}>{c.name}</Link>)}
+          </div>
+        </div>
+      )}
     </>
   );
 }
