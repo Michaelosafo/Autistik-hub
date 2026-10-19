@@ -1,25 +1,4 @@
-// What the browser may load. Scripts only from this site (plus Cloudflare's "are you human" check and Vercel's
-// preview toolbar), so injected scripts from other sites won't run. Fonts come from Google Fonts. Wallet and price
-// data use many HTTPS services, so connections are limited to HTTPS rather than a list.
-const dev = process.env.NODE_ENV !== "production";
-const CSP = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com https://vercel.live`,
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com https://vercel.live",
-  "img-src 'self' data: blob: https:",
-  `connect-src 'self' https: wss:${dev ? " ws: http://localhost:*" : ""}`,
-  // The built-in wallet (Privy) keeps keys in its own secure frame.
-  "frame-src https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io https://dexscreener.com",
-  "worker-src 'self' blob:",
-  "manifest-src 'self'",
-  "media-src 'self' data: blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
+// The Content Security Policy is set per request in middleware.ts (lib/csp.ts), so scripts can carry a nonce.
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -53,9 +32,13 @@ const nextConfig = {
         ],
       },
       {
+        // Files served without the middleware (the offline page) get a strict policy: no scripts at all.
+        source: "/offline.html",
+        headers: [{ key: "Content-Security-Policy", value: "default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" }],
+      },
+      {
         source: "/(.*)",
         headers: [
-          { key: "Content-Security-Policy", value: CSP },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
