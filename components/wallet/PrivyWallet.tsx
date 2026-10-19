@@ -6,6 +6,8 @@ import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { arbitrum, base, bsc, mainnet } from "viem/chains";
 import { WCHAINS } from "@/lib/wallet-chains";
 import WalletApp from "./WalletApp";
+import StakeApp from "@/components/stake/StakeApp";
+import type { Start } from "./types";
 import type { Signer } from "./types";
 
 const toB64 = (u8: Uint8Array) => { let s = ""; for (const b of u8) s += String.fromCharCode(b); return btoa(s); };
@@ -17,7 +19,7 @@ const SOL_RPC = WCHAINS.solana.rpc;
  * EVM wallet and a Solana wallet. Keys are split and kept in secure hardware; neither AUTISTIK nor anyone else can
  * use them without the member signing in.
  */
-export default function PrivyWallet({ appId, start }: { appId: string; start: { chain?: string; buy?: string; quick?: boolean } }) {
+export default function PrivyWallet({ appId, start, app }: { appId: string; start: Start; app?: "wallet" | "stake" }) {
   return (
     <PrivyProvider appId={appId} config={{
       loginMethods: ["email", "google", "apple", "passkey", "wallet"],
@@ -27,7 +29,7 @@ export default function PrivyWallet({ appId, start }: { appId: string; start: { 
       defaultChain: bsc,
       solana: { rpcs: { "solana:mainnet": { rpc: createSolanaRpc(SOL_RPC), rpcSubscriptions: createSolanaRpcSubscriptions(SOL_RPC.replace(/^http/, "ws")), blockExplorerUrl: "https://solscan.io" } } },
     }}>
-      <Inner start={start} />
+      <Inner start={start} app={app} />
     </PrivyProvider>
   );
 }
@@ -38,7 +40,7 @@ const typedJson = (typed: { domain: any; types: any; primaryType: string; messag
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 
-function Inner({ start }: { start: { chain?: string; buy?: string; quick?: boolean } }) {
+function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { connectWallet } = useConnectWallet();
   const { wallets } = useWallets();
@@ -90,5 +92,5 @@ function Inner({ start }: { start: { chain?: string; buy?: string; quick?: boole
     logout: () => { setPrefer(null); logout(); },
     exportKey: (kind) => { (kind === "evm" ? exportWallet({ address: evmEmbedded?.address }) : exportSol({ address: solEmbedded?.address })).catch(() => {}); },
   };
-  return <WalletApp signer={signer} start={start} />;
+  return app === "stake" ? <StakeApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} />;
 }

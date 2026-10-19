@@ -1365,3 +1365,35 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .or-line::before,.or-line::after{content:"";flex:1;height:1px;background:currentColor;opacity:.3}
 .nl-card .muted,.nl-nums span{color:#9aa0aa;opacity:1}
 .nl-card .up{color:#0ECB81} .nl-card .down{color:#F6465D}
+
+/* Staking */
+.stk{display:flex;flex-direction:column;gap:14px}
+.stk-top{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:18px;border-radius:18px;background:linear-gradient(150deg,rgba(240,185,11,.18),transparent 65%),#14161c;color:#EAECEF;border:1px solid rgba(240,185,11,.35)}
+.stk-top small{display:block;color:#9aa0aa}
+.stk-big{font-size:2em;font-weight:800;line-height:1.15}
+.stk-apr{text-align:right}
+.stk-apr b{display:block;font-size:1.35em;color:var(--gold,#F0B90B)}
+.stk-connect{display:flex;gap:8px;flex-wrap:wrap}
+.stk-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.stk-card{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;background:#14161c;color:#EAECEF;border:1px solid #2b2f36}
+.stk-card.featured{border-color:var(--gold,#F0B90B);box-shadow:0 0 0 1px rgba(240,185,11,.25)}
+.stk-card b{display:block}
+.stk-card small{display:block;color:#9aa0aa}
+.stk-card .muted{color:#9aa0aa}
+.stk-card input{background:#0b0e11;color:#EAECEF;border:1px solid #2b2f36;border-radius:10px;padding:10px;width:100%}
+.stk-tag{font-size:.72em;font-weight:800;padding:3px 8px;border-radius:99px;background:#2b2f36;color:#c7cbd1;flex:none}
+.stk-tag.gold{background:var(--gold,#F0B90B);color:#111}
+.stk-nums{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.stk-nums span,.stk-mine span{display:block;font-size:.75em;color:#9aa0aa}
+.stk-nums .gold{color:var(--gold,#F0B90B)}
+.stk-mine{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;padding:10px;border-radius:12px;background:#0b0e11}
+.stk-mine .up{color:#0ECB81}
+.stk-links{gap:12px;font-size:.85em;align-items:center}
+.stk-links .linkish{color:var(--gold,#F0B90B)}
+.stk-seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.stk-seg button{padding:7px 12px;border-radius:10px;border:1px solid #2b2f36;background:#0b0e11;color:#EAECEF;font-weight:700;cursor:pointer}
+.stk-seg button.on{background:var(--gold,#F0B90B);color:#111;border-color:var(--gold,#F0B90B)}
+.stk-card .field>span{font-weight:700}
+/* Four section cards ($AUTISTIK: Buy, Stake, Rewards, Fund): 4 across, 2×2 on phones */
+.launch-nav.n4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:640px){ .launch-nav.n4{grid-template-columns:repeat(2,minmax(0,1fr))} .launch-nav.n4 .ln-card{justify-content:center;text-align:center} }

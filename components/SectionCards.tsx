@@ -21,6 +21,7 @@ export const COMMUNITY_CARDS: SectionCard[] = [
 // $AUTISTIK: buy the token, earn airdrops, and the community fund.
 export const TOKEN_CARDS: SectionCard[] = [
   { href: "/buy", name: "Buy $AUTISTIK", blurb: "Official contract & how to buy", tone: "sun" },
+  { href: "/stake", name: "Stake", blurb: "Earn from platform fees", tone: "sun" },
   { href: "/rewards", name: "Rewards", blurb: "Points & airdrops", tone: "violet" },
   { href: "/fund", name: "AUTISTIK Fund", blurb: "Support for individuals", tone: "teal" },
 ];
