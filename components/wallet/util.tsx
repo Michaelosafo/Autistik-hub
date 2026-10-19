@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { createPublicClient, http } from "viem";
-import { isTokenAddress, type WChain, type WToken } from "@/lib/wallet-chains";
+import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } from "viem";
+import { KYBER_ROUTER, isTokenAddress, type WChain, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "./types";
 
 export type Risk = { level: "ok" | "warn" | "danger" | "unknown"; notes: string[]; buyTax: number; sellTax: number; honeypot: boolean };
@@ -102,3 +102,37 @@ export const friendlyError = (e: any, native: string) => {
   const m = String(e?.shortMessage || e?.message || e);
   return /reject|denied|cancel/i.test(m) ? "You cancelled it. Nothing was sent." : /insufficient funds|exceeds balance/i.test(m) ? `Not enough ${native} to pay the network fee.` : m.slice(0, 220);
 };
+
+/**
+ * Runs a quoted trade from the member's own wallet: build it on the server, check it goes only to a known swap
+ * contract, approve exactly the amount (tokens only), send, and wait. Returns the transaction hash.
+ */
+export async function runTrade(c: WChain, signer: Signer, owner: string, q: Quote, from: WToken, slippageBps: number, step: (s: string) => void): Promise<string> {
+  if (c.kind === "solana") {
+    step("Preparing your trade…");
+    const { tx } = await api<{ tx: { tx: string } }>("build", { chain: c.key, quote: q, from: owner, slippageBps });
+    step("Approve in your wallet…");
+    return sendSol(signer, tx.tx);
+  }
+  const ev = signer.evm!;
+  step("Preparing your trade…");
+  const { tx } = await api<{ tx: { to: `0x${string}`; data: `0x${string}`; value: string; spender: `0x${string}` | null } }>("build", { chain: c.key, quote: q, from: owner, slippageBps });
+  // Never send to a contract we don't expect, even if the server were tampered with.
+  const allowed = [KYBER_ROUTER, c.v2Router].filter(Boolean).map((a) => getAddress(a!));
+  if (!allowed.includes(getAddress(tx.to))) throw new Error("Unexpected swap contract. Stopped for your safety.");
+  if (tx.spender) {
+    const pc: any = createPublicClient({ chain: c.viem, transport: http(c.rpc) });
+    const have: bigint = await pc.readContract({ address: from.address as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [ev.address, tx.spender] });
+    if (have < BigInt(q.amountIn)) {
+      // The exact amount only: no unlimited approvals left lying around.
+      step(`Step 1 of 2: allow this trade to use your ${from.symbol}…`);
+      const h = await ev.send(c.chainId!, { to: from.address as `0x${string}`, value: "0", data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [tx.spender, BigInt(q.amountIn)] }) });
+      await waitEvm(c, h);
+    }
+    step("Step 2 of 2: confirm in your wallet…");
+  } else step("Confirm in your wallet…");
+  const hash = await ev.send(c.chainId!, { to: tx.to, data: tx.data, value: tx.value });
+  step("Waiting for the network…");
+  await waitEvm(c, hash);
+  return hash;
+}

@@ -1210,3 +1210,49 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 @media (max-width:860px){ .tx .hide-sm{display:none} }
 .tx-net,.tx-quote,.tx-inline select{width:auto;flex:none}
 .tx .tx-field input{border:0 !important;background:transparent !important;box-shadow:none;padding:2px 0}
+/* Simple / Pro switch and the beginner screen. */
+.tx-mode{display:inline-flex;align-self:flex-start;background:#121725;border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:3px}
+.tx-mode button{all:unset;cursor:pointer;padding:6px 18px;border-radius:999px;font-weight:700;font-size:.85em;color:#8B93A7}
+.tx-mode button.on{background:#F0B90B;color:#14151a}
+.sm{display:flex;flex-direction:column;gap:12px;max-width:640px;width:100%}
+.sm-top{background:linear-gradient(160deg,#0B0E17,#161D30);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.sm-top small{color:#8B93A7}
+.sm-total{font-family:var(--f-mono);font-size:2.1em;font-weight:800;color:#fff;line-height:1.1}
+.sm-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sm-btn{all:unset;box-sizing:border-box;cursor:pointer;text-align:center;padding:12px;border-radius:10px;font-weight:800;background:#1A2132;color:#EAECEF;border:1px solid rgba(255,255,255,.1)}
+.sm-btn.main{background:#F0B90B;color:#14151a;border-color:#F0B90B}
+.sm-search input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:12px;background:#121725;border:1px solid rgba(255,255,255,.1);color:#fff;font-size:1em}
+.sm-search input:focus{outline:none;border-color:#F0B90B}
+.sm-tabs{display:flex;gap:6px}
+.sm-tabs button{all:unset;cursor:pointer;padding:7px 14px;border-radius:999px;font-weight:700;font-size:.88em;background:#121725;color:#8B93A7;border:1px solid rgba(255,255,255,.08)}
+.sm-tabs button.on{background:#fff;color:#0B0E17}
+.sm-list{display:flex;flex-direction:column;background:#121725;border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden}
+.sm-list > .tx-dim{padding:14px}
+.sm-coin{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.06);color:#EAECEF;width:100%}
+.sm-coin:hover,.sm-coin:focus-visible{background:#1A2132}
+.sm-coin .grow{flex:1;min-width:0;display:flex;flex-direction:column}
+.sm-coin .grow small{color:#8B93A7;font-size:.78em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#sm-mine .sm-coin{background:#121725;border:1px solid rgba(255,255,255,.08);border-radius:12px}
+.sm-num{display:flex;flex-direction:column;align-items:flex-end;font-family:var(--f-mono);font-size:.88em}
+.sm .up{color:#0ECB81} .sm .down{color:#F6465D}
+.sm-badge{font-size:.7em;font-weight:800;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.sm-badge.safer{background:rgba(14,203,129,.15);color:#0ECB81} .sm-badge.caution{background:rgba(240,185,11,.15);color:#F0B90B}
+.sm-badge.risky{background:rgba(246,70,93,.15);color:#F6465D} .sm-badge.scam{background:#F6465D;color:#fff}
+.sm-sell{font-size:.8em;font-weight:800;color:#F6465D}
+.sm-sheet{background:#121725;color:#EAECEF;gap:12px}
+.sm-sheet .tx-dim{color:#8B93A7}
+.sm-why{margin:0;padding:10px 12px 10px 28px;border-radius:10px;background:#1A2132;font-size:.88em;display:flex;flex-direction:column;gap:4px}
+.sm-why.safer{border-left:3px solid #0ECB81} .sm-why.caution{border-left:3px solid #F0B90B} .sm-why.risky,.sm-why.scam{border-left:3px solid #F6465D}
+.sm-presets{display:flex;gap:6px;flex-wrap:wrap}
+.sm-presets button{all:unset;cursor:pointer;padding:10px 14px;border-radius:10px;font-weight:800;background:#1A2132;border:1px solid rgba(255,255,255,.1);color:#EAECEF}
+.sm-presets button.on{background:#F0B90B;border-color:#F0B90B;color:#14151a}
+.sm-presets input{width:96px;padding:10px;border-radius:10px;background:#1A2132;border:1px solid rgba(255,255,255,.1);color:#fff}
+.sm-sheet .aw-details{font-size:.9em} .sm-sheet .aw-details span:first-child{color:#8B93A7}
+.sm-sheet .aw-risk{background:#1A2132;color:#EAECEF}
+.sm-sheet .aw-risk.ok{border-left:3px solid #0ECB81} .sm-sheet .aw-risk.warn{border-left:3px solid #F0B90B} .sm-sheet .aw-risk.danger{border-left:3px solid #F6465D}
+.sm-go{font-size:1.05em;padding:15px}
+.sm-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:.92em}
+.sm-sheet .tx-receive code{color:#EAECEF}
+.sm-sheet .btn{background:#1A2132;color:#EAECEF;border-color:rgba(255,255,255,.1)}
+.sm-sheet .aw-link{color:#F0B90B}
+#sm-mine > b{color:var(--ink);font-size:1.05em}

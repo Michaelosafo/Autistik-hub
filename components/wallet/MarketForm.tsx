@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } from "viem";
-import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, KYBER_ROUTER, MAX_SLIPPAGE_BPS, isNative, toUnits, type WChain, type WChainKey, type WToken } from "@/lib/wallet-chains";
+import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, MAX_SLIPPAGE_BPS, isNative, toUnits, type WChain, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "./types";
-import { addTrade, amt, api, friendlyError, raw2num, RiskBox, sendSol, short, store, TokenPicker, usd, waitEvm, type Holding, type Quote, type TokenInfo } from "./util";
+import { addTrade, amt, api, friendlyError, raw2num, RiskBox, runTrade, short, store, TokenPicker, usd, type Holding, type Quote, type TokenInfo } from "./util";
 
 /** Kept back for network fees when "Max" is used on the chain's own coin. */
 export const GAS_RESERVE: Record<WChainKey, string> = { bsc: "0.002", ethereum: "0.003", base: "0.0003", arbitrum: "0.0003", solana: "0.01" };
@@ -73,34 +72,7 @@ export default function MarketForm({ c, signer, owner, from, to, side, tokens, b
     if (!q || !from || !to) return;
     setErr(""); setDone(null);
     try {
-      let hash: string;
-      if (c.kind === "solana") {
-        setStep("Preparing your trade…");
-        const { tx } = await api<{ tx: { tx: string } }>("build", { chain: c.key, quote: q, from: owner, slippageBps: slipBps });
-        setStep("Approve in your wallet…");
-        hash = await sendSol(signer, tx.tx);
-      } else {
-        const ev = signer.evm!;
-        setStep("Preparing your trade…");
-        const { tx } = await api<{ tx: { to: `0x${string}`; data: `0x${string}`; value: string; spender: `0x${string}` | null } }>("build", { chain: c.key, quote: q, from: owner, slippageBps: slipBps });
-        // Never send to a contract we don't expect, even if the server were tampered with.
-        const allowed = [KYBER_ROUTER, c.v2Router].filter(Boolean).map((a) => getAddress(a!));
-        if (!allowed.includes(getAddress(tx.to))) throw new Error("Unexpected swap contract. Stopped for your safety.");
-        if (tx.spender) {
-          const pc: any = createPublicClient({ chain: c.viem, transport: http(c.rpc) });
-          const have: bigint = await pc.readContract({ address: from.address as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [ev.address, tx.spender] });
-          if (have < BigInt(q.amountIn)) {
-            // The exact amount only: no unlimited approvals left lying around.
-            setStep(`Step 1 of 2: allow this trade to use ${amount} ${from.symbol}…`);
-            const h = await ev.send(c.chainId!, { to: from.address as `0x${string}`, value: "0", data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [tx.spender, BigInt(q.amountIn)] }) });
-            await waitEvm(c, h);
-          }
-          setStep("Step 2 of 2: confirm the trade in your wallet…");
-        } else setStep("Confirm the trade in your wallet…");
-        hash = await ev.send(c.chainId!, { to: tx.to, data: tx.data, value: tx.value });
-        setStep("Waiting for the network…");
-        await waitEvm(c, hash as `0x${string}`);
-      }
+      const hash = await runTrade(c, signer, owner, q, from, slipBps, setStep);
       addTrade({ at: Date.now(), chain: c.key, side, pay: `${amount} ${from.symbol}`, get: `${amt(out)} ${to.symbol}`, hash });
       setDone(hash); setAmount(""); setReview(false); onDone();
     } catch (e: any) { setErr(friendlyError(e, c.native.symbol)); }

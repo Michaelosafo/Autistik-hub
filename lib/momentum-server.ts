@@ -192,3 +192,44 @@ export async function runMomentum(deadline: number) {
   if (notes.length) await notify(notes);
   return { picks: picks.length, fresh: fresh.length, followUps: follow.length, sent: notes.length };
 }
+
+// ---------------------------------------------------------------- Discover (simple trade screen)
+
+export type Coin = {
+  token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number;
+  liquidity: number; mcap: number | null; ageHours: number | null; badge: "safer" | "caution" | "risky" | "scam"; reasons: string[];
+};
+
+/** A plain-English safety label for beginners. */
+export function badgeOf(p: Pool): { badge: Coin["badge"]; reasons: string[] } {
+  const s = p.safety, reasons: string[] = [];
+  if (s?.honeypot) return { badge: "scam", reasons: ["Honeypot: people can't sell it. Don't buy."] };
+  const tax = Math.max(s?.buyTax ?? 0, s?.sellTax ?? 0);
+  let risky = false, caution = false;
+  if (!s) { caution = true; reasons.push("Safety check not available yet."); }
+  if (tax >= 10) { risky = true; reasons.push(`High tax: ${Math.round(tax)}% on trades.`); } else if (tax > 0) { caution = true; reasons.push(`Tax: ${Math.round(tax)}% on trades.`); }
+  if (s?.mintable) { risky = true; reasons.push("The owner can print more tokens."); }
+  if (p.liquidity < 15_000) { risky = true; reasons.push("Very small pool: price moves a lot."); } else if (p.liquidity < 50_000) caution = true;
+  if (p.ageHours != null && p.ageHours < 6) { risky = true; reasons.push("Brand new (under 6 hours): the riskiest stage."); } else if (p.ageHours != null && p.ageHours < 24) caution = true;
+  if (!reasons.length) reasons.push(s ? "Passed the safety checks." : "");
+  return { badge: risky ? "risky" : caution ? "caution" : "safer", reasons: reasons.filter(Boolean) };
+}
+
+const toCoin = (p: Pool): Coin => ({ token: p.token, symbol: p.symbol, name: p.name, image: p.image, price: p.price, change1h: n(p.change.h1), change24h: n(p.change.h24),
+  liquidity: p.liquidity, mcap: p.mcap, ageHours: p.ageHours, ...badgeOf(p) });
+
+/** Trending coins and coins launched in the last 2 days, with safety labels. Cached about 2 minutes. */
+export async function discover(chain: MomentumChain): Promise<{ trending: Coin[]; fresh: Coin[] }> {
+  const gt = MOMENTUM_CHAINS.find((c) => c.key === chain)!.gt;
+  const [trend, fresh] = await Promise.all([
+    getJson(`${GT}/networks/${gt}/trending_pools?include=base_token&duration=6h&page=1`, 120).catch(() => null),
+    getJson(`${GT}/networks/${gt}/new_pools?include=base_token&page=1`, 120).catch(() => null),
+  ]);
+  const skip = /^(W?BNB|W?ETH|W?SOL|USDT|USDC|DAI|BUSD|FDUSD|USD1|WBTC|BTCB|CBBTC)$/i;
+  const clean = (list: Pool[]) => { const seen = new Set<string>(); return list.filter((p) => p.price > 0 && !skip.test(p.symbol) && !seen.has(p.token.toLowerCase()) && seen.add(p.token.toLowerCase())); };
+  const t = clean(parsePools(chain, trend)).filter((p) => p.liquidity >= 10_000).slice(0, 20);
+  const f = clean(parsePools(chain, fresh)).filter((p) => p.liquidity >= 5_000 && (p.ageHours ?? 99) <= 48).slice(0, 20);
+  const sf = await safety(chain, [...new Set([...t, ...f].map((p) => p.token))].slice(0, 40));
+  const withSafety = (p: Pool) => ({ ...p, safety: sf.get(p.token.toLowerCase()) ?? null });
+  return { trending: t.map(withSafety).map(toCoin), fresh: f.map(withSafety).map(toCoin) };
+}
