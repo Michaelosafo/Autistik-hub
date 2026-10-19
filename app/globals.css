@@ -1255,3 +1255,4 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .sm-sheet .tx-receive code{color:#EAECEF}
 .sm-sheet .btn{background:#1A2132;color:#EAECEF;border-color:rgba(255,255,255,.1)}
 .sm-sheet .aw-link{color:#F0B90B}
+#sm-mine > b{color:var(--ink);font-size:1.05em}
