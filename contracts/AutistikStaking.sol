@@ -12,14 +12,16 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * - Anyone (a token's dev team) can open a pool for their own token: members stake it and earn the rewards the team
  *   adds (their own token, BNB or any other token).
  *
- * Rewards added to a pool are paid out evenly over the pool's reward period (e.g. 7 days), split by how much each
- * member has staked at each moment. Adding more rewards starts a new period with the leftovers rolled in. While
- * nobody is staked the clock pauses, so no rewards are lost.
+ * Rewards added to a pool are paid out evenly over the pool's reward period (e.g. 7 days), split by each member's
+ * weight at each moment. Weight = amount staked x the boost of the lock they chose:
+ *   Flexible (no lock) 1x · 30 days 1.25x · 90 days 1.5x · 180 days 2x · 365 days 3x.
+ * So the longer someone locks, the bigger their share. Adding more rewards starts a new period with the leftovers
+ * rolled in. While nobody is staked the clock pauses, so no rewards are lost.
  *
  * Safety:
  * - Staked tokens can only ever go back to the member who staked them. Nobody else can move them: not the pool's
  *   creator, not the contract owner.
- * - A pool's lock (0 to 365 days) is fixed when the pool is made; each new stake restarts that member's lock.
+ * - Each lock level is a separate position. Adding to a position restarts that position's lock (only that one).
  * - Withdrawing never depends on rewards: if a reward token breaks, members still get their stake back.
  * - Only the pool's creator, and the funders they pick, can add rewards (so nobody can stretch a pool's reward
  *   period with dust).
@@ -31,7 +33,7 @@ contract AutistikStaking is ReentrancyGuard {
 
     /// @dev How pools write "the chain's own coin" (BNB, ETH) as the reward token.
     address public constant NATIVE = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
-    uint256 public constant MAX_LOCK = 365 days;
+    uint256 public constant TIERS = 5;
     uint256 public constant MIN_DURATION = 1 days;
     uint256 public constant MAX_DURATION = 365 days;
     uint256 public constant MAX_CREATE_FEE = 1 ether;
@@ -41,34 +43,40 @@ contract AutistikStaking is ReentrancyGuard {
         address stakeToken;
         address rewardToken;
         address creator;
-        uint64 lockSecs;
         uint64 duration;
         uint64 periodFinish;
         uint64 lastUpdate;
         uint256 rewardRate; // reward units per second, times PRECISION
-        uint256 rewardPerToken; // times PRECISION
+        uint256 rewardPerWeight; // times PRECISION
         uint256 totalStaked;
+        uint256 totalWeight;
     }
 
-    struct Stake {
-        uint256 amount;
-        uint256 paid; // rewardPerToken already counted for this member
+    struct Member {
+        uint256 weight;
+        uint256 paid; // rewardPerWeight already counted for this member
         uint256 earned;
+    }
+
+    struct Position {
+        uint256 amount;
+        uint256 weight;
         uint64 unlockAt;
     }
 
     Pool[] public pools;
-    mapping(uint256 => mapping(address => Stake)) public stakes;
+    mapping(uint256 => mapping(address => Member)) public members;
+    mapping(uint256 => mapping(address => mapping(uint256 => Position))) public positions;
     mapping(uint256 => mapping(address => bool)) public funders;
 
     address public owner;
     address public feeReceiver;
     uint256 public createFee;
 
-    event PoolCreated(uint256 indexed id, address indexed stakeToken, address indexed rewardToken, address creator, uint256 lockSecs, uint256 duration);
+    event PoolCreated(uint256 indexed id, address indexed stakeToken, address indexed rewardToken, address creator, uint256 duration);
     event RewardAdded(uint256 indexed id, address indexed from, uint256 amount, uint256 periodFinish);
-    event Staked(uint256 indexed id, address indexed user, uint256 amount, uint256 unlockAt);
-    event Withdrawn(uint256 indexed id, address indexed user, uint256 amount);
+    event Staked(uint256 indexed id, address indexed user, uint256 tier, uint256 amount, uint256 unlockAt);
+    event Withdrawn(uint256 indexed id, address indexed user, uint256 tier, uint256 amount);
     event Claimed(uint256 indexed id, address indexed user, uint256 amount);
     event FunderSet(uint256 indexed id, address indexed funder, bool allowed);
     event CreateFeeSet(uint256 fee, address receiver);
@@ -84,6 +92,7 @@ contract AutistikStaking is ReentrancyGuard {
     error Locked(uint256 unlockAt);
     error TooMuch();
     error PayFailed();
+    error BadTier();
 
     constructor(address owner_, address feeReceiver_, uint256 createFee_) {
         if (owner_ == address(0) || feeReceiver_ == address(0) || createFee_ > MAX_CREATE_FEE) revert BadSettings();
@@ -95,17 +104,17 @@ contract AutistikStaking is ReentrancyGuard {
     // ---------------------------------------------------------------- pools
 
     /// Open a pool. `rewardToken` can be NATIVE (BNB). Costs `createFee` in BNB (0 unless the owner sets one).
-    function createPool(address stakeToken, address rewardToken, uint256 lockSecs, uint256 duration) external payable nonReentrant returns (uint256 id) {
+    function createPool(address stakeToken, address rewardToken, uint256 duration) external payable nonReentrant returns (uint256 id) {
         if (stakeToken == NATIVE || stakeToken.code.length == 0) revert BadToken();
         if (rewardToken != NATIVE && rewardToken.code.length == 0) revert BadToken();
-        if (lockSecs > MAX_LOCK || duration < MIN_DURATION || duration > MAX_DURATION) revert BadSettings();
+        if (duration < MIN_DURATION || duration > MAX_DURATION) revert BadSettings();
         if (msg.value != createFee) revert BadFee();
         id = pools.length;
         pools.push(Pool({
-            stakeToken: stakeToken, rewardToken: rewardToken, creator: msg.sender, lockSecs: uint64(lockSecs), duration: uint64(duration),
-            periodFinish: 0, lastUpdate: uint64(block.timestamp), rewardRate: 0, rewardPerToken: 0, totalStaked: 0
+            stakeToken: stakeToken, rewardToken: rewardToken, creator: msg.sender, duration: uint64(duration),
+            periodFinish: 0, lastUpdate: uint64(block.timestamp), rewardRate: 0, rewardPerWeight: 0, totalStaked: 0, totalWeight: 0
         }));
-        emit PoolCreated(id, stakeToken, rewardToken, msg.sender, lockSecs, duration);
+        emit PoolCreated(id, stakeToken, rewardToken, msg.sender, duration);
         if (msg.value > 0) _pay(NATIVE, feeReceiver, msg.value);
     }
 
@@ -138,29 +147,36 @@ contract AutistikStaking is ReentrancyGuard {
 
     // ---------------------------------------------------------------- members
 
-    function stake(uint256 id, uint256 amount) external nonReentrant {
+    /// Stake `amount` at lock level `tier` (0 flexible, 1 = 30 days, 2 = 90 days, 3 = 180 days, 4 = 365 days).
+    function stake(uint256 id, uint256 amount, uint256 tier) external nonReentrant {
         Pool storage p = _pool(id);
+        (uint256 lock, uint256 boost) = tierInfo(tier);
         _update(id, msg.sender);
         uint256 got = _pull(p.stakeToken, amount);
         if (got == 0) revert ZeroAmount();
-        Stake storage s = stakes[id][msg.sender];
-        s.amount += got;
+        Position storage pos = positions[id][msg.sender][tier];
+        pos.amount += got;
+        pos.unlockAt = uint64(block.timestamp + lock);
+        uint256 w = (got * boost) / 100;
+        pos.weight += w;
+        members[id][msg.sender].weight += w;
+        p.totalWeight += w;
         p.totalStaked += got;
-        s.unlockAt = uint64(block.timestamp + p.lockSecs);
-        emit Staked(id, msg.sender, got, s.unlockAt);
+        emit Staked(id, msg.sender, tier, got, pos.unlockAt);
     }
 
-    function withdraw(uint256 id, uint256 amount) public nonReentrant {
-        _withdraw(id, amount);
+    function withdraw(uint256 id, uint256 tier, uint256 amount) public nonReentrant {
+        _withdraw(id, tier, amount);
     }
 
     function claim(uint256 id) public nonReentrant {
         _claim(id);
     }
 
-    /// Withdraw everything and collect rewards in one go.
-    function exit(uint256 id) external nonReentrant {
-        _withdraw(id, stakes[id][msg.sender].amount);
+    /// Withdraw everything from one lock level and collect rewards in one go.
+    function exit(uint256 id, uint256 tier) external nonReentrant {
+        if (tier >= TIERS) revert BadTier();
+        _withdraw(id, tier, positions[id][msg.sender][tier].amount);
         _claim(id);
     }
 
@@ -187,17 +203,36 @@ contract AutistikStaking is ReentrancyGuard {
         return pools.length;
     }
 
+    /// Lock length and boost (in %, 100 = 1x) of each lock level.
+    function tierInfo(uint256 tier) public pure returns (uint256 lock, uint256 boost) {
+        if (tier == 0) return (0, 100);
+        if (tier == 1) return (30 days, 125);
+        if (tier == 2) return (90 days, 150);
+        if (tier == 3) return (180 days, 200);
+        if (tier == 4) return (365 days, 300);
+        revert BadTier();
+    }
+
     /// Rewards `user` can collect from pool `id` right now.
     function earned(uint256 id, address user) public view returns (uint256) {
-        Stake storage s = stakes[id][user];
-        return s.earned + (s.amount * (_rewardPerToken(_pool(id)) - s.paid)) / PRECISION;
+        Member storage m = members[id][user];
+        return m.earned + (m.weight * (_rewardPerWeight(_pool(id)) - m.paid)) / PRECISION;
+    }
+
+    /// A member's five positions in one call (amount and unlock time per lock level).
+    function positionsOf(uint256 id, address user) external view returns (uint256[5] memory amounts, uint64[5] memory unlocks) {
+        for (uint256 t; t < TIERS; t++) {
+            Position storage pos = positions[id][user][t];
+            amounts[t] = pos.amount;
+            unlocks[t] = pos.unlockAt;
+        }
     }
 
     /// Rewards still to be paid out in the current period (in reward-token units).
     function rewardsLeft(uint256 id) external view returns (uint256) {
         Pool storage p = _pool(id);
         // While nobody is staked the clock is paused at lastUpdate.
-        uint256 from = p.totalStaked == 0 ? p.lastUpdate : block.timestamp;
+        uint256 from = p.totalWeight == 0 ? p.lastUpdate : block.timestamp;
         return p.periodFinish > from ? ((p.periodFinish - from) * p.rewardRate) / PRECISION : 0;
     }
 
@@ -208,49 +243,56 @@ contract AutistikStaking is ReentrancyGuard {
         return pools[id];
     }
 
-    function _rewardPerToken(Pool storage p) internal view returns (uint256) {
-        if (p.totalStaked == 0) return p.rewardPerToken;
+    function _rewardPerWeight(Pool storage p) internal view returns (uint256) {
+        if (p.totalWeight == 0) return p.rewardPerWeight;
         uint256 t = block.timestamp < p.periodFinish ? block.timestamp : p.periodFinish;
-        if (t <= p.lastUpdate) return p.rewardPerToken;
-        return p.rewardPerToken + ((t - p.lastUpdate) * p.rewardRate) / p.totalStaked;
+        if (t <= p.lastUpdate) return p.rewardPerWeight;
+        return p.rewardPerWeight + ((t - p.lastUpdate) * p.rewardRate) / p.totalWeight;
     }
 
     function _update(uint256 id, address user) internal {
         Pool storage p = pools[id];
-        if (p.totalStaked == 0) {
+        if (p.totalWeight == 0) {
             // Nobody staked: pause the clock so the remaining rewards wait for the next staker.
             if (p.periodFinish > p.lastUpdate) p.periodFinish = uint64(block.timestamp + (p.periodFinish - p.lastUpdate));
         } else {
-            p.rewardPerToken = _rewardPerToken(p);
+            p.rewardPerWeight = _rewardPerWeight(p);
         }
         p.lastUpdate = uint64(block.timestamp);
         if (user != address(0)) {
-            Stake storage s = stakes[id][user];
-            s.earned += (s.amount * (p.rewardPerToken - s.paid)) / PRECISION;
-            s.paid = p.rewardPerToken;
+            Member storage m = members[id][user];
+            m.earned += (m.weight * (p.rewardPerWeight - m.paid)) / PRECISION;
+            m.paid = p.rewardPerWeight;
         }
     }
 
-    function _withdraw(uint256 id, uint256 amount) internal {
+    function _withdraw(uint256 id, uint256 tier, uint256 amount) internal {
         Pool storage p = _pool(id);
-        Stake storage s = stakes[id][msg.sender];
+        tierInfo(tier); // reverts on a bad tier
+        Position storage pos = positions[id][msg.sender][tier];
         if (amount == 0) revert ZeroAmount();
-        if (amount > s.amount) revert TooMuch();
-        if (block.timestamp < s.unlockAt) revert Locked(s.unlockAt);
+        if (amount > pos.amount) revert TooMuch();
+        if (block.timestamp < pos.unlockAt) revert Locked(pos.unlockAt);
         _update(id, msg.sender);
-        s.amount -= amount;
+        Member storage m = members[id][msg.sender];
+        // This part's share of the position's weight; the last withdrawal takes all of it, so nothing is left behind.
+        uint256 w = amount == pos.amount ? pos.weight : (pos.weight * amount) / pos.amount;
+        pos.weight -= w;
+        pos.amount -= amount;
+        m.weight -= w;
+        p.totalWeight -= w;
         p.totalStaked -= amount;
-        emit Withdrawn(id, msg.sender, amount);
+        emit Withdrawn(id, msg.sender, tier, amount);
         IERC20(p.stakeToken).safeTransfer(msg.sender, amount);
     }
 
     function _claim(uint256 id) internal {
         Pool storage p = _pool(id);
         _update(id, msg.sender);
-        Stake storage s = stakes[id][msg.sender];
-        uint256 r = s.earned;
+        Member storage m = members[id][msg.sender];
+        uint256 r = m.earned;
         if (r == 0) return;
-        s.earned = 0;
+        m.earned = 0;
         emit Claimed(id, msg.sender, r);
         _pay(p.rewardToken, msg.sender, r);
     }
