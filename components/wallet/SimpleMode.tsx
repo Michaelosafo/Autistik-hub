@@ -4,6 +4,7 @@ import { IMPACT_BLOCK, IMPACT_CONFIRM, MAX_SLIPPAGE_BPS, WCHAIN_LIST, isNative, 
 import type { Signer } from "./types";
 import { GAS_RESERVE } from "./MarketForm";
 import { Receive } from "./panels";
+import { LISTINGS } from "@/lib/listings";
 import { addTrade, amt, api, friendlyError, Logo, pct, raw2num, runTrade, usd, type Holding, type Quote, type TokenInfo } from "./util";
 
 type Badge = "safer" | "caution" | "risky" | "scam";
@@ -14,14 +15,19 @@ const PRESETS = [5, 10, 25, 50, 100];
 const badgeFromRisk = (r: TokenInfo["risk"]): Badge => (r.honeypot ? "scam" : r.level === "danger" ? "risky" : r.level === "ok" ? "safer" : "caution");
 
 /** Beginner screen: find a coin, see if it looks safe, buy with a dollar amount in one tap, sell in one tap. */
-export default function SimpleMode({ c, onChain, signer, owner, holdings, balanceOf, onAdd, onDone }: {
+export default function SimpleMode({ c, onChain, signer, owner, holdings, balanceOf, onAdd, onDone, startBuy }: {
   c: WChain; onChain: (k: WChainKey) => void; signer: Signer; owner: string; holdings: Holding[] | null;
-  balanceOf: (a: string) => Holding | undefined; onAdd: (t: WToken) => void; onDone: () => void;
+  balanceOf: (a: string) => Holding | undefined; onAdd: (t: WToken) => void; onDone: () => void; startBuy?: string;
 }) {
   const [lists, setLists] = useState<{ trending: Coin[]; fresh: Coin[] } | null>(null);
   const [tab, setTab] = useState<"trending" | "fresh">("trending");
   const [q, setQ] = useState(""); const [qErr, setQErr] = useState("");
-  const [buy, setBuy] = useState<Partial<Coin> & { token: string } | null>(null);
+  const [buy, setBuy] = useState<Partial<Coin> & { token: string } | null>(() => {
+    // Opened from a "Buy" link (home page, New listings): go straight to the Buy screen for that coin.
+    if (!startBuy || !isTokenAddress(c, startBuy)) return null;
+    const l = LISTINGS.find((x) => x.chain === c.key && x.token.toLowerCase() === startBuy.toLowerCase());
+    return l ? { token: l.token, symbol: l.symbol, name: l.name } : { token: startBuy };
+  });
   const [sell, setSell] = useState<Holding | null>(null);
   const [money, setMoney] = useState(false);
 
@@ -33,6 +39,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
   const total = (holdings || []).reduce((s, h) => s + (h.valueUsd || 0), 0);
   const mine = (holdings || []).filter((h) => !isNative(c, h.address) && h.amount > 0 && !/^(USD|W(BNB|ETH))/.test(h.symbol));
   const nat = holdings?.[0];
+  const listed = LISTINGS.filter((l) => l.chain === c.key);
   const shown = (lists?.[tab] || []).filter((x) => !q || x.symbol.toLowerCase().includes(q.toLowerCase()) || x.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -55,6 +62,19 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
           placeholder="Search, or paste a coin address" aria-label="Find a coin" spellCheck={false} autoComplete="off" />
       </form>
       {qErr && <small className="down">{qErr}</small>}
+
+      {!!listed.length && (
+        <section className="stack sm-listed" style={{ gap: 6 }}>
+          <b>New on AUTISTIK</b>
+          {listed.map((l) => (
+            <button key={l.token} type="button" className="sm-coin" onClick={() => setBuy({ token: l.token, symbol: l.symbol, name: l.name })}>
+              <Logo t={{ symbol: l.symbol, logo: null }} size={38} />
+              <span className="grow"><b>{l.symbol}</b><small>{l.name} · {l.note}</small></span>
+              <span className="sm-buy">Buy</span>
+            </button>
+          ))}
+        </section>
+      )}
 
       <div className="sm-tabs" role="tablist">
         <button type="button" role="tab" aria-selected={tab === "trending"} className={tab === "trending" ? "on" : ""} onClick={() => setTab("trending")}>Trending</button>

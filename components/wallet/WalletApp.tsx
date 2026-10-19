@@ -18,7 +18,7 @@ type OType = "market" | "limit" | "stop";
 type BTab = "assets" | "orders" | "history" | "convert" | "send" | "receive" | "security";
 
 /** AUTISTIK Trade: an exchange-style screen on top of the member's own wallet. */
-export default function WalletApp({ signer, start }: { signer: Signer; start: { chain?: string; buy?: string } }) {
+export default function WalletApp({ signer, start }: { signer: Signer; start: { chain?: string; buy?: string; quick?: boolean } }) {
   const [chainKey, setChainKey] = useState<WChainKey>(start.chain && start.chain in WCHAINS ? (start.chain as WChainKey) : "bsc");
   const c = WCHAINS[chainKey];
   const owner = c.kind === "solana" ? signer.sol?.address : signer.evm?.address;
@@ -36,7 +36,7 @@ export default function WalletApp({ signer, start }: { signer: Signer; start: { 
   const [convTo, setConvTo] = useState<WToken | null>(null);
   // Simple (beginners: discover and buy in one tap) or Pro (exchange screen with charts and orders). Remembered per device.
   const [mode, setModeState] = useState<"simple" | "pro">("simple");
-  useEffect(() => { setModeState(store.get("aw-mode", start.buy ? "pro" : "simple")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setModeState(start.quick ? "simple" : store.get("aw-mode", start.buy ? "pro" : "simple")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const setMode = (m: "simple" | "pro") => { setModeState(m); store.set("aw-mode", m); };
 
   useEffect(() => { setCustom(store.get(`aw-tokens-${chainKey}`, [])); }, [chainKey]);
@@ -101,7 +101,7 @@ export default function WalletApp({ signer, start }: { signer: Signer; start: { 
     <div className="tx">
       {toggle}
       {missing && <div className="notice warn">{missing}</div>}
-      {owner && <SimpleMode c={c} onChain={switchChain} signer={signer} owner={owner} holdings={holdings} balanceOf={balanceOf} onAdd={addCustom} onDone={load} />}
+      {owner && <SimpleMode c={c} onChain={switchChain} signer={signer} owner={owner} holdings={holdings} balanceOf={balanceOf} onAdd={addCustom} onDone={load} startBuy={start.quick && start.buy && start.chain === chainKey ? start.buy : undefined} />}
     </div>
   );
 

@@ -2,6 +2,7 @@ import Link from "next/link";
 import AdBar from "@/components/AdBar";
 import Art from "@/components/Art";
 import TrendingNow from "@/components/TrendingNow";
+import NewListings from "@/components/NewListings";
 import { GROUPS } from "@/lib/groups";
 import { PHOTOS } from "@/lib/site";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -67,6 +68,8 @@ export default async function Home() {
         </div>
         <div className="ticker" aria-hidden="true"><div>{[...TICKER, ...TICKER].map((t, i) => <span key={i}><i>∞</i> {t.toUpperCase()}</span>)}</div></div>
       </div>
+
+      <NewListings />
 
       <div className="truths">
         <div className="truth" data-g="lounge"><b>Not a disease</b><p>Autism is a lifelong neurological difference in how a brain senses, thinks and communicates. There&apos;s nothing to catch and nothing to cure.</p></div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { safeNext } from "@/lib/auth";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 
 // Links that use Supabase's default email templates come here with a one-time code.
 // Our own templates use /auth/confirm instead, which also works across devices.
@@ -12,7 +12,12 @@ export async function GET(request: Request) {
   const err = url.searchParams.get("error_description");
   if (err) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(err)}`, url.origin));
   if (code) {
-    const { error } = await supabaseServer().auth.exchangeCodeForSession(code);
+    const { data, error } = await supabaseServer().auth.exchangeCodeForSession(code);
+    // Google / Apple sign-in: the button says "By continuing you confirm you're 18 or older", which the email form asks as a tick box.
+    const provider = data?.user?.app_metadata?.provider;
+    if (!error && data?.user && url.searchParams.get("adult") === "1" && (provider === "google" || provider === "apple")) {
+      await supabaseService().from("profiles").update({ confirmed_adult: true }).eq("id", data.user.id).eq("confirmed_adult", false).then(() => {}, () => {});
+    }
     if (error) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent("Open the link in the same browser you signed up in, or sign in with your password.")}`, url.origin));
   }
   return NextResponse.redirect(new URL(next, url.origin));
