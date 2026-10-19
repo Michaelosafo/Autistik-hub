@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { WCHAIN_LIST } from "@/lib/wallet-chains";
 import WalletApp from "./WalletApp";
+import StakeApp from "@/components/stake/StakeApp";
+import type { Start } from "./types";
 import type { Signer } from "./types";
 
 const typedJson = (address: string, typed: { domain: any; types: any; primaryType: string; message: any }) => JSON.stringify({
@@ -10,7 +12,7 @@ const typedJson = (address: string, typed: { domain: any; types: any; primaryTyp
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 /** Before the built-in wallet is switched on: use a wallet the member already has (MetaMask, Trust, OKX…). EVM only. */
-export default function BrowserWallet({ start }: { start: { chain?: string; buy?: string; quick?: boolean } }) {
+export default function BrowserWallet({ start, app }: { start: Start; app?: "wallet" | "stake" }) {
   const [address, setAddress] = useState<`0x${string}` | null>(null);
   const [ready, setReady] = useState(false);
   const eth = () => (typeof window !== "undefined" ? (window as any).ethereum : null);
@@ -55,5 +57,5 @@ export default function BrowserWallet({ start }: { start: { chain?: string; buy?
     },
     logout: () => setAddress(null),
   };
-  return <WalletApp signer={signer} start={start} />;
+  return app === "stake" ? <StakeApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} />;
 }

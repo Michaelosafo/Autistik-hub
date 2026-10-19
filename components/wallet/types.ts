@@ -28,3 +28,6 @@ export type Signer = {
   /** Opens the provider's secure screen to copy the private key (built-in wallet only). */
   exportKey?: (kind: "evm" | "solana") => void;
 };
+
+/** Where the page starts: wallet (?chain, ?buy, ?quick) or staking (?pool; admin tools for the admin). */
+export type Start = { chain?: string; buy?: string; quick?: boolean; pool?: number; admin?: boolean };
