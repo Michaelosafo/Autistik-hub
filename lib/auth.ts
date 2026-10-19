@@ -22,7 +22,7 @@ export function authMessage(raw: string | undefined | null): string {
   if (m.includes("rate limit") || m.includes("too many")) return "Too many tries. Please wait a few minutes and try again.";
   if (m.includes("invalid login credentials")) return "That email and password don't match. Check them, or reset your password.";
   if (m.includes("email not confirmed")) return "Please confirm your email first. Open the email from AUTISTIK Hub and press the button. You can send it again below.";
-  if (m.includes("already registered") || m.includes("already been registered")) return "There's already an account with this email. Sign in instead, or reset your password.";
+  if (m.includes("already registered") || m.includes("already been registered")) return "We couldn't create that account. If you already have one, sign in or reset your password.";
   if (m.includes("password should be") || m.includes("weak password")) return `Choose a stronger password: at least ${MIN_PASSWORD} characters, with letters and numbers.`;
   if (m.includes("rate limit") || m.includes("too many") || m.includes("security purposes")) return "Too many tries. Please wait a minute and try again.";
   if (m.includes("expired") || m.includes("invalid") && m.includes("token")) return "That link has expired or was already used. Ask for a new one below.";

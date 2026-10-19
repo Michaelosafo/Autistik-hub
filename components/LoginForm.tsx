@@ -71,9 +71,9 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
       } else if (mode === "join") {
         const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true }, captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); return; }
-        // Supabase returns a user with no identities when the email is already registered.
-        if (data.user && data.user.identities && data.user.identities.length === 0) { setError(authMessage("already registered")); return; }
         if (data.session) { router.push(next); router.refresh(); return; } // email confirmation switched off
+        // An email that's already registered gets the same answer as a new one, so this form can't be used to
+        // find out who has an account. (Supabase sends nothing in that case; the screen says what to do.)
         setSent("confirm"); setCanResend(true);
       } else {
         const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`, captchaToken: captchaToken() });
@@ -102,7 +102,8 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     setBusy(true); setError("");
     const { error } = await sb.auth.signInWithOtp({ email: em, options: { emailRedirectTo: confirmUrl(next), shouldCreateUser: false, captchaToken: captchaToken() } });
     setBusy(false); human.current?.reset();
-    if (error) setError(/signups not allowed|not found/i.test(error.message) ? "There's no account with this email yet. Create one first." : authMessage(error.message));
+    // "No account" looks exactly like success, so nobody can test which emails are registered.
+    if (error && !/signups not allowed|not found|user not found/i.test(error.message)) setError(authMessage(error.message));
     else setSent("link");
   }
 
@@ -123,10 +124,12 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
       <div className="auth-card card stack">
         <div className="label">Check your email</div>
         <h1>{sent === "confirm" ? "Confirm your email" : sent === "reset" ? "Password link sent" : "Sign-in link sent"}</h1>
-        <p>We sent an email to <b>{email.trim()}</b>.{" "}
+        <p>If <b>{email.trim()}</b> {sent === "confirm" ? "is new here" : "has an account"}, we&apos;ve sent it an email.{" "}
           {sent === "confirm" ? "Open it and press Confirm my email. Then you're in, and Believer and Purity are ready to chat."
             : sent === "reset" ? "Open it and press Choose a new password."
             : "Open it and press Sign me in."}</p>
+        {sent === "confirm" && <p className="muted" style={{ margin: 0 }}>Already have an account with this email? Nothing new is sent: just <button className="linkish" type="button" onClick={() => switchTo("signin")}>sign in</button> or reset your password.</p>}
+        {sent !== "confirm" && <p className="muted" style={{ margin: 0 }}>No email after a few minutes? The address may not have an account yet: <button className="linkish" type="button" onClick={() => switchTo("join")}>create one</button>.</p>}
         <div className="notice" style={{ fontSize: ".9em" }}>It comes from AUTISTIK Hub and usually arrives within a minute. Check your spam or promotions folder if you can&apos;t see it.</div>
         <div className="row" style={{ gap: 8 }}>
           {sent === "confirm" && <HumanCheck ref={human} onToken={setCaptcha} />}

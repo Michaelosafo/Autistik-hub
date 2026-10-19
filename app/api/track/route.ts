@@ -14,9 +14,11 @@ export async function POST(req: Request) {
   if (slow) return new Response(null, { status: 204 });
   const body = await req.json().catch(() => null);
   const path = String(body?.path || "");
-  if (!/^\/[A-Za-z0-9/_.~%-]{0,299}$/.test(path) || path.startsWith("/api")) return new Response(null, { status: 204 });
+  if (!/^\/[A-Za-z0-9/_.~%-]{0,299}$/.test(path) || /^\/(api|admin|login|auth|reset-password|me)(\/|$)/.test(path)) return new Response(null, { status: 204 });
+  // The referrer is stored as a bare site name only (e.g. "x.com"); anything else is dropped.
+  const raw = String(body?.ref || "").trim().toLowerCase();
   let ref: string | null = null;
-  try { const r = new URL(String(body?.ref || "")); ref = r.hostname === new URL(req.url).hostname ? null : r.hostname.slice(0, 200); } catch {}
+  try { const h = raw.includes("/") ? new URL(raw).hostname : raw; ref = /^[a-z0-9.-]{1,200}$/.test(h) && h.includes(".") && h !== new URL(req.url).hostname ? h : null; } catch {}
 
   const jar = cookies();
   let visitor = jar.get("hv")?.value || "";
