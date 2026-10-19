@@ -1,151 +1,132 @@
 import Link from "next/link";
-import AdBar from "@/components/AdBar";
 import Art from "@/components/Art";
-import TrendingNow from "@/components/TrendingNow";
+import CopyAddress from "@/components/CopyAddress";
 import NewListings from "@/components/NewListings";
-import { GROUPS } from "@/lib/groups";
-import { PHOTOS } from "@/lib/site";
-import { supabaseServer } from "@/lib/supabase/server";
-import { ads, getBoard, trending } from "@/lib/board";
-import { toAds } from "@/lib/ads";
+import TrendingNow from "@/components/TrendingNow";
+import { GROUPS, TOKEN_ADDRESS } from "@/lib/groups";
+import { getMarkets } from "@/lib/market";
+import { LINKS, PHOTOS } from "@/lib/site";
+import { getBoard, trending } from "@/lib/board";
 
 export const dynamic = "force-dynamic";
 
 const TICKER = ["Not a disease", "A community", "Different, not less", "Nothing about us without us", "Every mind on the spectrum", "Not broken", "Neurodiversity is strength", "Autistic and proud"];
 
-// Everything AUTISTIK offers, in one place. [icon, title, what it does, link, button]
-const UTILITIES: [string, string, string, string, string][] = [
-  ["i-rocket", "Launch Pad", "Launch your own token with Autistik, our launch agent. Liquidity locked or burned so buyers can trust it.", "/launchpad/new", "Launch a token"],
-  ["i-trend", "Trending", "See the tokens people are buying and watching, with live prices. Pay to trend or list your token.", "/launchpad", "See trending"],
-  ["i-com", "Community", "Two friendly groups: Spectrum Lounge to hang out, and Support & Questions for hard days and help.", "/community", "Find your group"],
-  ["i-kai", "Companion assistants", "Believer and Purity: two assistant friends who talk, plan, explain social situations and draw pictures with you.", "/companions", "Start a chat"],
-  ["i-ses", "Live sessions", "Talks, Q&As and support circles with practitioners the AUTISTIK team has checked.", "/sessions", "See sessions"],
-  ["i-rew", "Rewards & airdrops", "Earn points by taking part. Link your wallet and claim $AUTISTIK airdrops each round.", "/rewards", "My rewards"],
-  ["i-buy", "Buy $AUTISTIK", "The community token on BNB Chain. Holders support the Hub and get a say in what we build.", "/buy", "Buy $AUTISTIK"],
-  ["i-learn", "Understanding autism", "Plain-language facts about autism, written with autistic people. Share it with family and friends.", "/autism", "Learn more"],
+// The App's tools, each opening its own screen. [title, what it does, link, tag]
+const PRODUCTS: [string, string, string, string][] = [
+  ["Swap", "Trade any token on BNB Chain, Base, Ethereum, Arbitrum and Solana at the best price across every DEX.", "/swap", "Trade"],
+  ["Stake", "Stake $AUTISTIK and earn BNB from platform fees. Lock longer for up to 3x the rewards.", "/stake", "Earn"],
+  ["Lockers", "Lock liquidity or team tokens on-chain so buyers can trust a project.", "/lockers", "Lock"],
+  ["Launch Pad", "Launch your own token in minutes with liquidity locked or burned. No code.", "/launchpad/new", "Launch"],
+  ["Token scanner", "Holders, whales, dev wallets and safety checks for any coin, in plain words.", "/analytics", "Scanner"],
+  ["Wallet", "Your own self-custody wallet with limit and stop-loss orders. Your keys, your coins.", "/wallet", "Wallet"],
 ];
 
-const STEPS: [string, string, string, string][] = [
-  ["lounge", "1. Tell Autistik", "Chat with Autistik, our launch agent. Pick a chain, a name, a ticker and how much to add to the pool. No code, no forms.", "💬"],
-  ["calm", "2. Sign once", "Check your launch plan and sign one transaction in your own wallet. We never hold your keys or your money.", "✍️"],
-  ["spark", "3. Trade & trend", "Your token goes live on PancakeSwap or Uniswap, shows on DexScreener, and can trend here for everyone to see.", "🔥"],
+const COMMUNITY: [string, string, string][] = [
+  ["Groups", "Spectrum Lounge to hang out, Support & Questions for hard days.", "/community"],
+  ["Companions", "Believer and Purity: two assistant friends to talk, plan and draw with.", "/companions"],
+  ["Live sessions", "Talks and support circles with checked practitioners.", "/sessions"],
+  ["AUTISTIK Fund", "Direct support for autistic people and families.", "/fund"],
 ];
 
-const SAFE = ["Liquidity locked 6 months, 1 year, or burned", "Tax capped at 10%, no minting", "Every launch checked on-chain", "Listed on DexScreener automatically"];
+const usd = (v: number | null | undefined) => (v == null ? "–" : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toPrecision(3)}`);
 
+/** The website's front page: what AUTISTIK is, with one button into the App. */
 export default async function Home() {
-  const sb = supabaseServer();
-  const [{ data: { user } }, board] = await Promise.all([sb.auth.getUser(), getBoard(60)]);
-  const counts: Record<string, number> = {};
-  if (user) {
-    const { data: gm } = await sb.from("group_members").select("group_id");
-    for (const r of gm || []) counts[r.group_id] = (counts[r.group_id] || 0) + 1;
-  }
+  const [board, markets] = await Promise.all([getBoard(60), getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }])]);
+  const m = markets[TOKEN_ADDRESS.toLowerCase()];
 
   return (
-    <div className="stack" style={{ gap: 22 }}>
-      <AdBar ads={toAds(ads(board))} />
+    <div className="lp">
+      <header className="lp-bar">
+        <Link href="/" className="lp-logo" aria-label="AUTISTIK home"><svg width="44" height="22" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b></Link>
+        <nav className="lp-nav" aria-label="Website">
+          <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/autism">About autism</Link>
+        </nav>
+        <Link href="/swap" className="lp-launch">Launch App</Link>
+      </header>
 
-      <div>
-        <div className="hero">
-          <div className="hero-copy">
-            <div className="eyebrow">Autism awareness × Web3 community</div>
-            <h1>Autism is not a disease. <span className="grad">It&apos;s a community.</span></h1>
-            <p>A friendly home for autistic people and supporters, with simple, safe tools to buy, launch and lock coins.</p>
-            <div className="row">
-              <Link className="btn primary" href={user ? "/community" : "/login?mode=join"}>{user ? "Join a group" : "Join the Hub"}</Link>
-              <Link className="btn ghost" href="/start">New here? Start here</Link>
-              <Link className="btn ghost" href="/autism">What is autism?</Link>
-            </div>
-            <div className="an-metrics">
-              <div><b>{board.length}</b><span>tokens trending</span></div>
-              <div><b>{GROUPS.length}</b><span>groups</span></div>
-              <div><b>2</b><span>AI companions</span></div>
-              <div><b>24/7</b><span>live</span></div>
-            </div>
+      <section className="lp-hero">
+        <div className="lp-hero-copy">
+          <div className="lp-eyebrow">Autism awareness × Web3</div>
+          <h1>Autism is not a disease. <span>It&apos;s a community.</span></h1>
+          <p>AUTISTIK is a home for autistic people and supporters, with its own token and simple, safe tools to swap, stake, lock and launch coins.</p>
+          <div className="lp-ctas">
+            <Link href="/swap" className="lp-btn gold">Launch App</Link>
+            <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
+            <Link href="/community" className="lp-btn ghost">Join the community</Link>
           </div>
-          <div className="hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
         </div>
-        <div className="ticker" aria-hidden="true"><div>{[...TICKER, ...TICKER].map((t, i) => <span key={i}><i>∞</i> {t.toUpperCase()}</span>)}</div></div>
-      </div>
+        <div className="lp-hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
+      </section>
 
-      <NewListings />
+      <section className="lp-stats" aria-label="AUTISTIK in numbers">
+        <div><b>{usd(m?.priceUsd)}</b><span>$AUTISTIK price</span></div>
+        <div><b>{usd(m?.marketCap)}</b><span>Market cap</span></div>
+        <div><b>{usd(m?.liquidityUsd)}</b><span>Liquidity</span></div>
+        <div><b>{board.length}</b><span>Tokens trending</span></div>
+        <div><b>{GROUPS.length}</b><span>Community groups</span></div>
+      </section>
 
-      <div className="truths">
-        <div className="truth" data-g="lounge"><b>Not a disease</b><p>Autism is a lifelong neurological difference in how a brain senses, thinks and communicates. There&apos;s nothing to catch and nothing to cure.</p></div>
-        <div className="truth" data-g="calm"><b>A spectrum, not a scale</b><p>Every autistic person has a different mix of strengths and support needs. &quot;Mild&quot; and &quot;severe&quot; don&apos;t tell the story.</p></div>
-        <div className="truth" data-g="spark"><b>Nothing about us without us</b><p>Autistic people lead here. Supporters, families and practitioners join in to listen and help.</p></div>
-      </div>
+      <div className="ticker" aria-hidden="true"><div>{[...TICKER, ...TICKER].map((t, i) => <span key={i}><i>∞</i> {t.toUpperCase()}</span>)}</div></div>
 
-      <div className="stack" style={{ gap: 12 }}>
-        <div><div className="label">Utilities</div><h2 style={{ marginTop: 4 }}>What you can do on AUTISTIK</h2></div>
-        <div className="utils">
-          {UTILITIES.map(([icon, title, text, href, cta]) => (
-            <Link key={title} href={href} className="util">
-              <svg aria-hidden="true"><use href={"#" + icon} /></svg>
+      <section id="products" className="lp-sec">
+        <div className="lp-sec-head"><div className="lp-eyebrow">The App</div><h2>Everything in one place</h2><p>Open any tool and connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet.</p></div>
+        <div className="lp-products">
+          {PRODUCTS.map(([title, text, href, tag]) => (
+            <Link key={href} href={href} className="lp-product">
+              <span className="lp-tag">{tag}</span>
               <b>{title}</b>
-              <p className="muted">{text}</p>
-              <span className="util-cta">{cta} →</span>
+              <p>{text}</p>
+              <span className="lp-open">Open {title} →</span>
             </Link>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="hero launch-hero">
-        <div className="hero-copy">
-          <div className="eyebrow">AUTISTIK Launch Pad</div>
-          <h2>Launch your token in minutes. <span className="grad">Liquidity locked.</span></h2>
-          <p>Tell Autistik your token&apos;s name and ticker, sign once in your wallet, and it goes live on PancakeSwap or Uniswap with its liquidity locked, so buyers can trust it. Simple, honest, and built by an autism community.</p>
-          <div className="row">
-            <Link className="btn primary" href="/launchpad/new">Launch a token</Link>
-            <Link className="btn ghost" href="/launchpad">See trending</Link>
+      <section className="lp-sec"><NewListings /></section>
+
+      <section id="token" className="lp-sec lp-token">
+        <div>
+          <div className="lp-eyebrow">The token</div>
+          <h2>$AUTISTIK on BNB Chain</h2>
+          <p>Holders support the Hub and get a say in what we build. Stake it to earn a share of the platform&apos;s trading fees.</p>
+          <CopyAddress address={TOKEN_ADDRESS} />
+          <div className="lp-ctas">
+            <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn gold">Buy $AUTISTIK</Link>
+            <Link href="/stake" className="lp-btn">Stake</Link>
+            <Link href={`/analytics/bsc/${TOKEN_ADDRESS}`} className="lp-btn ghost">Chart &amp; holders</Link>
           </div>
+          <small className="lp-fine">Use the official contract only. Never share your seed phrase or private key.</small>
         </div>
-      </div>
+      </section>
 
-      <div className="stack" style={{ gap: 12 }}>
-        <div><div className="label">How it works</div><h2 style={{ marginTop: 4 }}>Three steps. That&apos;s it.</h2></div>
-        <div className="truths">
-          {STEPS.map(([g, title, text, icon]) => (
-            <div key={title} className="truth" data-g={g}><b>{icon} {title}</b><p>{text}</p></div>
+      <section className="lp-sec"><TrendingNow list={trending(board)} limit={5} /></section>
+
+      <section id="community" className="lp-sec">
+        <div className="lp-sec-head"><div className="lp-eyebrow">Community</div><h2>Built with autistic people</h2><p>Nothing about us without us. Autistic people lead here; supporters, families and practitioners join in.</p></div>
+        <div className="lp-products four">
+          {COMMUNITY.map(([title, text, href]) => (
+            <Link key={href} href={href} className="lp-product soft"><b>{title}</b><p>{text}</p><span className="lp-open">Open →</span></Link>
           ))}
         </div>
-        <div className="chips">{SAFE.map((s) => <span key={s} className="chip">✓ {s}</span>)}</div>
-      </div>
+      </section>
 
-      <TrendingNow list={trending(board)} limit={5} />
+      <section className="lp-band">
+        <h2>Ready to start?</h2>
+        <p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p>
+        <div className="lp-ctas"><Link href="/swap" className="lp-btn gold">Launch App</Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
+      </section>
 
-      <div className="stack" style={{ gap: 12 }}>
-        <div className="section-head"><div><div className="label">Community</div><h2 style={{ marginTop: 4 }}>Find your group</h2></div><Link className="btn small" href="/community">Open community</Link></div>
-        <div className="groups-grid">
-          {GROUPS.map((g) => (
-            <div key={g.id} className="gcard" data-g={g.id}>
-              <Art kind="group" id={g.id} photo={PHOTOS[g.id]?.src} alt={PHOTOS[g.id]?.alt} />
-              <div className="gbody">
-                <div><div className="tag">{g.tag}</div><h3 style={{ marginTop: 3 }}>{g.name}</h3></div>
-                <p className="muted" style={{ fontSize: ".9em" }}>{g.desc}</p>
-                <ul>{g.channels.map((c) => <li key={c.id}><span style={{ color: "var(--g)", fontWeight: 700 }}># </span>{c.title}</li>)}</ul>
-                <div className="row">
-                  <span className="muted" style={{ fontSize: ".84em" }}>{counts[g.id] ? `${counts[g.id]} member${counts[g.id] > 1 ? "s" : ""}` : "New group"}</span>
-                  <Link className="btn g small" href={user ? `/community?g=${g.id}` : "/login?mode=join"}>{user ? "Open" : "Join"}</Link>
-                </div>
-              </div>
-            </div>
-          ))}
+      <footer className="lp-foot">
+        <div className="lp-foot-cols">
+          <div><b>App</b><Link href="/swap">Swap</Link><Link href="/stake">Stake</Link><Link href="/lockers">Lockers</Link><Link href="/launchpad/new">Launch Pad</Link><Link href="/analytics">Scanner</Link></div>
+          <div><b>Community</b><Link href="/community">Groups</Link><Link href="/companions">Companions</Link><Link href="/sessions">Live sessions</Link><Link href="/fund">Fund</Link></div>
+          <div><b>Learn</b><Link href="/autism">About autism</Link><Link href="/start">Start here</Link><Link href="/buy">How to buy</Link><Link href="/safety">Safety &amp; privacy</Link></div>
+          <div><b>Follow</b><a href={LINKS.x} target="_blank" rel="noopener noreferrer">X (Twitter)</a><a href={LINKS.telegram} target="_blank" rel="noopener noreferrer">Telegram</a><a href={`mailto:${LINKS.email}`}>{LINKS.email}</a><Link href="/login">Sign in</Link></div>
         </div>
-      </div>
-
-      <div className="card row" style={{ justifyContent: "space-between" }}>
-        <div><b>Need a friendly chat?</b><p className="muted" style={{ fontSize: ".9em" }}>Believer and Purity, our companion assistants, are here to talk, plan or draw with you.</p></div>
-        <div className="row">
-          <Link className="btn small" href="/companions?c=believer">Talk to Believer</Link>
-          <Link className="btn small" href="/companions?c=purity">Talk to Purity</Link>
-        </div>
-      </div>
-
-      <p className="muted" style={{ fontSize: ".9em", textAlign: "center" }}>
-        Autism is not a disease. It&apos;s a community. <Link href="/autism">Learn more</Link> · Tokens can lose all their value; nothing here is financial advice.
-      </p>
+        <p>Nothing on AUTISTIK is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.</p>
+      </footer>
     </div>
   );
 }
