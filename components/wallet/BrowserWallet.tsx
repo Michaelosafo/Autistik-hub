@@ -10,7 +10,7 @@ const typedJson = (address: string, typed: { domain: any; types: any; primaryTyp
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 /** Before the built-in wallet is switched on: use a wallet the member already has (MetaMask, Trust, OKX…). EVM only. */
-export default function BrowserWallet({ start }: { start: { chain?: string; buy?: string } }) {
+export default function BrowserWallet({ start }: { start: { chain?: string; buy?: string; quick?: boolean } }) {
   const [address, setAddress] = useState<`0x${string}` | null>(null);
   const [ready, setReady] = useState(false);
   const eth = () => (typeof window !== "undefined" ? (window as any).ethereum : null);

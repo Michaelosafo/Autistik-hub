@@ -15,7 +15,7 @@ class Fallback extends Component<{ children: ReactNode; fallback: ReactNode }, {
   render() { return this.state.failed ? this.props.fallback : this.props.children; }
 }
 
-export default function WalletLoader({ appId, start }: { appId: string | null; start: { chain?: string; buy?: string } }) {
+export default function WalletLoader({ appId, start }: { appId: string | null; start: { chain?: string; buy?: string; quick?: boolean } }) {
   if (!appId) return <BrowserWallet start={start} />;
   return (
     <Fallback fallback={<><div className="notice warn">The built-in wallet is unavailable right now. You can still connect a wallet like MetaMask or Trust Wallet.</div><BrowserWallet start={start} /></>}>

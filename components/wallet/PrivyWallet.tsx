@@ -17,10 +17,10 @@ const SOL_RPC = WCHAINS.solana.rpc;
  * EVM wallet and a Solana wallet. Keys are split and kept in secure hardware; neither AUTISTIK nor anyone else can
  * use them without the member signing in.
  */
-export default function PrivyWallet({ appId, start }: { appId: string; start: { chain?: string; buy?: string } }) {
+export default function PrivyWallet({ appId, start }: { appId: string; start: { chain?: string; buy?: string; quick?: boolean } }) {
   return (
     <PrivyProvider appId={appId} config={{
-      loginMethods: ["email", "passkey", "wallet"],
+      loginMethods: ["email", "google", "apple", "passkey", "wallet"],
       appearance: { theme: "dark", accentColor: "#3EE58F", logo: "/icon.svg", landingHeader: "AUTISTIK Wallet", walletChainType: "ethereum-and-solana" },
       embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, solana: { createOnLogin: "users-without-wallets" }, showWalletUIs: true },
       supportedChains: [bsc, base, mainnet, arbitrum],
@@ -38,7 +38,7 @@ const typedJson = (typed: { domain: any; types: any; primaryType: string; messag
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 
-function Inner({ start }: { start: { chain?: string; buy?: string } }) {
+function Inner({ start }: { start: { chain?: string; buy?: string; quick?: boolean } }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { connectWallet } = useConnectWallet();
   const { wallets } = useWallets();
@@ -85,7 +85,7 @@ function Inner({ start }: { start: { chain?: string; buy?: string } }) {
       },
     } : null,
     login,
-    loginEmbedded: () => { setPrefer("embedded"); login({ loginMethods: ["email", "passkey"] }); },
+    loginEmbedded: () => { setPrefer("embedded"); login({ loginMethods: ["email", "google", "apple", "passkey"] }); },
     loginExternal: () => { setPrefer("external"); if (authenticated) connectWallet(); else login({ loginMethods: ["wallet"] }); },
     logout: () => { setPrefer(null); logout(); },
     exportKey: (kind) => { (kind === "evm" ? exportWallet({ address: evmEmbedded?.address }) : exportSol({ address: solEmbedded?.address })).catch(() => {}); },

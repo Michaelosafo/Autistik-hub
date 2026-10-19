@@ -1341,3 +1341,27 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 /* Coin analytics sections use the same cards as the Launch menu. */
 .launch-nav.n5{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:700px){ .launch-nav.an-cards{grid-template-columns:repeat(3,minmax(0,1fr))} }
+
+/* New listings: coins listed on AUTISTIK with a one-tap Buy */
+.nl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.nl-card{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:16px;border:1px solid rgba(240,185,11,.35);background:linear-gradient(160deg,rgba(240,185,11,.14),transparent 60%),#14161c;color:#EAECEF}
+.nl-card b{display:block}
+.nl-card small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nl-logo{width:44px;height:44px;border-radius:50%;flex:none;object-fit:cover}
+.nl-ph{display:grid;place-items:center;background:var(--gold,#F0B90B);color:#111;font-weight:800}
+.nl-new{font-size:.72em;font-weight:800;padding:3px 8px;border-radius:99px;background:var(--gold,#F0B90B);color:#111}
+.nl-nums{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.nl-nums span{display:block;font-size:.75em;opacity:.7}
+.nl-buy{text-align:center;justify-content:center}
+.sm-buy{font-size:.8em;font-weight:800;color:#111;background:var(--gold,#F0B90B);padding:4px 12px;border-radius:99px}
+.sm-listed>b{color:var(--ink)}
+
+/* Sign in with Google / Apple */
+.oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:11px 14px;font-weight:700;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
+.oauth-btn:hover{background:#f6f6f6}
+.oauth-btn.apple{background:#000;color:#fff;border-color:#000}
+.oauth-btn.apple:hover{background:#1a1a1a}
+.or-line{display:flex;align-items:center;gap:10px;font-size:.82em;opacity:.7}
+.or-line::before,.or-line::after{content:"";flex:1;height:1px;background:currentColor;opacity:.3}
+.nl-card .muted,.nl-nums span{color:#9aa0aa;opacity:1}
+.nl-card .up{color:#0ECB81} .nl-card .down{color:#F6465D}

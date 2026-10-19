@@ -12,11 +12,11 @@ export const metadata = {
 
 const clean = (v: string | undefined) => (v && /^[a-z0-9]{10,40}$/i.test(v.trim()) ? v.trim() : null);
 
-export default async function WalletPage({ searchParams }: { searchParams: { chain?: string; buy?: string } }) {
+export default async function WalletPage({ searchParams }: { searchParams: { chain?: string; buy?: string; quick?: string } }) {
   // Privy's app ID is public (it only names the app). Read at request time so adding it in Vercel needs no code change.
   const appId = clean(process.env.PRIVY_APP_ID) || clean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
   const { admin } = await adminState();
-  const start = { chain: searchParams.chain?.slice(0, 12), buy: searchParams.buy?.trim().slice(0, 64) };
+  const start = { chain: searchParams.chain?.slice(0, 12), buy: searchParams.buy?.trim().slice(0, 64), quick: searchParams.quick === "1" };
   return (
     <div className="stack" style={{ maxWidth: 1320 }}>
       <h1 className="sr-only">AUTISTIK Wallet</h1>
