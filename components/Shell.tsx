@@ -1,6 +1,7 @@
 "use client";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
+import AppShell, { isAppPath } from "@/components/AppShell";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -106,6 +107,10 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   async function copyCA() {
     try { await navigator.clipboard.writeText(TOKEN_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
+
+  // The front page is the website (its own header, no menus); trading tools open inside the App frame.
+  if (path === "/") return <><Sprites /><Tracker /><WalletPicker />{children}</>;
+  if (isAppPath(path)) return <><Sprites /><AppShell>{children}</AppShell></>;
 
   return (
     <>

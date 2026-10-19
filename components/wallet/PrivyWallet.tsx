@@ -8,6 +8,7 @@ import { WCHAINS } from "@/lib/wallet-chains";
 import { WALLETCONNECT_ID } from "@/lib/connect";
 import WalletApp from "./WalletApp";
 import StakeApp from "@/components/stake/StakeApp";
+import SwapApp from "@/components/swap/SwapApp";
 import type { Start } from "./types";
 import type { Signer } from "./types";
 
@@ -20,7 +21,7 @@ const SOL_RPC = WCHAINS.solana.rpc;
  * EVM wallet and a Solana wallet. Keys are split and kept in secure hardware; neither AUTISTIK nor anyone else can
  * use them without the member signing in.
  */
-export default function PrivyWallet({ appId, start, app }: { appId: string; start: Start; app?: "wallet" | "stake" }) {
+export default function PrivyWallet({ appId, start, app }: { appId: string; start: Start; app?: "wallet" | "stake" | "swap" }) {
   return (
     <PrivyProvider appId={appId} config={{
       loginMethods: ["email", "google", "apple", "passkey", "wallet"],
@@ -46,7 +47,7 @@ const typedJson = (typed: { domain: any; types: any; primaryType: string; messag
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 
-function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" }) {
+function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" | "swap" }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { connectWallet } = useConnectWallet();
   const { wallets } = useWallets();
@@ -98,5 +99,5 @@ function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" }) {
     logout: () => { setPrefer(null); logout(); },
     exportKey: (kind) => { (kind === "evm" ? exportWallet({ address: evmEmbedded?.address }) : exportSol({ address: solEmbedded?.address })).catch(() => {}); },
   };
-  return app === "stake" ? <StakeApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} />;
+  return app === "stake" ? <StakeApp signer={signer} start={start} /> : app === "swap" ? <SwapApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} />;
 }
