@@ -7,7 +7,8 @@ export type HeroStat = [value: React.ReactNode, label: string];
  * The dark "pro" header used at the top of every main page: a kicker line, the title, a short line of text,
  * an optional Live badge, live numbers and an optional tool (a search box, buttons) inside the panel.
  */
-export default function ProHero({ kicker, title, text, tone = "cyan", live, stats, link, children }: {
+export default function ProHero({ kicker, title, tone = "cyan", live, stats, link, children }: {
+  /** `text` is accepted but no longer shown: headers stay short (title and numbers). */
   kicker: string; title: React.ReactNode; text?: React.ReactNode; tone?: HeroTone; live?: string | false;
   stats?: HeroStat[]; link?: { href: string; text: React.ReactNode }; children?: React.ReactNode;
 }) {
