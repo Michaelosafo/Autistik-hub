@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, encodeAbiParameters, getAddress, getContractAddress, keccak256, toHex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
@@ -23,8 +24,8 @@ export default function OrdersAdmin() {
     setBusy(true); setMsg("");
     try {
       if (!info?.keeper) throw new Error("Add the keeper key in Vercel first (step 1), then redeploy the site.");
-      const eth = (window as any).ethereum;
-      if (!eth) throw new Error("Open this page in your wallet's browser (the team wallet).");
+      const eth = await pickWallet();
+      if (!eth) throw new Error("No wallet chosen.");
       const w = createWalletClient({ chain: c.viem, transport: custom(eth) }) as any;
       const pub = createPublicClient({ chain: c.viem, transport: custom(eth) }) as any;
       const [account] = await w.requestAddresses();

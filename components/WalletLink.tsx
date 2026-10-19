@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createWalletClient, custom, getAddress } from "viem";
@@ -29,8 +30,8 @@ export default function WalletLink({ uid, initial }: { uid: string; initial: str
   }, [wallet]);
 
   async function link() {
-    const eth = (window as any).ethereum;
-    if (!eth) { setStatus("No wallet found. Open this page in the browser inside Trust Wallet or MetaMask, or install MetaMask."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setStatus("Check your wallet app…");
     try {
       const client = createWalletClient({ chain: bsc, transport: custom(eth) });
@@ -51,8 +52,8 @@ export default function WalletLink({ uid, initial }: { uid: string; initial: str
   }
   async function doClaim() {
     if (!claim || !AIRDROP) return;
-    const eth = (window as any).ethereum;
-    if (!eth) { setStatus("Open this page in your wallet's browser to claim."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setStatus("Confirm the claim in your wallet…");
     try {
       const client = createWalletClient({ chain: bsc, transport: custom(eth) });

@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, encodeAbiParameters, encodeFunctionData, getAddress, getContractAddress, keccak256, toHex } from "viem";
 import { TOKEN_ADDRESS } from "@/lib/groups";
@@ -20,8 +21,8 @@ export default function StakeAdmin() {
   useEffect(() => { load(); }, []);
 
   async function wallet() {
-    const eth = (window as any).ethereum;
-    if (!eth) throw new Error("Open this page in your wallet's browser (the team wallet).");
+    const eth = await pickWallet();
+    if (!eth) throw new Error("No wallet chosen.");
     const w = createWalletClient({ chain: c.viem, transport: custom(eth) }) as any;
     const pub = createPublicClient({ chain: c.viem, transport: custom(eth) }) as any;
     const [account] = await w.requestAddresses();

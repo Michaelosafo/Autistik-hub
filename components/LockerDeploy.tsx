@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, getContractAddress, keccak256, toHex } from "viem";
 import { LOCKER_CHAINS, type LockerChain, type LockerSite } from "@/lib/locker";
@@ -24,8 +25,8 @@ export default function LockerDeploy({ sites }: { sites: LockerSite[] }) {
   }
 
   async function deploy() {
-    const eth = (window as any).ethereum;
-    if (!eth) { setMsg("No wallet found. Open this page in the browser inside MetaMask or Trust Wallet."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setMsg("Check your wallet app…");
     try {
       const cfg = LOCKER_CHAINS[chain];

@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
@@ -139,8 +140,8 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
   async function launch() {
     if (!plan) return;
     const c = CHAINS[plan.chain];
-    const eth = (window as any).ethereum;
-    if (!eth) { setStatus("No wallet found. Open this page in the browser inside MetaMask or Trust Wallet, or install MetaMask."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setLaunching(true); setStatus("Check your wallet app…");
     try {
       const chain = viemChain(c);
@@ -423,8 +424,8 @@ function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   async function start() {
-    const eth = (window as any).ethereum;
-    if (!eth) { setMsg("Open this page in your wallet's browser."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setMsg("Confirm in your wallet…");
     try {
       const chain = viemChain(c);

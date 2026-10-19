@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useCallback, useEffect, useState } from "react";
 import { createPublicClient, createWalletClient, custom, formatEther, http, isAddress } from "viem";
 import { CHAINS, LAUNCH_TOKEN_ABI, viemChain, type ChainKey } from "@/lib/launchpad";
@@ -28,8 +29,8 @@ export default function TokenControls({ chain, token, unlockAt, lock }: { chain:
   useEffect(() => { load(); }, [load]);
 
   async function act(fn: string, args: any[] = [], done = "✅ Done.") {
-    const eth = (window as any).ethereum;
-    if (!eth) { setMsg("Open this page in your wallet's browser."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setMsg("Confirm in your wallet…");
     try {
       const vc = viemChain(c);
@@ -47,8 +48,8 @@ export default function TokenControls({ chain, token, unlockAt, lock }: { chain:
   }
 
   async function connect() {
-    const eth = (window as any).ethereum;
-    if (!eth) { setMsg("Open this page in your wallet's browser."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     const [a] = await createWalletClient({ chain: viemChain(c), transport: custom(eth) }).requestAddresses().catch(() => [null as any]);
     setMe(a || null);
     if (a && s && a.toLowerCase() !== s.owner.toLowerCase()) setMsg("This wallet isn't the token's creator.");

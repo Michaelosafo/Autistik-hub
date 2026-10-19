@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, decodeEventLog, formatUnits, isAddress, parseUnits } from "viem";
@@ -50,8 +51,8 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
   const [mine, setMine] = useState<MyLock[] | null>(null);
 
   async function wallet() {
-    const eth = (window as any).ethereum;
-    if (!eth) throw new Error("No wallet found. Open this page in the browser inside MetaMask, Trust Wallet or another wallet app.");
+    const eth = await pickWallet();
+    if (!eth) throw new Error("No wallet chosen.");
     const w = createWalletClient({ chain: cfg.viem as any, transport: custom(eth) }) as any;
     const [acc] = await w.requestAddresses();
     try { await w.switchChain({ id: cfg.viem.id }); } catch { await w.addChain({ chain: cfg.viem }); await w.switchChain({ id: cfg.viem.id }); }

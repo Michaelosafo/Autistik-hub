@@ -1,4 +1,5 @@
 "use client";
+import { pickWallet } from "@/lib/connect";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, encodeFunctionData, erc20Abi, formatUnits, http } from "viem";
@@ -26,8 +27,8 @@ export default function ProPay() {
   }
 
   async function pay() {
-    const eth = (window as any).ethereum;
-    if (!eth) { setMsg("No wallet found. Open this page in the browser inside MetaMask or Trust Wallet, then press Pay again."); return; }
+    const eth = await pickWallet();
+    if (!eth) return;
     setBusy(true); setMsg("Check your wallet app…");
     try {
       const bsc = CHAINS.bsc, chain = viemChain(bsc);

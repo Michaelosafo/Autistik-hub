@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { WCHAIN_LIST } from "@/lib/wallet-chains";
 import WalletApp from "./WalletApp";
+import { currentWallet, disconnectWallet, pickWallet, restoreWallet } from "@/lib/connect";
 import StakeApp from "@/components/stake/StakeApp";
 import type { Start } from "./types";
 import type { Signer } from "./types";
@@ -15,16 +16,24 @@ const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b)
 export default function BrowserWallet({ start, app }: { start: Start; app?: "wallet" | "stake" }) {
   const [address, setAddress] = useState<`0x${string}` | null>(null);
   const [ready, setReady] = useState(false);
-  const eth = () => (typeof window !== "undefined" ? (window as any).ethereum : null);
+  // The wallet picked in the "Connect a wallet" sheet (MetaMask, Trust, Binance, OKX, WalletConnect…).
+  const [prov, setProv] = useState<any>(null);
+  const eth = () => prov ?? currentWallet()?.provider ?? null;
 
   useEffect(() => {
-    const p = eth();
-    if (!p) { setReady(true); return; }
-    p.request({ method: "eth_accounts" }).then((a: string[]) => setAddress((a?.[0] as any) || null)).catch(() => {}).finally(() => setReady(true));
-    const on = (a: string[]) => setAddress((a?.[0] as any) || null);
-    p.on?.("accountsChanged", on);
-    return () => p.removeListener?.("accountsChanged", on);
+    restoreWallet().then((p) => p && setProv(p)).finally(() => setReady(true));
+    const changed = () => setProv(currentWallet()?.provider ?? null);
+    addEventListener("aw-wallet-changed", changed);
+    return () => removeEventListener("aw-wallet-changed", changed);
   }, []);
+
+  useEffect(() => {
+    if (!prov) { setAddress(null); return; }
+    prov.request({ method: "eth_accounts" }).then((a: string[]) => setAddress((a?.[0] as any) || null)).catch(() => {});
+    const on = (a: string[]) => setAddress((a?.[0] as any) || null);
+    prov.on?.("accountsChanged", on);
+    return () => prov.removeListener?.("accountsChanged", on);
+  }, [prov]);
 
   async function switchTo(chainId: number) {
     const p = eth();
@@ -50,12 +59,8 @@ export default function BrowserWallet({ start, app }: { start: Start; app?: "wal
     } : null,
     sol: null,
     loginExternal: undefined,
-    login: () => {
-      const p = eth();
-      if (!p) { alert("No wallet found in this browser. Open this page in your wallet app's browser (Trust Wallet, MetaMask), or install MetaMask."); return; }
-      p.request({ method: "eth_requestAccounts" }).then((a: string[]) => setAddress((a?.[0] as any) || null)).catch(() => {});
-    },
-    logout: () => setAddress(null),
+    login: () => { pickWallet({ fresh: true }).then((p) => p && setProv(p)); },
+    logout: () => { disconnectWallet(); setProv(null); setAddress(null); },
   };
   return app === "stake" ? <StakeApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} />;
 }

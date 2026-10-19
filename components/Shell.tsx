@@ -1,5 +1,6 @@
 "use client";
 import Tracker from "@/components/Tracker";
+import WalletPicker from "@/components/connect/WalletPicker";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -191,6 +192,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>
           <Tracker />
+      <WalletPicker />
           <div className="page">{children}</div>
           <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety &amp; privacy</Link></footer>
         </main>
