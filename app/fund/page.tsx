@@ -49,7 +49,7 @@ export default function FundPage() {
         </div>
       </div>
 
-      <FundForm />
+      <div id="register"><FundForm /></div>
 
       <div className="card stack" id="faq">
         <h2>Questions</h2>

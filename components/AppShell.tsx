@@ -7,7 +7,7 @@ import WalletPicker from "@/components/connect/WalletPicker";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/swap", "/wallet", "/stake", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
+export const APP_PATHS = ["/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string };
@@ -17,8 +17,9 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
     { href: "/wallet", name: "Pro trading", note: "Chart, limit and stop-loss orders" },
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage" },
   ] },
-  { name: "Earn", match: ["/stake"], items: [
+  { name: "Earn", match: ["/stake", "/rewards"], items: [
     { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x" },
+    { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops" },
   ] },
   { name: "Launch", match: ["/launchpad", "/momentum"], items: [
     { href: "/launchpad/new", name: "Launch a token", note: "Liquidity locked, no code" },
@@ -35,7 +36,7 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
 ];
 const BOTTOM: { href: string; name: string; icon: string; match: string[] }[] = [
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"] },
-  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake"] },
+  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
   { href: "/analytics", name: "Scanner", icon: "i-stats", match: ["/analytics", "/pro"] },
 ];
@@ -133,7 +134,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {MENU.map((m) => (
               <div key={m.name}><small>{m.name}</small>{m.items.map((i) => <Link key={i.href} role="menuitem" href={i.href} onClick={() => setMore(false)}>{i.name}</Link>)}</div>
             ))}
-            <div><small>Website</small><Link href="/" onClick={() => setMore(false)}>Home</Link><Link href="/community" onClick={() => setMore(false)}>Community</Link><Link href="/buy" onClick={() => setMore(false)}>Buy $AUTISTIK</Link></div>
+            <div><small>Website</small><Link href="/" onClick={() => setMore(false)}>Home</Link><Link href="/community" onClick={() => setMore(false)}>Community</Link></div>
           </div>
         </div>
       )}
