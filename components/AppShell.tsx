@@ -35,10 +35,12 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
     { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow" },
   ] },
 ];
-const BOTTOM: { href: string; name: string; icon: string; match: string[] }[] = [
+// Phone bar: Swap sits in the middle as the big button; everything else is behind the ⋯ button.
+const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
   { href: "/", name: "Home", icon: "i-home", match: [] },
-  { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"] },
+  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/momentum"] },
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
+  { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"], main: true },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
   { href: "/analytics", name: "Scanner", icon: "i-stats", match: ["/analytics", "/pro"] },
 ];
@@ -128,9 +130,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <nav className="ax-tabs" aria-label="App">
         {BOTTOM.map((b) => (
-          <Link key={b.href} href={b.href} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
+          <Link key={b.href} href={b.href} className={b.main ? "main" : undefined} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
         ))}
-        <button type="button" aria-expanded={more} onClick={() => setMore(!more)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></svg><span>More</span></button>
+        <button type="button" className="dots" aria-expanded={more} aria-label="More" onClick={() => setMore(!more)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2.2" /><circle cx="12" cy="12" r="2.2" /><circle cx="19" cy="12" r="2.2" /></svg><span>More</span></button>
       </nav>
       {more && (
         <div className="ax-sheet" onClick={(e) => e.target === e.currentTarget && setMore(false)}>
