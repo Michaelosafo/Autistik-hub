@@ -1650,3 +1650,43 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 }
 .ax-connect:not(.on){gap:5px}
 .sw-connect{padding:10px;font-size:.9em;border-radius:12px}
+
+/* ===================== Companion chat, ChatGPT-style ===================== */
+.gpt-page{gap:0}
+.chat.lux.gpt{height:calc(100dvh - 96px);min-height:420px;border-radius:20px;display:flex;flex-direction:column}
+@media (max-width:860px){ .chat.lux.gpt{height:calc(100dvh - 150px - env(safe-area-inset-bottom));border-radius:16px;min-height:360px} }
+.gpt .lux-top{padding:8px 10px;gap:8px}
+.gpt .lux-who button{padding:3px 10px 3px 3px;font-size:.85em}
+.gpt .lux-who .av{width:24px;height:24px}
+.gpt-mood{margin-left:auto}
+.gpt-mood select{appearance:none;background:rgba(255,255,255,.06);color:#EDEFF7;border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:6px 26px 6px 12px;font:inherit;font-size:.82em;font-weight:700;cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,#bbb 50%),linear-gradient(135deg,#bbb 50%,transparent 50%);background-position:calc(100% - 13px) 55%,calc(100% - 8px) 55%;background-size:5px 5px;background-repeat:no-repeat}
+.gpt-mood select option{color:#111}
+/* The conversation: one centered reading column, like ChatGPT. */
+.chat.lux.gpt .msgs{flex:1;overflow-y:auto;padding:18px 12px 8px;display:flex;flex-direction:column;gap:18px}
+.chat.lux.gpt .msgs>*{width:100%;max-width:760px;margin-left:auto;margin-right:auto}
+.gpt .msg.me{align-self:flex-end;width:auto !important;max-width:min(80%,600px) !important;margin-right:max(0px,calc((100% - 760px)/2)) !important;
+  background:#2f2f3a !important;color:#F1F2F8 !important;font-weight:400 !important;border-radius:20px !important;padding:10px 16px !important}
+.gpt .msgrow{display:flex;gap:12px;align-items:flex-start}
+.gpt .msgrow .av{width:26px !important;height:26px !important;flex:none;margin-top:2px}
+.gpt .msg.ai,.gpt .msg.ai.paper{background:none !important;border:0 !important;box-shadow:none !important;padding:0 !important;color:#ECEDF4;
+  font-family:var(--f-body) !important;font-size:1.02em;line-height:1.7;max-width:none !important;white-space:pre-wrap}
+.gpt .msg.ai.paper::before,.gpt .msg.ai.paper::after{display:none !important}
+.gpt .msg.sys{align-self:center;width:auto !important;font-size:.82em}
+.gpt .listen{display:inline-block;margin-top:6px;color:#9aa0b8 !important;font-size:.85em}
+/* Empty chat: small bot, greeting, quick starters. */
+.gpt-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;padding:12px 0}
+.gpt-bot{width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#1A1E33,#07080F 70%);padding:4px}
+.gpt-bot svg{width:100%;height:100%}
+.gpt-empty h2{font-family:var(--f-display);font-size:1.5em;color:#fff;margin:4px 0 0}
+.gpt-empty p{color:rgba(233,236,248,.72);margin:0;max-width:40ch}
+.gpt-starters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;max-width:520px;margin-top:14px}
+.gpt-starters button{padding:12px 14px;border-radius:14px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#EDEFF7;font:inherit;text-align:left;cursor:pointer}
+.gpt-starters button:hover{background:rgba(255,255,255,.08);border-color:rgba(233,182,90,.5)}
+.gpt-starters b{font-size:.9em}
+/* Composer pinned at the bottom of the column. */
+.gpt .lux-composer{width:calc(100% - 20px);max-width:760px;margin:6px auto 4px;border-radius:24px;box-shadow:none;border-color:rgba(255,255,255,.16);background:rgba(255,255,255,.05)}
+.gpt .lux-plus,.gpt .lux-mic{width:36px;height:36px;border-color:rgba(255,255,255,.18);color:#ddd}
+.gpt .lux-send{width:36px;height:36px;background:#F1F2F8;color:#111;border:0}
+.gpt .lux-chips{max-width:760px;margin:0 auto 6px;justify-content:center;gap:4px;font-size:.78em;opacity:.85}
+@media (max-width:480px){ .gpt .lux-who button:not([aria-selected="true"]) span{display:none} .gpt .lux-who button:not([aria-selected="true"]){padding:3px} }
