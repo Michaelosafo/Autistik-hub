@@ -38,7 +38,7 @@ export default function WalletPicker() {
         badge: w.name === last ? "Last used" : undefined,
         sub: viaWc ? (mobile ? "Opens the app" : "Scan with your phone") : mobile && w.dapp ? "Open this site in the app" : "Get the app",
         go: () => {
-          if (viaWc) return chooseWalletConnect();
+          if (viaWc) return chooseWalletConnect(w.id);
           if (mobile && w.dapp) { location.href = w.dapp(location.href); return; }
           window.open(w.install, "_blank", "noopener,noreferrer");
         },
@@ -74,7 +74,7 @@ export default function WalletPicker() {
             {installed.length > 0 && <div className="wp-label">On this device</div>}
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
             <div className="wp-label">Any wallet</div>
-            <button type="button" className="wp-wc" disabled={!!s.busy} onClick={chooseWalletConnect}>
+            <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => chooseWalletConnect()}>
             <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
             <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : "300+ wallets · QR code or open your app") : "Coming soon"}</small></span>
             <i className="wp-chev" aria-hidden="true" />

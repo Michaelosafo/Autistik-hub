@@ -1488,6 +1488,12 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .lp-launch,.lp-btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 20px;border-radius:16px;font-weight:800;text-decoration:none;border:1px solid transparent}
 .lp-launch,.lp-btn.gold{background:var(--gold,#F0B90B);color:#191326 !important;box-shadow:0 -3px 0 rgba(0,0,0,.2) inset}
 .lp-btn{background:#372F47;color:#F4EEFF}
+.lp-signin{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:16px;font-weight:800;text-decoration:none;color:#F4EEFF;background:rgba(255,255,255,.06);border:1px solid #4a4160;white-space:nowrap}
+.lp-signin:hover{border-color:var(--gold,#F0B90B)}
+.lp-signin:focus-visible{outline:3px solid var(--gold,#F0B90B);outline-offset:2px}
+.lp-signin svg{width:18px;height:18px;flex:none}
+.lp-hero p.lp-member{font-size:.95em;margin:14px 0 0}
+.lp-member a{color:var(--gold,#F0B90B) !important;font-weight:800}
 .lp-btn.ghost{background:transparent;border-color:#4a4160}
 .lp-hero{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:center;max-width:1200px;margin:0 auto;padding:56px 18px 28px}
 .lp-eyebrow{color:var(--gold,#F0B90B);font-weight:800;text-transform:uppercase;letter-spacing:.08em;font-size:.78em}
@@ -1706,7 +1712,8 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .topbar .bot-btn{display:inline-flex;align-items:center;gap:7px;padding:3px 13px 3px 3px;border-radius:999px;background:linear-gradient(135deg,#9B7BFF,#6141D4);color:#fff;font-weight:800;font-size:.84em;text-decoration:none;box-shadow:0 4px 14px rgba(97,65,212,.3)}
 .topbar .bot-btn .bot-av{width:26px;height:26px}
 .topbar .bot-btn:focus-visible,.lp-launch.bot:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
-@media (max-width:440px){ .lp-launch.bot span{display:none} .lp-launch.bot{padding:6px} .lp-bar{gap:10px} }
+@media (max-width:440px){ .lp-launch.bot span{display:none} .lp-launch.bot{padding:6px} .lp-bar{gap:10px} .lp-signin{padding:10px 12px} .lp-bar .lp-launch:not(.bot){padding:12px 14px;white-space:nowrap} .lp-bar .lp-launch:not(.bot)>svg{display:none} .lp-logo b{display:none} }
+@media (max-width:340px){ .lp-signin svg{display:none} }
 .ax-connect.bot{background:linear-gradient(135deg,#9B7BFF,#6141D4 50%,#4A2FB8);color:#fff;text-decoration:none;padding:4px 14px 4px 4px;box-shadow:0 6px 20px rgba(97,65,212,.3),0 -2px 0 rgba(0,0,0,.18) inset}
 .ax-connect.bot .bot-av{width:28px;height:28px}
 @media (max-width:640px){ .ax-connect.bot{padding:4px} }
