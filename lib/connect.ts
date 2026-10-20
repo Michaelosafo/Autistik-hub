@@ -117,7 +117,7 @@ export async function chooseWalletConnect() {
         projectId: WALLETCONNECT_ID,
         // Networks are optional, so wallets connect straight away without asking to approve a network;
         // BNB Chain first, and the right network is only requested when a transaction needs it.
-        optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130],
+        optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130, 146, 999, 324, 534352, 81457, 5000, 100, 80094, 143, 42220, 1329, 480, 57073, 34443],
         showQrModal: true,
         qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
         metadata: { name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`] },
