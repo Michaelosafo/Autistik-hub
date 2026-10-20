@@ -1820,3 +1820,14 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .sw .tx-dim{color:#4d4563}
 .sw-pre .sw-flip{margin:-14px auto}
 .sw .aw-review .row{flex-wrap:nowrap}
+
+/* Phone bar in the App: 7 slots, Swap is the big gold button in the middle, ⋯ opens everything else. */
+@media (max-width:900px){
+  .ax-tabs{grid-template-columns:repeat(7,1fr);align-items:end}
+  .ax-tabs a.main{position:relative;top:-14px;color:#191326}
+  .ax-tabs a.main svg{width:28px;height:28px;padding:12px;box-sizing:content-box;border-radius:50%;background:linear-gradient(135deg,#FFD84D,#F0B90B 45%,#E8A400);box-shadow:0 6px 18px rgba(240,185,11,.35);color:#191326}
+  .ax-tabs a.main span{color:#F4EEFF;margin-top:2px}
+  .ax-tabs a.main[aria-current=page] span{color:var(--gold,#F0B90B)}
+  .ax-tabs .dots span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .ax-tabs .dots svg{width:26px;height:26px}
+}
