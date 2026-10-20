@@ -12,10 +12,11 @@ export type WalletInfo = { uuid: string; name: string; icon: string; rdns: strin
 type Detected = { info: WalletInfo; provider: any };
 
 /** Top wallets, in the order shown. `rdns` matches what the wallet announces when installed. */
-export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string }[] = [
+export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string; wc?: string }[] = [
+  // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
-  { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
-  { id: "trust", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
+  { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
+  { id: "trust", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
   { id: "binance", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet" },
   { id: "okx", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
   { id: "coinbase", name: "Coinbase Wallet", rdns: ["com.coinbase.wallet"], color: "#0052FF", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
@@ -61,6 +62,10 @@ export function startDiscovery() {
     set({ detected: [...state.detected, { info: { uuid: String(d.info.uuid), name: String(d.info.name).slice(0, 40), icon: String(d.info.icon || ""), rdns: String(d.info.rdns || "") }, provider: d.provider }] });
   });
   window.dispatchEvent(new Event("eip6963:requestProvider"));
+  // Back from the wallet app: if it approved while this tab was in the background, use that connection now.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !state.current && wc?.session) choose("WalletConnect", wc);
+  });
 }
 
 /** The plain injected wallet, for wallet apps' own browsers that don't announce themselves. */
@@ -88,6 +93,7 @@ export function closePicker() {
 }
 
 function choose(name: string, provider: any) {
+  if (name === "WalletConnect") flagWc(true);
   set({ current: { name, provider }, open: false, busy: "", error: "" });
   try { sessionStorage.setItem("aw-wallet", name); localStorage.setItem("aw-last-wallet", name); } catch { /* private mode */ }
   resolver?.(provider); resolver = null;
@@ -106,29 +112,63 @@ export async function chooseInjected(name: string, provider: any) {
 }
 
 let wc: any = null;
-/** WalletConnect: a QR code on a computer; on a phone, a list of wallet apps that opens the one picked. */
-export async function chooseWalletConnect() {
+// Kept in localStorage (not just this tab): phones often reload the page, or open a new tab, when coming back
+// from the wallet app, and the WalletConnect session must survive that.
+const WC_FLAG = "aw-wc";
+const flagWc = (on: boolean) => { try { on ? localStorage.setItem(WC_FLAG, String(Date.now())) : localStorage.removeItem(WC_FLAG); } catch { /* private mode */ } };
+// Set when a connection starts; a connection that never finished is forgotten after 15 minutes.
+const wcFlagAge = () => { try { const t = Number(localStorage.getItem(WC_FLAG)); return t ? Date.now() - t : Infinity; } catch { return Infinity; } };
+
+async function initWc() {
+  if (wc) return wc;
+  const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
+  wc = await EthereumProvider.init({
+    projectId: WALLETCONNECT_ID,
+    // Networks are optional, so wallets connect straight away without asking to approve a network;
+    // BNB Chain first, and the right network is only requested when a transaction needs it.
+    optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130, 146, 999, 324, 534352, 81457, 5000, 100, 80094, 143, 42220, 1329, 480, 57073, 34443],
+    showQrModal: true,
+    qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
+    metadata: {
+      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
+      // Where the wallet app sends the member back after they approve: this page, in their browser.
+      redirect: { universal: location.origin + location.pathname },
+    } as any,
+  });
+  wc.on("disconnect", () => { flagWc(false); if (state.current?.provider === wc) set({ current: null }); });
+  // The wallet approved while this page was in the background (or reloaded): pick the session up.
+  wc.on("connect", () => { if (!state.current && wc.session) choose("WalletConnect", wc); });
+  return wc;
+}
+
+/**
+ * WalletConnect: a QR code on a computer; on a phone, a list of wallet apps that opens the one picked.
+ * With `walletId` (a top wallet with its own link) on a phone, that wallet's app opens directly.
+ */
+export async function chooseWalletConnect(walletId?: string) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
-  set({ busy: "WalletConnect", error: "" });
+  set({ busy: walletId ? TOP_WALLETS.find((w) => w.id === walletId)?.name || "WalletConnect" : "WalletConnect", error: "" });
+  const direct = isMobile() ? TOP_WALLETS.find((w) => w.id === walletId && w.wc) : undefined;
   try {
-    if (!wc) {
-      const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
-      wc = await EthereumProvider.init({
-        projectId: WALLETCONNECT_ID,
-        // Networks are optional, so wallets connect straight away without asking to approve a network;
-        // BNB Chain first, and the right network is only requested when a transaction needs it.
-        optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130, 146, 999, 324, 534352, 81457, 5000, 100, 80094, 143, 42220, 1329, 480, 57073, 34443],
-        showQrModal: true,
-        qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
-        metadata: { name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`] },
+    await initWc();
+    if (wc.session) { choose("WalletConnect", wc); return; }
+    flagWc(true);
+    if (direct) {
+      // Skip the WalletConnect list: open this wallet's app with the request. Later signing requests open it too.
+      wc.rpc.showQrModal = false;
+      wc.once("display_uri", (uri: string) => {
+        try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: direct.wc, name: direct.name })); } catch { /* private mode */ }
+        location.href = `${direct.wc}/wc?uri=${encodeURIComponent(uri)}`;
       });
-      wc.on("disconnect", () => { if (state.current?.provider === wc) set({ current: null }); });
+    } else {
+      // Hide our sheet while WalletConnect shows its own QR / wallet list.
+      set({ open: false });
     }
-    // Hide our sheet while WalletConnect shows its own QR / wallet list.
-    set({ open: false });
-    if (!wc.session) await wc.connect();
+    try { await wc.connect(); } finally { wc.rpc.showQrModal = true; }
     choose("WalletConnect", wc);
   } catch (e: any) {
+    if (!wc?.session) flagWc(false);
+    if (state.current) return; // picked up by the "connect" event meanwhile
     set({ open: true, busy: "", error: /reset|reject|closed|cancel/i.test(String(e?.message)) ? "WalletConnect was closed. Try again, or pick another wallet." : String(e?.message || e).slice(0, 160) });
   }
 }
@@ -138,7 +178,7 @@ export async function disconnectWallet() {
   const p = state.current?.provider;
   set({ current: null });
   try { sessionStorage.removeItem("aw-wallet"); } catch { /* private mode */ }
-  if (p && p === wc) await wc.disconnect().catch(() => {});
+  if (p && p === wc) { flagWc(false); await wc.disconnect().catch(() => {}); }
   try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: null })); } catch { /* old browsers */ }
 }
 
@@ -148,6 +188,15 @@ export async function restoreWallet(): Promise<any | null> {
   if (state.current) return state.current.provider;
   let name = "";
   try { name = sessionStorage.getItem("aw-wallet") || ""; } catch { /* private mode */ }
+  // A WalletConnect session lives on after the page reloads or the wallet app opens a new tab.
+  if ((name === "WalletConnect" || (!name && wcFlagAge() < Infinity)) && WALLETCONNECT_ID) {
+    try {
+      await initWc();
+      if (wc.session) { if (!state.current) choose("WalletConnect", wc); return wc; }
+    } catch { /* WalletConnect unreachable: carry on as not connected */ }
+    if (wcFlagAge() > 15 * 60_000) flagWc(false);
+    return null;
+  }
   if (!name) return null;
   await new Promise((r) => setTimeout(r, 150)); // let wallets announce
   const d = state.detected.find((x) => x.info.name === name);
