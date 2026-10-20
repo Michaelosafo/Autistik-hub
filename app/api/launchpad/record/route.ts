@@ -6,6 +6,7 @@ import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, type ChainKey 
 import { padOn } from "@/lib/launchpad-server";
 import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { launchAccess } from "@/lib/admin";
 import { isAChain, scanToken } from "@/lib/analytics";
 
 export const runtime = "nodejs";
@@ -15,6 +16,7 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "launch-record", 20, 600);
   if (slow) return slow;
+  if (!(await launchAccess()).allowed) return json({ error: "The Launch Pad is coming soon." }, 403);
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");

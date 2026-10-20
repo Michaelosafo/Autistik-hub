@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { supabaseService } from "@/lib/supabase/server";
+import { launchAccess } from "@/lib/admin";
 import { AI_LAUNCH_SESSIONS, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, type Pads } from "@/lib/launchpad";
 import { padSites } from "@/lib/launchpad-server";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
@@ -80,6 +81,7 @@ Rules:
 
 // Autistik asks questions and, once the creator confirms, returns a launch plan for them to sign.
 export async function POST(req: Request) {
+  if (!(await launchAccess()).allowed) return json({ error: "The Launch Pad is coming soon." }, 403);
   const g = await guardAI("Autistik", { needsPass: false }); // the launch guide stays free: launches pay their own fee
   if ("error" in g) return g.error;
 

@@ -11,6 +11,8 @@ import { toAds } from "@/lib/ads";
 import { CHAINS, LOCKS, dexscreenerUrl, isLock, type ChainKey } from "@/lib/launchpad";
 import { getMarkets, usd } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
+import { launchAccess } from "@/lib/admin";
+import AddLiquidity from "@/components/AddLiquidity";
 
 export const dynamic = "force-dynamic";
 
@@ -19,10 +21,11 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   if (!c || !isAddress(params.token)) notFound();
   const token = getAddress(params.token);
   const sb = supabaseServer();
-  const [{ data: launch }, { data: { user } }, board] = await Promise.all([
+  const [{ data: launch }, { data: { user } }, board, access] = await Promise.all([
     sb.from("launches").select("*").eq("chain", c.key).eq("token", token).maybeSingle(),
     sb.auth.getUser(),
     getBoard(60),
+    launchAccess(),
   ]);
   if (!launch) notFound();
 
@@ -84,6 +87,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
           {!listed && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
+          {access.allowed && c.router && <AddLiquidity pads={{}} chain={c.key} token={token} />}
           <div className="notice warn" style={{ fontSize: ".86em" }}>{listed ? "Listed by a paid promotion, not checked by the AUTISTIK team." : "Made by a community member, not the AUTISTIK team."} Token prices can go to zero. Nothing here is financial advice.</div>
         </div>
       </div>
