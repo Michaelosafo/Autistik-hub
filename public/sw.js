@@ -36,3 +36,29 @@ self.addEventListener("fetch", (e) => {
     );
   }
 });
+
+// Tapping an alert pop-up opens the token's Analytics page on this site.
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const link = e.notification.data && e.notification.data.link;
+  const path = typeof link === "string" && /^\/[A-Za-z0-9\/_-]*$/.test(link) ? link : "/analytics";
+  e.waitUntil(self.clients.openWindow(path));
+});
+
+// Alerts pushed by the Hub (pinned-token signals and sell alerts), shown even when the site is closed.
+// "Strong" alerts (buy, take profit, sell) stay on screen until tapped and vibrate the phone.
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { title: "AUTISTIK Hub", body: e.data ? e.data.text() : "" }; }
+  const link = typeof d.link === "string" && /^\/[A-Za-z0-9\/_-]*$/.test(d.link) ? d.link : "/analytics";
+  e.waitUntil(self.registration.showNotification(String(d.title || "AUTISTIK Hub").slice(0, 120), {
+    body: String(d.body || "").slice(0, 300),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    data: { link },
+    tag: link + (d.strong ? ":signal" : ""),
+    renotify: true,
+    requireInteraction: !!d.strong,
+    vibrate: d.strong ? [400, 120, 400, 120, 800] : [200],
+  }));
+});

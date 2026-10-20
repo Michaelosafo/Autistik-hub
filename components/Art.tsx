@@ -5,7 +5,8 @@ type Kind =
   | { kind: "group"; id: string }
   | { kind: "session"; type: string }
   | { kind: "portrait"; person: string; bg: string }
-  | { kind: "believer" } | { kind: "purity" };
+  | { kind: "believer" } | { kind: "purity" }
+  | { kind: "robot"; who: "believer" | "purity" | "autistik"; mood?: string };
 
 function svgFor(p: Kind): string {
   switch (p.kind) {
@@ -16,6 +17,7 @@ function svgFor(p: Kind): string {
     case "portrait": return ART.portrait(p.person, p.bg);
     case "believer": return ART.believer();
     case "purity": return ART.purity();
+    case "robot": return ART.robot(p.who, p.mood);
   }
 }
 

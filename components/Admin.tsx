@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { ALL_GROUPS, CHANNELS } from "@/lib/groups";
+import { GROUPS, CHANNELS } from "@/lib/groups";
 import FundAdmin from "@/components/FundAdmin";
 import AdminLog from "@/components/AdminLog";
 
@@ -107,7 +107,7 @@ export default function Admin() {
         <div className="card stack">
           <h2>Group sizes</h2>
           <table><thead><tr><th>Group</th><th>Members</th></tr></thead>
-            <tbody>{ALL_GROUPS.map((g) => <tr key={g.id}><td>{g.name}</td><td className="num">{groups[g.id] || 0}</td></tr>)}</tbody>
+            <tbody>{GROUPS.map((g) => <tr key={g.id}><td>{g.name}</td><td className="num">{groups[g.id] || 0}</td></tr>)}</tbody>
           </table>
           <p className="muted" style={{ fontSize: ".88em" }}>To make someone else an admin, run the SQL at the bottom of supabase/schema.sql with their email.</p>
         </div>
@@ -121,7 +121,9 @@ export default function Admin() {
             <div className="row" style={{ justifyContent: "space-between" }}><h3>{a.full_name} · {a.role}</h3><span className={a.status === "approved" ? "badge v" : "badge gold"}>{a.status}</span></div>
             <p className="muted">{a.country || "Country not given"}</p>
             {a.topic && <p>{a.topic}</p>}
-            <a className="mono" href={a.verify_link} target="_blank" rel="noopener noreferrer" style={{ overflowWrap: "anywhere" }}>{a.verify_link}</a>
+            {/^https:\/\/[^\s"<>]+$/.test(a.verify_link || "")
+              ? <a className="mono" href={a.verify_link} target="_blank" rel="noopener noreferrer" style={{ overflowWrap: "anywhere" }}>{a.verify_link}</a>
+              : <span className="mono muted" style={{ overflowWrap: "anywhere" }}>Unsafe link, not opened: {a.verify_link}</span>}
             <div className="row">
               {a.status !== "approved" && <button className="btn primary small" type="button" onClick={() => approve(a)}>Approve &amp; verify</button>}
               {a.status === "pending" && <button className="btn small" type="button" onClick={() => reject(a)}>Reject</button>}

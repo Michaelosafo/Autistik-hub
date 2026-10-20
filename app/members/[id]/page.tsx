@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ProfileEdit from "@/components/ProfileEdit";
 import { badgesFor } from "@/lib/badges";
-import { CHANNELS, ALL_GROUPS } from "@/lib/groups";
+import { CHANNELS, GROUPS } from "@/lib/groups";
 import { supabaseServer } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export default async function MemberPage({ params }: { params: { id: string } })
   const mine = prof.id === user.id;
   const p = { posts: pts?.posts ?? 0, sessions: pts?.sessions ?? 0, support: pts?.support ?? 0, points: pts?.points ?? 0 };
   const badges = badgesFor({ ...p, isAdmin: prof.is_admin, practitioner: !!pro, qualify: st?.qualify_points ?? 50, joined: prof.created_at });
-  const joinedGroups = ALL_GROUPS.filter((g) => (groups || []).some((x: any) => x.group_id === g.id));
+  const joinedGroups = GROUPS.filter((g) => (groups || []).some((x: any) => x.group_id === g.id));
   let wallet: string | null = null;
   if (mine) {
     const { data: w } = await sb.from("wallets").select("address").eq("user_id", user.id).maybeSingle();

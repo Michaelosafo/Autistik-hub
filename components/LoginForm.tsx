@@ -10,7 +10,7 @@ import HumanCheck, { TURNSTILE_SITE_KEY, type HumanCheckHandle } from "@/compone
 type Mode = "signin" | "join" | "forgot";
 
 const TITLES: Record<Mode, [string, string]> = {
-  signin: ["Welcome back", "Sign in with your email and password."],
+  signin: ["Welcome back", "Sign in with Google, Apple or your email."],
   join: ["Join the Hub", "Create a free account. We'll email you a link to confirm it, then you can chat with Believer and Purity."],
   forgot: ["Reset your password", "Enter your email and we'll send you a link to choose a new password."],
 };
@@ -71,9 +71,9 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
       } else if (mode === "join") {
         const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true }, captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); return; }
-        // Supabase returns a user with no identities when the email is already registered.
-        if (data.user && data.user.identities && data.user.identities.length === 0) { setError(authMessage("already registered")); return; }
         if (data.session) { router.push(next); router.refresh(); return; } // email confirmation switched off
+        // An email that's already registered gets the same answer as a new one, so this form can't be used to
+        // find out who has an account. (Supabase sends nothing in that case; the screen says what to do.)
         setSent("confirm"); setCanResend(true);
       } else {
         const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`, captchaToken: captchaToken() });
@@ -102,8 +102,18 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     setBusy(true); setError("");
     const { error } = await sb.auth.signInWithOtp({ email: em, options: { emailRedirectTo: confirmUrl(next), shouldCreateUser: false, captchaToken: captchaToken() } });
     setBusy(false); human.current?.reset();
-    if (error) setError(/signups not allowed|not found/i.test(error.message) ? "There's no account with this email yet. Create one first." : authMessage(error.message));
+    // "No account" looks exactly like success, so nobody can test which emails are registered.
+    if (error && !/signups not allowed|not found|user not found/i.test(error.message)) setError(authMessage(error.message));
     else setSent("link");
+  }
+
+  async function social(provider: "google" | "apple") {
+    setError("");
+    if (!SUPABASE_CONFIGURED) { setError("Sign-in isn't set up on this site yet."); return; }
+    setBusy(true);
+    const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo: confirmUrl(next) + "&adult=1" } });
+    // On success the browser leaves for Google or Apple, so we only get here on an error.
+    if (error) { setBusy(false); setError(/not enabled|unsupported provider/i.test(error.message) ? `${provider === "google" ? "Google" : "Apple"} sign-in isn't switched on yet. Use your email for now.` : authMessage(error.message)); }
   }
 
   const [title, sub] = TITLES[mode];
@@ -114,10 +124,12 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
       <div className="auth-card card stack">
         <div className="label">Check your email</div>
         <h1>{sent === "confirm" ? "Confirm your email" : sent === "reset" ? "Password link sent" : "Sign-in link sent"}</h1>
-        <p>We sent an email to <b>{email.trim()}</b>.{" "}
+        <p>If <b>{email.trim()}</b> {sent === "confirm" ? "is new here" : "has an account"}, we&apos;ve sent it an email.{" "}
           {sent === "confirm" ? "Open it and press Confirm my email. Then you're in, and Believer and Purity are ready to chat."
             : sent === "reset" ? "Open it and press Choose a new password."
             : "Open it and press Sign me in."}</p>
+        {sent === "confirm" && <p className="muted" style={{ margin: 0 }}>Already have an account with this email? Nothing new is sent: just <button className="linkish" type="button" onClick={() => switchTo("signin")}>sign in</button> or reset your password.</p>}
+        {sent !== "confirm" && <p className="muted" style={{ margin: 0 }}>No email after a few minutes? The address may not have an account yet: <button className="linkish" type="button" onClick={() => switchTo("join")}>create one</button>.</p>}
         <div className="notice" style={{ fontSize: ".9em" }}>It comes from AUTISTIK Hub and usually arrives within a minute. Check your spam or promotions folder if you can&apos;t see it.</div>
         <div className="row" style={{ gap: 8 }}>
           {sent === "confirm" && <HumanCheck ref={human} onToken={setCaptcha} />}
@@ -137,6 +149,23 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
       </div>
       <h1>{title}</h1>
       <p className="muted">{sub} Other members only see your Hub name, never your email.</p>
+
+      {mode !== "forgot" && (
+        <>
+          <div className="stack" style={{ gap: 8 }}>
+            <button type="button" className="btn oauth-btn" disabled={busy} onClick={() => social("google")}>
+              <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+              Continue with Google
+            </button>
+            <button type="button" className="btn oauth-btn apple" disabled={busy} onClick={() => social("apple")}>
+              <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.5 2-3.7 2.1-3.7-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.9-1.7 0-3.3 1-4.2 2.5-1.8 3.1-.5 7.7 1.3 10.2.8 1.2 1.8 2.6 3.1 2.5 1.3-.1 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4 1-1.4 1.3-2.7 1.4-2.8-.1 0-2.6-1-2.4-4.3zM14 5.2c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1.1.1 2.1-.6 2.8-1.4z"/></svg>
+              Continue with Apple
+            </button>
+          </div>
+          <small className="muted" style={{ marginTop: -4 }}>By continuing you confirm you&apos;re 18 or older and will follow the <Link href="/safety" target="_blank">community guidelines</Link>.</small>
+          <div className="or-line"><span>or use your email</span></div>
+        </>
+      )}
 
       <form className="stack" onSubmit={submit} noValidate>
         <label className="field"><span>Email</span>

@@ -15,7 +15,7 @@ export default function Battery() {
   }
   return (
     <div className="card stack">
-      <h2>Your social battery today?</h2>
+      <div><div className="label">Check in</div><h2 style={{ marginTop: 4 }}>How full is your social battery today?</h2></div>
       <div className="battery">
         {LABELS.map((l, i) => (
           <button key={l} type="button" aria-pressed={level === i + 1} onClick={() => pick(i + 1)}>
@@ -26,8 +26,8 @@ export default function Battery() {
       </div>
       <p className="muted" style={{ fontSize: ".9em" }}>
         {level && level <= 2
-          ? "Low battery? Try Purity. She keeps it slow and quiet."
-          : "Only you can see this."}
+          ? "Low battery noted. Believer and Purity will keep their replies short and calm today."
+          : "Only you can see this. It's saved on this device and helps your companion adapt to you."}
       </p>
     </div>
   );

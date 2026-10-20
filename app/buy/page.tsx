@@ -1,5 +1,8 @@
+import Link from "next/link";
+import Guide from "@/components/Guide";
 import CopyCA from "@/components/CopyCA";
-import SectionTabs, { TOKEN_TABS } from "@/components/SectionTabs";
+import SectionCards, { TOKEN_CARDS } from "@/components/SectionCards";
+import ProHero from "@/components/ProHero";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import { LINKS } from "@/lib/site";
 
@@ -9,10 +12,12 @@ export const metadata = {
 };
 
 const STEPS: { title: string; body: React.ReactNode }[] = [
-  { title: "Get a wallet", body: <><a href="https://trustwallet.com" target="_blank" rel="noopener noreferrer">Trust Wallet</a> or <a href="https://metamask.io" target="_blank" rel="noopener noreferrer">MetaMask</a>. Keep your seed phrase secret.</> },
-  { title: "Add BNB", body: <>Buy BNB (e.g. on <a href="https://www.binance.com" target="_blank" rel="noopener noreferrer">Binance</a>) and send it to your wallet on <b>BNB Smart Chain</b>.</> },
-  { title: "Swap on PancakeSwap", body: <>Open <a href={LINKS.pancakeswap} target="_blank" rel="noopener noreferrer">PancakeSwap</a>, paste the address above and swap. Set slippage to about 5% (3% buy / 4% sell tax).</> },
-  { title: "Can't see it?", body: <>Use &quot;Import token&quot; in your wallet with the same address.</> },
+  { title: "Get a wallet", body: <>Install a non-custodial wallet such as <a href="https://trustwallet.com" target="_blank" rel="noopener noreferrer">Trust Wallet</a> or <a href="https://metamask.io" target="_blank" rel="noopener noreferrer">MetaMask</a>. Write your seed phrase on paper and keep it secret. Nobody from AUTISTIK will ever ask for it.</> },
+  { title: "Get BNB on BNB Smart Chain", body: <>Buy BNB on an exchange such as <a href="https://www.binance.com" target="_blank" rel="noopener noreferrer">Binance</a> and send it to your wallet on <b>BNB Smart Chain (BEP-20)</b>. Keep a little extra BNB to pay network fees.</> },
+  { title: "Open PancakeSwap", body: <>Go to <a href={LINKS.pancakeswap} target="_blank" rel="noopener noreferrer">PancakeSwap</a> and connect your wallet. Check you are on BNB Smart Chain.</> },
+  { title: "Paste the official contract", body: <>In the &quot;To&quot; box, paste the contract address below. Only use the address on this page or our official accounts. Fake tokens use the same name.</> },
+  { title: "Swap BNB for $AUTISTIK", body: <>Enter how much BNB to spend and press Swap. $AUTISTIK has a 3% buy tax and 4% sell tax, so if the swap fails, raise slippage slightly (around 5%). Start with a small test amount.</> },
+  { title: "See it in your wallet", body: <>If $AUTISTIK doesn&apos;t show up, use &quot;Import token&quot; in your wallet and paste the same contract address.</> },
 ];
 
 const ALLOCATION = [
@@ -31,12 +36,20 @@ const ROADMAP = [
 export default function BuyPage() {
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
-      <SectionTabs tabs={TOKEN_TABS} active="/buy" label="$AUTISTIK" />
-      <div className="page-head">
-        <div className="label">$AUTISTIK · BNB Smart Chain</div>
-        <h1>How to buy $AUTISTIK</h1>
-        <p className="muted">Four quick steps.</p>
-      </div>
+      <SectionCards items={TOKEN_CARDS} active="/buy" label="$AUTISTIK" />
+      <ProHero tone="gold" kicker="$AUTISTIK · BNB SMART CHAIN" title="How to buy $AUTISTIK"
+        text="Six steps, about ten minutes. Take your time, and ask in our Telegram if you get stuck."
+        stats={[["100M", "total supply"], ["30%", "burned at launch"], ["3% / 4%", "buy / sell tax"], ["🔒 Locked", "liquidity"]]}>
+        <div className="an-actions">
+          <a className="btn primary" href={LINKS.pancakeswap} target="_blank" rel="noopener noreferrer">Buy on PancakeSwap</a>
+          <a className="btn" href={LINKS.dexscreener} target="_blank" rel="noopener noreferrer">Chart</a>
+        </div>
+      </ProHero>
+      <Guide id="buy" action={{ href: "/wallet?chain=bsc", label: "Buy $AUTISTIK in the Wallet" }} title="The easiest way to buy $AUTISTIK" steps={[
+        <>Get some <b>BNB</b> on an exchange like Binance and send it to your wallet on <b>BNB Smart Chain</b>.</>,
+        <>Open the <Link href="/wallet">Wallet</Link> (Simple mode), pick BNB Chain and search <b>AUTISTIK</b>.</>,
+        <>Choose an amount and tap Buy. Or follow the full PancakeSwap steps below.</>,
+      ]} tip="Only use the official contract address on this page. Fake coins copy the name." />
 
       <div className="card stack">
         <h2>Official contract address</h2>
@@ -45,7 +58,7 @@ export default function BuyPage() {
           <a className="btn primary" href={LINKS.pancakeswap} target="_blank" rel="noopener noreferrer">Buy on PancakeSwap</a>
           <a className="btn" href={LINKS.dexscreener} target="_blank" rel="noopener noreferrer">View chart</a>
           <a className="btn" href={LINKS.bscscan} target="_blank" rel="noopener noreferrer">View on BscScan</a>
-          <a className="btn" href={LINKS.lpLock} target="_blank" rel="noopener noreferrer">🔒 Liquidity lock certificate</a>
+          <a className="btn" href={LINKS.lpLock} target="_blank" rel="noopener noreferrer">Liquidity lock certificate</a>
         </div>
       </div>
 
@@ -56,7 +69,7 @@ export default function BuyPage() {
             <li key={i}><b>{s.title}</b><p className="muted">{s.body}</p></li>
           ))}
         </ol>
-        <div className="notice alert" style={{ fontSize: ".9em" }}><b>Never</b> share your seed phrase with anyone.</div>
+        <div className="notice alert" style={{ fontSize: ".9em" }}><b>Never</b> share your seed phrase or private key with anyone, including people who say they are from AUTISTIK.</div>
       </div>
 
       <div className="grid2" style={{ alignItems: "start" }}>
@@ -99,13 +112,15 @@ export default function BuyPage() {
           <a className="btn" href={LINKS.telegram} target="_blank" rel="noopener noreferrer">Telegram</a>
           <a className="btn" href={LINKS.x} target="_blank" rel="noopener noreferrer">X</a>
           <a className="btn" href={LINKS.youtube} target="_blank" rel="noopener noreferrer">YouTube</a>
+          <a className="btn" href={`mailto:${LINKS.email}`}>{LINKS.email}</a>
           <a className="btn small" href={LINKS.dev} target="_blank" rel="noopener noreferrer">Dev on X</a>
           <a className="btn small" href={LINKS.coDev} target="_blank" rel="noopener noreferrer">Co-dev on X</a>
           <a className="btn small" href={LINKS.whitepaper} target="_blank" rel="noopener noreferrer">Whitepaper (PDF)</a>
         </div>
+        <p className="muted" style={{ fontSize: ".9em" }}>New to autism? Read <Link href="/autism">Understanding autism</Link>. Want to help autistic people directly? See the <Link href="/fund">AUTISTIK Fund</Link>.</p>
       </div>
 
-      <p className="muted" style={{ fontSize: ".82em" }}>Not financial advice. Prices can go to zero. Only spend what you can afford to lose.</p>
+      <p className="muted" style={{ fontSize: ".82em" }}>Nothing on this page is financial, legal or investment advice. $AUTISTIK is a community token and its price can go up or down a lot, including to zero. Only spend what you can afford to lose.</p>
     </div>
   );
 }

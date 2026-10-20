@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import Admin from "@/components/Admin";
 import AdminMfa from "@/components/AdminMfa";
+import AIBudget from "@/components/AIBudget";
+import SiteActivity from "@/components/SiteActivity";
 import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +15,7 @@ export default async function AdminPage() {
   return (
     <div className="stack">
       <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only the Hub owner can open this page.</p></div>
-      {admin ? <Admin /> : <AdminMfa />}
+      {admin ? <><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
     </div>
   );
 }

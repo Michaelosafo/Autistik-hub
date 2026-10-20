@@ -83,3 +83,53 @@ export async function lookupToken(chain: ChainKey, token: string): Promise<{ pai
     return null;
   }
 }
+
+/** Short-term price moves for one token's deepest pool: what a trading plan needs. */
+export type PairStats = {
+  priceUsd: number | null; m5: number | null; h1: number | null; h6: number | null; h24: number | null;
+  buysH1: number; sellsH1: number; liquidityUsd: number | null; marketCap: number | null; imageUrl: string | null;
+};
+
+/** `slug` is DexScreener's chain id (bsc, ethereum…). Cached for 30 seconds; returns null when unavailable. */
+export async function getPairStats(slug: string, token: string): Promise<PairStats | null> {
+  try {
+    const r = await fetch(`${API}/tokens/v1/${slug}/${token}`, { next: { revalidate: 30 }, signal: AbortSignal.timeout(5000) });
+    const pairs: any[] = r.ok ? await r.json() : [];
+    const p = (Array.isArray(pairs) ? pairs : []).sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0))[0];
+    if (!p) return null;
+    const c = p.priceChange || {}, t = p.txns?.h1 || {};
+    return {
+      priceUsd: num(p.priceUsd), m5: num(c.m5), h1: num(c.h1), h6: num(c.h6), h24: num(c.h24),
+      buysH1: num(t.buys) ?? 0, sellsH1: num(t.sells) ?? 0, liquidityUsd: num(p.liquidity?.usd), marketCap: num(p.marketCap) ?? num(p.fdv),
+      // The token's logo, when the project added one on DexScreener.
+      imageUrl: (pairs as any[]).map((x) => x?.info?.imageUrl).find((u) => typeof u === "string" && u.startsWith("https://") && u.length < 600) ?? null,
+    };
+  } catch { return null; }
+}
+
+// GeckoTerminal's names for our chains (free price history, no key).
+const GT: Record<string, string> = {
+  bsc: "bsc", ethereum: "eth", base: "base", robinhood: "robinhood", solana: "solana", arbitrum: "arbitrum", polygon: "polygon_pos",
+  avalanche: "avax", optimism: "optimism", sonic: "sonic", berachain: "berachain", monad: "monad", unichain: "unichain",
+  abstract: "abstract", linea: "linea", blast: "blast",
+};
+
+// Candle sizes: 15 minutes (last day), 1 hour (last 3 days), 4 hours (last 10 days).
+const FRAMES = { "15m": "minute?aggregate=15&limit=96", "1h": "hour?limit=72", "4h": "hour?aggregate=4&limit=60" } as const;
+export type Frame = keyof typeof FRAMES;
+
+/** Candles for a pool, oldest first (hourly by default). Cached for 5 minutes; empty when unavailable. */
+export async function getCandles(chain: string, pool: string | null | undefined, frame: Frame = "1h") {
+  const net = GT[chain];
+  if (!net || !pool) return [];
+  try {
+    const r = await fetch(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${pool}/ohlcv/${FRAMES[frame]}`, {
+      next: { revalidate: 300 }, signal: AbortSignal.timeout(5000), headers: { accept: "application/json" },
+    });
+    const list: any[] = r.ok ? (await r.json())?.data?.attributes?.ohlcv_list || [] : [];
+    return list
+      .map((x) => ({ t: Number(x[0]), o: Number(x[1]), h: Number(x[2]), l: Number(x[3]), c: Number(x[4]), v: Number(x[5]) }))
+      .filter((c) => [c.o, c.h, c.l, c.c].every((v) => isFinite(v) && v > 0))
+      .sort((a, b) => a.t - b.t);
+  } catch { return []; }
+}

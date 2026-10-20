@@ -5,6 +5,8 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 ## 1. Basics
 - [ ] Use **one** Vercel project for the Hub: **`autistiklatestwork`** (it has your settings). Its domain is **autistik.io** (bought on Vercel). Check settings any time at `/api/health`.
 - [ ] Vercel → Settings → Environment Variables has: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`, `NEXT_PUBLIC_TOKEN_ADDRESS`.
+  - `SUPABASE_SERVICE_ROLE_KEY`: a Supabase **secret** key (`sb_secret_…`, Project Settings → API Keys → Secret keys) or the legacy `service_role` key. Not the anon/publishable key. If AI chat says "isn't available… database isn't fully set up", this key is usually wrong.
+  - `ANTHROPIC_API_KEY`: the `sk-ant-…` key. `ANTHROPIC_MODEL` is optional and must be a model name like `claude-sonnet-5-5`, never a key.
 - [ ] Email sign-up works: follow [`EMAIL-SETUP.md`](EMAIL-SETUP.md) (Resend + Supabase settings + email templates).
 - [ ] You can create an account, confirm the email, and Believer and Autistik both reply.
 - [ ] You are admin (README step 6). **Admin** shows in the menu.
@@ -12,9 +14,13 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 ## 2. Database (Supabase → SQL Editor → New query → paste → Run)
 - [ ] `supabase/launchpad.sql` (lock options, Listed tokens, trending)
 - [ ] `supabase/fund.sql` (Fund "register your interest" list)
-- [ ] `supabase/ai-pass.sql` (2 free AI tries, then the paid AI Pass)
+- [ ] `supabase/ai-pass.sql` (5 free AI messages a day, then the paid AI Pass)
 - [ ] `supabase/security.sql` (rate limits, anti-spam rules, admin log)
+- [ ] `supabase/ai-budget.sql` (AI cost tracking for the Admin page, 2 AI launch sessions a day)
 - [ ] `supabase/admin-lock.sql` with your email (admin area only for you, with 2-step verification)
+- [ ] `supabase/hardening.sql` (browsers get only the exact database access the site uses)
+- [ ] `supabase/analytics.sql` (Analytics: top 40 wallets, dev wallet, sell alerts, checked every 10 minutes)
+- [ ] Supabase → Authentication → **Attack Protection** → turn on **Prevent use of leaked passwords** → Save.
 
 ## 3. Wallets
 | Wallet | Used for | Notes |
@@ -34,15 +40,21 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 | `NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD` | `20` |
 | `NEXT_PUBLIC_AI_PASS_USD` | `5` (price of an AI Pass) |
 | `NEXT_PUBLIC_AI_PASS_DAYS` | `30` |
-| `NEXT_PUBLIC_AI_FREE_TRIES` | `2` |
+| `NEXT_PUBLIC_AI_FREE_PER_DAY` | `5` (free Believer & Purity messages per member per day; a picture counts as 5) |
+| `ANTHROPIC_FAST_MODEL` | optional, default `claude-haiku-5-5` (low-cost model for free messages and the Launch Pad guide) |
 | `AI_DAILY_LIMIT` | `60` (messages a day per member; lower it if Claude costs get high) |
 
 > AI Pass and trending payments carry a small note (the account id or token address) inside the BNB transfer. A normal wallet (MetaMask, Trust Wallet) as `NEXT_PUBLIC_TREASURY_WALLET` accepts these. A Safe multisig may reject them, so if you use a Safe, receive into a normal wallet and move the BNB to the Safe now and then. Test with one payment first.
 
 - [ ] Deployments → ⋯ → **Redeploy**. Trending payments now work.
 
+## 4b. Analytics (top 40 wallets and sell alerts)
+- [ ] moralis.com → sign up free → copy your **API key**. Vercel: `MORALIS_API_KEY` = the key (**Secret**) → Redeploy. Without it, Analytics still works but shows the top 10 wallets only.
+- [ ] Optional: `MORALIS_DAILY_LIMIT` (default `600`) caps the paid calls per day.
+
 ## 5. Launch Pad contract on BNB Chain (remix.ethereum.org)
-- [ ] Paste `contracts/AutistikLaunchpad.sol`, compile with **0.8.24**, optimizer **200**.
+- [ ] Paste `contracts/AutistikLaunchpad.sol`. It imports OpenZeppelin **5.0.2**: Remix fetches it; if it asks for a version, use `@openzeppelin/contracts@5.0.2`.
+- [ ] Compile with **0.8.24**, optimizer **200**, EVM version **paris** (Advanced configurations). This is exactly what the tests used.
 - [ ] Deploy with MetaMask on BNB Smart Chain (owner wallet):
   - `router_` `0x10ED43C718714eb63d5aA57B78B54704E256024E`
   - `treasury_` treasury address
@@ -50,6 +62,9 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
   - `minLiquidity_` `100000000000000000` (0.1 BNB)
   - `stablecoin_` `0x55d398326f99059fF775485246999027B3197955`
   - `eligibilitySigner_` signer wallet's **address**
+- [ ] Check before going on: the contract's `factory()` reads `0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73` and `weth()` reads `0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c` (WBNB).
+- [ ] Verify the source on BscScan (Contract → Verify & Publish, same compiler settings), so buyers can read it.
+- [ ] Move ownership to the Safe in two steps: owner calls `transferOwnership(Safe address)`, then the Safe calls `acceptOwnership()`.
 - [ ] Vercel: `NEXT_PUBLIC_LAUNCHPAD_BSC` = the new contract address → Redeploy.
 
 ## 6. Test with small amounts
@@ -57,7 +72,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] A wallet **without** AUTISTIK is refused.
 - [ ] "Make it trend" with $20 of BNB. The BNB arrives in the treasury and the token shows **Promoted**.
 - [ ] Register on `/fund`. The entry shows in Admin.
-- [ ] With a new (non-admin) account: 2 free messages to Believer work, the 3rd asks for an AI Pass. Pay $5 of BNB, and chatting works again.
+- [ ] With a new (non-admin) account: 5 messages to Believer work, the 6th asks for an AI Pass (or to come back tomorrow). Pay $5 of BNB, and chatting works again.
 
 ## 7. Website address: autistik.io
 - [ ] autistik.io (bought on Vercel) is added to the `autistiklatestwork` project, with `www.autistik.io` redirecting to it.

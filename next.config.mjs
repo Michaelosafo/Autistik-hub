@@ -1,24 +1,4 @@
-// What the browser may load. Scripts only from this site (plus Cloudflare's "are you human" check and Vercel's
-// preview toolbar), so injected scripts from other sites won't run. Fonts come from Google Fonts. Wallet and price
-// data use many HTTPS services, so connections are limited to HTTPS rather than a list.
-const dev = process.env.NODE_ENV !== "production";
-const CSP = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ""} https://challenges.cloudflare.com https://vercel.live`,
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com https://vercel.live",
-  "img-src 'self' data: blob: https:",
-  `connect-src 'self' https: wss:${dev ? " ws: http://localhost:*" : ""}`,
-  "frame-src https://challenges.cloudflare.com https://vercel.live",
-  "worker-src 'self' blob:",
-  "manifest-src 'self'",
-  "media-src 'self' data: blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "upgrade-insecure-requests",
-].join("; ");
+// The Content Security Policy is set per request in middleware.ts (lib/csp.ts), so scripts can carry a nonce.
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -26,6 +6,11 @@ const nextConfig = {
   // Keeps first deploys smooth; run `npx tsc --noEmit` locally to see type hints.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // Optional add-ons of the wallet library (Privy) that the Hub doesn't use: left out of the bundle.
+  webpack(config) {
+    config.resolve.alias = { ...config.resolve.alias, "@farcaster/mini-app-solana": false, "@abstract-foundation/agw-client": false };
+    return config;
+  },
   // Old autistikk.com addresses keep working after the switch to the Hub.
   async redirects() {
     return [
@@ -47,9 +32,13 @@ const nextConfig = {
         ],
       },
       {
+        // Files served without the middleware (the offline page) get a strict policy: no scripts at all.
+        source: "/offline.html",
+        headers: [{ key: "Content-Security-Policy", value: "default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" }],
+      },
+      {
         source: "/(.*)",
         headers: [
-          { key: "Content-Security-Policy", value: CSP },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

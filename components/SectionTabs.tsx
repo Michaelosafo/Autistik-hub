@@ -13,17 +13,6 @@ export default function SectionTabs({ tabs, active, label }: { tabs: SectionTab[
   );
 }
 
-export const COMMUNITY_TABS: SectionTab[] = [
-  { href: "/community", label: "Groups" },
-  { href: "/sessions", label: "Live sessions" },
-];
-
-export const TRENDING_TABS: SectionTab[] = [
-  { href: "/launchpad/new", label: "🚀 Launch" },
-  { href: "/launchpad", label: "Trending" },
-  { href: "/trade", label: "Trade" },
-];
-
 export const TOKEN_TABS: SectionTab[] = [
   { href: "/buy", label: "Buy $AUTISTIK" },
   { href: "/rewards", label: "Rewards & airdrops" },
