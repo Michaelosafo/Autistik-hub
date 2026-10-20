@@ -1830,3 +1830,14 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .sx-ca input::placeholder{color:#8F84AA;font-family:var(--f-body)}
 .sx-ca-note{display:flex;align-items:center;gap:6px;font-size:.78em;font-weight:800;color:#B8ADD2;flex-basis:100%;padding-left:28px}
 .sx-ca.ok .sx-ca-note{color:#31D0AA} .sx-ca.bad .sx-ca-note{color:#ED4B9E}
+
+/* Phone bar in the App: 7 slots, Swap is the big gold button in the middle, ⋯ opens everything else. */
+@media (max-width:900px){
+  .ax-tabs{grid-template-columns:repeat(7,1fr);align-items:end}
+  .ax-tabs a.main{position:relative;top:-14px;color:#191326}
+  .ax-tabs a.main svg{width:28px;height:28px;padding:12px;box-sizing:content-box;border-radius:50%;background:linear-gradient(135deg,#FFD84D,#F0B90B 45%,#E8A400);box-shadow:0 6px 18px rgba(240,185,11,.35);color:#191326}
+  .ax-tabs a.main span{color:#F4EEFF;margin-top:2px}
+  .ax-tabs a.main[aria-current=page] span{color:var(--gold,#F0B90B)}
+  .ax-tabs .dots span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+  .ax-tabs .dots svg{width:26px;height:26px}
+}
