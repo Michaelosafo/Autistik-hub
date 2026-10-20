@@ -35,7 +35,7 @@ export default async function NewLaunchPage() {
         </div>
       ) : (
         <>
-          {!access.public && <div className="notice warn">🔒 Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Set <span className="mono">LAUNCH_PUBLIC=1</span> in Vercel to open it to all.</div>}
+          {!access.public && <div className="notice warn">🔒 Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Remove <span className="mono">LAUNCH_PUBLIC=0</span> in Vercel to open it to all.</div>}
           <Launchpad signedIn={!!user} pads={pads} />
           <AddLiquidity pads={pads} />
         </>
