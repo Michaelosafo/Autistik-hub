@@ -1697,3 +1697,16 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .gpt-empty h2{font-size:1.35em}
 .gpt-empty{gap:4px}
 .gpt-starters{margin-top:12px}
+
+/* "Ask the bot" button: sits next to Open App on the front page and in the App's top bar. */
+.lp-launch.bot{background:linear-gradient(135deg,#9B7BFF,#6141D4 50%,#4A2FB8);color:#fff !important;box-shadow:0 8px 26px rgba(97,65,212,.35),0 -3px 0 rgba(0,0,0,.18) inset;padding:8px 16px 8px 8px}
+.lp-bar .lp-launch.bot{margin-left:auto}
+.bot-av{width:30px;height:30px;border-radius:50%;background:radial-gradient(circle at 50% 40%,#1A1E33,#07080F 70%);padding:2px;flex:none}
+.bot-av svg{width:100%;height:100%;display:block}
+.topbar .bot-btn{display:inline-flex;align-items:center;gap:7px;padding:3px 13px 3px 3px;border-radius:999px;background:linear-gradient(135deg,#9B7BFF,#6141D4);color:#fff;font-weight:800;font-size:.84em;text-decoration:none;box-shadow:0 4px 14px rgba(97,65,212,.3)}
+.topbar .bot-btn .bot-av{width:26px;height:26px}
+.topbar .bot-btn:focus-visible,.lp-launch.bot:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
+@media (max-width:440px){ .lp-launch.bot span{display:none} .lp-launch.bot{padding:6px} .lp-bar{gap:10px} }
+.ax-connect.bot{background:linear-gradient(135deg,#9B7BFF,#6141D4 50%,#4A2FB8);color:#fff;text-decoration:none;padding:4px 14px 4px 4px;box-shadow:0 6px 20px rgba(97,65,212,.3),0 -2px 0 rgba(0,0,0,.18) inset}
+.ax-connect.bot .bot-av{width:28px;height:28px}
+@media (max-width:640px){ .ax-connect.bot{padding:4px} }

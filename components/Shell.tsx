@@ -151,6 +151,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
 
         <main>
           <div className="topbar mini">
+            {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
             {path !== "/start" && <Link className="start-btn" href="/start">Start here</Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
             <div className="me-menu" ref={menuRef}>
