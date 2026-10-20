@@ -35,6 +35,7 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
   ] },
 ];
 const BOTTOM: { href: string; name: string; icon: string; match: string[] }[] = [
+  { href: "/", name: "Home", icon: "i-home", match: [] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"] },
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
@@ -79,6 +80,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Link href="/" className="ax-logo" aria-label="AUTISTIK home">
           <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b><small>APP</small>
         </Link>
+        <Link href="/" className="ax-home" aria-label="Home screen"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
             <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)}>
@@ -109,7 +111,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
           ) : (
-            <button type="button" className="ax-connect" onClick={() => pickWallet({ fresh: true })}>Connect Wallet</button>
+            <button type="button" className="ax-connect" onClick={() => pickWallet({ fresh: true })}>Connect<span className="ax-hide-sm">Wallet</span></button>
           )}
         </div>
       </header>
@@ -126,7 +128,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {BOTTOM.map((b) => (
           <Link key={b.href} href={b.href} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
         ))}
-        <button type="button" aria-expanded={more} onClick={() => setMore(!more)}><svg aria-hidden="true"><use href="#i-home" /></svg><span>More</span></button>
+        <button type="button" aria-expanded={more} onClick={() => setMore(!more)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="4" y="4" width="6" height="6" rx="1.5" /><rect x="14" y="4" width="6" height="6" rx="1.5" /><rect x="4" y="14" width="6" height="6" rx="1.5" /><rect x="14" y="14" width="6" height="6" rx="1.5" /></svg><span>More</span></button>
       </nav>
       {more && (
         <div className="ax-sheet" onClick={(e) => e.target === e.currentTarget && setMore(false)}>

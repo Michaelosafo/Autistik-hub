@@ -1633,3 +1633,20 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .lp-fund h2{font-family:var(--f-display);font-size:clamp(1.5em,3vw,2.2em);margin:6px 0 8px}
 .lp-fund p{color:#B8ADD2;max-width:720px}
 .lp-fund .lp-eyebrow{color:#31D0AA}
+/* Smaller Connect buttons, Home button */
+.ax-connect{padding:8px 14px;font-size:.88em;border-radius:12px;white-space:nowrap}
+.ax-chain{padding:6px 10px;font-size:.8em;border-radius:12px}
+.ax-home{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:12px;color:#B8ADD2;text-decoration:none;font-weight:700;font-size:.9em;border:1px solid rgba(255,255,255,.08);margin-left:6px}
+.ax-home:hover{color:#F4EEFF;border-color:rgba(240,185,11,.5)}
+.ax-home svg{width:16px;height:16px}
+.sw-connect{padding:12px;font-size:.95em;border-radius:14px}
+@media (max-width:900px){
+  .ax-home{display:none}
+  .ax-connect{padding:7px 12px;font-size:.82em}
+  .ax-hide-sm{display:none}
+  .ax-tabs{grid-template-columns:repeat(6,1fr)}
+  .ax-tabs a,.ax-tabs button{font-size:.66em}
+  .ax-tabs svg{width:20px;height:20px}
+}
+.ax-connect:not(.on){gap:5px}
+.sw-connect{padding:10px;font-size:.9em;border-radius:12px}
