@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { WCHAIN_LIST } from "@/lib/wallet-chains";
+import { XCHAINS } from "@/lib/bridge-chains";
 import WalletApp from "./WalletApp";
 import { currentWallet, disconnectWallet, pickWallet, restoreWallet } from "@/lib/connect";
 import StakeApp from "@/components/stake/StakeApp";
@@ -42,8 +43,11 @@ export default function BrowserWallet({ start, app }: { start: Start; app?: "wal
     try { await p.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] }); }
     catch (e: any) {
       const c = WCHAIN_LIST.find((x) => x.chainId === chainId);
-      if (e?.code !== 4902 || !c) throw e;
-      await p.request({ method: "wallet_addEthereumChain", params: [{ chainId: hex, chainName: c.name, nativeCurrency: { name: c.native.name, symbol: c.native.symbol, decimals: 18 }, rpcUrls: [c.rpc], blockExplorerUrls: [c.explorer] }] });
+      const x = XCHAINS[chainId];
+      if (e?.code !== 4902 || (!c && !x)) throw e;
+      const add = c ? { chainName: c.name, nativeCurrency: { name: c.native.name, symbol: c.native.symbol, decimals: 18 }, rpcUrls: [c.rpc], blockExplorerUrls: [c.explorer] }
+        : { chainName: x.name, nativeCurrency: { name: x.native.symbol, symbol: x.native.symbol, decimals: x.native.decimals }, rpcUrls: [x.rpc], blockExplorerUrls: [x.explorer] };
+      await p.request({ method: "wallet_addEthereumChain", params: [{ chainId: hex, ...add }] });
     }
   }
 

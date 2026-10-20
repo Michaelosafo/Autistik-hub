@@ -3,8 +3,9 @@ import { useState } from "react";
 import { PrivyProvider, useConnectWallet, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useExportWallet as useSolExport, useSignTransaction, useWallets as useSolWallets } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
-import { arbitrum, base, bsc, mainnet } from "viem/chains";
+import { bsc } from "viem/chains";
 import { WCHAINS } from "@/lib/wallet-chains";
+import { XCHAIN_LIST } from "@/lib/bridge-chains";
 import { WALLETCONNECT_ID } from "@/lib/connect";
 import WalletApp from "./WalletApp";
 import StakeApp from "@/components/stake/StakeApp";
@@ -32,7 +33,8 @@ export default function PrivyWallet({ appId, start, app }: { appId: string; star
       },
       ...(WALLETCONNECT_ID ? { walletConnectCloudProjectId: WALLETCONNECT_ID } : {}),
       embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, solana: { createOnLogin: "users-without-wallets" }, showWalletUIs: true },
-      supportedChains: [bsc, base, mainnet, arbitrum],
+      // Every network the swap reaches, so the wallet can switch to it.
+      supportedChains: XCHAIN_LIST.filter((c) => c.viem).map((c) => c.viem),
       defaultChain: bsc,
       solana: { rpcs: { "solana:mainnet": { rpc: createSolanaRpc(SOL_RPC), rpcSubscriptions: createSolanaRpcSubscriptions(SOL_RPC.replace(/^http/, "ws")), blockExplorerUrl: "https://solscan.io" } } },
     }}>

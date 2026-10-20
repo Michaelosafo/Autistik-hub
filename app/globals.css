@@ -1717,3 +1717,106 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .view-more>summary::after{content:"▾";transition:transform .15s}
 .view-more[open]>summary::after{transform:rotate(180deg)}
 .view-more[open]>summary{margin-bottom:14px}
+
+/* ===================== Swap anywhere: the AUTISTIK swap, across every network ===================== */
+.sw{--tx-p:#14111f;--tx-p2:#100e18;--tx-line:#2a2537;--tx-ink:#F4EEFF;--tx-dim:#B8ADD2;--tx-acc:#F0B90B;--tx-buy:#0ECB81;--tx-sell:#F6465D;
+  --sx-spec:linear-gradient(90deg,#E8453C,#F39A2B,#F5C935,#3DB66A,#2F8FE0,#7B55E0)}
+.sw-card{position:relative;max-width:480px;border-radius:30px !important;
+  background:linear-gradient(#17141f,#17141f) padding-box,linear-gradient(135deg,#E8453C,#F39A2B 20%,#F5C935 38%,#3DB66A 56%,#2F8FE0 76%,#7B55E0) border-box !important;
+  border:1.5px solid transparent !important;box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 90px rgba(123,85,224,.16),0 0 60px rgba(245,201,53,.06)}
+.sw-card::before{content:"";position:absolute;inset:-1px -1px auto;height:140px;border-radius:30px 30px 0 0;pointer-events:none;
+  background:radial-gradient(60% 100% at 50% 0%,rgba(123,85,224,.18),transparent 70%)}
+.sw-card>*{position:relative}
+.sw-head h1{display:flex;gap:.3em;align-items:baseline;background:none;color:#F4EEFF;-webkit-background-clip:initial;background-clip:initial;font-size:1.45em;letter-spacing:-.01em}
+.sw-head h1 span{background:var(--sx-spec);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sw-badges{margin-top:8px}
+.sw-badges span.v{background:rgba(123,85,224,.16);color:#B9A6FF}
+
+/* From network ⇄ To network */
+.sx-bar{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:8px;position:relative}
+.sx-bar::before{content:"";position:absolute;left:20%;right:20%;top:50%;height:2px;border-radius:2px;background:var(--sx-spec);opacity:.25}
+.sx-bar.cross::before{opacity:1;height:3px;
+  -webkit-mask:repeating-linear-gradient(90deg,#000 0 8px,transparent 8px 14px);mask:repeating-linear-gradient(90deg,#000 0 8px,transparent 8px 14px);animation:sxFlow 1.2s linear infinite}
+@keyframes sxFlow{to{-webkit-mask-position:14px 0;mask-position:14px 0}}
+.sx-net{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:4px;min-width:0;padding:10px 12px;border-radius:18px;background:#100e18;border:1px solid #2a2537;position:relative;z-index:1;transition:border-color .15s,transform .15s}
+.sx-net:hover,.sx-net:focus-visible{border-color:rgba(245,201,53,.55)}
+.sx-net:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sx-net small{font-size:.68em;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8F84AA}
+.sx-net-in{display:flex;align-items:center;gap:8px;min-width:0}
+.sx-net-in b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#F4EEFF}
+.sx-net-in .tx-caret{margin-left:auto;color:#8F84AA}
+.sx-chain-logo{flex:none;border-radius:50%;object-fit:cover;background:#2a2537}
+.sx-chain-logo.ph{display:inline-flex;align-items:center;justify-content:center;color:#100e18;font-weight:900;font-family:var(--f-display)}
+.sx-swapnets{all:unset;cursor:pointer;z-index:1;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#F4EEFF;
+  background:linear-gradient(#211c2e,#211c2e) padding-box,var(--sx-spec) border-box;border:2px solid transparent;transition:transform .25s}
+.sx-swapnets:hover{transform:rotate(180deg)}
+.sx-swapnets:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sx-swapnets svg{width:18px;height:18px}
+.sx-mode{display:flex;align-items:center;justify-content:center;gap:8px;font-size:.78em;font-weight:700;color:#B8ADD2;margin:-2px 0 2px}
+.sx-arc{font-style:normal;font-size:1.5em;line-height:1;font-weight:900;background:var(--sx-spec);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* The two coin fields */
+.sw .tx-field{border-radius:20px;padding:12px 14px;gap:6px;background:#100e18;border-color:#2a2537}
+.sw .tx-field:focus-within{border-color:rgba(245,201,53,.6);box-shadow:0 0 0 3px rgba(245,201,53,.08)}
+.sw .tx-field-top{font-size:.78em;color:#B8ADD2}
+.sw .tx-field input,.sw .tx-out{font-size:1.6em;font-family:var(--f-display);font-weight:600;letter-spacing:-.01em;color:#F4EEFF}
+.sw .tx-field input::placeholder{color:#4d4563}
+.sw .aw-pick{background:#211c2e;border-color:#3a3350;color:#F4EEFF;padding:6px 12px 6px 6px}
+.sw .aw-pick:hover{border-color:rgba(245,201,53,.55)}
+.sw .tx-parts button{border-radius:10px;border-color:#2a2537;color:#B8ADD2}
+.sw .tx-parts button:hover{border-color:#F5C935;color:#F4EEFF}
+.sw .tx-cta{border-radius:18px;padding:15px;font-size:1.02em;position:relative;overflow:hidden;color:#191326;
+  background:linear-gradient(135deg,#FFD84D,#F0B90B 45%,#E8A400);box-shadow:0 8px 26px rgba(240,185,11,.22),0 -3px 0 rgba(0,0,0,.18) inset}
+.sw .tx-cta.sx-cta:not(:disabled)::after{content:"";position:absolute;inset:auto 0 0;height:3px;background:var(--sx-spec)}
+.sw .aw-details{font-size:.85em} .sw .aw-details span:first-child{color:#B8ADD2}
+.sw .aw-review{border-color:rgba(245,201,53,.55);background:#100e18}
+.sx-on{display:flex;align-items:center;gap:6px;font-size:.76em;color:#8F84AA;flex-wrap:wrap}
+.sx-link{all:unset;cursor:pointer;color:#F5C935;font-weight:700}
+.sx-addr{width:100%;box-sizing:border-box;margin-top:4px;background:#17141f;border:1px solid #3a3350;border-radius:12px;padding:9px 10px;color:#F4EEFF;font-family:var(--f-mono);font-size:.85em}
+
+/* The route LI.FI found */
+.sx-route{border-radius:18px;padding:12px 14px;background:#100e18;border:1px solid #2a2537;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden}
+.sx-route::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(#E8453C,#F5C935,#3DB66A,#2F8FE0,#7B55E0)}
+.sx-route-head{display:flex;align-items:center;gap:8px;font-size:.88em}
+.sx-route-head img{border-radius:4px}
+.sx-route-tag{font-size:.72em;font-weight:800;padding:3px 8px;border-radius:99px;background:rgba(61,182,106,.15);color:#31D0AA}
+.sx-time{font-size:.85em;color:#B8ADD2;font-weight:700}
+.sx-hops{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px;font-size:.74em}
+.sx-hops li{padding:3px 9px;border-radius:99px;background:#211c2e;color:#B8ADD2}
+.sx-hops li.x{background:rgba(123,85,224,.18);color:#C9B9FF}
+.sx-hops li+li::before{content:"→";margin-right:6px;color:#5f5677}
+
+/* Following the coins across */
+.sx-track{border-radius:18px;padding:14px;background:#100e18;border:1px solid #2a2537;font-size:.9em;display:flex;flex-direction:column;gap:8px}
+.sx-track.ok{border-color:rgba(49,208,170,.5)} .sx-track.bad{border-color:rgba(237,75,158,.5)}
+.sx-track ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.sx-track li{display:flex;align-items:center;gap:10px;color:#8F84AA}
+.sx-track li span{width:12px;height:12px;border-radius:50%;border:2px solid #3a3350;flex:none}
+.sx-track li.done{color:#F4EEFF} .sx-track li.done span{background:#31D0AA;border-color:#31D0AA}
+.sx-track li.now{color:#F4EEFF} .sx-track li.now span{border-color:#F5C935;animation:sxPulse 1.2s ease-in-out infinite}
+.sx-track li.bad{color:#ED4B9E} .sx-track li.bad span{background:#ED4B9E;border-color:#ED4B9E}
+@keyframes sxPulse{50%{box-shadow:0 0 0 5px rgba(245,201,53,.18)}}
+.sx-track a{color:#F5C935;font-weight:700;text-decoration:none}
+.sx-track p{margin:0;color:#B8ADD2}
+
+/* Network sheet */
+.sx-sheet{background:#17141f !important;color:#F4EEFF}
+.sx-sheet input{background:#100e18;border:1px solid #3a3350;color:#F4EEFF;border-radius:12px;padding:10px}
+.sx-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;overflow:auto;padding-bottom:4px}
+.sx-grid-item{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:14px;background:#100e18;border:1px solid #2a2537;font-size:.8em;font-weight:700;text-align:center}
+.sx-grid-item span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sx-grid-item:hover,.sx-grid-item:focus-visible{border-color:rgba(245,201,53,.55)}
+.sx-grid-item.on{border-color:#F5C935;background:rgba(245,201,53,.08)}
+.sx-grid-item:disabled{opacity:.4;cursor:not-allowed}
+@media (min-width:520px){ .sx-grid{grid-template-columns:repeat(4,minmax(0,1fr))} }
+@media (max-width:420px){
+  .sw-card{padding:14px;border-radius:24px !important}
+  .sx-net{padding:8px 10px}
+  .sx-net-in{gap:6px} .sx-net-in b{font-size:.92em}
+  .sw .tx-field input,.sw .tx-out{font-size:1.35em}
+}
+:root[data-calm="on"] .sx-bar.cross::before,:root[data-calm="on"] .sx-track li.now span{animation:none}
+@media (prefers-reduced-motion:reduce){ .sx-bar.cross::before,.sx-track li.now span{animation:none} .sx-swapnets:hover{transform:none} }
+.sw .tx-dim{color:#4d4563}
+.sw-pre .sw-flip{margin:-14px auto}
+.sw .aw-review .row{flex-wrap:nowrap}
