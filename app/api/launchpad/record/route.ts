@@ -2,10 +2,12 @@ import { rateLimit } from "@/lib/ratelimit";
 import { logActivity } from "@/lib/activity";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
-import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, isSolana, type ChainKey } from "@/lib/launchpad";
+import { SOL_ADDR, verifyLaunch } from "@/lib/solana-launch";
 import { padOn } from "@/lib/launchpad-server";
 import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { launchAccess } from "@/lib/admin";
 import { isAChain, scanToken } from "@/lib/analytics";
 
 export const runtime = "nodejs";
@@ -15,10 +17,12 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "launch-record", 20, 600);
   if (slow) return slow;
+  if (!(await launchAccess()).allowed) return json({ error: "The Launch Pad is coming soon." }, 403);
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");
   if (!chain) return json({ error: "Unknown chain." }, 400);
+  if (isSolana(chain)) return recordSolana(body);
   const pad = await padOn(chain.key);
   if (!pad) return json({ error: `${chain.name} launches aren't open yet.` }, 400);
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
@@ -73,5 +77,32 @@ export async function POST(req: Request) {
   // Analytics follows every token launched here: its top wallets and the creator as the dev.
   if (isAChain(chain.key)) await scanToken(chain.key, row.token, { dev: row.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chain.key}/${row.token}`);
+  return json({ launch: row });
+}
+
+/** Account that launched it: only when the account's linked wallet is the token's creator. */
+async function ownerOf(creator: string, sameCase: boolean) {
+  const { data: { user } } = await supabaseServer().auth.getUser();
+  if (!user) return null;
+  const { data: w } = await supabaseService().from("wallets").select("address").eq("user_id", user.id);
+  return (w || []).some((x: any) => (sameCase ? String(x.address) === creator : String(x.address).toLowerCase() === creator.toLowerCase())) ? user.id : null;
+}
+
+// Solana: the token (fixed supply, no freeze), its name and ticker, and its Raydium pool are all read from the chain.
+async function recordSolana(body: any) {
+  const mint = String(body?.token || ""), pool = String(body?.pair || ""), sig = String(body?.txHash || "");
+  if (!SOL_ADDR.test(mint) || !SOL_ADDR.test(pool) || !/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(sig)) return json({ error: "Missing the token, pool or transaction." }, 400);
+  let v;
+  try { v = await verifyLaunch(mint, pool); } catch { return json({ error: "Couldn't reach Solana. Try again in a minute." }, 502); }
+  if ("error" in v) return json({ error: v.error }, 400);
+  const owner = await ownerOf(v.creator, true);
+  const row = {
+    chain: "solana", token: mint, pair: pool, creator: v.creator, name: v.name.slice(0, 64), symbol: v.symbol.slice(0, 24),
+    supply: v.supply, tx_hash: sig, lp_lock: "burn", lp_unlock_at: null, user_id: owner,
+  };
+  const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
+  if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
+  if (isAChain("solana")) await scanToken("solana", mint, { dev: v.creator, userId: owner }).catch(() => null);
+  logActivity(owner, "launch", `Launched ${row.symbol || mint} on Solana`, `/launchpad/solana/${mint}`);
   return json({ launch: row });
 }

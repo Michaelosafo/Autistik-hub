@@ -16,3 +16,13 @@ export async function adminState(): Promise<{ owner: boolean; admin: boolean }> 
     return { owner: false, admin: false };
   }
 }
+
+/**
+ * Who can use the Launch Pad (launching and adding liquidity). While LAUNCH_PUBLIC isn't "1" it's in test mode:
+ * only the owner, signed in with the owner's email, can use it, and everyone else sees "coming soon".
+ * Set LAUNCH_PUBLIC=1 in Vercel to open it to everyone.
+ */
+export async function launchAccess(): Promise<{ public: boolean; allowed: boolean }> {
+  if (process.env.LAUNCH_PUBLIC === "1") return { public: true, allowed: true };
+  return { public: false, allowed: (await adminState()).owner };
+}

@@ -1,7 +1,7 @@
 import { rateLimit } from "@/lib/ratelimit";
 import { createPublicClient, getAddress, http, isAddress } from "viem";
 import { json } from "@/lib/ai";
-import { CHAINS, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, isSolana, type ChainKey } from "@/lib/launchpad";
 import { lookupToken } from "@/lib/market";
 import { supabaseService } from "@/lib/supabase/server";
 import { TREASURY, TRENDING_HOURS, TRENDING_USD, bnbPriceUsd, weiFor } from "@/lib/trending";
@@ -26,9 +26,10 @@ export async function POST(req: Request) {
   const tokenIn = String(body?.token || "");
   const txHash = String(body?.txHash || "").toLowerCase();
   if (!chain) return json({ error: "Pick the chain your token is on." }, 400);
-  if (!isAddress(tokenIn)) return json({ error: "That isn't a token address." }, 400);
+  const sol = isSolana(chain);
+  if (!(sol ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(tokenIn) : isAddress(tokenIn))) return json({ error: "That isn't a token address." }, 400);
   if (!/^0x[0-9a-f]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
-  const token = getAddress(tokenIn);
+  const token = sol ? tokenIn : getAddress(tokenIn);
 
   const sb = supabaseService();
   const { data: seen } = await sb.from("launch_promotions").select("token,ends_at").eq("tx_hash", txHash).maybeSingle();

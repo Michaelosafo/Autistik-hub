@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
-import { AI_LAUNCH_SESSIONS, CHAINS, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
+import { SolanaLaunch } from "@/components/SolanaLaunch";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, CHAINS, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
@@ -100,7 +101,7 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
   useEffect(() => {
     setFee(null); setMinLiq(null);
     const c = plan && CHAINS[plan.chain];
-    if (!c || !isLive(c, pads)) return;
+    if (!c || isSolana(c) || !isLive(c, pads)) return;
     readLimits(createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any, pads[c.key]!)
       .then(({ fee, minLiquidity, maxWhitelistNative }) => { setFee(fee); setMinLiq(minLiquidity); setMaxWl(maxWhitelistNative); }).catch(() => {});
   }, [plan?.chain]);
@@ -283,7 +284,7 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
             <div className="card stack">
               <h3>🚀 {plan?.symbol} is live!</h3>
               <p className="muted" style={{ fontSize: ".9em" }}>Liquidity: {plan ? LOCKS[plan.lock].short.toLowerCase() : "locked"}. DexScreener usually shows the pair within a few minutes of the first trade.</p>
-              <StartTrading c={c} token={done.token} />
+              {!isSolana(c) && <StartTrading c={c} token={done.token} />}
               <div className="field"><span>Token address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{done.token}</span></div>
               <div className="row" style={{ gap: 6 }}>
                 <a className="btn small" href={dexscreenerUrl(c, done.pair, done.token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
@@ -294,6 +295,24 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
               {done.listed
                 ? <Link className="btn primary" href={`/launchpad/${c.key}/${done.token}`}>Open token page &amp; make it trend 🔥</Link>
                 : <span className="muted" style={{ fontSize: ".85em" }}>Your token is live, but we couldn&apos;t add it to the Hub list.</span>}
+            </div>
+          ) : plan && c && isSolana(c) ? (
+            <div className="card stack" id="launch-plan">
+              <h3>Launch plan</h3>
+              <table><tbody>
+                <tr><th>Chain</th><td>{c.name} · {c.dex}</td></tr>
+                <tr><th>Token</th><td>{plan.name} (${plan.symbol})</td></tr>
+                <tr><th>Supply</th><td className="num">{fmt(plan.supply)} · fixed: minting and freezing switched off</td></tr>
+                <tr><th>You keep</th><td className="num">{plan.creatorPercent}% · {creatorTokens.toLocaleString("en-US")}</td></tr>
+                <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {plan.liquidity} SOL</td></tr>
+                <tr><th>Liquidity</th><td>LP tokens burned forever</td></tr>
+                <tr><th>Tax</th><td>No tax</td></tr>
+                <tr><th>Trading</th><td>Opens as soon as the pool exists</td></tr>
+                <tr><th>Fees</th><td>About {SOL_POOL_COST} SOL: Raydium&apos;s pool fee (≈0.15 SOL) plus network fees</td></tr>
+              </tbody></table>
+              <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS.burn.explain} You sign three times: the token, the pool, then the burn. Token prices can go to zero.</div>
+              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand the liquidity is burned forever and I can&apos;t take it back.</span></label>
+              <SolanaLaunch plan={plan} agree={agree} onDone={(d) => { setDone(d); say(`${plan.symbol} is live. Congratulations!`); }} />
             </div>
           ) : plan && c ? (
             <div className="card stack" id="launch-plan">
@@ -345,12 +364,13 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
   const live = liveChains(pads);
   const [f, setF] = useState({
     chain: (live[0]?.key ?? "bsc") as LaunchPlan["chain"], name: "", symbol: "", supply: "1000000000", creatorPercent: "5",
-    liquidity: live[0]?.suggestedLiquidity ?? "0.5", lock: "burn" as LiquidityLock, description: "", website: "", x: "", telegram: "",
+    liquidity: "", lock: "burn" as LiquidityLock, description: "", website: "", x: "", telegram: "",
     buyTax: "0", sellTax: "0", taxWallet: "", wl1: "", wl2: "", wl3: "", devBuy: "0",
   });
   const [err, setErr] = useState("");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const coin = CHAINS[f.chain]?.coin ?? "BNB";
+  const sol = isSolana(CHAINS[f.chain]);
 
   function review(e: React.FormEvent) {
     e.preventDefault();
@@ -367,7 +387,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
       <div><b>⚡ Quick launch</b><p className="muted" style={{ fontSize: ".88em" }}>Fill in the details, review your plan, then sign once in your wallet.</p></div>
       <div className="form-grid">
         <label className="field"><span>Chain</span>
-          <select value={f.chain} onChange={(e) => { const c = CHAINS[e.target.value as LaunchPlan["chain"]]; setF({ ...f, chain: c.key, liquidity: c.suggestedLiquidity }); }}>
+          <select value={f.chain} onChange={(e) => { const c = CHAINS[e.target.value as LaunchPlan["chain"]]; setF({ ...f, chain: c.key }); }}>
             {live.map((c) => <option key={c.key} value={c.key}>{c.name} · {c.dex}</option>)}
           </select>
         </label>
@@ -375,8 +395,9 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
         <label className="field"><span>Ticker</span><input value={f.symbol} onChange={set("symbol")} maxLength={13} placeholder="e.g. OTTER" required /></label>
         <label className="field"><span>Total supply</span><input value={f.supply} onChange={set("supply")} inputMode="numeric" required /></label>
         <label className="field"><span>Your free share (0–20%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
-        <label className="field"><span>Liquidity ({coin}, incl. ≈$3 launch contribution)</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" required /></label>
+        <label className="field"><span>Liquidity ({coin}{sol ? "" : ", incl. ≈$3 launch contribution"})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" placeholder={`Any amount, e.g. ${CHAINS[f.chain]?.suggestedLiquidity ?? "0.1"}`} required /></label>
       </div>
+      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens burned forever. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool.</div> : <>
       <fieldset className="stack" style={{ gap: 8, border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px" }}>
         <legend style={{ padding: "0 6px" }}><b>Tax</b> <span className="muted" style={{ fontSize: ".85em" }}>optional, max {MAX_TAX_PERCENT}%, can only be lowered later</span></legend>
         <div className="form-grid">
@@ -403,6 +424,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
           <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
         ))}
       </fieldset>
+      </>}
       <details>
         <summary className="muted">Optional: description and links</summary>
         <div className="form-grid" style={{ marginTop: 8 }}>
