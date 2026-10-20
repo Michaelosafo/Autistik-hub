@@ -37,16 +37,21 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
     api<{ tokens: XToken[] }>("x-tokens", { chain: net.id, q: "" }).then((d) => setXTo(d.tokens.find((t) => t.address !== xNative(net)) || null)).catch(() => {});
   }, []);
   function chooseFrom(n: XChain) {
+    setAuto(false);
     // While both sides are on one network, moving "From" moves both.
     const to = toNet.id === fromNet.id ? n : toNet;
     setFromNet(n); setToNet(to); setXFrom(nativeOf(n)); pickTo(to, n);
     if (to.id === n.id && n.wchain) switchChain(n.wchain);
   }
+  // Once the member picks where to receive, a pasted address no longer moves it.
+  const [toPicked, setToPicked] = useState(false);
   function chooseTo(n: XChain) {
+    setToPicked(true);
     setToNet(n); pickTo(n, fromNet);
-    if (n.id === fromNet.id && n.wchain) switchChain(n.wchain);
+    // Back on the pay network: keep the coin they pay with.
+    if (n.id === fromNet.id && n.wchain) { switchChain(n.wchain); if (xFrom) setFromAddr(xFrom.address); }
   }
-  const flipNets = () => { const f = fromNet, t = toNet, a = xFrom, b = xTo; setFromNet(t); setToNet(f); setXFrom(b); setXTo(a); };
+  const flipNets = () => { const f = fromNet, t = toNet, a = xFrom, b = xTo; setFromNet(t); setToNet(f); setXFrom(b); setXTo(a); setAuto(false); setToPicked(true); };
   const solFromOk = (c: XChain) => (c.kind === "solana" && signer.mode === "browser" ? "Solana needs the AUTISTIK wallet" : null);
 
   const [chainKey, setChainKey] = useState<WChainKey>(first.wchain || "bsc");
@@ -94,9 +99,13 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   }
   const flip = () => { const f = fromAddr; setFromAddr(toAddr); setToAddr(f); };
 
-  // Paste a coin's contract address: the swap finds its network and sets it up as "network's own coin → that coin".
+  // Paste the contract address of the coin to pay with: the swap finds its network and fills in the "pay" side.
+  // The member picks where to receive (until then it is the same network, getting its own coin).
   const [ca, setCa] = useState(""); const [finding, setFinding] = useState(false); const [found, setFound] = useState<{ ok: boolean; text: string } | null>(null);
+  const [auto, setAuto] = useState(false);
   const caSeq = useRef(0);
+  const toPickedRef = useRef(toPicked); toPickedRef.current = toPicked;
+  const toNetRef = useRef(toNet); toNetRef.current = toNet;
   const detect = useCallback(async (raw: string) => {
     const a = raw.trim();
     setFound(null);
@@ -106,9 +115,11 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
       const d = await api<{ chain: number; token: XToken }>("x-detect", { address: a });
       if (id !== caSeq.current) return;
       const net = XCHAINS[d.chain];
-      setFromNet(net); setToNet(net); setXFrom(nativeOf(net)); setXTo(d.token);
-      if (net.wchain) { switchChain(net.wchain); setToAddr(d.token.address); }
-      setFound({ ok: true, text: `${d.token.symbol} on ${net.name}` });
+      const to = toPickedRef.current ? toNetRef.current : net;
+      setFromNet(net); setXFrom(d.token); setAuto(true);
+      setToNet(to); setXTo(nativeOf(to));
+      if (to.id === net.id && net.wchain) { switchChain(net.wchain); setFromAddr(d.token.address); setToAddr(WCHAINS[net.wchain].native.address); }
+      setFound({ ok: true, text: `Paying with ${d.token.symbol} on ${net.name}` });
     } catch (e: any) { if (id === caSeq.current) setFound({ ok: false, text: e.message }); }
     if (id === caSeq.current) setFinding(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -126,14 +137,14 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
 
         <label className={"sx-ca" + (found ? (found.ok ? " ok" : " bad") : "")}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2V5a1 1 0 0 1 1-1zm0 2v1h6V6z" fill="currentColor" /></svg>
-          <input value={ca} onChange={(e) => { setCa(e.target.value); detect(e.target.value); }} placeholder="Paste any contract address (CA)" spellCheck={false} autoComplete="off" aria-label="Paste a coin's contract address" />
+          <input value={ca} onChange={(e) => { setCa(e.target.value); detect(e.target.value); }} placeholder="Paste the contract address (CA) you pay with" spellCheck={false} autoComplete="off" aria-label="Paste the contract address of the coin you pay with" />
           {finding ? <span className="sx-ca-note"><span className="aw-spin" /> Finding…</span> : found ? <span className="sx-ca-note">{found.ok ? "✓ " : ""}{found.text}</span> : null}
         </label>
 
         <div className={"sx-bar" + (local ? "" : " cross")}>
-          <NetPicker label="From" value={fromNet} onPick={chooseFrom} logos={logos} allow={solFromOk} />
+          <NetPicker label="Pay on" value={fromNet} onPick={chooseFrom} logos={logos} allow={solFromOk} tag={auto ? "auto" : undefined} />
           <button type="button" className="sx-swapnets" onClick={flipNets} aria-label="Switch the two networks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-          <NetPicker label="To" value={toNet} onPick={chooseTo} logos={logos} />
+          <NetPicker label="Receive on" value={toNet} onPick={chooseTo} logos={logos} hint={auto && !toPicked ? "choose" : undefined} />
         </div>
         <div className="sx-mode">{local ? <>Same network · best price across every DEX</> : fromNet.id === toNet.id ? <>Best price across every DEX on {fromNet.name}</> : <><i className="sx-arc" aria-hidden="true">∞</i>Cross-chain · bridge and swap in one step</>}</div>
 

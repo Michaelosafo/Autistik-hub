@@ -11,15 +11,17 @@ export function ChainBadge({ c, logo, size = 22 }: { c: XChain; logo?: string; s
 }
 
 /** Pick a network: a searchable grid of every network the swap reaches. */
-export function NetPicker({ label, value, onPick, logos, allow }: {
+export function NetPicker({ label, value, onPick, logos, allow, tag, hint }: {
   label: string; value: XChain; onPick: (c: XChain) => void; logos: Record<number, string>; allow?: (c: XChain) => string | null;
+  /** A small badge by the label, e.g. "auto" when the network came from a pasted address. */
+  tag?: string; hint?: string;
 }) {
   const [open, setOpen] = useState(false); const [q, setQ] = useState("");
   const list = XCHAIN_LIST.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
-      <button type="button" className="sx-net" onClick={() => setOpen(true)} aria-label={`${label}: ${value.name}`}>
-        <small>{label}</small>
+      <button type="button" className={"sx-net" + (hint ? " ask" : "")} onClick={() => setOpen(true)} aria-label={`${label}: ${value.name}`}>
+        <small>{label}{tag && <em className="sx-tag">{tag}</em>}{hint && <em className="sx-hint">{hint}</em>}</small>
         <span className="sx-net-in"><ChainBadge c={value} logo={logos[value.id]} size={24} /><b>{value.name}</b><span aria-hidden="true" className="tx-caret">▾</span></span>
       </button>
       {open && (
