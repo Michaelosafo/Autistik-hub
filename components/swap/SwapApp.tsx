@@ -1,11 +1,11 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WCHAINS, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "@/components/wallet/types";
 import MarketForm from "@/components/wallet/MarketForm";
 import { api, store, TokenPicker, type Holding, type TokenInfo } from "@/components/wallet/util";
-import { XCHAIN_BY_KEY, XCHAIN_LIST, xNative, type XChain, type XToken } from "@/lib/bridge-chains";
+import { XCHAINS, XCHAIN_BY_KEY, XCHAIN_LIST, xNative, type XChain, type XToken } from "@/lib/bridge-chains";
 import BridgeForm from "./BridgeForm";
 import { NetPicker } from "./parts";
 
@@ -94,6 +94,27 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   }
   const flip = () => { const f = fromAddr; setFromAddr(toAddr); setToAddr(f); };
 
+  // Paste a coin's contract address: the swap finds its network and sets it up as "network's own coin → that coin".
+  const [ca, setCa] = useState(""); const [finding, setFinding] = useState(false); const [found, setFound] = useState<{ ok: boolean; text: string } | null>(null);
+  const caSeq = useRef(0);
+  const detect = useCallback(async (raw: string) => {
+    const a = raw.trim();
+    setFound(null);
+    if (!/^0x[0-9a-fA-F]{40}$/.test(a) && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) { setFinding(false); return; }
+    const id = ++caSeq.current; setFinding(true);
+    try {
+      const d = await api<{ chain: number; token: XToken }>("x-detect", { address: a });
+      if (id !== caSeq.current) return;
+      const net = XCHAINS[d.chain];
+      setFromNet(net); setToNet(net); setXFrom(nativeOf(net)); setXTo(d.token);
+      if (net.wchain) { switchChain(net.wchain); setToAddr(d.token.address); }
+      setFound({ ok: true, text: `${d.token.symbol} on ${net.name}` });
+    } catch (e: any) { if (id === caSeq.current) setFound({ ok: false, text: e.message }); }
+    if (id === caSeq.current) setFinding(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // A link with a coin but no network (?buy=0x…): find the network too.
+  useEffect(() => { if (start.buy && !start.chain) detect(start.buy); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="sw">
       <div className="sw-card">
@@ -102,6 +123,12 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
             <div className="sw-badges"><span className="g">Best price</span><span>Your keys</span><span className="v">{XCHAIN_LIST.length} networks</span></div>
           </div>
         </div>
+
+        <label className={"sx-ca" + (found ? (found.ok ? " ok" : " bad") : "")}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2V5a1 1 0 0 1 1-1zm0 2v1h6V6z" fill="currentColor" /></svg>
+          <input value={ca} onChange={(e) => { setCa(e.target.value); detect(e.target.value); }} placeholder="Paste any contract address (CA)" spellCheck={false} autoComplete="off" aria-label="Paste a coin's contract address" />
+          {finding ? <span className="sx-ca-note"><span className="aw-spin" /> Finding…</span> : found ? <span className="sx-ca-note">{found.ok ? "✓ " : ""}{found.text}</span> : null}
+        </label>
 
         <div className={"sx-bar" + (local ? "" : " cross")}>
           <NetPicker label="From" value={fromNet} onPick={chooseFrom} logos={logos} allow={solFromOk} />

@@ -4,9 +4,9 @@
  * address the member picked, checks the route goes through the LI.FI contract, and hands it to their wallet to sign.
  * Server only.
  */
-import { getAddress } from "viem";
+import { createPublicClient, erc20Abi, getAddress, http } from "viem";
 import { FEE_BPS, WCHAINS } from "@/lib/wallet-chains";
-import { XCHAINS, isXNative, lifiDiamond, xNative, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
+import { XCHAINS, XCHAIN_BY_KEY, isXAddress, isXNative, lifiDiamond, xNative, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
 
 const LIFI = process.env.LIFI_API || "https://li.quest/v1";
 /**
@@ -154,4 +154,63 @@ export async function xStatus(txHash: string, fromChain: number, toChain: number
     receiveHash: j?.receiving?.txHash || null, receiveAmount: j?.receiving?.amount ? String(j.receiving.amount) : null,
     link: typeof j?.lifiExplorerLink === "string" && j.lifiExplorerLink.startsWith("https://") ? j.lifiExplorerLink : null,
   };
+}
+
+// ---------------------------------------------------------------- Which network is a pasted address on?
+
+const DEX_API = process.env.DEXSCREENER_API || "https://api.dexscreener.com";
+/** DexScreener's names where they differ from ours. */
+const DEX_ALIAS: Record<string, string> = { gnosischain: "gnosis", seiv2: "sei", flowevm: "flow", hyperliquid: "hyperevm", zksyncera: "zksync", apechain: "apechain" };
+/** Busiest networks first, for the contract check when no pool exists yet. */
+const CODE_ORDER = ["bsc", "base", "ethereum", "arbitrum", "polygon", "optimism", "avalanche", "sonic", "hyperevm", "unichain", "linea", "berachain", "blast", "monad"];
+
+/**
+ * The network a pasted coin address lives on, and the coin itself, so nobody has to pick a network first.
+ * Solana addresses look different from 0x ones. For 0x addresses: DexScreener's pools (the network with the most
+ * liquidity wins), then the networks' own nodes (the first where that address is a contract).
+ */
+export async function xDetect(raw: string): Promise<{ chain: number; token: XToken } | null> {
+  const a = raw.trim();
+  const sol = XCHAIN_BY_KEY.solana;
+  if (!a.startsWith("0x") && isXAddress(sol, a)) {
+    const list = await xTokens(sol, a).catch(() => []);
+    const t = list.find((x) => x.address === a);
+    return t ? { chain: sol.id, token: t } : null;
+  }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(a)) return null;
+  const addr = getAddress(a);
+  let found: XChain | null = null;
+  let hint: Partial<XToken> = {};
+  try {
+    const r = await fetch(`${DEX_API}/latest/dex/tokens/${addr}`, { signal: AbortSignal.timeout(6000), next: { revalidate: 300 } } as any);
+    const pairs: any[] = r.ok ? ((await r.json())?.pairs ?? []) : [];
+    const liq = new Map<string, number>();
+    for (const p of pairs) {
+      if (String(p?.baseToken?.address || "").toLowerCase() !== addr.toLowerCase()) continue;
+      const key = DEX_ALIAS[p?.chainId] || p?.chainId;
+      if (!XCHAIN_BY_KEY[key]) continue;
+      liq.set(key, (liq.get(key) || 0) + num(p?.liquidity?.usd));
+      if (!hint.symbol) hint = { symbol: p.baseToken.symbol, name: p.baseToken.name, logo: p.info?.imageUrl || null, priceUsd: num(p.priceUsd) || null };
+    }
+    const best = [...liq].sort((x, y) => y[1] - x[1])[0];
+    if (best) found = XCHAIN_BY_KEY[best[0]];
+  } catch { /* fall through to the contract check */ }
+  if (!found) {
+    const hits = await Promise.all(CODE_ORDER.map(async (k) => {
+      const c = XCHAIN_BY_KEY[k];
+      try {
+        const code = await (createPublicClient({ chain: c.viem, transport: http(c.rpc, { timeout: 4000 }) }) as any).getCode({ address: addr });
+        return code && code !== "0x" ? c : null;
+      } catch { return null; }
+    }));
+    found = hits.find(Boolean) ?? null;
+  }
+  if (!found) return null;
+  // Name and decimals from the token itself: decimals must be right, or amounts would be wrong.
+  const read = (functionName: "name" | "symbol" | "decimals") => ({ address: addr, abi: erc20Abi, functionName } as const);
+  const pc: any = createPublicClient({ chain: found.viem, transport: http(found.rpc, { timeout: 6000 }) });
+  const res = await pc
+    .multicall({ contracts: [read("name"), read("symbol"), read("decimals")], allowFailure: true }).catch(() => null);
+  if (!res || res[2].status !== "success") return null;
+  return { chain: found.id, token: { address: addr, symbol: String(res[1].result ?? hint.symbol ?? "?"), name: String(res[0].result ?? hint.name ?? ""), decimals: Number(res[2].result), logo: hint.logo ?? null, priceUsd: hint.priceUsd ?? null } };
 }
