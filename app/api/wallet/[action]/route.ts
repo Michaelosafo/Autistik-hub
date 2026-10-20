@@ -5,7 +5,7 @@ import { discover } from "@/lib/momentum-server";
 import { MAX_SLIPPAGE_BPS, WCHAINS, isTokenAddress, isWChain } from "@/lib/wallet-chains";
 import { balances, build, market, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
 import { XCHAINS, isXAddress, isXChain } from "@/lib/bridge-chains";
-import { xChainLogos, xQuote, xStatus, xTokens } from "@/lib/bridge-server";
+import { xChainLogos, xDetect, xQuote, xStatus, xTokens } from "@/lib/bridge-server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const maxDuration = 30;
 
 const LIMITS: Record<string, [number, number]> = {
   token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60],
-  "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60],
+  "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60],
 };
 
 /**
@@ -94,6 +94,10 @@ async function cross(action: string, b: any) {
   try {
     switch (action) {
       case "x-chains": return json({ logos: await xChainLogos() });
+      case "x-detect": {
+        const d = await xDetect(String(b.address || "").slice(0, 64));
+        return d ? json(d) : json({ error: "Couldn't find that coin on any network. Check the address." }, 404);
+      }
       case "x-tokens": {
         if (!isXChain(b.chain)) return json({ error: "Pick a network." }, 400);
         return json({ tokens: await xTokens(XCHAINS[b.chain], String(b.q || "").slice(0, 64)) });

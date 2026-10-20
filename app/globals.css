@@ -1820,6 +1820,16 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .sw .tx-dim{color:#4d4563}
 .sw-pre .sw-flip{margin:-14px auto}
 .sw .aw-review .row{flex-wrap:nowrap}
+/* Paste a contract address */
+.sx-ca{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-radius:18px;background:#100e18;border:1.5px dashed #3a3350;cursor:text}
+.sx-ca:focus-within{border-style:solid;border-color:rgba(245,201,53,.7);box-shadow:0 0 0 3px rgba(245,201,53,.08)}
+.sx-ca.ok{border-style:solid;border-color:rgba(49,208,170,.55)} .sx-ca.bad{border-color:rgba(237,75,158,.55)}
+.sx-ca svg{width:18px;height:18px;color:#F5C935;flex:none}
+.sx-ca input{flex:1;min-width:0;background:transparent;border:0;padding:4px 0;color:#F4EEFF;font:inherit;font-family:var(--f-mono);font-size:.88em}
+.sx-ca input:focus{outline:none}
+.sx-ca input::placeholder{color:#8F84AA;font-family:var(--f-body)}
+.sx-ca-note{display:flex;align-items:center;gap:6px;font-size:.78em;font-weight:800;color:#B8ADD2;flex-basis:100%;padding-left:28px}
+.sx-ca.ok .sx-ca-note{color:#31D0AA} .sx-ca.bad .sx-ca-note{color:#ED4B9E}
 
 /* Phone bar in the App: 7 slots, Swap is the big gold button in the middle, ⋯ opens everything else. */
 @media (max-width:900px){
