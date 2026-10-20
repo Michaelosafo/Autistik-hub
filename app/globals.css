@@ -1690,3 +1690,10 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .gpt .lux-send{width:36px;height:36px;background:#F1F2F8;color:#111;border:0}
 .gpt .lux-chips{max-width:760px;margin:0 auto 6px;justify-content:center;gap:4px;font-size:.78em;opacity:.85}
 @media (max-width:480px){ .gpt .lux-who button:not([aria-selected="true"]) span{display:none} .gpt .lux-who button:not([aria-selected="true"]){padding:3px} }
+/* Answers use the whole width; only the top-left switch shows the bots. */
+.gpt-spacer{flex:1}
+.gpt .msgrow{display:block}
+.gpt .msgrow>.msg.ai{width:100%}
+.gpt-empty h2{font-size:1.35em}
+.gpt-empty{gap:4px}
+.gpt-starters{margin-top:12px}

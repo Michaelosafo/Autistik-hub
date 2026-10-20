@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import AIPass from "@/components/AIPass";
 import Art from "@/components/Art";
-import { COMPANIONS, DRAW_RE, MOODS, isMood, type CompanionId, type Mood } from "@/lib/companions";
+import { COMPANIONS, DRAW_RE, type CompanionId, type Mood } from "@/lib/companions";
 import { cleanSvg } from "@/lib/svg-clean";
 import { useVoice } from "@/lib/voice";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
@@ -30,7 +30,8 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const [draw, setDraw] = useState(false);
   const [passKey, setPassKey] = useState(0);
   const [needPass, setNeedPass] = useState(false);
-  const [mood, setMood] = useState<Mood>("okay");
+  // No mood picker any more: replies use the everyday "okay" tone.
+  const mood: Mood = "okay";
   const [sheet, setSheet] = useState<null | "pass" | "privacy" | "help">(null);
   const ctl = useRef<AbortController | null>(null);
   const box = useRef<HTMLDivElement>(null);
@@ -41,7 +42,6 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
     try {
       const saved = localStorage.getItem("companion") as CompanionId | null;
       if (!start && saved && COMPANIONS[saved]) setWho(saved);
-      const m = localStorage.getItem("mood"); if (isMood(m)) setMood(m);
     } catch {}
   }, []);
   useEffect(() => { try { localStorage.setItem("companion", who); } catch {} }, [who]);
@@ -60,12 +60,6 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
   const lowBattery = () => { try { return Number(localStorage.getItem("battery")) > 0 && Number(localStorage.getItem("battery")) <= 2; } catch { return false; } };
 
   function choose(id: CompanionId) { ctl.current?.abort(); voice.stopSpeaking(); setWho(id); }
-  function pickMood(m: Mood) {
-    if (m === mood) return;
-    setMood(m);
-    try { localStorage.setItem("mood", m); } catch {}
-    if (msgs[who].length) push(who, { kind: "sys", text: `Mood: ${MOODS[m].label}` });
-  }
 
   function voiceNote() {
     if (!signedIn) { push(who, { kind: "sys", text: "Please sign in to talk with Believer and Purity." }); return; }
@@ -169,12 +163,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
               </button>
             ))}
           </div>
-          <label className="gpt-mood" title="How are you feeling? Replies adapt to it.">
-            <span className="sr-only">How are you feeling?</span>
-            <select value={mood} onChange={(e) => pickMood(e.target.value as Mood)}>
-              {(Object.keys(MOODS) as Mood[]).map((k) => <option key={k} value={k}>{MOODS[k].label}</option>)}
-            </select>
-          </label>
+          <span className="gpt-spacer" />
           {voice.canSpeak && (
             <button className="lux-icon" type="button" aria-pressed={voice.autoRead} onClick={() => voice.setRead(!voice.autoRead)}
               title={voice.autoRead ? "Replies are read aloud. Tap to turn off." : "Read replies aloud"}>
@@ -186,9 +175,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         <div className="msgs" ref={box} aria-live="polite">
           {list.length === 0 && (
             <div className="gpt-empty">
-              <Art kind="robot" who={who} mood={mood} className="gpt-bot" />
-              <h2>Hi, I&apos;m <span className="lux-name">{c.name}</span></h2>
-              <p>{MOODS[mood].line}</p>
+              <h2>How can <span className="lux-name">{c.name}</span> help?</h2>
               <div className="gpt-starters">
                 {[
                   ["Plan my day", "Can you help me plan my day in small, easy steps?"],
@@ -205,10 +192,10 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
             if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
             if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
             if (m.kind === "drawing") return (
-              <div key={i} className="msgrow"><Art kind="robot" who={who} mood={mood} className="av" /><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
+              <div key={i} className="msgrow"><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
             );
             if (m.kind === "img") return (
-              <div key={i} className="msgrow"><Art kind="robot" who={who} mood={mood} className="av" />
+              <div key={i} className="msgrow">
                 <div className="msg ai paper"><div className="genwrap">
                   <span>{m.title}</span>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -222,7 +209,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
               </div>
             );
             return (
-              <div key={i} className="msgrow"><Art kind="robot" who={who} mood={mood} className="av" />
+              <div key={i} className="msgrow">
                 {m.pending ? <WritingNote name={c.name} /> : (
                   <Handwritten text={m.text} done={!m.writing} fresh={!!m.born && Date.now() - m.born < 20_000}
                     after={voice.canSpeak && <button className="listen" type="button" onClick={() => voice.speak(m.text)} title="Listen to this reply">▶ Listen</button>} />
