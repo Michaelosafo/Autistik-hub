@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Art from "@/components/Art";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
@@ -95,6 +96,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="ax-right">
           <span className="ax-chain" title="Network"><i />BNB Chain</span>
+          {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
           {acct ? (
             <div className="ax-acct">
               <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>

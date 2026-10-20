@@ -2,7 +2,6 @@ import AdBar from "@/components/AdBar";
 import Guide from "@/components/Guide";
 import Launchpad from "@/components/Launchpad";
 import Link from "next/link";
-import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { currentUser } from "@/lib/supabase/server";
@@ -19,7 +18,6 @@ export default async function NewLaunchPage() {
   const [user, board, pads, { admin }] = await Promise.all([currentUser(), getBoard(60), padSites(), adminState()]);
   return (
     <div className="stack">
-      <SectionCards items={LAUNCH_CARDS} active="/launchpad/new" label="Launch" />
       <AdBar ads={toAds(ads(board))} />
       <ProHero tone="coral" kicker="AUTISTIK · LAUNCH PAD" title="Launch your own token" live={liveChains(pads).length ? "Live" : false}
         text="Free to launch, live in one step: liquidity added and locked, anti-sniper protection and your own first buy. You need $20 of AUTISTIK in your wallet."

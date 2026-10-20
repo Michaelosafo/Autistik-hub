@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Guide from "@/components/Guide";
 import { getAddress } from "viem";
-import SectionCards, { LAUNCH_CARDS } from "@/components/SectionCards";
 import TokenLogo from "@/components/TokenLogo";
 import PinButton from "@/components/PinButton";
 import MomentumAlerts from "@/components/MomentumAlerts";
@@ -36,7 +35,6 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
   return (
     <div className="stack" style={{ maxWidth: 980 }}>
       <AutoRefresh seconds={120} />
-      <SectionCards items={LAUNCH_CARDS} active="/momentum" label="Launch" />
       <ProHero tone="gold" kicker="AUTISTIK · MOMENTUM SCANNER" title="Fast movers" live="Scanning"
         text="Tokens where volume and buying are suddenly much higher than normal, scored for how likely a quick move up (like 2x) is, with a suggested buy range, take-profit steps and a stop."
         stats={[[picks.filter((p) => p.level === "hot").length, "hot now"], [picks.filter((p) => p.level === "building").length, "building"], [record && record.picks ? `${Math.round((record.hit2x / record.picks) * 100)}%` : "–", "hot picks hit 2x (7d)"], ["2 min", "refresh"]]} />
