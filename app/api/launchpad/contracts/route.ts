@@ -20,6 +20,9 @@ const WRAPPED: Partial<Record<ChainKey, string>> = {
   ethereum: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
   base: "0x4200000000000000000000000000000000000006",
   arbitrum: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+  polygon: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+  avalanche: "0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7",
+  optimism: "0x4200000000000000000000000000000000000006",
 };
 const BURNER_ABI = parseAbi(["function router() view returns (address)", "function autistik() view returns (address)"]);
 const PAD_EXTRA = parseAbi(["function deployer() view returns (address)", "function maxWhitelistNative() view returns (uint256)"]);
@@ -30,8 +33,10 @@ export async function GET(req: Request) {
   const chain = new URL(req.url).searchParams.get("chain") as ChainKey;
   const c = CHAINS[chain];
   if (!c || !deployable(c)) return json({ error: "That chain can't have the launchpad yet." }, 400);
-  const [info, locker, markets] = await Promise.all([padInfo(true), lockerOn(chain), WRAPPED[chain] ? getMarkets([{ chain, token: WRAPPED[chain]! }]) : Promise.resolve({} as any)]);
-  const price = markets[String(WRAPPED[chain]).toLowerCase()]?.priceUsd ?? null;
+  // Chains without a listed wrapped coin that use ETH (e.g. Robinhood Chain) take Ethereum's ETH price.
+  const priced: ChainKey | null = WRAPPED[chain] ? chain : c.coin === "ETH" ? "ethereum" : null;
+  const [info, locker, markets] = await Promise.all([padInfo(true), lockerOn(chain as any), priced ? getMarkets([{ chain: priced, token: WRAPPED[priced]! }]) : Promise.resolve({} as any)]);
+  const price = priced ? markets[String(WRAPPED[priced]).toLowerCase()]?.priceUsd ?? null : null;
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
   return json({
     chain, coin: c.coin, priceUsd: price, router: c.router, stablecoin: c.stablecoin, team: TREASURY ?? null, autistik: AUTISTIK,

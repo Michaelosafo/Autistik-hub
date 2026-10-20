@@ -63,7 +63,7 @@ export const PLANS = [
 
 export const ERC20_META_ABI = parseAbi(["function name() view returns (string)", "function symbol() view returns (string)"]);
 
-export type ChainKey = "bsc" | "ethereum" | "base" | "arbitrum" | "robinhood" | "solana";
+export type ChainKey = "bsc" | "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "optimism" | "robinhood" | "solana";
 
 export type LaunchChain = {
   key: ChainKey;
@@ -145,15 +145,58 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     suggestedLiquidity: "0.05",
     swapUrl: (t) => `https://app.uniswap.org/swap?chain=arbitrum&outputCurrency=${t}`,
   },
+  polygon: {
+    key: "polygon",
+    name: "Polygon",
+    dex: "Uniswap",
+    coin: "POL",
+    chainId: 137,
+    rpc: process.env.NEXT_PUBLIC_POLYGON_RPC || "https://polygon-rpc.com",
+    explorer: "https://polygonscan.com",
+    dexscreener: "polygon",
+    router: "0xedf6066a2b290C185783862C7F4776A2C8077AD1",
+    stablecoin: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+    suggestedLiquidity: "100",
+    swapUrl: (t) => `https://app.uniswap.org/swap?chain=polygon&outputCurrency=${t}`,
+  },
+  avalanche: {
+    key: "avalanche",
+    name: "Avalanche",
+    dex: "Uniswap",
+    coin: "AVAX",
+    chainId: 43114,
+    rpc: process.env.NEXT_PUBLIC_AVALANCHE_RPC || "https://api.avax.network/ext/bc/C/rpc",
+    explorer: "https://snowtrace.io",
+    dexscreener: "avalanche",
+    router: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
+    stablecoin: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+    suggestedLiquidity: "3",
+    swapUrl: (t) => `https://app.uniswap.org/swap?chain=avalanche&outputCurrency=${t}`,
+  },
+  optimism: {
+    key: "optimism",
+    name: "Optimism",
+    dex: "Uniswap",
+    coin: "ETH",
+    chainId: 10,
+    rpc: process.env.NEXT_PUBLIC_OPTIMISM_RPC || "https://mainnet.optimism.io",
+    explorer: "https://optimistic.etherscan.io",
+    dexscreener: "optimism",
+    router: "0x4A7b5Da61326A6379179b40d00F57E5bbDC962c2",
+    stablecoin: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
+    suggestedLiquidity: "0.05",
+    swapUrl: (t) => `https://app.uniswap.org/swap?chain=optimism&outputCurrency=${t}`,
+  },
   robinhood: {
     key: "robinhood",
     name: "Robinhood Chain",
     dex: process.env.NEXT_PUBLIC_ROBINHOOD_DEX_NAME || "Robinhood Chain DEX",
     coin: "ETH",
-    chainId: Number(process.env.NEXT_PUBLIC_ROBINHOOD_CHAIN_ID || 0),
-    rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "",
-    explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "").replace(/\/+$/, ""),
-    dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "",
+    // Robinhood Chain mainnet (an Arbitrum chain). Its V2 router and stablecoin come from the settings until one is picked.
+    chainId: Number(process.env.NEXT_PUBLIC_ROBINHOOD_CHAIN_ID || 4663),
+    rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
+    explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "https://robinhoodchain.blockscout.com").replace(/\/+$/, ""),
+    dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "robinhood",
     router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER),
     stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN),
     suggestedLiquidity: "0.1",
