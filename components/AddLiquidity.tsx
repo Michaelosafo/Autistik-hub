@@ -3,7 +3,8 @@ import { pickWallet } from "@/lib/connect";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createPublicClient, createWalletClient, custom, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
-import { CHAINS, LAUNCH_TOKEN_ABI, liveChains, viemChain, type ChainKey, type Pads } from "@/lib/launchpad";
+import { CHAINS, LAUNCH_TOKEN_ABI, isSolana, liveChains, viemChain, type ChainKey, type Pads } from "@/lib/launchpad";
+import { SolAddLiquidity } from "@/components/SolanaLaunch";
 
 const ROUTER_ABI = parseAbi([
   "function factory() view returns (address)",
@@ -39,8 +40,8 @@ const fmt = (v: bigint, d: number) => Number(formatUnits(v, d)).toLocaleString("
  * Type how many tokens to add and the matching coin amount is worked out from the pool's price (or set both when
  * there's no pool yet). The LP tokens come back to the wallet; after that they can be burned or locked.
  */
-export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToken }: { pads: Pads; chain?: ChainKey; token?: string }) {
-  const chains = liveChains(pads).filter((c) => c.router);
+export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToken, pair }: { pads: Pads; chain?: ChainKey; token?: string; pair?: string }) {
+  const chains = liveChains(pads).filter((c) => c.router || isSolana(c));
   const [chain, setChain] = useState<ChainKey>(fixedChain ?? chains[0]?.key ?? "bsc");
   const c = CHAINS[chain];
   const [tokenIn, setTokenIn] = useState(fixedToken ?? "");
@@ -186,12 +187,13 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
   return (
     <div className="card stack" style={{ gap: 10 }}>
       <b>💧 Add liquidity</b>
-      <small className="muted">Put more {c.coin} and tokens into a token&apos;s pool on {c.dex}, straight from your wallet. You get LP tokens back, which you can burn or lock.</small>
+      <small className="muted">Put more {c.coin} and tokens into a token&apos;s pool on {c.dex}, straight from your wallet. You get LP tokens back, which you can burn{isSolana(c) ? "" : " or lock"}.</small>
       {!fixedChain && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           {chains.map((x) => <button key={x.key} type="button" className={"btn small" + (x.key === chain ? " primary" : "")} onClick={() => setChain(x.key)}>{x.name}</button>)}
         </div>
       )}
+      {isSolana(c) ? <SolAddLiquidity key={fixedToken ?? "any"} mint={fixedToken} pool={pair} /> : <>
       {!fixedToken && <input value={tokenIn} onChange={(e) => setTokenIn(e.target.value)} placeholder={`Token address on ${c.name} (0x…)`} spellCheck={false} aria-label="Token address" />}
       {pool && (
         <>
@@ -220,6 +222,7 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
         </div>
       )}
       {msg && <small className="muted">{msg}</small>}
+      </>}
     </div>
   );
 }

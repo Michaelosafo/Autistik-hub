@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { supabaseService } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
-import { AI_LAUNCH_SESSIONS, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, type Pads } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, type Pads } from "@/lib/launchpad";
 import { padSites } from "@/lib/launchpad-server";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
@@ -18,12 +18,12 @@ const PREPARE_LAUNCH: Anthropic.Tool = {
     additionalProperties: false,
     required: ["chain", "name", "symbol", "supply", "creatorPercent", "liquidity", "lock", "description", "website", "x", "telegram"],
     properties: {
-      chain: { type: "string", enum: ["bsc", "ethereum", "robinhood"], description: "bsc = BNB Chain (PancakeSwap), ethereum = Ethereum (Uniswap), robinhood = Robinhood Chain" },
+      chain: { type: "string", enum: Object.keys(CHAINS), description: Object.values(CHAINS).map((c) => `${c.key} = ${c.name} (${c.dex})`).join(", ") },
       name: { type: "string", description: "Token name, 1-32 characters" },
       symbol: { type: "string", description: "Ticker, 1-12 letters or numbers, no $" },
       supply: { type: "string", description: "Total supply in whole tokens, digits only, e.g. 1000000000" },
       creatorPercent: { type: "number", description: "Share of supply sent to the creator's wallet, 0-20" },
-      liquidity: { type: "string", description: "Amount of the chain's coin (BNB or ETH) to add to the pool, e.g. 0.5" },
+      liquidity: { type: "string", description: "Amount of the chain's coin (BNB, ETH or SOL) to add to the pool: any amount the creator chooses" },
       lock: { type: "string", enum: ["6m", "1y", "burn"], description: "What happens to the LP tokens: 6m = locked 6 months, 1y = locked 1 year, burn = sent to the dead address forever" },
       description: { type: "string", description: "Short description, or empty string" },
       website: { type: "string", description: "https link, or empty string" },
@@ -60,14 +60,16 @@ How a launch works (explain when useful, don't lecture):
 Chains:
 ${chainLines}
 
+Solana is different: the token is a standard Solana token with a fixed supply (minting and freezing switched off), the pool is on Raydium, and the LP tokens are always burned (no lock option). There is no tax, whitelist, first buy, Start trading step or $3 contribution on Solana: trading opens as soon as the pool exists. Raydium charges about 0.15 SOL to create the pool, so the creator needs their SOL for the pool plus about ${SOL_POOL_COST} SOL. They sign three times (token, pool, burn) with a Solana wallet like Phantom or Solflare. Supply on Solana can be at most 10,000,000,000,000. For Solana, use lock "burn".
+
 Collect, in this order:
 1. Chain
 2. Token name
 3. Ticker
 4. Total supply (whole tokens; suggest 1,000,000,000 if they don't mind)
 5. How much of the supply they want to keep (0-20%; less looks fairer to buyers)
-6. How much BNB or ETH to put in the pool (suggest around 0.5; more liquidity means steadier prices)
-7. What to do with the liquidity: lock 6 months, lock 1 year, or burn
+6. How much BNB, ETH or SOL to put in the pool. Any amount is fine: don't push a number, just mention that more liquidity means steadier prices and that EVM chains have a small minimum of about $28 including the launch contribution
+7. What to do with the liquidity: lock 6 months, lock 1 year, or burn (Solana: always burned)
 8. Optional: a one-line description, website, X and Telegram links (https links only)
 
 Then show a short summary and ask them to confirm. Only when they confirm, call prepare_launch. After that, tell them to check the plan card, tick the box and press Launch. If they want to change something, ask, then call prepare_launch again with the new plan.
