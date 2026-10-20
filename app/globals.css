@@ -1841,3 +1841,8 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
   .ax-tabs .dots span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
   .ax-tabs .dots svg{width:26px;height:26px}
 }
+.sx-net small{display:flex;align-items:center;gap:6px}
+.sx-tag{font-style:normal;letter-spacing:.04em;padding:1px 6px;border-radius:99px;background:rgba(49,208,170,.15);color:#31D0AA}
+.sx-hint{font-style:normal;letter-spacing:.02em;text-transform:none;color:#F5C935}
+.sx-net.ask{border-color:rgba(245,201,53,.6);box-shadow:0 0 0 3px rgba(245,201,53,.08)}
+.sx-net small{white-space:nowrap}
