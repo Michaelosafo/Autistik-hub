@@ -2,15 +2,6 @@ import Link from "next/link";
 
 export type SectionCard = { href: string; name: string; blurb: string; tone: "coral" | "violet" | "sun" | "teal" | "ink" };
 
-// Launch: make a token, then everything about trading and protecting them.
-export const LAUNCH_CARDS: SectionCard[] = [
-  { href: "/launchpad/new", name: "Launch", blurb: "Make your own token in minutes", tone: "coral" },
-  { href: "/launchpad", name: "Trending", blurb: "What everyone is watching", tone: "violet" },
-  { href: "/momentum", name: "Momentum", blurb: "Fast movers & quick 2x ideas", tone: "sun" },
-  { href: "/lockers", name: "Lockers", blurb: "Lock liquidity & tokens", tone: "teal" },
-  { href: "/perps", name: "Perps", blurb: "Trade long or short", tone: "ink" },
-];
-
 // Chat & Community: talking to Believer and Purity comes first, then the groups and live sessions.
 export const COMMUNITY_CARDS: SectionCard[] = [
   { href: "/companions", name: "Chat", blurb: "Talk with Believer & Purity", tone: "violet" },
