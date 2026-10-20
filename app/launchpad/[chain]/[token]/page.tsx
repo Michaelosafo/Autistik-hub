@@ -13,6 +13,7 @@ import { getMarkets, usd } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
+import VerifySource from "@/components/VerifySource";
 
 export const dynamic = "force-dynamic";
 
@@ -81,6 +82,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
               <a className="btn small" href={dexscreenerUrl(c, launch.pair, token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>
+            {!listed && !sol && <VerifySource chain={c.key} token={token} />}
             {listed ? (
               <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock. Check the contract on the explorer before buying.</p>
             ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK Locker.`}</p>}

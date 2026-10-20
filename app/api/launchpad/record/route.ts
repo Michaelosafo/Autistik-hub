@@ -9,6 +9,7 @@ import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import { isAChain, scanToken } from "@/lib/analytics";
+import { submitVerify } from "@/lib/launch-verify";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -77,6 +78,9 @@ export async function POST(req: Request) {
   // Analytics follows every token launched here: its top wallets and the creator as the dev.
   if (isAChain(chain.key)) await scanToken(chain.key, row.token, { dev: row.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chain.key}/${row.token}`);
+  // Publish the token's source on the explorer so it shows as open source. If the explorer hasn't indexed the
+  // token yet, the Verify button on the token page finishes the job.
+  await submitVerify(chain.key, row.token as `0x${string}`, row.tx_hash as `0x${string}`).catch(() => null);
   return json({ launch: row });
 }
 
