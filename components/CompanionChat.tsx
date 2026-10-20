@@ -20,12 +20,6 @@ type Turn = { role: "user" | "assistant"; content: string };
 // Both speak with a natural male voice: Believer slower and heartfelt, Purity quicker and brighter.
 const VOICES: Record<CompanionId, { rate: number; pitch: number }> = { believer: { rate: 0.92, pitch: 0.95 }, purity: { rate: 1.08, pitch: 1.12 } };
 
-const MOOD_ICONS: Record<Mood, JSX.Element> = {
-  okay: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5c1.8 2 5.2 2 7 0M9 9.5h.01M15 9.5h.01" /></svg>,
-  overwhelmed: <svg viewBox="0 0 24 24"><path d="M7 18h10.5a4 4 0 0 0 .5-8 6 6 0 0 0-11.6 1.5A3.3 3.3 0 0 0 7 18z" /></svg>,
-  motivation: <svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>,
-  chat: <svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" /></svg>,
-};
 
 export default function CompanionChat({ signedIn, start }: { signedIn: boolean; start?: CompanionId }) {
   const [who, setWho] = useState<CompanionId>(start || "believer");
@@ -166,7 +160,7 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
 
   return (
     <div className="kai companions">
-      <div className="card chat lux" data-c={who} data-mood={mood}>
+      <div className="card chat lux gpt" data-c={who} data-mood={mood}>
         <div className="lux-top">
           <div className="lux-who" role="tablist" aria-label="Choose a companion">
             {(Object.keys(COMPANIONS) as CompanionId[]).map((id) => (
@@ -175,7 +169,12 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
               </button>
             ))}
           </div>
-          <span className="lux-online"><i />Assistant online</span>
+          <label className="gpt-mood" title="How are you feeling? Replies adapt to it.">
+            <span className="sr-only">How are you feeling?</span>
+            <select value={mood} onChange={(e) => pickMood(e.target.value as Mood)}>
+              {(Object.keys(MOODS) as Mood[]).map((k) => <option key={k} value={k}>{MOODS[k].label}</option>)}
+            </select>
+          </label>
           {voice.canSpeak && (
             <button className="lux-icon" type="button" aria-pressed={voice.autoRead} onClick={() => voice.setRead(!voice.autoRead)}
               title={voice.autoRead ? "Replies are read aloud. Tap to turn off." : "Read replies aloud"}>
@@ -185,14 +184,23 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
         </div>
 
         <div className="msgs" ref={box} aria-live="polite">
-          <div className="lux-hero" data-small={list.length > 0 ? "1" : undefined}>
-            <div className="lux-ring"><Art kind="robot" who={who} mood={mood} className="lux-bot" /></div>
-            <div className="lux-hello">
+          {list.length === 0 && (
+            <div className="gpt-empty">
+              <Art kind="robot" who={who} mood={mood} className="gpt-bot" />
               <h2>Hi, I&apos;m <span className="lux-name">{c.name}</span></h2>
               <p>{MOODS[mood].line}</p>
-              <span className="lux-here"><i />Always here for you</span>
+              <div className="gpt-starters">
+                {[
+                  ["Plan my day", "Can you help me plan my day in small, easy steps?"],
+                  ["Explain a situation", "Can you help me understand a social situation that confused me?"],
+                  ["I feel overwhelmed", "I feel overwhelmed right now. Can you help me calm down?"],
+                  ["Draw a picture", ""],
+                ].map(([t, q]) => (
+                  <button key={t} type="button" disabled={busy} onClick={() => (q ? send(q) : setDraw(true))}><b>{t}</b></button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           {list.map((m, i) => {
             if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
             if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
@@ -225,13 +233,6 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
           {voice.listening && <div className="msg me listening">🎙️ {voice.heard || "Listening… speak now"}</div>}
         </div>
 
-        <div className="lux-moods" data-compact={list.length > 0 ? "1" : undefined} role="radiogroup" aria-label="How are you feeling?">
-          {(Object.keys(MOODS) as Mood[]).map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={mood === k} data-m={k} onClick={() => pickMood(k)}>
-              {MOOD_ICONS[k]}<span>{MOODS[k].label}</span>
-            </button>
-          ))}
-        </div>
         <form className="lux-composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
           <button className="lux-plus" type="button" aria-pressed={draw} onClick={() => setDraw(!draw)} title={draw ? "Picture mode is on: describe what to draw" : "Make a picture"}>
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg><span className="sr-only">Make a picture</span>

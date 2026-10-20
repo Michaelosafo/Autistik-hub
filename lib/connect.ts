@@ -115,8 +115,9 @@ export async function chooseWalletConnect() {
       const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
       wc = await EthereumProvider.init({
         projectId: WALLETCONNECT_ID,
-        chains: [56],
-        optionalChains: [1, 8453, 42161, 10, 137, 43114, 59144, 130],
+        // Networks are optional, so wallets connect straight away without asking to approve a network;
+        // BNB Chain first, and the right network is only requested when a transaction needs it.
+        optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130],
         showQrModal: true,
         qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
         metadata: { name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`] },
