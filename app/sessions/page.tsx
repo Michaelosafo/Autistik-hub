@@ -2,7 +2,6 @@ import { adminState } from "@/lib/admin";
 import Guide from "@/components/Guide";
 import SessionCard from "@/components/SessionCard";
 import SessionForms from "@/components/SessionForms";
-import SectionCards, { COMMUNITY_CARDS } from "@/components/SectionCards";
 import ProHero from "@/components/ProHero";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -22,7 +21,6 @@ export default async function SessionsPage() {
   }
   return (
     <div className="stack">
-      <SectionCards items={COMMUNITY_CARDS} active="/sessions" label="Chat and community" />
       <ProHero tone="coral" kicker="AUTISTIK · LIVE SESSIONS" title="Talks, Q&amp;As and support circles" live={sessions?.some((s: any) => new Date(s.starts_at).getTime() <= Date.now()) ? "On now" : false}
         text="Hosted by practitioners the AUTISTIK team has checked. Save your seat to earn participation points."
         stats={[[sessions?.length ?? 0, "coming up"], ["Checked", "hosts"], ["+ points", "for every seat"]]} />

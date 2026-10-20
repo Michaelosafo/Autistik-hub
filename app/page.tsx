@@ -55,7 +55,6 @@ export default async function Home() {
           <div className="lp-ctas">
             <Link href="/swap" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
-            <Link href="/community" className="lp-btn ghost">Join the community</Link>
           </div>
         </div>
         <div className="lp-hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>

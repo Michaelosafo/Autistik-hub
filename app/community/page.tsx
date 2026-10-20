@@ -1,7 +1,6 @@
 import Link from "next/link";
 import Guide from "@/components/Guide";
 import Community from "@/components/Community";
-import SectionCards, { COMMUNITY_CARDS } from "@/components/SectionCards";
 import { currentUser } from "@/lib/supabase/server";
 import ProHero from "@/components/ProHero";
 import { GROUPS } from "@/lib/groups";
@@ -13,7 +12,6 @@ export default async function CommunityPage({ searchParams }: { searchParams: { 
   const user = await currentUser();
   return (
     <div className="stack">
-      <SectionCards items={COMMUNITY_CARDS} active="/community" label="Chat and community" />
       <ProHero tone="violet" kicker="AUTISTIK · COMMUNITY" title="Two groups. One community."
         text="Join the groups that fit you, then talk in their channels. You post under your Hub name, never your real name."
         stats={[[GROUPS.length, "groups"], [GROUPS.reduce((n, g) => n + g.channels.length, 0), "channels"], ["Hub names", "never real names"], ["18+", "adults only"]]} />

@@ -14,21 +14,13 @@ import { TOKEN_ADDRESS } from "@/lib/groups";
 
 type NavItem = { href: string; name: string; short?: string; icon: string; railOnly?: boolean; match?: string[]; not?: string[]; children?: { href: string; name: string }[] };
 
-// Each menu item is one section. Sections with several pages show tabs at the top (components/SectionTabs).
+// One flat menu, no dropdowns: each item opens one page. The App's tools (launch, trade, lock…) are behind Open App.
 const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
-  { href: "/start", name: "Start here", icon: "i-learn", railOnly: true },
-  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/trade", "/perps", "/lockers", "/momentum"], children: [
-    { href: "/launchpad/new", name: "Launch a coin" }, { href: "/launchpad", name: "Trending" }, { href: "/momentum", name: "Momentum" }, { href: "/lockers", name: "Lockers" }, { href: "/perps", name: "Perps" },
-  ] },
-  { href: "/analytics", name: "Analytics", short: "Stats", icon: "i-stats" },
+  { href: "/companions", name: "Chat", icon: "i-kai" },
+  { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
+  { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/fund"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet" },
-  { href: "/companions", name: "Chat & Community", short: "Chat", icon: "i-kai", match: ["/companions", "/community", "/sessions"], children: [
-    { href: "/companions", name: "Chat" }, { href: "/community", name: "Groups" }, { href: "/sessions", name: "Live sessions" },
-  ] },
-  { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/fund"], children: [
-    { href: "/buy", name: "Buy $AUTISTIK" }, { href: "/fund", name: "AUTISTIK Fund" },
-  ] },
   { href: "/autism", name: "About autism", icon: "i-learn", railOnly: true },
   { href: "/safety", name: "Safety", icon: "i-safe", railOnly: true },
 ];
@@ -152,7 +144,6 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
         <main>
           <div className="topbar mini">
             {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
-            {path !== "/start" && <Link className="start-btn" href="/start">Start here</Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
             <div className="me-menu" ref={menuRef}>
               <button className="me-btn" type="button" aria-expanded={menu} aria-haspopup="dialog" onClick={openMenu}

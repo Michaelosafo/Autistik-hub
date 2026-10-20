@@ -152,7 +152,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
             <AnalyticsScan signedIn={!!user} chain={chain} token={t.token} label="Refresh" />
           </div>
         </div>
-        <p className="muted" style={{ fontSize: ".85em" }}>👀 Watch this token to get a 🔔 alert when the dev or a top wallet sells. Balances checked {heldFor(t.checked_at) || "just now"} ago.</p>
+        <p className="muted" style={{ fontSize: ".85em" }}>Checked {heldFor(t.checked_at) || "just now"} ago.</p>
         <div className="an-stats">
           <div><span>Top wallets hold</span><b>{pct(topShare)}</b></div>
           <div><span>Sells in 24 h</span><b>{sells24}</b></div>
@@ -175,12 +175,8 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         ))}
       </nav>
 
-      {view === "overview" && <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />}
       {view === "safety" && <BundleCard b={bundle} explorer={c.explorer} token={t.token} />}
       {view === "safety" && <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />}
-      {view === "overview" && <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
-        frames={pro ? await confluence(chain, t.pair, zoneBase, zone) : undefined}
-        whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />}
 
       {view === "overview" && <div className={"card stack verdict " + call.kind}>
         <div className="label">Buy or sell? The read right now</div>
@@ -197,19 +193,38 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
             <small>Sell</small><small>Wait</small><small>Buy</small>
           </div>
         )}
-        <details open>
-          <summary>Why?</summary>
-          <ul className="signals">{call.reasons.map((r, i) => <li key={i} className={r.level}>{r.text}</li>)}</ul>
-        </details>
         <div className="signal-now" aria-label="Signal right now">
           <span className="label">Signal right now</span>
           <span className={"sig " + now.short}>⚡ Day trade: <b>{LABEL[now.short]}</b></span>
           <span className={"sig " + now.long}>📅 Long term: <b>{LABEL[now.long]}</b></span>
           <small className="muted">📌 Pin this token to get an alert the moment these change.</small>
         </div>
-        <TradePlans plans={plans} symbol={t.symbol || "this token"} />
         <p className="fin-note">⚠️ Nothing stated here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Do your own research and never put in more than you can afford to lose.</p>
       </div>}
+
+      {/* Overview shows the quick read above; everything else is one tap away so the page stays short. */}
+      {view === "overview" && (
+        <details className="card view-more">
+          <summary>View more</summary>
+          <div className="stack">
+            <div className="stack" style={{ gap: 6 }}>
+              <h2>Why?</h2>
+              <ul className="signals">{call.reasons.map((r, i) => <li key={i} className={r.level}>{r.text}</li>)}</ul>
+            </div>
+            <ZoneCard z={zone} symbol={t.symbol || "TOKEN"} />
+            <TradePlans plans={plans} symbol={t.symbol || "this token"} />
+            {signals.length > 0 && (
+              <div className="stack" style={{ gap: 6 }}>
+                <h2>What buyers should know</h2>
+                <ul className="signals">{signals.map((s, i) => <li key={i} className={s.level}>{s.text}</li>)}</ul>
+              </div>
+            )}
+            <ProCard pro={pro} chain={chain} token={t.token} explorer={c.explorer} record={record}
+              frames={pro ? await confluence(chain, t.pair, zoneBase, zone) : undefined}
+              whales={pro ? whales((trades || []) as any, Number(t.total_supply) || 0) : undefined} />
+          </div>
+        </details>
+      )}
 
       {view === "chess" && (
         <div className="card stack">
@@ -284,13 +299,6 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         </div>
       </div>}
 
-      {view === "overview" && signals.length > 0 && (
-        <div className="card stack">
-          <h2>What buyers should know</h2>
-          <ul className="signals">{signals.map((s, i) => <li key={i} className={s.level}>{s.text}</li>)}</ul>
-          <p className="muted" style={{ fontSize: ".78em" }}>Worked out automatically from the blockchain. It&apos;s a guide, not financial advice.</p>
-        </div>
-      )}
 
       {view === "safety" && <div className={"card stack dev-card" + (devEvents.length ? " warn" : "")}>
         <h2>Dev wallet</h2>
