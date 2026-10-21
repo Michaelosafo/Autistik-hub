@@ -6,7 +6,7 @@ import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
 import { padOn } from "@/lib/launchpad-server";
 import { getMarkets } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
-import { launchAccess } from "@/lib/admin";
+import { adminState, launchAccess } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,16 +17,20 @@ const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)", "f
 const PERMIT_SECONDS = 5 * 60;
 
 // Checks the wallet holds at least $20 of AUTISTIK on BNB Chain and, if so, signs a short-lived permit
-// that the AutistikLaunchpad contract checks before it creates the token.
+// that the AutistikLaunchpad contract checks before it creates the token. The admin (owner with the 2-step code)
+// gets a permit without holding any AUTISTIK, for as many launches as they like.
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "eligibility", 20, 600);
   if (slow) return slow;
   if (!(await launchAccess()).allowed) return json({ error: "The Launch Pad is coming soon." }, 403);
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return json({ error: "Please sign in first." }, 401);
+  const { admin } = await adminState();
   // Per account too, so one AUTISTIK bag can't be passed around to get permits for many wallets quickly.
-  const perUser = await rateLimit(null, "eligibility-user", 10, 3600, user.id);
-  if (perUser) return perUser;
+  if (!admin) {
+    const perUser = await rateLimit(null, "eligibility-user", 10, 3600, user.id);
+    if (perUser) return perUser;
+  }
 
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
@@ -39,6 +43,7 @@ export async function POST(req: Request) {
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
   // Not set up yet: the contract's eligibilitySigner should also be the zero address, so no check happens.
   if (!key) return json({ checked: false, deadline: "0", signature: "0x" });
+  if (admin) return json({ checked: true, admin: true, ...(await permit(key, pad, chain.chainId, creator)) });
 
   const bsc = createPublicClient({ transport: http(CHAINS.bsc.rpc) });
   let balance: bigint, decimals: number;
@@ -64,12 +69,17 @@ export async function POST(req: Request) {
     }, 403);
   }
 
+  return json({ checked: true, ...(await permit(key, pad, chain.chainId, creator)), holdUsd, needTokens });
+}
+
+/** A one-use permit for `creator` to launch on `pad`, valid for PERMIT_SECONDS. */
+async function permit(key: string, pad: `0x${string}`, chainId: number, creator: `0x${string}`) {
   const deadline = BigInt(Math.floor(Date.now() / 1000) + PERMIT_SECONDS);
   // Must match AutistikLaunchpad.permitHash: keccak256(abi.encode(launchpad, chainId, creator, deadline)).
   const hash = keccak256(encodeAbiParameters(
     [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "uint256" }],
-    [pad, BigInt(chain.chainId), creator, deadline],
+    [pad, BigInt(chainId), creator, deadline],
   ));
   const signature = await privateKeyToAccount(key as `0x${string}`).signMessage({ message: { raw: hash } });
-  return json({ checked: true, deadline: deadline.toString(), signature, holdUsd, needTokens });
+  return { deadline: deadline.toString(), signature };
 }
