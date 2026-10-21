@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from "react";
 /** How long the page takes to open after "Go to site". */
 const OPEN_MS = 800;
 
+/** How many visits get the welcome. After that, the site opens straight away. */
+const SHOW_TIMES = 2;
+
 /**
  * The first thing a visitor sees: Autistik, the AUTISTIK mascot, says hi. "Go to site" (or Escape) opens the page
- * around it. Once per visit (a new tab or a fresh visit shows it again). With calm mode or reduced motion nothing
+ * around it. Shown on a visitor's first SHOW_TIMES visits, once per visit. With calm mode or reduced motion nothing
  * moves and the page appears straight away. The layout's early script hides it before the page paints when it was
  * already shown this visit, so it never flashes.
  */
@@ -16,7 +19,10 @@ export default function Welcome() {
   const go = useRef<HTMLButtonElement>(null);
 
   const open = () => {
-    try { sessionStorage.setItem("welcomed", "1"); } catch {}
+    try {
+      if (sessionStorage.getItem("welcomed") !== "1") localStorage.setItem("welcomes", String(Number(localStorage.getItem("welcomes") || 0) + 1));
+      sessionStorage.setItem("welcomed", "1");
+    } catch {}
     const still = document.documentElement.dataset.calm === "on" || matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (still) { setPhase("gone"); return; }
     setPhase("open");
@@ -25,7 +31,7 @@ export default function Welcome() {
 
   useEffect(() => {
     let seen = false;
-    try { seen = sessionStorage.getItem("welcomed") === "1"; } catch {}
+    try { seen = sessionStorage.getItem("welcomed") === "1" || Number(localStorage.getItem("welcomes") || 0) >= SHOW_TIMES; } catch {}
     if (seen) { setPhase("gone"); return; }
     go.current?.focus();
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") open(); };

@@ -7,7 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "AUTISTIK",
     description: "Autism community and Web3 hub: safe self-custody wallet, coin analytics, launchpad, liquidity locker, groups and live sessions.",
     id: "/",
-    start_url: "/?source=app",
+    // The installed app opens straight on the tools.
+    start_url: "/app?source=app",
     scope: "/",
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],

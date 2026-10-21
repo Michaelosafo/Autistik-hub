@@ -1891,3 +1891,20 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 @keyframes wm-pulse{0%,100%{transform:scale(.8);opacity:.25}50%{transform:scale(1.25);opacity:.5}}
 @keyframes wm-twinkle{0%,100%{transform:scale(.4) rotate(0);opacity:.3}50%{transform:scale(1) rotate(45deg);opacity:1}}
 @media (prefers-reduced-motion:reduce){.welcome{transition:none}}
+
+/* App home: only the tools, big and simple (app/app/page.tsx) */
+.ah{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.ah-title{font-size:clamp(1.3em,4.5vw,1.8em);text-align:center;margin-top:6px}
+.ah-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.ah-tool{--c:var(--violet);--soft:var(--violet-soft);display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:18px 16px;min-height:150px;border-radius:18px;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink);text-decoration:none;box-shadow:0 1px 0 var(--line);transition:transform .12s,border-color .12s,box-shadow .12s}
+.ah-tool:hover,.ah-tool:focus-visible{transform:translateY(-2px);border-color:var(--c);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.ah-tool:active{transform:scale(.98)}
+.ah-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--soft);font-size:28px;line-height:1;margin-bottom:4px}
+.ah-tool b{font-family:var(--f-display);font-size:1.02em;line-height:1.2}
+.ah-tool small{color:var(--muted);font-size:.86em;line-height:1.35}
+.ah-tool.sun{--c:var(--sun);--soft:var(--sun-soft)} .ah-tool.teal{--c:var(--teal);--soft:var(--teal-soft)}
+.ah-tool.coral{--c:var(--coral);--soft:var(--coral-soft)} .ah-tool.orange{--c:var(--orange);--soft:var(--orange-soft)}
+.ah-tool.green{--c:var(--teal);--soft:var(--teal-soft)}
+.ah-note{text-align:center;color:var(--muted);font-size:.88em}
+@media (max-width:520px){.ah-grid{grid-template-columns:1fr 1fr;gap:10px}.ah-tool{min-height:140px;padding:14px 12px}}

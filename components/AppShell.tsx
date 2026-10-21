@@ -8,7 +8,7 @@ import WalletPicker from "@/components/connect/WalletPicker";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
+export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string };
@@ -37,7 +37,7 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
 ];
 // Phone bar: Swap sits in the middle as the big button; everything else is behind the ⋯ button.
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
-  { href: "/", name: "Home", icon: "i-home", match: [] },
+  { href: "/app", name: "Tools", icon: "i-home", match: ["/app"] },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/momentum"] },
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"], main: true },
@@ -80,10 +80,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="ax">
       <header className="ax-bar" ref={bar}>
-        <Link href="/" className="ax-logo" aria-label="AUTISTIK home">
+        <Link href="/app" className="ax-logo" aria-label="AUTISTIK App: all tools">
           <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b><small>APP</small>
         </Link>
-        <Link href="/" className="ax-home" aria-label="Home screen"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
+        <Link href="/app" className="ax-home" aria-label="All tools"><svg aria-hidden="true"><use href="#i-home" /></svg><span>All tools</span></Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
             <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)}>
@@ -124,7 +124,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <WalletPicker />
       <main className="ax-main">{children}</main>
       <footer className="ax-foot">
-        <Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link>
+        <Link href="/app">All tools</Link><Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link>
         <span>Crypto is risky. Nothing here is financial advice. Never share your seed phrase.</span>
       </footer>
 
