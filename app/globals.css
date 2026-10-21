@@ -1355,6 +1355,7 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .nl-buy{text-align:center;justify-content:center}
 .sm-buy{font-size:.8em;font-weight:800;color:#111;background:var(--gold,#F0B90B);padding:4px 12px;border-radius:99px}
 .sm-listed>b{color:var(--ink)}
+.sm-ours{margin-left:6px;font-size:.62em;font-weight:800;padding:2px 6px;border-radius:99px;background:rgba(240,185,11,.15);color:#F0B90B;vertical-align:middle}
 
 /* Sign in with Google / Apple */
 .oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:11px 14px;font-weight:700;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
