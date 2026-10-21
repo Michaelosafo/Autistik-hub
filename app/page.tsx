@@ -45,6 +45,8 @@ export default async function Home() {
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
         <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
+        {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
+        <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         {user
           ? <Link href="/me" className="lp-signin" aria-label="My profile"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></Link>
           : <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
