@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
 
 export default async function NewLaunchPage() {
-  const [user, board, pads, { admin }, access] = await Promise.all([currentUser(), getBoard(60), padSites(), adminState(), launchAccess()]);
+  const [user, board, pads, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padSites(), adminState(), launchAccess()]);
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
@@ -41,6 +41,7 @@ export default async function NewLaunchPage() {
           <AddLiquidity pads={pads} />
         </>
       )}
+      {owner && !admin && <div className="notice">🛠️ Your admin tools (deploy the Launch Pad on a new chain, list tokens) show here after your 2-step code. <Link href="/admin">Enter it on the Admin page</Link>, then come back to this page.</div>}
       {admin && <AdminListTokens />}
       {admin && <PadDeploy />}
       <p className="muted" style={{ fontSize: ".9em" }}>Already launched, or launched somewhere else? See the <Link href="/launchpad">Trending</Link> tab to get your token listed and promoted.</p>
