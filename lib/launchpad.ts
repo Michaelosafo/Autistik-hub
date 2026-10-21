@@ -190,14 +190,15 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
   robinhood: {
     key: "robinhood",
     name: "Robinhood Chain",
-    dex: process.env.NEXT_PUBLIC_ROBINHOOD_DEX_NAME || "Robinhood Chain DEX",
+    dex: process.env.NEXT_PUBLIC_ROBINHOOD_DEX_NAME || "Uniswap V2",
     coin: "ETH",
-    // Robinhood Chain mainnet (an Arbitrum chain). Its V2 router and stablecoin come from the settings until one is picked.
+    // Robinhood Chain mainnet (an Arbitrum chain). Uniswap V2 router from Uniswap's deployments list; the stablecoin
+    // (used to price the launch fee) comes from the settings until it's confirmed.
     chainId: Number(process.env.NEXT_PUBLIC_ROBINHOOD_CHAIN_ID || 4663),
     rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
     explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "https://robinhoodchain.blockscout.com").replace(/\/+$/, ""),
     dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "robinhood",
-    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER),
+    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89E5Db8B5aA49aa85AC63f691524311aeb649EBA",
     stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN),
     suggestedLiquidity: "0.1",
     swapUrl: (t) => (process.env.NEXT_PUBLIC_ROBINHOOD_SWAP_URL || "").replace("{token}", t),
