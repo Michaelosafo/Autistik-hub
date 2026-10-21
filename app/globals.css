@@ -1892,19 +1892,36 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 @keyframes wm-twinkle{0%,100%{transform:scale(.4) rotate(0);opacity:.3}50%{transform:scale(1) rotate(45deg);opacity:1}}
 @media (prefers-reduced-motion:reduce){.welcome{transition:none}}
 
-/* App home: only the tools, big and simple (app/app/page.tsx) */
-.ah{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
-.ah-title{font-size:clamp(1.3em,4.5vw,1.8em);text-align:center;margin-top:6px}
-.ah-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.ah-tool{--c:var(--violet);--soft:var(--violet-soft);display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:18px 16px;min-height:150px;border-radius:18px;
-  background:var(--surface);border:1px solid var(--line);color:var(--ink);text-decoration:none;box-shadow:0 1px 0 var(--line);transition:transform .12s,border-color .12s,box-shadow .12s}
-.ah-tool:hover,.ah-tool:focus-visible{transform:translateY(-2px);border-color:var(--c);box-shadow:0 8px 24px rgba(0,0,0,.12)}
-.ah-tool:active{transform:scale(.98)}
-.ah-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--soft);font-size:28px;line-height:1;margin-bottom:4px}
-.ah-tool b{font-family:var(--f-display);font-size:1.02em;line-height:1.2}
-.ah-tool small{color:var(--muted);font-size:.86em;line-height:1.35}
-.ah-tool.sun{--c:var(--sun);--soft:var(--sun-soft)} .ah-tool.teal{--c:var(--teal);--soft:var(--teal-soft)}
-.ah-tool.coral{--c:var(--coral);--soft:var(--coral-soft)} .ah-tool.orange{--c:var(--orange);--soft:var(--orange-soft)}
-.ah-tool.green{--c:var(--teal);--soft:var(--teal-soft)}
-.ah-note{text-align:center;color:var(--muted);font-size:.88em}
-@media (max-width:520px){.ah-grid{grid-template-columns:1fr 1fr;gap:10px}.ah-tool{min-height:140px;padding:14px 12px}}
+/* App home: $AUTISTIK at a glance, then every tool, grouped (app/app/page.tsx) */
+.ah{max-width:1080px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.ah-coin{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:18px 22px;border-radius:18px;background:linear-gradient(135deg,#1d1a29,#14121c);border:1px solid #2f2a3b}
+.ah-coin-id{display:flex;align-items:center;gap:12px;min-width:220px;flex:1 1 220px}
+.ah-coin-id img,.ah-coin-ph{width:44px;height:44px;border-radius:50%;flex:none}
+.ah-coin-ph{display:grid;place-items:center;background:#27262C}
+.ah-coin-id b{display:block;font-family:var(--f-display);font-size:1.1em;letter-spacing:.01em}
+.ah-coin-id small{color:#8E86A6;font-size:.82em}
+.ah-stats{display:flex;gap:28px;margin:0;flex-wrap:wrap}
+.ah-stats div{display:flex;flex-direction:column;gap:2px}
+.ah-stats dt{color:#8E86A6;font-size:.72em;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.ah-stats dd{margin:0;font-family:var(--f-mono);font-weight:600;font-size:1em;font-variant-numeric:tabular-nums}
+.ah-stats .up{color:#31D0AA} .ah-stats .down{color:#ED4B9E}
+.ah-coin-cta{display:flex;gap:8px;margin-left:auto}
+.ah-btn{display:inline-flex;align-items:center;justify-content:center;min-width:92px;padding:10px 18px;border-radius:12px;font-weight:800;text-decoration:none;color:#F4EEFF;background:#2c2838;border:1px solid #3a3449}
+.ah-btn:hover{background:#372F47}
+.ah-btn.gold{background:var(--gold,#F0B90B);border-color:transparent;color:#191326}
+.ah-btn.gold:hover{opacity:.9}
+.ah-group{display:flex;flex-direction:column;gap:10px}
+.ah-group h2{font-family:var(--f-body);font-size:.74em;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#8E86A6;margin:0}
+.ah-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ah-tool{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;background:#17151f;border:1px solid #2a2635;color:#F4EEFF;text-decoration:none;transition:background .12s,border-color .12s}
+.ah-tool:hover,.ah-tool:focus-visible{background:#1f1c2a;border-color:#4a4160}
+.ah-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:rgba(240,185,11,.1);color:var(--gold,#F0B90B);flex:none}
+.ah-icon svg{width:22px;height:22px}
+.ah-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.ah-txt b{font-size:.96em;font-weight:700}
+.ah-txt small{color:#8E86A6;font-size:.8em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ah-go{width:16px;height:16px;color:#5d5672;flex:none;transition:transform .12s,color .12s}
+.ah-tool:hover .ah-go{transform:translateX(2px);color:#F4EEFF}
+@media (max-width:900px){.ah-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.ah{gap:18px}.ah-coin{padding:16px;gap:14px}.ah-stats{gap:18px;width:100%;justify-content:space-between}.ah-coin-cta{margin-left:0;width:100%}.ah-btn{flex:1}
+  .ah-grid{grid-template-columns:1fr;gap:8px}.ah-tool{padding:12px}}
