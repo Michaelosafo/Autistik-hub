@@ -37,7 +37,7 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
 ];
 // Phone bar: Swap sits in the middle as the big button; everything else is behind the ⋯ button.
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
-  { href: "/app", name: "Tools", icon: "i-home", match: ["/app"] },
+  { href: "/", name: "Home", icon: "i-home", match: [] },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/momentum"] },
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"], main: true },
@@ -83,7 +83,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Link href="/app" className="ax-logo" aria-label="AUTISTIK App: all tools">
           <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b><small>APP</small>
         </Link>
-        <Link href="/app" className="ax-home" aria-label="All tools"><svg aria-hidden="true"><use href="#i-home" /></svg><span>All tools</span></Link>
+        {/* Home switches sides: from the App it goes to the website's main page, whose Home button comes back here. */}
+        <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
             <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)}>

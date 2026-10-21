@@ -1925,3 +1925,5 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 @media (max-width:900px){.ah-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.ah{gap:18px}.ah-coin{padding:16px;gap:14px}.ah-stats{gap:18px;width:100%;justify-content:space-between}.ah-coin-cta{margin-left:0;width:100%}.ah-btn{flex:1}
   .ah-grid{grid-template-columns:1fr;gap:8px}.ah-tool{padding:12px}}
+/* Home button on the main page (opens the App): icon only on phones */
+@media (max-width:600px){ .lp-home span{display:none} .lp-signin.lp-home{padding:10px} .lp-signin.lp-home svg{display:block} }
