@@ -1355,6 +1355,7 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .nl-buy{text-align:center;justify-content:center}
 .sm-buy{font-size:.8em;font-weight:800;color:#111;background:var(--gold,#F0B90B);padding:4px 12px;border-radius:99px}
 .sm-listed>b{color:var(--ink)}
+.sm-ours{margin-left:6px;font-size:.62em;font-weight:800;padding:2px 6px;border-radius:99px;background:rgba(240,185,11,.15);color:#F0B90B;vertical-align:middle}
 
 /* Sign in with Google / Apple */
 .oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:11px 14px;font-weight:700;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
@@ -1853,3 +1854,57 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .sx-hint{font-style:normal;letter-spacing:.02em;text-transform:none;color:#F5C935}
 .sx-net.ask{border-color:rgba(245,201,53,.6);box-shadow:0 0 0 3px rgba(245,201,53,.08)}
 .sx-net small{white-space:nowrap}
+
+/* Welcome: Autistik the mascot says hi; "Go to site" opens the page from the middle (components/Welcome.tsx) */
+.welcome{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;overflow:auto;
+  background:radial-gradient(circle at 50% 55%,var(--rail-2),var(--rail) 70%);color:#fff;
+  clip-path:circle(150% at 50% 50%);transition:clip-path .8s cubic-bezier(.7,0,.3,1),opacity .8s ease}
+.welcome.opening{clip-path:circle(0% at 50% 50%);opacity:.6;pointer-events:none}
+[data-welcomed] .welcome{display:none}
+.welcome::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:var(--spectrum)}
+.welcome-in{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;max-width:420px}
+.welcome-bot{width:min(62vw,260px);height:auto;display:block;overflow:visible;animation:wb-in .7s cubic-bezier(.3,1.6,.5,1) both}
+.welcome-bubble{position:relative;display:flex;flex-direction:column;gap:4px;background:#fff;color:#141830;padding:14px 22px;border-radius:20px;
+  font-size:1.05em;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:wb-pop .45s cubic-bezier(.3,1.6,.5,1) .55s both}
+.welcome-bubble b{font-family:var(--f-display);font-size:1.15em;line-height:1.2}
+.welcome-bubble::after{content:"";position:absolute;left:50%;bottom:-9px;margin-left:-10px;border:10px solid transparent;border-bottom:0;border-top-color:#fff}
+.welcome-go{all:unset;box-sizing:border-box;cursor:pointer;margin-top:6px;padding:14px 34px;border-radius:99px;font-family:var(--f-display);font-weight:700;font-size:1.05em;
+  color:#141830;background:linear-gradient(90deg,#FFB347,#F5E663);box-shadow:0 10px 30px rgba(255,179,71,.35);animation:wb-pop .4s ease 1s both;transition:transform .15s}
+.welcome-go:hover{transform:translateY(-2px) scale(1.03)}
+.welcome-go:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.welcome-go span{display:inline-block;margin-left:6px;transition:transform .15s}
+.welcome-go:hover span{transform:translateX(4px)}
+/* Mascot parts */
+.wm-float{animation:wm-float 3s ease-in-out infinite}
+.wm-shadow{transform-box:fill-box;transform-origin:center;animation:wm-shadow 3s ease-in-out infinite}
+.wm-wave{transform-box:view-box;transform-origin:141px 138px;animation:wm-wave 1.6s ease-in-out .8s infinite}
+.wm-eyes{transform-box:view-box;transform-origin:100px 84px;animation:wm-blink 4s infinite}
+.wm-bulb-glow{transform-box:fill-box;transform-origin:center;animation:wm-pulse 1.8s ease-in-out infinite}
+.wm-sparkles path{transform-box:fill-box;transform-origin:center;animation:wm-twinkle 2.4s ease-in-out infinite}
+.wm-sparkles path:nth-child(2){animation-delay:.8s} .wm-sparkles path:nth-child(3){animation-delay:1.6s}
+@keyframes wb-in{from{transform:translateY(60px) scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes wb-pop{from{transform:scale(.6) translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@keyframes wm-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes wm-shadow{0%,100%{transform:scaleX(1);opacity:.35}50%{transform:scaleX(.82);opacity:.22}}
+@keyframes wm-wave{0%,100%{transform:rotate(0)}20%{transform:rotate(-16deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-12deg)}80%{transform:rotate(4deg)}}
+@keyframes wm-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes wm-pulse{0%,100%{transform:scale(.8);opacity:.25}50%{transform:scale(1.25);opacity:.5}}
+@keyframes wm-twinkle{0%,100%{transform:scale(.4) rotate(0);opacity:.3}50%{transform:scale(1) rotate(45deg);opacity:1}}
+@media (prefers-reduced-motion:reduce){.welcome{transition:none}}
+
+/* App home: only the tools, big and simple (app/app/page.tsx) */
+.ah{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.ah-title{font-size:clamp(1.3em,4.5vw,1.8em);text-align:center;margin-top:6px}
+.ah-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.ah-tool{--c:var(--violet);--soft:var(--violet-soft);display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:18px 16px;min-height:150px;border-radius:18px;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink);text-decoration:none;box-shadow:0 1px 0 var(--line);transition:transform .12s,border-color .12s,box-shadow .12s}
+.ah-tool:hover,.ah-tool:focus-visible{transform:translateY(-2px);border-color:var(--c);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.ah-tool:active{transform:scale(.98)}
+.ah-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:var(--soft);font-size:28px;line-height:1;margin-bottom:4px}
+.ah-tool b{font-family:var(--f-display);font-size:1.02em;line-height:1.2}
+.ah-tool small{color:var(--muted);font-size:.86em;line-height:1.35}
+.ah-tool.sun{--c:var(--sun);--soft:var(--sun-soft)} .ah-tool.teal{--c:var(--teal);--soft:var(--teal-soft)}
+.ah-tool.coral{--c:var(--coral);--soft:var(--coral-soft)} .ah-tool.orange{--c:var(--orange);--soft:var(--orange-soft)}
+.ah-tool.green{--c:var(--teal);--soft:var(--teal-soft)}
+.ah-note{text-align:center;color:var(--muted);font-size:.88em}
+@media (max-width:520px){.ah-grid{grid-template-columns:1fr 1fr;gap:10px}.ah-tool{min-height:140px;padding:14px 12px}}

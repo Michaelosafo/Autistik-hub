@@ -9,6 +9,7 @@ import { padSites } from "@/lib/launchpad-server";
 import { adminState, launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import PadDeploy from "@/components/PadDeploy";
+import AdminListTokens from "@/components/AdminListTokens";
 import ProHero from "@/components/ProHero";
 import { liveChains } from "@/lib/launchpad";
 
@@ -36,10 +37,11 @@ export default async function NewLaunchPage() {
       ) : (
         <>
           {!access.public && <div className="notice warn">🔒 Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Remove <span className="mono">LAUNCH_PUBLIC=0</span> in Vercel to open it to all.</div>}
-          <Launchpad signedIn={!!user} pads={pads} />
+          <Launchpad signedIn={!!user} pads={pads} admin={admin} />
           <AddLiquidity pads={pads} />
         </>
       )}
+      {admin && <AdminListTokens />}
       {admin && <PadDeploy />}
       <p className="muted" style={{ fontSize: ".9em" }}>Already launched, or launched somewhere else? See the <Link href="/launchpad">Trending</Link> tab to get your token listed and promoted.</p>
     </div>

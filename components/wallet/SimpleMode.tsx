@@ -8,7 +8,8 @@ import { LISTINGS } from "@/lib/listings";
 import { addTrade, amt, api, friendlyError, Logo, pct, raw2num, runTrade, usd, type Holding, type Quote, type TokenInfo } from "./util";
 
 type Badge = "safer" | "caution" | "risky" | "scam";
-type Coin = { token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number; liquidity: number; mcap: number | null; ageHours: number | null; badge: Badge; reasons: string[] };
+type Coin = { token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number; liquidity: number; mcap: number | null; ageHours: number | null; badge: Badge; reasons: string[]; autistik?: "launchpad" | "listed" };
+type Lists = { trending: Coin[]; fresh: Coin[]; listed: Coin[] };
 const BADGE: Record<Badge, string> = { safer: "Safer", caution: "Caution", risky: "Risky", scam: "Scam warning" };
 const age = (h: number | null) => (h == null ? "" : h < 1 ? "new" : h < 48 ? `${Math.floor(h)}h old` : `${Math.floor(h / 24)}d old`);
 const PRESETS = [5, 10, 25, 50, 100];
@@ -19,7 +20,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
   c: WChain; onChain: (k: WChainKey) => void; signer: Signer; owner: string; holdings: Holding[] | null;
   balanceOf: (a: string) => Holding | undefined; onAdd: (t: WToken) => void; onDone: () => void; startBuy?: string;
 }) {
-  const [lists, setLists] = useState<{ trending: Coin[]; fresh: Coin[] } | null>(null);
+  const [lists, setLists] = useState<Lists | null>(null);
   const [tab, setTab] = useState<"trending" | "fresh">("trending");
   const [q, setQ] = useState(""); const [qErr, setQErr] = useState("");
   const [buy, setBuy] = useState<Partial<Coin> & { token: string } | null>(() => {
@@ -33,13 +34,17 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
 
   useEffect(() => {
     setLists(null);
-    api<{ trending: Coin[]; fresh: Coin[] }>("discover", { chain: c.key }).then(setLists).catch(() => setLists({ trending: [], fresh: [] }));
+    api<Lists>("discover", { chain: c.key }).then((l) => setLists({ ...l, listed: l.listed || [] })).catch(() => setLists({ trending: [], fresh: [], listed: [] }));
   }, [c.key]);
 
   const total = (holdings || []).reduce((s, h) => s + (h.valueUsd || 0), 0);
   const mine = (holdings || []).filter((h) => !isNative(c, h.address) && h.amount > 0 && !/^(USD|W(BNB|ETH))/.test(h.symbol));
   const nat = holdings?.[0];
-  const listed = LISTINGS.filter((l) => l.chain === c.key);
+  // Coins listed by the team, then every token launched or listed on the AUTISTIK Launch Pad on this network.
+  const listed = [
+    ...LISTINGS.filter((l) => l.chain === c.key).map((l) => ({ token: l.token, symbol: l.symbol, name: l.name, note: l.note, image: null as string | null })),
+    ...(lists?.listed || []).map((x) => ({ token: x.token, symbol: x.symbol, name: x.name, note: x.autistik === "listed" ? "Listed on AUTISTIK" : "Launched on AUTISTIK", image: x.image })),
+  ].filter((l, i, all) => all.findIndex((y) => y.token.toLowerCase() === l.token.toLowerCase()) === i);
   const shown = (lists?.[tab] || []).filter((x) => !q || x.symbol.toLowerCase().includes(q.toLowerCase()) || x.name.toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -68,7 +73,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
           <b>New on AUTISTIK</b>
           {listed.map((l) => (
             <button key={l.token} type="button" className="sm-coin" onClick={() => setBuy({ token: l.token, symbol: l.symbol, name: l.name })}>
-              <Logo t={{ symbol: l.symbol, logo: null }} size={38} />
+              <Logo t={{ symbol: l.symbol, logo: l.image }} size={38} />
               <span className="grow"><b>{l.symbol}</b><small>{l.name} · {l.note}</small></span>
               <span className="sm-buy">Buy</span>
             </button>
@@ -86,7 +91,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
         {shown.map((x) => (
           <button key={x.token} type="button" className="sm-coin" onClick={() => setBuy(x)}>
             <Logo t={{ symbol: x.symbol, logo: x.image }} size={38} />
-            <span className="grow"><b>{x.symbol}</b><small>{x.name}{x.ageHours != null ? ` · ${age(x.ageHours)}` : ""}</small></span>
+            <span className="grow"><span><b>{x.symbol}</b>{x.autistik && <span className="sm-ours">AUTISTIK</span>}</span><small>{x.name}{x.ageHours != null ? ` · ${age(x.ageHours)}` : ""}</small></span>
             <span className="sm-num"><b>{usd(x.price)}</b><small className={x.change24h >= 0 ? "up" : "down"}>{pct(x.change24h)}</small></span>
             <span className={"sm-badge " + x.badge}>{BADGE[x.badge]}</span>
           </button>

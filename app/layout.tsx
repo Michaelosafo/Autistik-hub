@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
+import Welcome from "@/components/Welcome";
 import { headers } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
 
@@ -28,12 +29,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" suppressHydrationWarning>
       <head>
         {/* Applies saved comfort settings before the page paints, so there's no flash of bright colours or motion. */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";var t=l.getItem("theme");if(t==="light"||t==="dark")d.dataset.theme=t}catch(e){}` }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";var t=l.getItem("theme");if(t==="light"||t==="dark")d.dataset.theme=t;if(sessionStorage.getItem("welcomed")==="1"||+(l.getItem("welcomes")||0)>=2)d.dataset.welcomed="1"}catch(e){}` }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Unbounded:wght@500;700;800&family=JetBrains+Mono:wght@400;600&display=swap" />
       </head>
       <body>
+        {/* Without JavaScript the welcome can't close, so it isn't shown at all. */}
+        <noscript><style>{`.welcome{display:none}`}</style></noscript>
+        <Welcome />
         <Shell me={me}>{children}</Shell>
       </body>
     </html>

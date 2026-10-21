@@ -31,7 +31,8 @@ function Bot() {
 }
 const fmt = (n: string) => BigInt(n).toLocaleString("en-US");
 
-export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads: Pads }) {
+/** `admin`: the Hub admin launches without holding any AUTISTIK (the Hub signs the permit without checking). */
+export default function Launchpad({ signedIn, pads, admin = false }: { signedIn: boolean; pads: Pads; admin?: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const turns = useRef<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -159,7 +160,7 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
       if (liquidity < f + m) { setStatus(`The pool needs at least ${formatEther(f + m)} ${c.coin} (including the ${formatEther(f)} ${c.coin} launch contribution).`); return; }
 
       // The Hub checks this wallet holds $20+ of AUTISTIK on BNB Chain and gives a 5-minute, one-use permit the contract checks.
-      setStatus(`Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
+      setStatus(admin ? "Getting your admin launch permit…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
       const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, wallet: account }) });
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); say(permit.error || ""); return; }
@@ -328,13 +329,13 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
                 <tr><th>Tax</th><td>{plan.buyTax || plan.sellTax ? `${plan.buyTax}% buy · ${plan.sellTax}% sell → ${plan.taxWallet.slice(0, 6)}…${plan.taxWallet.slice(-4)} (can only be lowered later)` : "No tax"}</td></tr>
                 <tr><th>Whitelist</th><td>{plan.whitelist.length ? `${plan.whitelist.length} wallet${plan.whitelist.length > 1 ? "s" : ""} may buy up to ${maxWl ? formatEther(maxWl) : "…"} ${c.coin} (≈$40) each before trading opens` : "None"}</td></tr>
                 <tr><th>Trading</th><td>Starts when you press Start trading (opens by itself after 24h). First 5 minutes: max 1% of supply per buy.</td></tr>
-                <tr><th>You must hold</th><td>${MIN_HOLD_USD}+ of AUTISTIK (BNB Chain), same wallet</td></tr>
+                <tr><th>You must hold</th><td>{admin ? "Nothing: admin launch" : `$${MIN_HOLD_USD}+ of AUTISTIK (BNB Chain), same wallet`}</td></tr>
                 <tr><th>Launch</th><td className="num">Free · {fee === null ? "…" : `${formatEther(fee)} ${c.coin}`} (≈$3) comes out of your liquidity</td></tr>
                 <tr><th>Trade fee</th><td>0.3% on buys and sells, supports AUTISTIK</td></tr>
               </tbody></table>
               {minLiq !== null && fee !== null && parseEther(plan.liquidity) < minLiq + fee && <div className="notice alert">The pool needs at least {formatEther(minLiq + fee)} {c.coin}. Change the liquidity amount.</div>}
               <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS[plan.lock].explain} Token prices can go to zero.</div>
-              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand {plan.lock === "burn" ? "the liquidity is burned forever" : `the liquidity is ${LOCKS[plan.lock].short.toLowerCase()}`}, my wallet must hold ${MIN_HOLD_USD}+ of AUTISTIK, and this is not financial advice.</span></label>
+              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand {plan.lock === "burn" ? "the liquidity is burned forever" : `the liquidity is ${LOCKS[plan.lock].short.toLowerCase()}`}{admin ? "" : `, my wallet must hold $${MIN_HOLD_USD}+ of AUTISTIK`}, and this is not financial advice.</span></label>
               <button className="btn primary" type="button" disabled={!agree || launching || fee === null} onClick={launch}>
                 {launching ? "Launching…" : `Launch for ${formatEther(parseEther(plan.liquidity) + parseEther(plan.devBuy || "0"))} ${c.coin} + gas`}
               </button>
@@ -349,7 +350,7 @@ export default function Launchpad({ signedIn, pads }: { signedIn: boolean; pads:
                 <li><b>3</b><span>Sign once in your wallet.</span></li>
                 <li><b>4</b><span>🚀 Press Start trading. Your token is live on {[...new Set(liveChains(pads).map((x) => x.dex))].join(", ") || "the DEX"}.</span></li>
               </ol>
-              <p className="muted" style={{ fontSize: ".86em" }}>Free to launch. You need ${MIN_HOLD_USD}+ of AUTISTIK on BNB Chain. Liquidity is locked in the AUTISTIK Locker (6 months or 1 year) or burned forever, so it can&apos;t be pulled. No blacklist, tax max {MAX_TAX_PERCENT}%, anti-sniper protection.</p>
+              <p className="muted" style={{ fontSize: ".86em" }}>Free to launch. {admin ? "Admin: no AUTISTIK needed, launch as many as you like." : `You need $${MIN_HOLD_USD}+ of AUTISTIK on BNB Chain.`} Liquidity is locked in the AUTISTIK Locker (6 months or 1 year) or burned forever, so it can&apos;t be pulled. No blacklist, tax max {MAX_TAX_PERCENT}%, anti-sniper protection.</p>
             </div>
           )}
           <div className="notice alert" style={{ fontSize: ".86em" }}><b>Never</b> share your seed phrase or private key. Autistik will never ask for it.</div>
