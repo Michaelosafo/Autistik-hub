@@ -1446,12 +1446,31 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .ax-foot{display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:center;padding:18px;color:#B8ADD2;font-size:.82em;border-top:1px solid #2b2638}
 .ax-foot a{color:#B8ADD2}
 .ax-tabs{display:none}
-.ax-sheet{position:fixed;inset:0;z-index:90;background:rgba(5,4,10,.6);display:flex;align-items:flex-end}
-.ax-sheet-in{width:100%;max-height:80dvh;overflow:auto;background:#27262C;border-radius:24px 24px 0 0;padding:16px 16px calc(84px + env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.ax-sheet-in>div{display:flex;flex-direction:column;gap:2px}
-.ax-sheet-in small{color:#B8ADD2;font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:.72em;margin-bottom:4px}
-.ax-sheet-in a{color:#F4EEFF;text-decoration:none;padding:8px 6px;border-radius:10px;font-weight:700}
-.ax-sheet-in a:hover{background:#372F47}
+/* The full menu: a list of everything, as a sheet from the bottom on phones and a side panel on computers. */
+.ax-burger{display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:16px;border:1px solid #383241;background:#1C1828;color:#F4EEFF;font:inherit;font-weight:800;font-size:.9em;cursor:pointer}
+.ax-burger:hover,.ax-burger[aria-expanded=true]{border-color:rgba(240,185,11,.55);color:var(--gold,#F0B90B)}
+.ax-burger svg{width:18px;height:18px}
+.ax-sheet{position:fixed;inset:0;z-index:90;background:rgba(5,4,10,.6);backdrop-filter:blur(3px);display:flex;justify-content:flex-end}
+.ax-sheet-in{width:min(400px,100%);height:100%;overflow:auto;overscroll-behavior:contain;background:#1C1828;border-left:1px solid #383241;box-shadow:-20px 0 60px rgba(0,0,0,.5);padding:0 12px 24px;display:flex;flex-direction:column;gap:14px;animation:ax-in-r .18s ease-out}
+.ax-sheet-h{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:14px 4px 10px;background:#1C1828;border-bottom:1px solid #2b2638}
+.ax-sheet-h b{font-family:var(--f-display);font-size:1.25em}
+.ax-sheet-h button{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;border:0;background:#27262C;color:#F4EEFF;cursor:pointer}
+.ax-sheet-h svg{width:20px;height:20px}
+.ax-sheet-in section{display:flex;flex-direction:column;gap:2px}
+.ax-sheet-in small{color:#B8ADD2;font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:.72em;padding:0 8px 4px}
+.ax-sheet-in a{display:flex;align-items:center;gap:12px;color:#F4EEFF;text-decoration:none;padding:9px 8px;border-radius:14px}
+.ax-sheet-in a:hover,.ax-sheet-in a:focus-visible{background:#27262C}
+.ax-sheet-in a[aria-current=page]{background:#372F47}
+.ax-sheet-in a span{display:flex;flex-direction:column;min-width:0;flex:1}
+.ax-sheet-in a b{font-weight:800}
+.ax-sheet-in a em{font-style:normal;color:#B8ADD2;font-size:.82em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ax-ic{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:12px;background:#27262C;color:var(--gold,#F0B90B)}
+.ax-sheet-in a[aria-current=page] .ax-ic{background:var(--gold,#F0B90B);color:#191326}
+.ax-ic svg{width:20px;height:20px}
+.ax-go{width:16px;height:16px;flex:none;color:#6F6688}
+@keyframes ax-in-r{from{transform:translateX(24px);opacity:0}}
+@keyframes ax-in-up{from{transform:translateY(32px);opacity:0}}
+html[data-calm=on] .ax-sheet-in{animation:none}
 /* Existing pages inside the App pick up the App's surfaces. */
 .ax .card,.ax .notice:not(.warn){background:#27262C;border-color:#383241;color:#F4EEFF;border-radius:24px}
 .ax .muted{color:#B8ADD2}
@@ -1854,8 +1873,12 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
   .ax-tabs a.main svg{width:28px;height:28px;padding:12px;box-sizing:content-box;border-radius:50%;background:linear-gradient(135deg,#FFD84D,#F0B90B 45%,#E8A400);box-shadow:0 6px 18px rgba(240,185,11,.35);color:#191326}
   .ax-tabs a.main span{color:#F4EEFF;margin-top:2px}
   .ax-tabs a.main[aria-current=page] span{color:var(--gold,#F0B90B)}
-  .ax-tabs .dots span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
-  .ax-tabs .dots svg{width:26px;height:26px}
+  .ax-tabs .dots svg{width:24px;height:24px}
+  /* Phones: the ☰ Menu button lives in the bottom bar, so the top one goes; the list slides up and the bar stays on top to close it. */
+  .ax-burger{display:none}
+  .ax-sheet{z-index:79;align-items:flex-end}
+  .ax-sheet-in{width:100%;height:auto;max-height:86dvh;border-left:0;border-top:1px solid #383241;border-radius:24px 24px 0 0;box-shadow:0 -20px 60px rgba(0,0,0,.5);padding-bottom:calc(110px + env(safe-area-inset-bottom));animation:ax-in-up .2s ease-out}
+  .ax-sheet-h{border-radius:24px 24px 0 0}
 }
 .sx-net small{display:flex;align-items:center;gap:6px}
 .sx-tag{font-style:normal;letter-spacing:.04em;padding:1px 6px;border-radius:99px;background:rgba(49,208,170,.15);color:#31D0AA}

@@ -12,33 +12,50 @@ import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, sub
 export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
-type Item = { href: string; name: string; note?: string };
+type Item = { href: string; name: string; note?: string; icon?: string };
 const MENU: { name: string; match: string[]; items: Item[] }[] = [
   // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
   { name: "Wallet", match: ["/wallet", "/arena", "/analytics", "/pro"], items: [
-    { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade" },
-    { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match" },
-    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety" },
-    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow" },
+    { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade", icon: "i-wallet" },
+    { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match", icon: "i-ball" },
+    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
+    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
   ] },
   { name: "Trade", match: ["/swap", "/perps", "/trade"], items: [
-    { href: "/swap", name: "Swap", note: "Trade any token at the best price" },
-    { href: "/perps", name: "Perpetuals", note: "Long or short with leverage" },
+    { href: "/swap", name: "Swap", note: "Trade any token at the best price, on any network", icon: "i-swap" },
+    { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
   { name: "Earn", match: ["/stake", "/rewards"], items: [
-    { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x" },
-    { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops" },
+    { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
+    { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops", icon: "i-gift" },
   ] },
   { name: "Launch", match: ["/launchpad", "/momentum"], items: [
-    { href: "/launchpad/new", name: "Launch a token", note: "Liquidity locked, no code" },
-    { href: "/launchpad", name: "Trending", note: "What people are buying" },
-    { href: "/momentum", name: "Momentum", note: "New coins picking up speed" },
+    { href: "/launchpad/new", name: "Launch a token", note: "Liquidity locked, no code", icon: "i-rocket" },
+    { href: "/launchpad", name: "Trending", note: "What people are buying", icon: "i-fire" },
+    { href: "/momentum", name: "Momentum", note: "New coins picking up speed", icon: "i-bolt" },
   ] },
   { name: "Lock", match: ["/lockers"], items: [
-    { href: "/lockers", name: "Lockers", note: "Lock liquidity or team tokens" },
+    { href: "/lockers", name: "Lockers", note: "Lock liquidity or team tokens", icon: "i-lock" },
   ] },
 ];
-// Phone bar: Swap sits in the middle as the big button; everything else is behind the ⋯ button.
+// The full menu (phone ☰ button, desktop Menu button): every App tool above, then the website and your account.
+const MORE: { name: string; items: Item[] }[] = [
+  ...MENU.map((m) => ({ name: m.name, items: m.items })),
+  { name: "Website", items: [
+    { href: "/", name: "Home", note: "The AUTISTIK main page", icon: "i-home" },
+    { href: "/app", name: "All tools", note: "Every App tool on one page", icon: "i-grid" },
+    { href: "/companions", name: "Ask the bot", note: "Chat with Believer, Purity and the AUTISTIK bot", icon: "i-kai" },
+    { href: "/community", name: "Community", note: "Groups, posts and live sessions", icon: "i-com" },
+    { href: "/buy", name: "$AUTISTIK", note: "How to buy the token", icon: "i-buy" },
+    { href: "/autism", name: "About autism", note: "Guides and support", icon: "i-learn" },
+    { href: "/safety", name: "Safety", note: "Stay safe in crypto", icon: "i-safe" },
+  ] },
+  { name: "Account", items: [
+    { href: "/me", name: "My profile", note: "Your name, colour and posts", icon: "i-user" },
+    { href: "/security", name: "Account security", note: "Your authenticator app", icon: "i-key" },
+  ] },
+];
+// Phone bar: Swap sits in the middle as the big button; everything else is behind the ☰ Menu button.
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
   { href: "/", name: "Home", icon: "i-home", match: [] },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/momentum"] },
@@ -101,6 +118,7 @@ export default function AppShell({ admin, children }: { admin?: boolean; childre
           ))}
         </nav>
         <div className="ax-right">
+          <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
           <span className="ax-chain" title="Network"><i />BNB Chain</span>
@@ -139,19 +157,41 @@ export default function AppShell({ admin, children }: { admin?: boolean; childre
         {BOTTOM.map((b) => (
           <Link key={b.href} href={b.href} className={b.main ? "main" : undefined} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
         ))}
-        <button type="button" className="dots" aria-expanded={more} aria-label="More" onClick={() => setMore(!more)}><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2.2" /><circle cx="12" cy="12" r="2.2" /><circle cx="19" cy="12" r="2.2" /></svg><span>More</span></button>
+        <button type="button" className="dots" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
       </nav>
       {more && (
         <div className="ax-sheet" onClick={(e) => e.target === e.currentTarget && setMore(false)}>
-          <div className="ax-sheet-in" role="menu" aria-label="All of the App">
-            {MENU.map((m) => (
-              <div key={m.name}><small>{m.name}</small>{m.items.map((i) => <Link key={i.href} role="menuitem" href={i.href} onClick={() => setMore(false)}>{i.name}</Link>)}</div>
-            ))}
-            <div><small>Website</small><Link href="/" onClick={() => setMore(false)}>Home</Link><Link href="/community" onClick={() => setMore(false)}>Community</Link></div>
-            {admin && <div><small>Owner</small><Link href="/admin" onClick={() => setMore(false)}>Admin: everything happening</Link></div>}
+          <div className="ax-sheet-in" role="menu" aria-label="Menu: everything on AUTISTIK">
+            <div className="ax-sheet-h"><b>Menu</b><button type="button" aria-label="Close menu" onClick={() => setMore(false)}><Burger open /></button></div>
+            {admin && <MoreGroup name="Owner" items={[{ href: "/admin", name: "Admin", note: "Everything happening on the site", icon: "i-adm" }]} path={path} close={() => setMore(false)} />}
+            {MORE.map((g) => <MoreGroup key={g.name} name={g.name} items={g.items} path={path} close={() => setMore(false)} />)}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/** Three lines (☰) that turn into an ✕ while the menu is open. */
+function Burger({ open }: { open?: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+      {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 6h16M4 12h16M4 18h16" />}
+    </svg>
+  );
+}
+
+function MoreGroup({ name, items, path, close }: { name: string; items: Item[]; path: string; close: () => void }) {
+  return (
+    <section>
+      <small>{name}</small>
+      {items.map((i) => (
+        <Link key={i.href} role="menuitem" href={i.href} onClick={close} aria-current={path === i.href ? "page" : undefined}>
+          <i className="ax-ic"><svg aria-hidden="true"><use href={"#" + (i.icon || "i-grid")} /></svg></i>
+          <span><b>{i.name}</b>{i.note && <em>{i.note}</em>}</span>
+          <svg className="ax-go" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        </Link>
+      ))}
+    </section>
   );
 }
