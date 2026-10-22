@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { seatOf, sellRisk, type EventRow, type HolderRow, type LinkRow, type Risk } from "@/lib/analytics-insights";
 import { toast } from "@/lib/toast";
 import AnalyticsScan from "@/components/AnalyticsScan";
-import Player, { seed, type Mood } from "@/components/arena/Player";
+import Player, { PlayerDefs, seed, type Mood } from "@/components/arena/Player";
 
 /**
  * The game arena: every tracked holder of the token is a goofy cartoon footballer on one big pitch, for a chosen
@@ -41,7 +41,7 @@ const KIT = { home: { kit: "#12A66A", trim: "#FFFFFF" }, away: { kit: "#E5482F",
 const RISK_COLOR = { low: "#2BC48F", medium: "#F5B82E", high: "#F0563A" } as const;
 const PRESETS = [5, 10, 25, 50, 100];
 const ME_KEY = "ar-me";
-const MAX_HOME = 36, MAX_AWAY = 24;
+const MAX_HOME = 36, MAX_AWAY = 30;
 /** A wallet that sold everything this recently still shows on the pitch, vanishing in a puff. */
 const POOF_MS = 15 * 60_000;
 const W = 640; // pitch width (touchline to touchline)
@@ -60,6 +60,22 @@ const store = {
   get: () => { try { return localStorage.getItem(ME_KEY) || ""; } catch { return ""; } },
   set: (v: string) => { try { v ? localStorage.setItem(ME_KEY, v) : localStorage.removeItem(ME_KEY); } catch {} },
 };
+
+/** Stops the page behind a full-screen layer from scrolling (iPhones included) while `on` is true. */
+function useScrollLock(on: boolean) {
+  useEffect(() => {
+    if (!on) return;
+    const b = document.body, y = window.scrollY;
+    const prev = { position: b.style.position, top: b.style.top, width: b.style.width, overflow: document.documentElement.style.overflow };
+    document.documentElement.style.overflow = "hidden";
+    b.style.position = "fixed"; b.style.top = `-${y}px`; b.style.width = "100%";
+    return () => {
+      document.documentElement.style.overflow = prev.overflow;
+      b.style.position = prev.position; b.style.top = prev.top; b.style.width = prev.width;
+      window.scrollTo(0, y);
+    };
+  }, [on]);
+}
 
 /** Phones get a tall pitch (home goal at the bottom), wider screens a wide one (home goal on the left). */
 function usePortrait() {
@@ -108,8 +124,13 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
   const [sel, setSel] = useState<string | null>(null);
   const [buyOpen, setBuyOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  // Big screen: the pitch fills the whole screen and can be zoomed until every face is huge.
+  const [big, setBig] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const scroller = useRef<HTMLDivElement>(null);
+  useScrollLock(big);
   const portrait = usePortrait();
-  const L = portrait ? 1400 : 1000;
+  const L = portrait ? 1800 : 1000;
   // Your wallet: the signed-in member's own, or one pasted into "Find me" (kept on this device).
   const [saved, setSaved] = useState("");
   useEffect(() => { setSaved(store.get()); }, []);
@@ -156,15 +177,16 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
 
     // Two teams. Paper Hands: wallets that sold (more than they bought) in this time frame and still hold some.
     // Diamond Hands: everyone still holding, ranked by the size of their bag; the ones who bought more get a "+".
-    // Wallets that sold everything leave the pitch (in a puff, if it just happened).
-    type Entry = { h: HolderRow; amount: number; bought: number; poof?: boolean };
+    // Wallets that sold everything stay on the pitch as see-through ghosts (vanishing in a puff if it just happened).
+    type Entry = { h: HolderRow; amount: number; bought: number; poof?: boolean; ghost?: boolean };
     const away: Entry[] = [], home: Entry[] = [], gone: { h: HolderRow; at?: string }[] = [];
     const seen = new Set<string>();
     const consider = (h: HolderRow, f?: { bought: number; sold: number }) => {
       if (isGone(h)) {
         const at = lastExit(h.wallet);
         gone.push({ h, at });
-        if (at && Date.now() - Date.parse(at) < POOF_MS) away.push({ h, amount: f?.sold || 0, bought: 0, poof: true });
+        const poof = !!at && Date.now() - Date.parse(at) < POOF_MS;
+        away.push({ h, amount: f?.sold || Math.max(n(h.peak_balance), n(h.balance)), bought: 0, poof, ghost: !poof });
       } else if (f && f.sold > f.bought) away.push({ h, amount: f.sold - f.bought, bought: 0 });
       else if (!f || f.bought >= f.sold) home.push({ h, amount: n(h.pct), bought: f ? f.bought - f.sold : 0 });
     };
@@ -184,7 +206,9 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
       const h = holders.find((x) => same(x.wallet, me));
       if (h && !h.is_contract && !isGone(h)) home.push({ h, amount: n(h.pct), bought: 0 });
     }
-    away.sort((a, b) => Number(!!a.poof) - Number(!!b.poof) || b.amount - a.amount);
+    // Active sellers first, then the ones who just left, then the ghosts.
+    const tier = (x: Entry) => (x.ghost ? 2 : x.poof ? 1 : 0);
+    away.sort((a, b) => tier(a) - tier(b) || b.amount - a.amount);
     home.sort((a, b) => b.amount - a.amount);
 
     const men: Man[] = [];
@@ -197,8 +221,8 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
       shown.forEach((x, i) => {
         const r = risk(x.h);
         const peak = Math.max(n(x.h.peak_balance), n(x.h.balance) + (team === "away" ? x.amount : 0));
-        const left = x.poof ? 0 : peak > 0 ? Math.min(1, n(x.h.balance) / peak) : 1;
-        const mood: Mood = x.poof ? "gone" : team === "away" ? "paper" : r.level === "high" ? "ready" : r.level === "medium" ? "nervous" : "chill";
+        const left = x.poof || x.ghost ? 0 : peak > 0 ? Math.min(1, n(x.h.balance) / peak) : 1;
+        const mood: Mood = x.ghost ? "ghost" : x.poof ? "gone" : team === "away" ? "paper" : r.level === "high" ? "ready" : r.level === "medium" ? "nervous" : "chill";
         men.push({ h: x.h, team, amount: x.amount, bought: x.bought, risk: r, mood, left, place: i + 1, spot: spots[i] });
       });
       return shown;
@@ -227,7 +251,7 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
     }
     return {
       men, bench, gone, buyVol, sellVol, total, power, slots, buyers, moves: win, pops,
-      home: home.length, away: away.filter((x) => !x.poof).length, buys: win.filter((m) => m.buy).length, sells: win.filter((m) => !m.buy).length,
+      home: home.length, away: away.filter((x) => !x.poof && !x.ghost).length, buys: win.filter((m) => m.buy).length, sells: win.filter((m) => !m.buy).length,
     };
   }, [tf, holders, events, trades, links, dev, me, L, portrait]);
 
@@ -276,7 +300,47 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
   const ball = at(L / 2 + (power - 0.5) * 0.7 * L, W / 2);
   const join = at(0.3 * L, W - 2);
   const VW = portrait ? W : L, VH = portrait ? L : W;
-  const moodName = (m: Man) => m.mood === "gone" ? "sold everything and is vanishing" : m.mood === "paper" ? `sold ${fmt(m.amount)} ${symbol}, ${Math.round(m.left * 100)}% of the bag left`
+  const M = portrait ? 56 : 70; // the stands around the pitch
+  // The crowd: rows of fans in the stands, the same every time.
+  const crowd = useMemo(() => {
+    const r = seed("crowd" + L);
+    const colors = ["#12A66A", "#5BE3B0", "#E5482F", "#FF8A70", "#FFD84D", "#F5F5F5", "#7A5CFF", "#4FA3FF"];
+    const out: JSX.Element[] = [];
+    const fan = (x: number, y: number) => {
+      const c = colors[Math.floor(r() * colors.length)];
+      out.push(<g key={out.length} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`}><circle r="4.2" fill={c} /><circle cy="-6" r="3.2" fill={r() > 0.5 ? "#F4C69E" : "#8A5631"} /></g>);
+    };
+    for (let row = 0; row < (portrait ? 2 : 3); row++) {
+      const off = -M + 10 + row * 12;
+      for (let x = -M + 14; x < L + M - 10; x += 12) { fan(x + (row % 2) * 6, off); fan(x + (row % 2) * 6, W - off + 6); }
+      for (let y = -M + 40; y < W + M - 34; y += 12) { fan(off, y + (row % 2) * 6); fan(L - off, y + (row % 2) * 6); }
+    }
+    return <g opacity=".8" aria-hidden="true">{out}</g>;
+  }, [L, M, portrait]);
+  // Zoom keeps the middle of the view where it was; big screen opens zoomed in on phones, around your player or the middle.
+  const zoomBy = (dz: number) => {
+    const el = scroller.current, next = Math.min(4, Math.max(1, zoom + dz));
+    if (!el || next === zoom) return;
+    const cx = (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth, cy = (el.scrollTop + el.clientHeight / 2) / el.scrollHeight;
+    setZoom(next);
+    requestAnimationFrame(() => { el.scrollLeft = cx * el.scrollWidth - el.clientWidth / 2; el.scrollTop = cy * el.scrollHeight - el.clientHeight / 2; });
+  };
+  const openBig = () => {
+    setBig(true); setZoom(portrait ? 2 : 1.5);
+    setTimeout(() => {
+      const el = scroller.current;
+      if (!el) return;
+      const fx = mine ? (mine.spot.x + M) / (VW + 2 * M) : 0.5, fy = mine ? (mine.spot.y + M) / (VH + 2 * M) : 0.5;
+      el.scrollLeft = fx * el.scrollWidth - el.clientWidth / 2; el.scrollTop = fy * el.scrollHeight - el.clientHeight / 2;
+    }, 250);
+  };
+  useEffect(() => {
+    if (!big) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !buyOpen) { setBig(false); setZoom(1); } };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [big, buyOpen]);
+  const moodName = (m: Man) => m.mood === "gone" ? "sold everything and is vanishing" : m.mood === "ghost" ? "sold everything: a ghost now" : m.mood === "paper" ? `sold ${fmt(m.amount)} ${symbol}, ${Math.round(m.left * 100)}% of the bag left`
     : m.mood === "ready" ? "looks ready to sell" : m.mood === "nervous" ? "a bit nervous" : "chilling";
 
   return (
@@ -287,7 +351,7 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
         </div>
         <button type="button" className="sc-scan-btn" aria-expanded={scanOpen} onClick={() => setScanOpen(!scanOpen)}>🔎 Scan a token</button>
       </div>
-      {scanOpen && <div className="sc-scan"><AnalyticsScan signedIn={signedIn} label="Scan & play" view="chess" /></div>}
+      {scanOpen && <div className="sc-scan"><AnalyticsScan signedIn={signedIn} label="Scan & play" to="arena" /></div>}
 
       <div className="sc-board" role="img" aria-label={`Score: Diamond hands ${d.buys} buys, Paper hands ${d.sells} sells`}>
         <span className="h"><b>💎 DIAMOND HANDS</b><small>{d.home} holding · {d.buyers} bought</small></span>
@@ -309,21 +373,43 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
           : <span className="muted">No moves in this time frame yet. New buys and sells appear here within a minute.</span>}
       </button>
 
-      <div className={"sc-wrap" + (portrait ? " tall" : "")}>
-        <svg className="sc-pitch" viewBox={`-20 -20 ${VW + 40} ${VH + 40}`} role="img"
+      <div className={"sc-wrap" + (portrait ? " tall" : "") + (big ? " big" : "")} role={big ? "dialog" : undefined} aria-modal={big || undefined} aria-label={big ? "Big screen match" : undefined}>
+        <div className="sc-tools">
+          {big ? <b className="sc-tools-t">⚽ ${symbol} · {d.home} vs {d.away}</b> : <button type="button" className="sc-big-btn" onClick={() => openBig()}>⛶ Big screen: see every face</button>}
+          <span className="sc-zoom" role="group" aria-label="Zoom">
+            <button type="button" onClick={() => zoomBy(-0.5)} disabled={zoom <= 1} aria-label="Zoom out">−</button>
+            <span>{zoom.toFixed(1).replace(".0", "")}×</span>
+            <button type="button" onClick={() => zoomBy(0.5)} disabled={zoom >= 4} aria-label="Zoom in">+</button>
+          </span>
+          {big && <button type="button" className="sc-close" onClick={() => { setBig(false); setZoom(1); }} aria-label="Close big screen">✕</button>}
+        </div>
+        <div className="sc-scroll" ref={scroller}>
+        <svg className="sc-pitch" style={{ width: `${zoom * 100}%` }} viewBox={`${-M} ${-M} ${VW + 2 * M} ${VH + 2 * M}`} role="img"
           aria-label={`Game arena for ${symbol}: ${d.home} diamond hands against ${d.away} paper hands. ${verdict}.`}>
           <defs>
-            <pattern id="sc-net" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0L8 8M8 0L0 8" stroke="#fff" strokeWidth="1" opacity=".7" /></pattern>
+            <PlayerDefs />
+            <pattern id="sc-net" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M0 0L8 8M8 0L0 8" stroke="#fff" strokeWidth="1" opacity=".75" /></pattern>
+            <pattern id="sc-mow" width={L / 10} height={W / 8} patternUnits="userSpaceOnUse"><rect width={L / 10} height={W / 16} fill="#fff" opacity=".05" /></pattern>
             <radialGradient id="sc-me" cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#FFD54A" stopOpacity=".9" /><stop offset="1" stopColor="#FFB300" stopOpacity="0" /></radialGradient>
+            <radialGradient id="sc-light" cx=".5" cy=".5" r=".7"><stop offset="0" stopColor="#fff" stopOpacity=".12" /><stop offset=".6" stopColor="#fff" stopOpacity="0" /><stop offset="1" stopColor="#000" stopOpacity=".35" /></radialGradient>
+            <radialGradient id="sc-flood" cx=".5" cy=".5" r=".5"><stop offset="0" stopColor="#FFFBE0" stopOpacity=".55" /><stop offset="1" stopColor="#FFFBE0" stopOpacity="0" /></radialGradient>
+            <linearGradient id="sc-stand" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#0B1020" /><stop offset=".5" stopColor="#1A2238" /><stop offset="1" stopColor="#0B1020" /></linearGradient>
+            <linearGradient id="sc-board" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#2A1E5C" /><stop offset="1" stopColor="#120C2E" /></linearGradient>
+            <radialGradient id="sc-ball" cx=".35" cy=".3" r=".75"><stop offset="0" stopColor="#fff" /><stop offset=".7" stopColor="#E6E6E6" /><stop offset="1" stopColor="#9A9A9A" /></radialGradient>
           </defs>
-          <rect x="-20" y="-20" width={VW + 40} height={VH + 40} rx="26" fill="#1F7A3D" />
-          {/* The pitch is drawn wide, then turned upright on phones. */}
+          {/* The stadium and pitch are drawn wide, then turned upright on phones. */}
           <g transform={portrait ? `translate(0 ${L}) rotate(-90)` : undefined}>
-            {Array.from({ length: 10 }, (_, i) => <rect key={i} x={(i * L) / 10} y="0" width={L / 10} height={W} fill={i % 2 ? "#33A957" : "#2C9C4E"} />)}
+            <rect x={-M} y={-M} width={L + 2 * M} height={W + 2 * M} rx="30" fill="url(#sc-stand)" />
+            {crowd}
+            {/* advertising boards around the pitch */}
+            <rect x={-26} y={-26} width={L + 52} height={W + 52} rx="8" fill="none" stroke="url(#sc-board)" strokeWidth="14" />
+            {[-21, W + 31].map((y) => <text key={y} x={L / 2} y={y - 2} textAnchor="middle" className="sc-ads">{"AUTISTIK  ·  💎 DIAMOND HANDS  ·  ⚽ JOIN THE MATCH  ·  AUTISTIK  ·  NO PAPER HANDS  ·  AUTISTIK"}</text>)}
+            {Array.from({ length: 10 }, (_, i) => <rect key={i} x={(i * L) / 10 - (i === 0 ? 12 : 0)} y="-12" width={L / 10 + (i === 0 || i === 9 ? 12 : 0)} height={W + 24} fill={i % 2 ? "#3DB463" : "#2FA052"} />)}
+            <rect x="-12" y="-12" width={L + 24} height={W + 24} fill="url(#sc-mow)" />
             {/* whose half is winning: a green wash from the home end, red from the away end */}
             <rect x="0" y="0" width={L * power} height={W} fill="#7CFFB2" opacity=".08" />
             <rect x={L * power} y="0" width={L * (1 - power)} height={W} fill="#FF7A5C" opacity=".08" />
-            <g fill="none" stroke="#fff" strokeWidth="4" opacity=".9">
+            <g fill="none" stroke="#fff" strokeWidth="4" opacity=".92">
               <rect x="2" y="2" width={L - 4} height={W - 4} />
               <line x1={L / 2} y1="2" x2={L / 2} y2={W - 2} />
               <circle cx={L / 2} cy={W / 2} r={W * 0.14} />
@@ -337,15 +423,25 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
             </g>
             <circle cx={L / 2} cy={W / 2} r="5" fill="#fff" />
             <circle cx={L * 0.105} cy={W / 2} r="4" fill="#fff" /><circle cx={L * 0.895} cy={W / 2} r="4" fill="#fff" />
-            {/* goals */}
-            <rect x="-18" y={W * 0.4} width="18" height={W * 0.2} fill="url(#sc-net)" stroke="#fff" strokeWidth="4" />
-            <rect x={L} y={W * 0.4} width="18" height={W * 0.2} fill="url(#sc-net)" stroke="#fff" strokeWidth="4" />
+            {/* corner flags */}
+            {[[2, 2], [2, W - 2], [L - 2, 2], [L - 2, W - 2]].map(([x, y], i) => <g key={i} transform={`translate(${x} ${y})`}><line y2="-22" stroke="#fff" strokeWidth="2.5" /><path d="M0 -22 l12 4 l-12 4z" fill={x < L / 2 ? "#12A66A" : "#E5482F"} /></g>)}
+            {/* goals with a little depth */}
+            {[0, 1].map((side) => (
+              <g key={side} transform={side ? `translate(${L} 0) scale(-1 1)` : undefined}>
+                <rect x="-22" y={W * 0.4 + 4} width="22" height={W * 0.2} fill="rgba(0,0,0,.25)" />
+                <rect x="-22" y={W * 0.4} width="22" height={W * 0.2} fill="url(#sc-net)" />
+                <path d={`M0 ${W * 0.4} h-22 v${W * 0.2} h22`} fill="none" stroke="#fff" strokeWidth="5" strokeLinejoin="round" />
+              </g>
+            ))}
+            <rect x="-12" y="-12" width={L + 24} height={W + 24} fill="url(#sc-light)" pointerEvents="none" />
+            {[[-M + 10, -M + 10], [L + M - 10, -M + 10], [-M + 10, W + M - 10], [L + M - 10, W + M - 10]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="150" fill="url(#sc-flood)" pointerEvents="none" />)}
           </g>
           {!d.men.length && <text x={VW / 2} y={VH / 2} textAnchor="middle" className="sc-empty">Scan the token to fill the pitch</text>}
           {d.men.length > 0 && !d.sells && <text x={VW / 2} y={portrait ? VH * 0.1 : VH * 0.12} textAnchor="middle" className="sc-empty good" transform={portrait ? undefined : `translate(${VW * 0.25} 0)`}>✓ No paper hands in this time frame</text>}
 
           <g transform={`translate(${ball.x} ${ball.y})`} className="sc-ball" aria-hidden="true">
-            <g className="sc-ball-spin"><circle r="13" fill="#fff" stroke="#222" strokeWidth="2" /><path d="M0 -6 l5.7 4.1 -2.2 6.7 h-7 l-2.2 -6.7z" fill="#222" /></g>
+            <ellipse cx="3" cy="12" rx="13" ry="4" fill="rgba(0,0,0,.35)" />
+            <g className="sc-ball-spin"><circle r="13" fill="url(#sc-ball)" stroke="#222" strokeWidth="2" /><path d="M0 -6 l5.7 4.1 -2.2 6.7 h-7 l-2.2 -6.7z" fill="#222" /><path d="M0 -6 v-6 M5.7 -1.9 l6 -2 M3.5 4.8 l4 5 M-3.5 4.8 l-4 5 M-5.7 -1.9 l-6 -2" stroke="#222" strokeWidth="1.5" /></g>
           </g>
 
           {canBuy && !mine && (
@@ -362,7 +458,7 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
             const k = KIT[p.team];
             return (
               <g key={p.team + p.h.wallet} transform={`translate(${p.spot.x} ${p.spot.y}) scale(${p.spot.s})`}
-                className={"pl " + p.mood + (on ? " sel" : "") + (you ? " me" : "")} style={{ ["--dl" as any]: `${(i % 9) * 0.21}s`, opacity: p.mood === "paper" ? 0.28 + 0.72 * p.left : undefined }}
+                className={"pl " + p.mood + (on ? " sel" : "") + (you ? " me" : "")} style={{ ["--dl" as any]: `${(i % 9) * 0.21}s`, opacity: p.mood === "paper" ? 0.4 + 0.6 * p.left : p.mood === "ghost" ? 0.55 : undefined }}
                 role="button" tabIndex={0} onClick={() => pick(p.h.wallet)} onKeyDown={keys(() => pick(p.h.wallet))}
                 aria-label={`${you ? "You: " : ""}${p.team === "home" ? "Diamond hands" : "Paper hands"} player ${short(p.h.wallet)}, holds ${pct(n(p.h.pct))}, ${moodName(p)}`}>
                 {you && <ellipse cx="0" cy="-2" rx="48" ry="16" fill="url(#sc-me)" />}
@@ -372,8 +468,8 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
                 </g>
                 {p.mood === "gone" && <text y="-60" textAnchor="middle" className="pl-poof" fontSize="56">💨</text>}
                 <g transform="translate(0 20)">
-                  <rect x="-34" y="-11" width="68" height="22" rx="11" fill={p.team === "home" ? "#0B5E3E" : "#8E1F10"} stroke="#fff" strokeWidth="2" />
-                  <text y="5" textAnchor="middle" className="pl-tag">{p.team === "home" ? pct(n(p.h.pct)) : "−" + fmt(p.amount)}</text>
+                  <rect x="-34" y="-11" width="68" height="22" rx="11" fill={p.team === "home" ? "#0B5E3E" : p.mood === "ghost" ? "#5B6478" : "#8E1F10"} stroke="#fff" strokeWidth="2" />
+                  <text y="5" textAnchor="middle" className="pl-tag">{p.team === "home" ? pct(n(p.h.pct)) : p.mood === "ghost" || p.mood === "gone" ? "SOLD ALL" : "−" + fmt(p.amount)}</text>
                 </g>
                 {p.team === "home" && !you && <circle cx="-26" cy="-98" r="8" fill={RISK_COLOR[p.risk.level]} stroke="#fff" strokeWidth="2.5" />}
                 {p.bought > 0 && <g transform="translate(28 -98)"><circle r="11" fill="#0E7A55" stroke="#fff" strokeWidth="2.5" /><text y="5" textAnchor="middle" className="pl-plus">+</text></g>}
@@ -395,6 +491,8 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
             );
           })}
         </svg>
+        </div>
+        {big && canBuy && <button type="button" className="ar-enter sc-big-join" onClick={() => setBuyOpen(true)}>{enterLabel}</button>}
       </div>
 
       <div className="ar-panels">
@@ -402,7 +500,7 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
           <div className="ar-h"><b>🎮 Your player</b></div>
           {mine ? (
             <button type="button" className="ar-me-card" onClick={() => setSel(mine.h.wallet)}>
-              <svg className="ar-me-face" viewBox="-40 -105 80 110" aria-hidden="true"><Player wallet={mine.h.wallet} kit="#FFB300" trim={KIT[mine.team].trim} number={mine.place} mood={mine.mood} you /></svg>
+              <svg className="ar-me-face" viewBox="-40 -105 80 110" aria-hidden="true"><defs><PlayerDefs /></defs><Player wallet={mine.h.wallet} kit="#FFB300" trim={KIT[mine.team].trim} number={mine.place} mood={mine.mood} you /></svg>
               <span className="grow">
                 <b>You play for {mine.team === "home" ? "💎 Diamond Hands" : "🧻 Paper Hands"}</b>
                 <small>#{mine.place} of {mine.team === "home" ? d.home : d.away} · {mine.team === "home" ? `holds ${pct(n(mine.h.pct))}` : `sold ${fmt(mine.amount)} ${symbol}`}</small>
@@ -493,7 +591,7 @@ export default function Arena({ holders, events, trades = [], links, explorer, t
         <div className="tl-axis"><span>{tf === "all" ? "Start" : FRAMES.find((f) => f.k === tf)!.label + " ago"}</span><span>Now</span></div>
       </div>
 
-      {buyOpen && chain && <EnterSheet chain={chain} token={token} symbol={symbol} more={!!mine && mine.team === "home"} onClose={() => setBuyOpen(false)} />}
+      {buyOpen && chain && <EnterSheet chain={chain} token={token} symbol={symbol} signedIn={signedIn} more={!!mine && mine.team === "home"} onClose={() => setBuyOpen(false)} />}
     </div>
   );
 }
@@ -512,7 +610,8 @@ function FindMe({ saved, onSave }: { saved: string; onSave: (v: string) => void 
 }
 
 /** Pick an amount, then buy in the Wallet with it filled in. */
-function EnterSheet({ chain, token, symbol, more, onClose }: { chain: string; token: string; symbol: string; more: boolean; onClose: () => void }) {
+function EnterSheet({ chain, token, symbol, more, signedIn, onClose }: { chain: string; token: string; symbol: string; more: boolean; signedIn: boolean; onClose: () => void }) {
+  useScrollLock(true);
   const [usd, setUsd] = useState(25); const [custom, setCustom] = useState("");
   const dollars = custom ? Number(custom) : usd;
   const ok = dollars > 0 && dollars <= 100_000;
@@ -523,7 +622,7 @@ function EnterSheet({ chain, token, symbol, more, onClose }: { chain: string; to
   }, [onClose]);
   const href = `/wallet?chain=${encodeURIComponent(chain)}&buy=${encodeURIComponent(token)}&quick=1&usd=${encodeURIComponent(String(dollars))}`;
   return (
-    <div className="aw-sheet" role="dialog" aria-modal="true" aria-label={`Buy ${symbol}`} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="aw-sheet ar-full" role="dialog" aria-modal="true" aria-label={`Buy ${symbol}`} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="aw-sheet-in sm-sheet ar-sheet">
         <div className="row" style={{ justifyContent: "space-between" }}><b>{more ? `⚽ Buy more ${symbol}` : `⚽ Join the ${symbol} match`}</b><button type="button" className="btn small" onClick={onClose}>Close</button></div>
         <b>How much do you want to spend?</b>
@@ -534,6 +633,11 @@ function EnterSheet({ chain, token, symbol, more, onClose }: { chain: string; to
         <small className="tx-dim">Next you&apos;ll see the price and safety check in your wallet and confirm the buy there. Your player runs onto the pitch within a minute after it goes through.</small>
         <a className={"tx-cta buy" + (ok ? "" : " off")} href={ok ? href : undefined} aria-disabled={!ok}>{ok ? `Continue: buy $${dollars} of ${symbol}` : "Pick an amount"}</a>
         <small className="tx-dim">New coins are very risky. Only spend what you can afford to lose. Not financial advice.</small>
+        <div className="ar-sheet-scan">
+          <b>🔎 Or play another coin</b>
+          <small className="tx-dim">Paste any token&apos;s contract address (CA) to open its match.</small>
+          <AnalyticsScan signedIn={signedIn} label="Play" to="arena" />
+        </div>
       </div>
     </div>
   );

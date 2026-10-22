@@ -1,6 +1,6 @@
 import dynamicImport from "next/dynamic";
 import Link from "next/link";
-import Player from "@/components/arena/Player";
+import Player, { PlayerDefs } from "@/components/arena/Player";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
@@ -29,12 +29,12 @@ export default async function WalletPage({ searchParams }: { searchParams: { cha
       {/* The wallet is the player's locker room: straight into a match or the scanner from here. */}
       <nav className="wg-bar" aria-label="Wallet games">
         <span className="wg-me" aria-hidden="true">
-          <svg viewBox="-40 -105 80 110"><g className="pl chill"><g className="pl-move"><Player wallet={member?.evm || member?.sol || "autistik-player"} kit="#FFB300" trim="#fff" number={1} you /></g></g></svg>
+          <svg viewBox="-40 -105 80 110"><defs><PlayerDefs /></defs><g className="pl chill"><g className="pl-move"><Player wallet={member?.evm || member?.sol || "autistik-player"} kit="#FFB300" trim="#fff" number={1} you /></g></g></svg>
         </span>
         <span className="wg-title"><b>Player wallet</b><small>Trade, then jump into a match</small></span>
         <span className="wg-links">
           <Link href="/arena" className="wg-btn arena">⚽ Game arena</Link>
-          <Link href={`/analytics/bsc/${TOKEN_ADDRESS}?view=chess`} className="wg-btn">💎 $AUTISTIK match</Link>
+          <Link href={`/arena/bsc/${TOKEN_ADDRESS}`} className="wg-btn">💎 $AUTISTIK match</Link>
           <Link href="/analytics" className="wg-btn">🔎 Scanner</Link>
         </span>
       </nav>

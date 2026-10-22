@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import WatchButton from "@/components/WatchButton";
-import Arena from "@/components/Arena";
 import { insights } from "@/lib/analytics-insights";
 import { holdOutlook, tradeCall, tradingPlans, whoMightSell } from "@/lib/analytics-signals";
 import { getCandles, getPairStats } from "@/lib/market";
@@ -26,7 +25,6 @@ import AutoRefresh from "@/components/AutoRefresh";
 import TrustScore from "@/components/TrustScore";
 import { trustScore } from "@/lib/trust-score";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
-import { walletMember } from "@/lib/privy-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -48,12 +46,14 @@ function status(h: any, last: any) {
   return { cls: "", text: "Holding" };
 }
 
-const VIEWS = [["overview", "Overview"], ["chess", "Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
+const VIEWS = [["overview", "Overview"], ["chess", "⚽ Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
 type View = (typeof VIEWS)[number][0];
 
 export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string } }) {
   const view: View = (VIEWS.find(([k]) => k === searchParams.view)?.[0]) ?? "overview";
   if (!isAChain(params.chain) || !isChainAddress(params.chain, params.token)) notFound();
+  // The game arena is its own page now, apart from the scanner; old links still land there.
+  if (view === "chess") redirect(`/arena/${params.chain}/${params.token}`);
   const chain = params.chain, c = ACHAINS[chain];
   const sb = supabaseServer();
   let { data: t } = await sb.from("tracked_tokens").select("*").eq("chain", chain).eq("token", params.token).maybeSingle();
@@ -135,9 +135,6 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
     ? { buys: move.buysH24 ?? 0, sells: move.sellsH24 }
     : hasLiveTrades(chain) && t.pair ? { buys: ours24.filter((x: any) => x.side === "buy").length, sells: ours24.filter((x: any) => x.side === "sell").length } : null;
   const topSells24 = (events || []).filter((e: any) => e.kind !== "buy" && day(e.created_at)).length;
-  // The member's own wallet, so the game arena can show their player.
-  const member = view === "chess" && user ? await walletMember().catch(() => null) : null;
-  const myWallet = member ? (chain === "solana" ? member.sol : member.evm) : null;
   const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
   return (
@@ -180,7 +177,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
 
       <nav className="launch-nav n5 an-cards" aria-label="Sections">
         {VIEWS.map(([k, name], i) => (
-          <Link key={k} href={`/analytics/${chain}/${t.token}${k === "overview" ? "" : `?view=${k}`}`} aria-current={view === k ? "page" : undefined} scroll={false}
+          <Link key={k} href={k === "chess" ? `/arena/${chain}/${t.token}` : `/analytics/${chain}/${t.token}${k === "overview" ? "" : `?view=${k}`}`} aria-current={view === k ? "page" : undefined} scroll={false}
             className={"ln-card " + (["coral", "violet", "sun", "teal", "ink"] as const)[i]}><span className="ln-text"><b>{name}</b></span></Link>
         ))}
       </nav>
@@ -236,26 +233,6 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         </details>
       )}
 
-      {view === "chess" && (
-        <div className="card stack">
-          <h2>⚽ Game arena: every holder on the pitch</h2>
-          <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"}
-            chain={chain} canBuy={isWChain(chain)} me={myWallet} signedIn={!!user} />
-          <details className="chess-help">
-            <summary>How to watch the match</summary>
-            <ul>
-              <li><b>Green kits are Diamond Hands</b>: wallets still holding, defending their own goal. <b>Red kits are Paper Hands</b>: wallets that sold some in this time frame.</li>
-              <li><b>Shaking and sweating</b> means a holder looks ready to sell (sold before, bought very recently, or linked to other wallets).</li>
-              <li><b>Faded players</b> sold part of their bag: the less they have left, the more see-through they get. <b>💨 Poof:</b> a wallet that sells everything vanishes from the pitch.</li>
-              <li><b>Every new sell pops up</b> as a note at the top of the screen, and the latest buys and sells show over the player who made them.</li>
-              <li><b>Your player</b> has gold hair, a gold kit and a YOU flag. Not signed in? Paste your wallet under &quot;Your player&quot; to find it.</li>
-              <li><b>Join the match</b> (or tap the gold JOIN on the touchline): pick an amount and buy in your wallet. Your player runs on within a minute.</li>
-              <li><b>The keeper</b> on each side is the biggest bag (or biggest seller). The score is buys against sells, and the ball rolls toward the losing side&apos;s goal.</li>
-              <li><b>🔎 Scan a token</b> opens any other token&apos;s match. Pick a time frame (1H to All) and tap any player to see that wallet.</li>
-            </ul>
-          </details>
-        </div>
-      )}
 
 
       {view === "wallets" && <div className="card stack">
