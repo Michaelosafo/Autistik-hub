@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
-import { safeNext } from "@/lib/auth";
+import { safeNext, welcomeUrl } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import { ensureMemberWallet } from "@/lib/privy-server";
 
@@ -22,6 +22,8 @@ export async function GET(request: Request) {
       if (type === "recovery") return NextResponse.redirect(new URL("/reset-password", url.origin));
       const done = new URL(next, url.origin);
       if (type === "signup" || type === "email") done.searchParams.set("welcome", "1");
+      // A brand-new account sees the (optional, recommended) 2-step verification offer first.
+      if (type === "signup") return NextResponse.redirect(welcomeUrl(done, url.origin));
       return NextResponse.redirect(done);
     }
     return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin));

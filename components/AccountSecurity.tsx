@@ -12,11 +12,11 @@ const clean = (c: string) => c.replace(/\D/g, "");
 
 /**
  * The member's 2-step verification:
- * - "setup": add an authenticator app (needed before using the Hub)
  * - "code": type the code from the app to finish signing in
- * - "ok": see the apps on the account, add a backup one, or remove one
+ * - "ok": turn it on (optional, recommended), or see the apps on the account, add a backup one, or remove one
+ * `welcome`: just joined, so there's a "Skip for now" back to where they were going.
  */
-export default function AccountSecurity({ step, next, email }: { step: MfaStep; next: string; email: string }) {
+export default function AccountSecurity({ step, next, email, welcome = false }: { step: MfaStep; next: string; email: string; welcome?: boolean }) {
   const mfa = supabaseBrowser().auth.mfa;
   const [factors, setFactors] = useState<Factor[] | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
@@ -43,9 +43,7 @@ export default function AccountSecurity({ step, next, email }: { step: MfaStep; 
     setSetup({ factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret, uri: data.totp.uri });
   }, [mfa]);
 
-  useEffect(() => {
-    load().then((all) => { if (step === "setup") startSetup(all); });
-  }, [load, startSetup, step]);
+  useEffect(() => { load(); }, [load]);
 
   const done = () => window.location.assign(next);
 
@@ -56,8 +54,9 @@ export default function AccountSecurity({ step, next, email }: { step: MfaStep; 
     const { error } = await mfa.challengeAndVerify({ factorId: setup.factorId, code: clean(code) });
     setBusy(false);
     if (error) { setMsg(BAD_CODE); return; }
-    if (step === "ok") { setSetup(null); setCode(""); setMsg("Backup authenticator added."); load(); return; }
-    done();
+    setSetup(null); setCode("");
+    setMsg(factors?.length ? "Backup authenticator added." : "2-step verification is on. Your account is now much harder to break into.");
+    load();
   }
 
   async function verifyCode(e: React.FormEvent) {
@@ -73,12 +72,15 @@ export default function AccountSecurity({ step, next, email }: { step: MfaStep; 
   }
 
   async function remove(f: Factor) {
-    if (!factors || factors.length < 2) return;
-    if (!confirm(`Remove "${f.friendly_name || "this authenticator"}"? Its codes will stop working for your account.`)) return;
+    if (!factors?.length) return;
+    const last = factors.length === 1;
+    if (!confirm(last
+      ? "Turn off 2-step verification? Your account will only be protected by your password or email again, which makes it easier to break into."
+      : `Remove "${f.friendly_name || "this authenticator"}"? Its codes will stop working for your account.`)) return;
     setBusy(true);
     const { error } = await mfa.unenroll({ factorId: f.id });
     setBusy(false);
-    setMsg(error ? "Couldn't remove it. Sign out and in again, then try once more." : "Removed.");
+    setMsg(error ? "Couldn't remove it. Sign out and in again, then try once more." : last ? "2-step verification is off." : "Removed.");
     load();
   }
 
@@ -118,22 +120,13 @@ export default function AccountSecurity({ step, next, email }: { step: MfaStep; 
       {codeField}
       <div className="row" style={{ gap: 8 }}>
         <button className="btn primary" type="submit" disabled={busy}>{busy ? "Checking…" : "Turn it on"}</button>
-        {step === "ok" && <button className="btn" type="button" onClick={() => { setSetup(null); load().then((all) => all.filter((f) => f.status !== "verified").forEach((f) => mfa.unenroll({ factorId: f.id }))); }}>Cancel</button>}
+        {<button className="btn" type="button" onClick={() => { setSetup(null); load().then((all) => all.filter((f) => f.status !== "verified").forEach((f) => mfa.unenroll({ factorId: f.id }))); }}>Cancel</button>}
       </div>
     </form>
   );
 
   return (
     <div className="card stack" style={{ maxWidth: 560 }}>
-      {step === "setup" && (
-        <>
-          <div className="label">Step 2 of 2</div>
-          <h2>Protect your account with an authenticator app</h2>
-          <p className="muted" style={{ margin: 0 }}>Every Hub account needs this. It takes about a minute, and you only do it once. Signed in as <b>{email}</b>.</p>
-          {setupForm || (!msg && <div className="muted">Getting your code ready…</div>)}
-        </>
-      )}
-
       {step === "code" && (
         <form className="stack" onSubmit={verifyCode}>
           <div className="label">One more step</div>
@@ -144,30 +137,48 @@ export default function AccountSecurity({ step, next, email }: { step: MfaStep; 
         </form>
       )}
 
-      {step === "ok" && (
+      {step === "ok" && factors?.length === 0 && (
+        <>
+          {welcome && <div className="label">Welcome to the Hub</div>}
+          <h2>Make your account more secure</h2>
+          <div className="notice warn stack" style={{ gap: 6 }}>
+            <b>2-step verification is off for {email}.</b>
+            <span>Right now anyone who gets your password, or into your email, can get into your account. Turn on 2-step verification and they&apos;d also need your phone. It takes about a minute, and we strongly recommend it.</span>
+          </div>
+          {setup ? setupForm : (
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn primary" type="button" disabled={busy} onClick={() => load().then(startSetup)}>Turn on 2-step verification</button>
+              {welcome && <a className="btn" href={next}>Skip for now</a>}
+            </div>
+          )}
+          {welcome && !setup && <span className="muted" style={{ fontSize: ".9em" }}>You can turn it on any time from the menu: <b>Account security</b>.</span>}
+        </>
+      )}
+
+      {step === "ok" && !!factors?.length && (
         <>
           <h2>Your authenticator apps</h2>
-          <p className="muted" style={{ margin: 0 }}>2-step verification is <b>on</b> for {email}. Every sign-in needs a code from one of these.</p>
-          {factors === null ? <div className="muted">Loading…</div> : (
-            <ul className="stack" style={{ margin: 0, padding: 0, listStyle: "none", gap: 8 }}>
-              {factors.map((f) => (
-                <li key={f.id} className="notice row" style={{ justifyContent: "space-between", gap: 8 }}>
-                  <span>🔐 <b>{f.friendly_name || "Authenticator"}</b> <small className="muted">added {new Date(f.created_at).toLocaleDateString()}</small></span>
-                  {factors.length > 1 && <button className="btn small" type="button" disabled={busy} onClick={() => remove(f)}>Remove</button>}
-                </li>
-              ))}
-            </ul>
-          )}
+          <p className="muted" style={{ margin: 0 }}>2-step verification is <b>on</b> for {email} ✓. Every sign-in needs a code from one of these, so your password alone isn&apos;t enough to get in.</p>
+          <ul className="stack" style={{ margin: 0, padding: 0, listStyle: "none", gap: 8 }}>
+            {factors.map((f) => (
+              <li key={f.id} className="notice row" style={{ justifyContent: "space-between", gap: 8 }}>
+                <span>🔐 <b>{f.friendly_name || "Authenticator"}</b> <small className="muted">added {new Date(f.created_at).toLocaleDateString()}</small></span>
+                <button className="btn small" type="button" disabled={busy} onClick={() => remove(f)}>{factors.length > 1 ? "Remove" : "Turn off"}</button>
+              </li>
+            ))}
+          </ul>
           {setup ? setupForm : (
             <>
               <p className="muted" style={{ margin: 0, fontSize: ".92em" }}>Add a backup, like a tablet or a second phone, so you can still sign in if you lose your phone.</p>
               <button className="btn" type="button" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => load().then(startSetup)}>Add a backup authenticator</button>
             </>
           )}
+          {welcome && <a className="btn primary" href={next} style={{ alignSelf: "flex-start" }}>Continue</a>}
         </>
       )}
+      {step === "ok" && factors === null && !msg && <div className="muted">Loading…</div>}
 
-      {msg && <div className={`notice ${/added|Removed/.test(msg) ? "" : "warn"}`} role="status">{msg}</div>}
+      {msg && <div className={`notice ${/added|Removed|is on|is off/.test(msg) ? "" : "warn"}`} role="status">{msg}</div>}
       {step !== "ok" && <button className="linkish" type="button" onClick={signOut} style={{ alignSelf: "flex-start" }}>Sign out instead</button>}
     </div>
   );

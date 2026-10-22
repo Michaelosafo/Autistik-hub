@@ -13,7 +13,8 @@ export default function AuthenticatorGuide() {
       <h2 id="guide-h">How to add an authenticator app</h2>
       <p className="muted" style={{ margin: 0 }}>
         An authenticator app makes a new 6-digit code every 30 seconds. When you sign in, the Hub asks for your password <b>and</b> the code.
-        Someone who steals your password still can&apos;t get in without your phone.
+        Someone who steals your password still can&apos;t get in without your phone. It&apos;s optional, but we strongly recommend it,
+        especially if you hold coins or use the wallet.
       </p>
 
       <h3 style={{ marginBottom: 0 }}>1. Install an app on your phone</h3>
