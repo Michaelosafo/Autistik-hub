@@ -1927,3 +1927,47 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
   .ah-grid{grid-template-columns:1fr;gap:8px}.ah-tool{padding:12px}}
 /* Home button on the main page (opens the App): icon only on phones */
 @media (max-width:600px){ .lp-home span{display:none} .lp-signin.lp-home{padding:10px} .lp-signin.lp-home svg{display:block} }
+
+/* Swap: the network chip sits inside the paste-address row; "Receive on" is one small line under it. */
+.sx-ca{flex-wrap:wrap;padding:8px 10px 8px 8px;gap:8px;cursor:default}
+.sx-ca input{flex:1 1 140px}
+.sx-chip{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:7px;flex:none;max-width:60%;padding:7px 10px 7px 7px;border-radius:14px;background:#1d1a28;border:1px solid #3a3350;color:#F4EEFF;font-size:.9em;transition:border-color .15s}
+.sx-chip:hover,.sx-chip:focus-visible{border-color:rgba(245,201,53,.7)}
+.sx-chip:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sx-chip b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800}
+.sx-chip .tx-caret{color:#8F84AA}
+.sx-chip .sx-tag,.sx-chip .sx-hint{font-size:.72em;font-weight:800}
+.sx-chip.ask{border-color:rgba(245,201,53,.6);box-shadow:0 0 0 3px rgba(245,201,53,.08)}
+.sx-ca-x{all:unset;cursor:pointer;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#8F84AA;font-size:1.2em;flex:none}
+.sx-ca-x:hover{color:#F4EEFF;background:rgba(255,255,255,.06)}
+.sx-ca-note{padding-left:4px}
+.sx-recv{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.86em;color:#B8ADD2;font-weight:700;padding:0 2px}
+.sx-recv>small{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.9em;color:#8F84AA}
+.sx-recv.cross>small{color:#F4EEFF}
+.sx-recv .sx-chip{font-size:.95em;padding:5px 9px 5px 5px}
+@media (max-width:440px){ .sx-recv>small{margin-left:0;flex-basis:100%} .sx-chip{max-width:none} }
+
+/* Pop-up notes (toast), e.g. "Swap done" */
+.toasts{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:120;display:flex;flex-direction:column;gap:8px;width:min(420px,calc(100% - 24px));pointer-events:none}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 14px;border-radius:16px;background:#1d1a28;border:1px solid #3a3350;color:#F4EEFF;box-shadow:0 14px 40px rgba(0,0,0,.45);animation:toastIn .25s ease-out}
+.toast.ok{border-color:rgba(49,208,170,.6)} .toast.bad{border-color:rgba(237,75,158,.6)}
+.toast-ic{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:900;background:rgba(245,201,53,.15);color:#F5C935}
+.toast.ok .toast-ic{background:rgba(49,208,170,.18);color:#31D0AA} .toast.bad .toast-ic{background:rgba(237,75,158,.18);color:#ED4B9E}
+.toast-t{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.toast-t small{color:#B8ADD2;font-size:.84em;overflow-wrap:anywhere}
+.toast-t a{color:#F5C935;font-weight:800;font-size:.84em;text-decoration:none}
+.toast-x{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;color:#8F84AA;font-size:1.2em}
+.toast-x:hover{color:#F4EEFF;background:rgba(255,255,255,.06)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+:root[data-calm="on"] .toast{animation:none}
+@media (prefers-reduced-motion:reduce){ .toast{animation:none} }
+
+/* Main page: Open App is the biggest thing in the top bar, with a soft glow so it's easy to find. */
+.lp-bar .lp-openapp{padding:13px 24px;font-size:1.06em;border-radius:18px;white-space:nowrap;box-shadow:0 0 0 3px rgba(240,185,11,.28),0 10px 30px rgba(240,185,11,.45),0 -3px 0 rgba(0,0,0,.18) inset;animation:openAppGlow 2.6s ease-in-out infinite}
+.lp-bar .lp-openapp svg{width:20px;height:20px}
+@keyframes openAppGlow{0%,100%{box-shadow:0 0 0 3px rgba(240,185,11,.28),0 10px 30px rgba(240,185,11,.4),0 -3px 0 rgba(0,0,0,.18) inset}50%{box-shadow:0 0 0 6px rgba(240,185,11,.16),0 10px 34px rgba(240,185,11,.6),0 -3px 0 rgba(0,0,0,.18) inset}}
+:root[data-calm="on"] .lp-bar .lp-openapp{animation:none}
+@media (prefers-reduced-motion:reduce){ .lp-bar .lp-openapp{animation:none} }
+/* Phones: the Home button opens the App too, so Open App takes its place. */
+@media (max-width:600px){ .lp-bar .lp-home{display:none} }
+@media (max-width:440px){ .lp-bar .lp-launch.lp-openapp{padding:12px 16px;font-size:1em} .lp-bar .lp-launch.lp-openapp>svg{display:inline-block;width:16px;height:16px} }
