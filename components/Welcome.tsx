@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 /** How long the page takes to open after "Go to site". */
 const OPEN_MS = 800;
 
-/** How long the mascot says hi before it tells you about the game arena. */
-const ARENA_MS = 1200;
+/** How long the mascot says hi (and why AUTISTIK) before it tells you about the game arena. */
+const ARENA_MS = 4000;
 
 /**
- * The first thing a visitor sees: Autistik, the AUTISTIK mascot, says hi, then a second later tells them about the
+ * The first thing a visitor sees: Autistik, the AUTISTIK mascot, says hi, then a few seconds later tells them about the
  * game arena. "Go to site" (or Escape) opens the page around it; "Play the arena" goes straight to the arena.
  * Shown every time the site is opened or reloaded (moving between pages inside the site doesn't bring it back).
  * With calm mode or reduced motion nothing moves and the page appears straight away.
@@ -43,7 +43,7 @@ export default function Welcome() {
         {line === 0 ? (
           <div className="welcome-bubble" key="hi">
             <b>Hi, welcome to AUTISTIK!</b>
-            <span>I&apos;m Autistik, the mascot.</span>
+            <span>I&apos;m Autistik, the mascot. This is a crypto home built around autism awareness: simple, safe tools, and part of the activity helps autistic people.</span>
           </div>
         ) : (
           <div className="welcome-bubble arena" key="arena" aria-live="polite">
