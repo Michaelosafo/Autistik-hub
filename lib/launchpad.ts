@@ -63,10 +63,12 @@ export const PLANS = [
 
 export const ERC20_META_ABI = parseAbi(["function name() view returns (string)", "function symbol() view returns (string)"]);
 
-export type ChainKey = "bsc" | "ethereum" | "base" | "arbitrum" | "robinhood";
+export type ChainKey = "bsc" | "ethereum" | "base" | "arbitrum" | "polygon" | "avalanche" | "optimism" | "robinhood" | "solana";
 
 export type LaunchChain = {
   key: ChainKey;
+  /** EVM chains launch through the AUTISTIK Launch Pad contract; Solana creates an SPL token and a Raydium pool. */
+  kind?: "evm" | "solana";
   name: string;
   dex: string;
   coin: string;
@@ -78,7 +80,7 @@ export type LaunchChain = {
   /** The chain's V2 DEX router and the stablecoin promotions are paid in (used when the team deploys the launchpad). */
   router?: `0x${string}`;
   stablecoin?: `0x${string}`;
-  /** Suggested liquidity, shown to creators and Autistik. The contract enforces its own minimum. */
+  /** Example amount shown as a hint only: creators put in any amount. The contract enforces its own small minimum (about $25 + $3). */
   suggestedLiquidity: string;
   swapUrl: (token: string) => string;
 };
@@ -98,7 +100,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     dexscreener: "bsc",
     router: "0x10ED43C718714eb63d5aA57B78B54704E256024E",
     stablecoin: "0x55d398326f99059fF775485246999027B3197955",
-    suggestedLiquidity: "0.5",
+    suggestedLiquidity: "0.1",
     swapUrl: (t) => `https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${t}`,
   },
   ethereum: {
@@ -112,7 +114,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     dexscreener: "ethereum",
     router: "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
     stablecoin: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-    suggestedLiquidity: "0.5",
+    suggestedLiquidity: "0.1",
     swapUrl: (t) => `https://app.uniswap.org/swap?chain=mainnet&outputCurrency=${t}`,
   },
   base: {
@@ -126,7 +128,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     dexscreener: "base",
     router: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
     stablecoin: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    suggestedLiquidity: "0.2",
+    suggestedLiquidity: "0.05",
     swapUrl: (t) => `https://app.uniswap.org/swap?chain=base&outputCurrency=${t}`,
   },
   arbitrum: {
@@ -140,24 +142,88 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     dexscreener: "arbitrum",
     router: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
     stablecoin: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
-    suggestedLiquidity: "0.2",
+    suggestedLiquidity: "0.05",
     swapUrl: (t) => `https://app.uniswap.org/swap?chain=arbitrum&outputCurrency=${t}`,
+  },
+  polygon: {
+    key: "polygon",
+    name: "Polygon",
+    dex: "Uniswap",
+    coin: "POL",
+    chainId: 137,
+    rpc: process.env.NEXT_PUBLIC_POLYGON_RPC || "https://polygon-rpc.com",
+    explorer: "https://polygonscan.com",
+    dexscreener: "polygon",
+    router: "0xedf6066a2b290C185783862C7F4776A2C8077AD1",
+    stablecoin: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+    suggestedLiquidity: "100",
+    swapUrl: (t) => `https://app.uniswap.org/swap?chain=polygon&outputCurrency=${t}`,
+  },
+  avalanche: {
+    key: "avalanche",
+    name: "Avalanche",
+    dex: "Uniswap",
+    coin: "AVAX",
+    chainId: 43114,
+    rpc: process.env.NEXT_PUBLIC_AVALANCHE_RPC || "https://api.avax.network/ext/bc/C/rpc",
+    explorer: "https://snowtrace.io",
+    dexscreener: "avalanche",
+    router: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24",
+    stablecoin: "0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7",
+    suggestedLiquidity: "3",
+    swapUrl: (t) => `https://app.uniswap.org/swap?chain=avalanche&outputCurrency=${t}`,
+  },
+  optimism: {
+    key: "optimism",
+    name: "Optimism",
+    dex: "Uniswap",
+    coin: "ETH",
+    chainId: 10,
+    rpc: process.env.NEXT_PUBLIC_OPTIMISM_RPC || "https://mainnet.optimism.io",
+    explorer: "https://optimistic.etherscan.io",
+    dexscreener: "optimism",
+    router: "0x4A7b5Da61326A6379179b40d00F57E5bbDC962c2",
+    stablecoin: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
+    suggestedLiquidity: "0.05",
+    swapUrl: (t) => `https://app.uniswap.org/swap?chain=optimism&outputCurrency=${t}`,
   },
   robinhood: {
     key: "robinhood",
     name: "Robinhood Chain",
-    dex: process.env.NEXT_PUBLIC_ROBINHOOD_DEX_NAME || "Robinhood Chain DEX",
+    dex: process.env.NEXT_PUBLIC_ROBINHOOD_DEX_NAME || "Uniswap V2",
     coin: "ETH",
-    chainId: Number(process.env.NEXT_PUBLIC_ROBINHOOD_CHAIN_ID || 0),
-    rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "",
-    explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "").replace(/\/+$/, ""),
-    dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "",
-    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER),
+    // Robinhood Chain mainnet (an Arbitrum chain). Uniswap V2 router from Uniswap's deployments list; the stablecoin
+    // (used to price the launch fee) comes from the settings until it's confirmed.
+    chainId: Number(process.env.NEXT_PUBLIC_ROBINHOOD_CHAIN_ID || 4663),
+    rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
+    explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "https://robinhoodchain.blockscout.com").replace(/\/+$/, ""),
+    dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "robinhood",
+    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89E5Db8B5aA49aa85AC63f691524311aeb649EBA",
     stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN),
-    suggestedLiquidity: "0.5",
+    suggestedLiquidity: "0.1",
     swapUrl: (t) => (process.env.NEXT_PUBLIC_ROBINHOOD_SWAP_URL || "").replace("{token}", t),
   },
+  solana: {
+    key: "solana",
+    kind: "solana",
+    name: "Solana",
+    dex: "Raydium",
+    coin: "SOL",
+    chainId: 0,
+    rpc: process.env.NEXT_PUBLIC_SOLANA_RPC || "https://solana-rpc.publicnode.com",
+    explorer: "https://solscan.io",
+    dexscreener: "solana",
+    suggestedLiquidity: "0.5",
+    swapUrl: (t) => `https://raydium.io/swap/?inputMint=sol&outputMint=${t}`,
+  },
 };
+
+export const isSolana = (c: LaunchChain | null | undefined) => c?.kind === "solana";
+/** Solana launches: 6 decimals (like most Solana memecoins), and a supply that fits in a u64. */
+export const SOL_DECIMALS = 6;
+export const SOL_MAX_SUPPLY = 10n ** 13n;
+/** What Raydium charges to create a pool (about 0.15 SOL), plus room for rent and network fees. Shown before signing. */
+export const SOL_POOL_COST = 0.2;
 
 /** Where the launchpad is deployed on each chain (saved by the team's deploy, read from the database). */
 export type Pads = Partial<Record<ChainKey, `0x${string}`>>;
@@ -171,10 +237,11 @@ export async function readLimits(client: PublicClient, pad: `0x${string}`) {
   return { fee, minLiquidity, maxWhitelistNative, platformFee };
 }
 
-export const isLive = (c: LaunchChain, pads: Pads) => !!(pads[c.key] && c.chainId && c.rpc && c.explorer);
+// Solana needs no contract of ours (the token program and Raydium do the work), so it is live whenever it has an RPC.
+export const isLive = (c: LaunchChain, pads: Pads) => (isSolana(c) ? !!c.rpc : !!(pads[c.key] && c.chainId && c.rpc && c.explorer));
 export const liveChains = (pads: Pads) => Object.values(CHAINS).filter((c) => isLive(c, pads));
 /** Chains the team can deploy the launchpad on (a known V2 router and stablecoin). */
-export const deployable = (c: LaunchChain) => !!(c.router && c.stablecoin && c.chainId && c.rpc);
+export const deployable = (c: LaunchChain) => !isSolana(c) && !!(c.router && c.stablecoin && c.chainId && c.rpc);
 
 export function viemChain(c: LaunchChain) {
   return defineChain({
@@ -246,13 +313,18 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined, pads: Pads)
   if (!name || new TextEncoder().encode(name).length > 32) return { error: "The name must be 1–32 characters." };
   if (!/^[A-Z0-9]{1,12}$/.test(symbol)) return { error: "The ticker must be 1–12 letters or numbers." };
   const supply = String(p.supply || "").replace(/[,_\s]/g, "");
-  if (!/^\d+$/.test(supply) || BigInt(supply) < 1000n || BigInt(supply) > 10n ** 15n) return { error: "Total supply must be a whole number from 1,000 to 1,000,000,000,000,000." };
+  const sol = isSolana(chain);
+  // Solana launches have no tax, whitelist or first buy (a plain SPL token), and the pool's LP tokens are always burned.
+  if (sol) p = { ...p, lock: "burn", buyTax: 0, sellTax: 0, taxWallet: "", whitelist: [], devBuy: "0" };
+  const maxSupply = sol ? SOL_MAX_SUPPLY : 10n ** 15n;
+  if (!/^\d+$/.test(supply) || BigInt(supply) < 1000n || BigInt(supply) > maxSupply) return { error: `Total supply must be a whole number from 1,000 to ${maxSupply.toLocaleString("en-US")}.` };
   const creatorPercent = Number(p.creatorPercent ?? 0);
   if (!(creatorPercent >= 0 && creatorPercent <= MAX_CREATOR_PERCENT)) return { error: `Your share can be 0–${MAX_CREATOR_PERCENT}% of the supply.` };
   const liquidity = String(p.liquidity || "").trim();
   let wei = 0n;
   try { wei = parseEther(liquidity); } catch {}
   if (wei <= 0n) return { error: `Liquidity must be an amount of ${chain.coin}, like ${chain.suggestedLiquidity}.` };
+  if (sol && !/^\d*(\.\d{1,9})?$/.test(liquidity)) return { error: "SOL amounts can have at most 9 decimals." };
   if (!isLock(p.lock)) return { error: "Choose what happens to the liquidity: lock 6 months, lock 1 year, or burn." };
   const buyTax = Number(p.buyTax ?? 0), sellTax = Number(p.sellTax ?? 0);
   if (!(buyTax >= 0 && buyTax <= MAX_TAX_PERCENT) || !(sellTax >= 0 && sellTax <= MAX_TAX_PERCENT)) return { error: `Tax can be 0–${MAX_TAX_PERCENT}% on buys and on sells.` };

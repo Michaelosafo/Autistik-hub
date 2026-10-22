@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, MAX_SLIPPAGE_BPS, isNative, toUnits, type WChain, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "./types";
+import { toast } from "@/lib/toast";
 import { addTrade, amt, api, friendlyError, raw2num, RiskBox, runTrade, short, store, TokenPicker, usd, type Holding, type Quote, type TokenInfo } from "./util";
 
 /** Kept back for network fees when "Max" is used on the chain's own coin. */
@@ -75,7 +76,8 @@ export default function MarketForm({ c, signer, owner, from, to, side, tokens, b
       const hash = await runTrade(c, signer, owner, q, from, slipBps, setStep);
       addTrade({ at: Date.now(), chain: c.key, side, pay: `${amount} ${from.symbol}`, get: `${amt(out)} ${to.symbol}`, hash });
       setDone(hash); setAmount(""); setReview(false); onDone();
-    } catch (e: any) { setErr(friendlyError(e, c.native.symbol)); }
+      toast({ kind: "ok", title: side === "convert" ? "Swap done" : side === "buy" ? "Buy done" : "Sell done", text: `${amount} ${from.symbol} → ${amt(out)} ${to.symbol} on ${c.name}`, link: { href: `${c.explorer}/tx/${hash}`, label: "View transaction" } });
+    } catch (e: any) { const m = friendlyError(e, c.native.symbol); setErr(m); if (!m.startsWith("You cancelled")) toast({ kind: "bad", title: "Swap didn't go through", text: m }); }
     setStep("");
   }
 

@@ -19,22 +19,33 @@ export type BoardToken = {
 
 const key = (chain: string, token: string) => `${chain}:${token.toLowerCase()}`;
 
-/** Everything the Launch Pad pages show: launches with live prices, watcher counts and paid trending slots. */
-export async function getBoard(limit = 200): Promise<BoardToken[]> {
+/**
+ * Everything the Launch Pad pages show: launches with live prices, watcher counts and paid trending slots. Every token
+ * launched or listed here is on it: the newest `limit`, plus any older one that is paying to trend right now.
+ */
+export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToken[]> {
   const sb = supabaseServer();
   const now = new Date().toISOString();
+  const onChain = (q: any) => (chain ? q.eq("chain", chain) : q);
   const [{ data: launches }, { data: promos }, { data: counts }] = await Promise.all([
-    sb.from("launches").select("*").order("created_at", { ascending: false }).limit(limit),
-    sb.from("launch_promotions").select("chain,token,ends_at").gt("ends_at", now),
-    sb.from("launch_watch_counts").select("chain,token,watchers"),
+    onChain(sb.from("launches").select("*")).order("created_at", { ascending: false }).limit(limit),
+    onChain(sb.from("launch_promotions").select("chain,token,ends_at")).gt("ends_at", now),
+    onChain(sb.from("launch_watch_counts").select("chain,token,watchers")),
   ]);
-  const rows = (launches || []).filter((l: any) => CHAINS[l.chain as ChainKey]);
   const until = new Map<string, string>();
   for (const p of promos || []) {
     const k = key(p.chain, p.token);
     if (!until.has(k) || until.get(k)! < p.ends_at) until.set(k, p.ends_at);
   }
-  const watchers = new Map((counts || []).map((c: any) => [key(c.chain, c.token), c.watchers as number]));
+  // Paid tokens older than the newest `limit` still trend and still show as ads.
+  const seen = new Set((launches || []).map((l: any) => key(l.chain, l.token)));
+  const missing = (promos || []).filter((p: any) => !seen.has(key(p.chain, p.token)));
+  const { data: older } = missing.length
+    ? await onChain(sb.from("launches").select("*")).in("token", [...new Set(missing.map((p: any) => p.token))])
+    : { data: [] };
+  const rows = [...(launches || []), ...(older || []).filter((l: any) => !seen.has(key(l.chain, l.token)) && until.has(key(l.chain, l.token)))]
+    .filter((l: any) => CHAINS[l.chain as ChainKey]);
+  const watchers = new Map<string, number>((counts || []).map((c: any) => [key(c.chain, c.token), c.watchers as number]));
   const markets = await getMarkets(rows.map((r: any) => ({ chain: r.chain, token: r.token })));
   return rows.map((r: any) => ({
     // Only the public fields: rows are read with * so the board keeps working before new columns exist.

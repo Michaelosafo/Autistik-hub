@@ -7,6 +7,7 @@ import { GROUPS, TOKEN_ADDRESS } from "@/lib/groups";
 import { getMarkets } from "@/lib/market";
 import { LINKS, PHOTOS } from "@/lib/site";
 import { getBoard, trending } from "@/lib/board";
+import { currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ const usd = (v: number | null | undefined) => (v == null ? "–" : v >= 1e6 ? `$
 
 /** The website's front page: what AUTISTIK is, with one button into the App. */
 export default async function Home() {
-  const [board, markets] = await Promise.all([getBoard(60), getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }])]);
+  const [board, markets, user] = await Promise.all([getBoard(60), getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }]), currentUser().catch(() => null)]);
   const m = markets[TOKEN_ADDRESS.toLowerCase()];
 
   return (
@@ -44,7 +45,12 @@ export default async function Home() {
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
         <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
-        <Link href="/swap" className="lp-launch">Open App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></Link>
+        {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
+        <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
+        {user
+          ? <Link href="/me" className="lp-signin" aria-label="My profile"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></Link>
+          : <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
+        <Link href="/app" className="lp-launch lp-openapp" aria-label="Open the AUTISTIK App">Open App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></Link>
       </header>
 
       <section className="lp-hero">
@@ -53,9 +59,10 @@ export default async function Home() {
           <h1>Autism is not a disease. <span>It&apos;s a community.</span></h1>
           <p>AUTISTIK is a home for autistic people and supporters, with its own token and simple, safe tools to swap, stake, lock and launch coins.</p>
           <div className="lp-ctas">
-            <Link href="/swap" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
+            <Link href="/app" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
           </div>
+          {!user && <p className="lp-member">Part of the community? <Link href="/login?next=/">Sign in</Link> or <Link href="/login?mode=join&amp;next=/">join free</Link> to chat in the groups and save your settings.</p>}
         </div>
         <div className="lp-hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
       </section>
@@ -124,7 +131,7 @@ export default async function Home() {
       <section className="lp-band">
         <h2>Ready to start?</h2>
         <p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p>
-        <div className="lp-ctas"><Link href="/swap" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
+        <div className="lp-ctas"><Link href="/app" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
       </section>
 
       <footer className="lp-foot">

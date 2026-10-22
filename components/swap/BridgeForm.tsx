@@ -5,10 +5,12 @@ import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, toUnits, WSOL } from "@/lib/
 import { isXAddress, isXNative, lifiDiamond, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
 import type { Signer } from "@/components/wallet/types";
 import { addTrade, amt, api, friendlyError, raw2num, sendSol, short, store, usd, type Holding } from "@/components/wallet/util";
+import { toast } from "@/lib/toast";
 import { GAS_RESERVE } from "@/components/wallet/MarketForm";
 import { ChainBadge, XTokenPicker } from "./parts";
 
 const pc = (c: XChain): any => createPublicClient({ chain: c.viem, transport: http(c.rpc, { timeout: 10_000 }) });
+const explorerTx = (c: XChain, h: string) => `${c.explorer}/tx/${h}`;
 const mins = (s: number | null) => (s == null ? "–" : s < 60 ? `about ${Math.max(5, Math.round(s / 5) * 5)} sec` : `about ${Math.round(s / 60)} min`);
 
 /** Raw balance of a coin, read from the network in the browser (Solana through the Wallet API). */
@@ -138,23 +140,33 @@ export default function BridgeForm({ signer, from, to, fromToken, toToken, onFro
       }
       addTrade({ at: Date.now(), chain: from.key, side: "convert", pay: `${amount} ${fromToken.symbol} (${from.name})`, get: `${amt(out)} ${toToken.symbol} (${to.name})`, hash });
       setStep(""); setReview(false); setAmount(""); loadBal();
-      if (!cross) { setStage({ at: 3, hash }); return; }
+      const what = `${amount} ${fromToken.symbol} → ${amt(out)} ${toToken.symbol}`;
+      if (!cross) { setStage({ at: 3, hash }); toast({ kind: "ok", title: "Swap done", text: `${what} on ${from.name}`, link: { href: explorerTx(from, hash), label: "View transaction" } }); return; }
+      toast({ kind: "info", title: `Sent on ${from.name}`, text: `${what}. Arrives on ${to.name} in ${mins(x.seconds)}. We'll tell you when it lands.` });
       // Follow the coins across: sent → on the way → arrived.
       setStage({ at: 1, hash });
       for (let i = 0; i < 360; i++) {
         await new Promise((r) => setTimeout(r, 5000));
         const { status: s } = await api<{ status: { status: string; receiveHash: string | null; link: string | null; message: string | null } }>("x-status", { hash, fromChain: from.id, toChain: to.id, tool: x.tool })
           .catch(() => ({ status: { status: "pending", receiveHash: null, link: null, message: null } }));
-        if (s.status === "done") { setStage({ at: 3, hash, receive: s.receiveHash, link: s.link }); return; }
-        if (s.status === "failed" || s.status === "refunded") { setStage({ at: 2, hash, link: s.link, failed: s.status === "refunded" ? `The transfer didn't go through and your coins were refunded. ${s.message || ""}` : s.message || "The transfer failed. If your coins don't come back soon, open the tracker." }); return; }
+        if (s.status === "done") {
+          setStage({ at: 3, hash, receive: s.receiveHash, link: s.link });
+          toast({ kind: "ok", title: `Swap done: arrived on ${to.name}`, text: what, link: s.receiveHash ? { href: explorerTx(to, s.receiveHash), label: "View transaction" } : undefined });
+          return;
+        }
+        if (s.status === "failed" || s.status === "refunded") {
+          const failed = s.status === "refunded" ? `The transfer didn't go through and your coins were refunded. ${s.message || ""}` : s.message || "The transfer failed. If your coins don't come back soon, open the tracker.";
+          setStage({ at: 2, hash, link: s.link, failed });
+          toast({ kind: "bad", title: s.status === "refunded" ? "Swap refunded" : "Swap stopped", text: failed });
+          return;
+        }
         setStage({ at: 2, hash, link: s.link });
       }
-    } catch (e: any) { setErr(friendlyError(e, from.native.symbol)); }
+    } catch (e: any) { const m = friendlyError(e, from.native.symbol); setErr(m); if (!m.startsWith("You cancelled")) toast({ kind: "bad", title: "Swap didn't go through", text: m }); }
     setStep("");
   }
 
   const balNum = bal != null && fromToken ? raw2num(bal.toString(), fromToken.decimals) : null;
-  const explorerTx = (c: XChain, h: string) => `${c.explorer}/tx/${h}`;
   const connect = signer.loginExternal ?? signer.login;
   return (
     <div className="stack tx-form" style={{ gap: 10 }}>

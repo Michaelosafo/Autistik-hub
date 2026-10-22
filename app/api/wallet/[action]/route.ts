@@ -38,7 +38,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
         return t ? json({ token: t }) : json({ error: `No token found at that address on ${chain!.name}.` }, 404);
       }
       case "discover": {
-        if (!isMomentumChain(chain!.key)) return json({ trending: [], fresh: [] });
+        if (!isMomentumChain(chain!.key)) return json({ trending: [], fresh: [], listed: [] });
         return json(await discover(chain!.key));
       }
       case "market": {

@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
+import Toaster from "@/components/Toaster";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
+export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string };
@@ -80,10 +81,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="ax">
       <header className="ax-bar" ref={bar}>
-        <Link href="/" className="ax-logo" aria-label="AUTISTIK home">
+        <Link href="/app" className="ax-logo" aria-label="AUTISTIK App: all tools">
           <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b><small>APP</small>
         </Link>
-        <Link href="/" className="ax-home" aria-label="Home screen"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
+        {/* Home switches sides: from the App it goes to the website's main page, whose Home button comes back here. */}
+        <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
             <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)}>
@@ -122,9 +124,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <Tracker />
       <WalletPicker />
+      <Toaster />
       <main className="ax-main">{children}</main>
       <footer className="ax-foot">
-        <Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link>
+        <Link href="/app">All tools</Link><Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link>
         <span>Crypto is risky. Nothing here is financial advice. Never share your seed phrase.</span>
       </footer>
 

@@ -1355,6 +1355,7 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .nl-buy{text-align:center;justify-content:center}
 .sm-buy{font-size:.8em;font-weight:800;color:#111;background:var(--gold,#F0B90B);padding:4px 12px;border-radius:99px}
 .sm-listed>b{color:var(--ink)}
+.sm-ours{margin-left:6px;font-size:.62em;font-weight:800;padding:2px 6px;border-radius:99px;background:rgba(240,185,11,.15);color:#F0B90B;vertical-align:middle}
 
 /* Sign in with Google / Apple */
 .oauth-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:11px 14px;font-weight:700;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
@@ -1488,6 +1489,12 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .lp-launch,.lp-btn{display:inline-flex;align-items:center;justify-content:center;padding:12px 20px;border-radius:16px;font-weight:800;text-decoration:none;border:1px solid transparent}
 .lp-launch,.lp-btn.gold{background:var(--gold,#F0B90B);color:#191326 !important;box-shadow:0 -3px 0 rgba(0,0,0,.2) inset}
 .lp-btn{background:#372F47;color:#F4EEFF}
+.lp-signin{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:16px;font-weight:800;text-decoration:none;color:#F4EEFF;background:rgba(255,255,255,.06);border:1px solid #4a4160;white-space:nowrap}
+.lp-signin:hover{border-color:var(--gold,#F0B90B)}
+.lp-signin:focus-visible{outline:3px solid var(--gold,#F0B90B);outline-offset:2px}
+.lp-signin svg{width:18px;height:18px;flex:none}
+.lp-hero p.lp-member{font-size:.95em;margin:14px 0 0}
+.lp-member a{color:var(--gold,#F0B90B) !important;font-weight:800}
 .lp-btn.ghost{background:transparent;border-color:#4a4160}
 .lp-hero{display:grid;grid-template-columns:1.15fr .85fr;gap:28px;align-items:center;max-width:1200px;margin:0 auto;padding:56px 18px 28px}
 .lp-eyebrow{color:var(--gold,#F0B90B);font-weight:800;text-transform:uppercase;letter-spacing:.08em;font-size:.78em}
@@ -1706,7 +1713,8 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .topbar .bot-btn{display:inline-flex;align-items:center;gap:7px;padding:3px 13px 3px 3px;border-radius:999px;background:linear-gradient(135deg,#9B7BFF,#6141D4);color:#fff;font-weight:800;font-size:.84em;text-decoration:none;box-shadow:0 4px 14px rgba(97,65,212,.3)}
 .topbar .bot-btn .bot-av{width:26px;height:26px}
 .topbar .bot-btn:focus-visible,.lp-launch.bot:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
-@media (max-width:440px){ .lp-launch.bot span{display:none} .lp-launch.bot{padding:6px} .lp-bar{gap:10px} }
+@media (max-width:440px){ .lp-launch.bot span{display:none} .lp-launch.bot{padding:6px} .lp-bar{gap:10px} .lp-signin{padding:10px 12px} .lp-bar .lp-launch:not(.bot){padding:12px 14px;white-space:nowrap} .lp-bar .lp-launch:not(.bot)>svg{display:none} .lp-logo b{display:none} }
+@media (max-width:340px){ .lp-signin svg{display:none} }
 .ax-connect.bot{background:linear-gradient(135deg,#9B7BFF,#6141D4 50%,#4A2FB8);color:#fff;text-decoration:none;padding:4px 14px 4px 4px;box-shadow:0 6px 20px rgba(97,65,212,.3),0 -2px 0 rgba(0,0,0,.18) inset}
 .ax-connect.bot .bot-av{width:28px;height:28px}
 @media (max-width:640px){ .ax-connect.bot{padding:4px} }
@@ -1864,3 +1872,120 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .trust-checks span{display:flex;flex-direction:column;min-width:0}
 .trust-checks b{font-size:.86em} .trust-checks small{font-size:.76em;color:var(--muted)}
 @media (max-width:760px){.trust-checks{grid-template-columns:1fr 1fr}.trust-ring{width:68px;height:68px}.trust-ring b{font-size:1.3em}}
+
+/* Welcome: Autistik the mascot says hi; "Go to site" opens the page from the middle (components/Welcome.tsx) */
+.welcome{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:16px;overflow:auto;
+  background:radial-gradient(circle at 50% 55%,var(--rail-2),var(--rail) 70%);color:#fff;
+  clip-path:circle(150% at 50% 50%);transition:clip-path .8s cubic-bezier(.7,0,.3,1),opacity .8s ease}
+.welcome.opening{clip-path:circle(0% at 50% 50%);opacity:.6;pointer-events:none}
+[data-welcomed] .welcome{display:none}
+.welcome::before{content:"";position:absolute;left:0;right:0;top:0;height:5px;background:var(--spectrum)}
+.welcome-in{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;max-width:420px}
+.welcome-bot{width:min(62vw,260px);height:auto;display:block;overflow:visible;animation:wb-in .7s cubic-bezier(.3,1.6,.5,1) both}
+.welcome-bubble{position:relative;display:flex;flex-direction:column;gap:4px;background:#fff;color:#141830;padding:14px 22px;border-radius:20px;
+  font-size:1.05em;box-shadow:0 12px 40px rgba(0,0,0,.35);animation:wb-pop .45s cubic-bezier(.3,1.6,.5,1) .55s both}
+.welcome-bubble b{font-family:var(--f-display);font-size:1.15em;line-height:1.2}
+.welcome-bubble::after{content:"";position:absolute;left:50%;bottom:-9px;margin-left:-10px;border:10px solid transparent;border-bottom:0;border-top-color:#fff}
+.welcome-go{all:unset;box-sizing:border-box;cursor:pointer;margin-top:6px;padding:14px 34px;border-radius:99px;font-family:var(--f-display);font-weight:700;font-size:1.05em;
+  color:#141830;background:linear-gradient(90deg,#FFB347,#F5E663);box-shadow:0 10px 30px rgba(255,179,71,.35);animation:wb-pop .4s ease 1s both;transition:transform .15s}
+.welcome-go:hover{transform:translateY(-2px) scale(1.03)}
+.welcome-go:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.welcome-go span{display:inline-block;margin-left:6px;transition:transform .15s}
+.welcome-go:hover span{transform:translateX(4px)}
+/* Mascot parts */
+.wm-float{animation:wm-float 3s ease-in-out infinite}
+.wm-shadow{transform-box:fill-box;transform-origin:center;animation:wm-shadow 3s ease-in-out infinite}
+.wm-wave{transform-box:view-box;transform-origin:141px 138px;animation:wm-wave 1.6s ease-in-out .8s infinite}
+.wm-eyes{transform-box:view-box;transform-origin:100px 84px;animation:wm-blink 4s infinite}
+.wm-bulb-glow{transform-box:fill-box;transform-origin:center;animation:wm-pulse 1.8s ease-in-out infinite}
+.wm-sparkles path{transform-box:fill-box;transform-origin:center;animation:wm-twinkle 2.4s ease-in-out infinite}
+.wm-sparkles path:nth-child(2){animation-delay:.8s} .wm-sparkles path:nth-child(3){animation-delay:1.6s}
+@keyframes wb-in{from{transform:translateY(60px) scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes wb-pop{from{transform:scale(.6) translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@keyframes wm-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes wm-shadow{0%,100%{transform:scaleX(1);opacity:.35}50%{transform:scaleX(.82);opacity:.22}}
+@keyframes wm-wave{0%,100%{transform:rotate(0)}20%{transform:rotate(-16deg)}40%{transform:rotate(10deg)}60%{transform:rotate(-12deg)}80%{transform:rotate(4deg)}}
+@keyframes wm-blink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
+@keyframes wm-pulse{0%,100%{transform:scale(.8);opacity:.25}50%{transform:scale(1.25);opacity:.5}}
+@keyframes wm-twinkle{0%,100%{transform:scale(.4) rotate(0);opacity:.3}50%{transform:scale(1) rotate(45deg);opacity:1}}
+@media (prefers-reduced-motion:reduce){.welcome{transition:none}}
+
+/* App home: $AUTISTIK at a glance, then every tool, grouped (app/app/page.tsx) */
+.ah{max-width:1080px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.ah-coin{display:flex;align-items:center;gap:24px;flex-wrap:wrap;padding:18px 22px;border-radius:18px;background:linear-gradient(135deg,#1d1a29,#14121c);border:1px solid #2f2a3b}
+.ah-coin-id{display:flex;align-items:center;gap:12px;min-width:220px;flex:1 1 220px}
+.ah-coin-id img,.ah-coin-ph{width:44px;height:44px;border-radius:50%;flex:none}
+.ah-coin-ph{display:grid;place-items:center;background:#27262C}
+.ah-coin-id b{display:block;font-family:var(--f-display);font-size:1.1em;letter-spacing:.01em}
+.ah-coin-id small{color:#8E86A6;font-size:.82em}
+.ah-stats{display:flex;gap:28px;margin:0;flex-wrap:wrap}
+.ah-stats div{display:flex;flex-direction:column;gap:2px}
+.ah-stats dt{color:#8E86A6;font-size:.72em;text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+.ah-stats dd{margin:0;font-family:var(--f-mono);font-weight:600;font-size:1em;font-variant-numeric:tabular-nums}
+.ah-stats .up{color:#31D0AA} .ah-stats .down{color:#ED4B9E}
+.ah-coin-cta{display:flex;gap:8px;margin-left:auto}
+.ah-btn{display:inline-flex;align-items:center;justify-content:center;min-width:92px;padding:10px 18px;border-radius:12px;font-weight:800;text-decoration:none;color:#F4EEFF;background:#2c2838;border:1px solid #3a3449}
+.ah-btn:hover{background:#372F47}
+.ah-btn.gold{background:var(--gold,#F0B90B);border-color:transparent;color:#191326}
+.ah-btn.gold:hover{opacity:.9}
+.ah-group{display:flex;flex-direction:column;gap:10px}
+.ah-group h2{font-family:var(--f-body);font-size:.74em;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:#8E86A6;margin:0}
+.ah-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.ah-tool{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;background:#17151f;border:1px solid #2a2635;color:#F4EEFF;text-decoration:none;transition:background .12s,border-color .12s}
+.ah-tool:hover,.ah-tool:focus-visible{background:#1f1c2a;border-color:#4a4160}
+.ah-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:rgba(240,185,11,.1);color:var(--gold,#F0B90B);flex:none}
+.ah-icon svg{width:22px;height:22px}
+.ah-txt{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.ah-txt b{font-size:.96em;font-weight:700}
+.ah-txt small{color:#8E86A6;font-size:.8em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ah-go{width:16px;height:16px;color:#5d5672;flex:none;transition:transform .12s,color .12s}
+.ah-tool:hover .ah-go{transform:translateX(2px);color:#F4EEFF}
+@media (max-width:900px){.ah-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.ah{gap:18px}.ah-coin{padding:16px;gap:14px}.ah-stats{gap:18px;width:100%;justify-content:space-between}.ah-coin-cta{margin-left:0;width:100%}.ah-btn{flex:1}
+  .ah-grid{grid-template-columns:1fr;gap:8px}.ah-tool{padding:12px}}
+/* Home button on the main page (opens the App): icon only on phones */
+@media (max-width:600px){ .lp-home span{display:none} .lp-signin.lp-home{padding:10px} .lp-signin.lp-home svg{display:block} }
+
+/* Swap: the network chip sits inside the paste-address row; "Receive on" is one small line under it. */
+.sx-ca{flex-wrap:wrap;padding:8px 10px 8px 8px;gap:8px;cursor:default}
+.sx-ca input{flex:1 1 140px}
+.sx-chip{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:7px;flex:none;max-width:60%;padding:7px 10px 7px 7px;border-radius:14px;background:#1d1a28;border:1px solid #3a3350;color:#F4EEFF;font-size:.9em;transition:border-color .15s}
+.sx-chip:hover,.sx-chip:focus-visible{border-color:rgba(245,201,53,.7)}
+.sx-chip:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sx-chip b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800}
+.sx-chip .tx-caret{color:#8F84AA}
+.sx-chip .sx-tag,.sx-chip .sx-hint{font-size:.72em;font-weight:800}
+.sx-chip.ask{border-color:rgba(245,201,53,.6);box-shadow:0 0 0 3px rgba(245,201,53,.08)}
+.sx-ca-x{all:unset;cursor:pointer;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#8F84AA;font-size:1.2em;flex:none}
+.sx-ca-x:hover{color:#F4EEFF;background:rgba(255,255,255,.06)}
+.sx-ca-note{padding-left:4px}
+.sx-recv{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.86em;color:#B8ADD2;font-weight:700;padding:0 2px}
+.sx-recv>small{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.9em;color:#8F84AA}
+.sx-recv.cross>small{color:#F4EEFF}
+.sx-recv .sx-chip{font-size:.95em;padding:5px 9px 5px 5px}
+@media (max-width:440px){ .sx-recv>small{margin-left:0;flex-basis:100%} .sx-chip{max-width:none} }
+
+/* Pop-up notes (toast), e.g. "Swap done" */
+.toasts{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:120;display:flex;flex-direction:column;gap:8px;width:min(420px,calc(100% - 24px));pointer-events:none}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;gap:12px;padding:12px 12px 12px 14px;border-radius:16px;background:#1d1a28;border:1px solid #3a3350;color:#F4EEFF;box-shadow:0 14px 40px rgba(0,0,0,.45);animation:toastIn .25s ease-out}
+.toast.ok{border-color:rgba(49,208,170,.6)} .toast.bad{border-color:rgba(237,75,158,.6)}
+.toast-ic{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:900;background:rgba(245,201,53,.15);color:#F5C935}
+.toast.ok .toast-ic{background:rgba(49,208,170,.18);color:#31D0AA} .toast.bad .toast-ic{background:rgba(237,75,158,.18);color:#ED4B9E}
+.toast-t{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.toast-t small{color:#B8ADD2;font-size:.84em;overflow-wrap:anywhere}
+.toast-t a{color:#F5C935;font-weight:800;font-size:.84em;text-decoration:none}
+.toast-x{all:unset;cursor:pointer;width:26px;height:26px;display:grid;place-items:center;border-radius:50%;color:#8F84AA;font-size:1.2em}
+.toast-x:hover{color:#F4EEFF;background:rgba(255,255,255,.06)}
+@keyframes toastIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+:root[data-calm="on"] .toast{animation:none}
+@media (prefers-reduced-motion:reduce){ .toast{animation:none} }
+
+/* Main page: Open App is the biggest thing in the top bar, with a soft glow so it's easy to find. */
+.lp-bar .lp-openapp{padding:13px 24px;font-size:1.06em;border-radius:18px;white-space:nowrap;box-shadow:0 0 0 3px rgba(240,185,11,.28),0 10px 30px rgba(240,185,11,.45),0 -3px 0 rgba(0,0,0,.18) inset;animation:openAppGlow 2.6s ease-in-out infinite}
+.lp-bar .lp-openapp svg{width:20px;height:20px}
+@keyframes openAppGlow{0%,100%{box-shadow:0 0 0 3px rgba(240,185,11,.28),0 10px 30px rgba(240,185,11,.4),0 -3px 0 rgba(0,0,0,.18) inset}50%{box-shadow:0 0 0 6px rgba(240,185,11,.16),0 10px 34px rgba(240,185,11,.6),0 -3px 0 rgba(0,0,0,.18) inset}}
+:root[data-calm="on"] .lp-bar .lp-openapp{animation:none}
+@media (prefers-reduced-motion:reduce){ .lp-bar .lp-openapp{animation:none} }
+/* Phones: the Home button opens the App too, so Open App takes its place. */
+@media (max-width:600px){ .lp-bar .lp-home{display:none} }
+@media (max-width:440px){ .lp-bar .lp-launch.lp-openapp{padding:12px 16px;font-size:1em} .lp-bar .lp-launch.lp-openapp>svg{display:inline-block;width:16px;height:16px} }

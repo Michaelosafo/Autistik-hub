@@ -9,4 +9,4 @@ export const LISTINGS: Listing[] = [
 ];
 
 /** The wallet link that opens the easy Buy screen for a listed coin. */
-export const buyLink = (l: Pick<Listing, "chain" | "token">) => `/wallet?chain=${l.chain}&buy=${l.token}&quick=1`;
+export const buyLink = (l: { chain: string; token: string }) => `/wallet?chain=${l.chain}&buy=${l.token}&quick=1`;

@@ -6,7 +6,7 @@
 
 create table if not exists public.launches (
   id uuid primary key default gen_random_uuid(),
-  chain text not null check (chain in ('bsc','ethereum','robinhood')),
+  chain text not null check (chain in ('bsc','ethereum','base','arbitrum','polygon','avalanche','optimism','robinhood','solana')),
   token text not null,
   pair text not null,
   creator text not null,
@@ -23,6 +23,10 @@ alter table public.launches add column if not exists lp_lock text not null defau
 alter table public.launches add column if not exists lp_unlock_at timestamptz;
 -- Where a token came from: 'launchpad' (launched here) or 'listed' (launched elsewhere, paid to be listed and trend).
 alter table public.launches add column if not exists source text not null default 'launchpad' check (source in ('launchpad','listed'));
+
+-- Every chain the Launch Pad supports (projects set up before Base, Arbitrum and Solana: this widens the old list).
+alter table public.launches drop constraint if exists launches_chain_check;
+alter table public.launches add constraint launches_chain_check check (chain in ('bsc','ethereum','base','arbitrum','polygon','avalanche','optimism','robinhood','solana'));
 
 alter table public.launches enable row level security;
 -- Anyone can see launches. Only the server writes them, after checking the transaction on-chain.

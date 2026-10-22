@@ -3,7 +3,7 @@ import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPublicClient, createWalletClient, custom, formatEther, http, isAddress } from "viem";
-import { CHAINS, viemChain, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, isSolana, viemChain, type ChainKey } from "@/lib/launchpad";
 
 type Quote = { usd: number; hours: number; treasury: `0x${string}`; bnbPrice: number; wei: string };
 
@@ -30,7 +30,7 @@ export default function TrendingPay({ chain: fixedChain, token: fixedToken, prom
   }, []);
 
   const bsc = CHAINS.bsc;
-  const tokenOk = isAddress(token.trim());
+  const tokenOk = isSolana(CHAINS[chain as ChainKey]) ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token.trim()) : isAddress(token.trim());
   const live = promotedUntil && Date.parse(promotedUntil) > Date.now();
 
   async function claim(hash: string) {

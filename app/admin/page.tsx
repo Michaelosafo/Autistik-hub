@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import Admin from "@/components/Admin";
 import AdminMfa from "@/components/AdminMfa";
@@ -15,7 +16,7 @@ export default async function AdminPage() {
   return (
     <div className="stack">
       <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only the Hub owner can open this page.</p></div>
-      {admin ? <><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
+      {admin ? <><div className="notice">🚀 Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
     </div>
   );
 }

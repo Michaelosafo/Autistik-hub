@@ -5,6 +5,8 @@
 import { supabaseService } from "@/lib/supabase/server";
 import { notify } from "@/lib/push";
 import { proUsersOf } from "@/lib/pro-server";
+import { getBoard, trending as boardTrending, type BoardToken } from "@/lib/board";
+import type { ChainKey } from "@/lib/launchpad";
 import {
   DEFAULT_PREFS, FREE_ALERTS_PER_DAY, MOMENTUM_CHAINS, PRO_ALERTS_PER_DAY, chainName, matches, rank, usd,
   type AlertPrefs, type MomentumChain, type Pick, type Pool,
@@ -198,6 +200,8 @@ export async function runMomentum(deadline: number) {
 export type Coin = {
   token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number;
   liquidity: number; mcap: number | null; ageHours: number | null; badge: "safer" | "caution" | "risky" | "scam"; reasons: string[];
+  /** Set for tokens launched on the AUTISTIK Launch Pad ("launchpad") or paid to be listed here ("listed"). */
+  autistik?: "launchpad" | "listed";
 };
 
 /** A plain-English safety label for beginners. */
@@ -218,18 +222,38 @@ export function badgeOf(p: Pool): { badge: Coin["badge"]; reasons: string[] } {
 const toCoin = (p: Pool): Coin => ({ token: p.token, symbol: p.symbol, name: p.name, image: p.image, price: p.price, change1h: n(p.change.h1), change24h: n(p.change.h24),
   liquidity: p.liquidity, mcap: p.mcap, ageHours: p.ageHours, ...badgeOf(p) });
 
-/** Trending coins and coins launched in the last 2 days, with safety labels. Cached about 2 minutes. */
-export async function discover(chain: MomentumChain): Promise<{ trending: Coin[]; fresh: Coin[] }> {
+/** A token from the Launch Pad board, shaped like a pool so it gets the same safety label. */
+const boardPool = (chain: MomentumChain, t: BoardToken): Pool => ({
+  chain, pool: t.pair, token: t.token, symbol: t.symbol.slice(0, 16), name: t.name.slice(0, 40), image: t.market?.imageUrl ?? null,
+  price: t.market?.priceUsd ?? 0, change: { h24: t.market?.change24h ?? 0 }, volume: { h24: t.market?.volume24h ?? 0 }, tx: {},
+  liquidity: t.market?.liquidityUsd ?? 0, mcap: t.market?.marketCap ?? null, ageHours: (Date.now() - Date.parse(t.created_at)) / 3_600_000,
+});
+
+/**
+ * Trending coins and coins launched in the last 2 days, with safety labels. Cached about 2 minutes. Tokens launched or
+ * listed on AUTISTIK come first in both lists, and all of them are in `listed`.
+ */
+export async function discover(chain: MomentumChain): Promise<{ trending: Coin[]; fresh: Coin[]; listed: Coin[] }> {
   const gt = MOMENTUM_CHAINS.find((c) => c.key === chain)!.gt;
-  const [trend, fresh] = await Promise.all([
+  const [trend, fresh, board] = await Promise.all([
     getJson(`${GT}/networks/${gt}/trending_pools?include=base_token&duration=6h&page=1`, 120).catch(() => null),
     getJson(`${GT}/networks/${gt}/new_pools?include=base_token&page=1`, 120).catch(() => null),
+    getBoard(30, chain as ChainKey).catch(() => [] as BoardToken[]),
   ]);
   const skip = /^(W?BNB|W?ETH|W?SOL|USDT|USDC|DAI|BUSD|FDUSD|USD1|WBTC|BTCB|CBBTC)$/i;
   const clean = (list: Pool[]) => { const seen = new Set<string>(); return list.filter((p) => p.price > 0 && !skip.test(p.symbol) && !seen.has(p.token.toLowerCase()) && seen.add(p.token.toLowerCase())); };
-  const t = clean(parsePools(chain, trend)).filter((p) => p.liquidity >= 10_000).slice(0, 20);
-  const f = clean(parsePools(chain, fresh)).filter((p) => p.liquidity >= 5_000 && (p.ageHours ?? 99) <= 48).slice(0, 20);
-  const sf = await safety(chain, [...new Set([...t, ...f].map((p) => p.token))].slice(0, 40));
-  const withSafety = (p: Pool) => ({ ...p, safety: sf.get(p.token.toLowerCase()) ?? null });
-  return { trending: t.map(withSafety).map(toCoin), fresh: f.map(withSafety).map(toCoin) };
+  const ours = new Map(board.map((b) => [b.token.toLowerCase(), b.source]));
+  const notOurs = (p: Pool) => !ours.has(p.token.toLowerCase());
+  const mine = board.map((b) => boardPool(chain, b));
+  const mineTrending = boardTrending(board).slice(0, 10).map((b) => boardPool(chain, b));
+  const mineFresh = mine.filter((p) => (p.ageHours ?? 99) <= 48).slice(0, 10);
+  const t = [...mineTrending, ...clean(parsePools(chain, trend)).filter((p) => p.liquidity >= 10_000 && notOurs(p)).slice(0, 20)];
+  const f = [...mineFresh, ...clean(parsePools(chain, fresh)).filter((p) => p.liquidity >= 5_000 && (p.ageHours ?? 99) <= 48 && notOurs(p)).slice(0, 20)];
+  const sf = await safety(chain, [...new Set([...mine, ...t, ...f].map((p) => p.token))].slice(0, 40));
+  const coin = (p: Pool): Coin => {
+    const c = toCoin({ ...p, safety: sf.get(p.token.toLowerCase()) ?? null });
+    const src = ours.get(p.token.toLowerCase());
+    return src ? { ...c, autistik: src } : c;
+  };
+  return { trending: t.map(coin), fresh: f.map(coin), listed: mine.map(coin) };
 }

@@ -8,21 +8,27 @@ import TokenControls from "@/components/TokenControls";
 import WatchButton from "@/components/WatchButton";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
-import { CHAINS, LOCKS, dexscreenerUrl, isLock, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, LOCKS, dexscreenerUrl, isLock, isSolana, type ChainKey } from "@/lib/launchpad";
 import { getMarkets, usd } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
+import { launchAccess } from "@/lib/admin";
+import AddLiquidity from "@/components/AddLiquidity";
+import VerifySource from "@/components/VerifySource";
 
 export const dynamic = "force-dynamic";
 
 export default async function TokenPage({ params }: { params: { chain: string; token: string } }) {
   const c = CHAINS[params.chain as ChainKey];
-  if (!c || !isAddress(params.token)) notFound();
-  const token = getAddress(params.token);
+  const sol = isSolana(c);
+  if (!c || !(sol ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(params.token) : isAddress(params.token))) notFound();
+  // Solana addresses are case-sensitive base58; EVM ones get their checksum.
+  const token = sol ? params.token : getAddress(params.token);
   const sb = supabaseServer();
-  const [{ data: launch }, { data: { user } }, board] = await Promise.all([
+  const [{ data: launch }, { data: { user } }, board, access] = await Promise.all([
     sb.from("launches").select("*").eq("chain", c.key).eq("token", token).maybeSingle(),
     sb.auth.getUser(),
     getBoard(60),
+    launchAccess(),
   ]);
   if (!launch) notFound();
 
@@ -76,6 +82,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
               <a className="btn small" href={dexscreenerUrl(c, launch.pair, token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>
+            {!listed && !sol && <VerifySource chain={c.key} token={token} />}
             {listed ? (
               <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock. Check the contract on the explorer before buying.</p>
             ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK Locker.`}</p>}
@@ -83,7 +90,8 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         </div>
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
-          {!listed && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
+          {!listed && !sol && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
+          {access.allowed && (c.router || sol) && <AddLiquidity pads={{}} chain={c.key} token={token} pair={launch.pair} />}
           <div className="notice warn" style={{ fontSize: ".86em" }}>{listed ? "Listed by a paid promotion, not checked by the AUTISTIK team." : "Made by a community member, not the AUTISTIK team."} Token prices can go to zero. Nothing here is financial advice.</div>
         </div>
       </div>
