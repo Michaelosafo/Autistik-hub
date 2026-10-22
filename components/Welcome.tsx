@@ -4,23 +4,24 @@ import { useEffect, useRef, useState } from "react";
 /** How long the page takes to open after "Go to site". */
 const OPEN_MS = 800;
 
-/** How many visits get the welcome. After that, the site opens straight away. */
-const SHOW_TIMES = 2;
+/** How long the mascot says hi before it tells you about the game arena. */
+const ARENA_MS = 1200;
 
 /**
- * The first thing a visitor sees: Autistik, the AUTISTIK mascot, says hi. "Go to site" (or Escape) opens the page
- * around it. Shown on a visitor's first SHOW_TIMES visits, once per visit. With calm mode or reduced motion nothing
+ * The first thing a visitor sees: Autistik, the AUTISTIK mascot, says hi, then a second later tells them about the
+ * game arena. "Go to site" (or Escape) opens the page around it; "Play the arena" goes straight to the arena.
+ * Shown once on every visit. With calm mode or reduced motion nothing
  * moves and the page appears straight away. The layout's early script hides it before the page paints when it was
  * already shown this visit, so it never flashes.
  */
 export default function Welcome() {
   const [phase, setPhase] = useState<"hello" | "open" | "gone">("hello");
+  const [line, setLine] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const go = useRef<HTMLButtonElement>(null);
 
   const open = () => {
     try {
-      if (sessionStorage.getItem("welcomed") !== "1") localStorage.setItem("welcomes", String(Number(localStorage.getItem("welcomes") || 0) + 1));
       sessionStorage.setItem("welcomed", "1");
     } catch {}
     const still = document.documentElement.dataset.calm === "on" || matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -31,24 +32,35 @@ export default function Welcome() {
 
   useEffect(() => {
     let seen = false;
-    try { seen = sessionStorage.getItem("welcomed") === "1" || Number(localStorage.getItem("welcomes") || 0) >= SHOW_TIMES; } catch {}
+    try { seen = sessionStorage.getItem("welcomed") === "1"; } catch {}
     if (seen) { setPhase("gone"); return; }
     go.current?.focus();
+    const t = setTimeout(() => setLine(1), ARENA_MS);
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") open(); };
     document.addEventListener("keydown", key);
-    return () => { clearTimeout(timer.current); document.removeEventListener("keydown", key); };
+    return () => { clearTimeout(t); clearTimeout(timer.current); document.removeEventListener("keydown", key); };
   }, []);
 
   if (phase === "gone") return null;
   return (
     <div className={"welcome" + (phase === "open" ? " opening" : "")} role="dialog" aria-modal="true" aria-label="Welcome to AUTISTIK">
       <div className="welcome-in">
-        <div className="welcome-bubble">
-          <b>Hi, welcome to AUTISTIK!</b>
-          <span>I&apos;m Autistik, the mascot.</span>
-        </div>
+        {line === 0 ? (
+          <div className="welcome-bubble" key="hi">
+            <b>Hi, welcome to AUTISTIK!</b>
+            <span>I&apos;m Autistik, the mascot.</span>
+          </div>
+        ) : (
+          <div className="welcome-bubble arena" key="arena" aria-live="polite">
+            <b>⚽ Have you played the Game arena?</b>
+            <span>Every holder is a player on a pitch. Diamond hands vs paper hands: watch who sells, then join the match.</span>
+          </div>
+        )}
         <Mascot />
-        <button ref={go} type="button" className="welcome-go" onClick={open}>Go to site <span aria-hidden="true">→</span></button>
+        <div className="welcome-btns">
+          <button ref={go} type="button" className="welcome-go" onClick={open}>Go to site <span aria-hidden="true">→</span></button>
+          {line === 1 && <a className="welcome-go arena" href="/arena" onClick={() => { try { sessionStorage.setItem("welcomed", "1"); } catch {} }}>⚽ Play the arena</a>}
+        </div>
       </div>
     </div>
   );
