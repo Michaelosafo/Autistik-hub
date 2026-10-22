@@ -6,6 +6,7 @@ import type { Member, Signer } from "./types";
 import MarketForm from "./MarketForm";
 import OrderForm, { OpenOrders } from "./OrderForm";
 import SimpleMode from "./SimpleMode";
+import Portfolio from "./Portfolio";
 import { Assets, History, Receive, Security, Send, Welcome } from "./panels";
 import { api, pct, short, store, TokenPicker, usd, type Holding, type Market, type TokenInfo } from "./util";
 
@@ -34,10 +35,12 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
   const [chart, setChart] = useState(true);
   const [convFrom, setConvFrom] = useState<WToken | null>(null);
   const [convTo, setConvTo] = useState<WToken | null>(null);
-  // Simple (beginners: discover and buy in one tap) or Pro (exchange screen with charts and orders). Remembered per device.
-  const [mode, setModeState] = useState<"simple" | "pro">("simple");
-  useEffect(() => { setModeState(start.quick ? "simple" : store.get("aw-mode", start.buy ? "pro" : "simple")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const setMode = (m: "simple" | "pro") => { setModeState(m); store.set("aw-mode", m); };
+  // Wallet (everything you own on every network), Simple (discover and buy in one tap) or Pro (exchange screen with
+  // charts and orders). Remembered per device; a Buy link opens the trade screen.
+  const [mode, setModeState] = useState<"wallet" | "simple" | "pro">("wallet");
+  // The page always opens on Wallet; only a Buy link opens the trade screen (the one used last).
+  useEffect(() => { if (start.quick || start.buy) setModeState(start.quick ? "simple" : store.get<"simple" | "pro">("aw-trade-mode", "pro")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMode = (m: "wallet" | "simple" | "pro") => { setModeState(m); if (m !== "wallet") store.set("aw-trade-mode", m); };
 
   useEffect(() => { setCustom(store.get(`aw-tokens-${chainKey}`, [])); }, [chainKey]);
   const addCustom = useCallback((t: WToken) => setCustom((list) => {
@@ -93,8 +96,15 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
 
   const toggle = (
     <div className="tx-mode" role="tablist" aria-label="Screen">
+      <button type="button" role="tab" aria-selected={mode === "wallet"} className={mode === "wallet" ? "on" : ""} onClick={() => setMode("wallet")}>Wallet</button>
       <button type="button" role="tab" aria-selected={mode === "simple"} className={mode === "simple" ? "on" : ""} onClick={() => setMode("simple")}>Simple</button>
       <button type="button" role="tab" aria-selected={mode === "pro"} className={mode === "pro" ? "on" : ""} onClick={() => setMode("pro")}>Pro</button>
+    </div>
+  );
+  if (mode === "wallet") return (
+    <div className="tx">
+      {toggle}
+      <Portfolio signer={signer} onTrade={(k, m, token) => { switchChain(k); if (m === "pro" && token && token.toLowerCase() !== WCHAINS[k].native.address.toLowerCase()) setBaseAddr(token); setMode(m); }} />
     </div>
   );
   if (mode === "simple") return (
@@ -130,6 +140,10 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
         <div className="tx-acct">
           <span className="tx-acct-bal">{holdings ? usd(total) : "…"}</span>
           <span className="tx-dim">{signer.using === "external" ? "Your wallet" : signer.mode === "privy" ? "AUTISTIK wallet" : "Wallet"}{owner ? ` · ${short(owner)}` : ""}</span>
+          <span className="tx-acct-btns">
+            <button type="button" className="tx-mini" onClick={() => { setBtab("receive"); document.querySelector(".tx-bottom")?.scrollIntoView({ behavior: "smooth" }); }}>↓ Receive</button>
+            <button type="button" className="tx-mini" onClick={() => { setBtab("send"); document.querySelector(".tx-bottom")?.scrollIntoView({ behavior: "smooth" }); }}>↑ Send</button>
+          </span>
           {signer.canSwitch && signer.switchTo && <button type="button" className="aw-link" onClick={() => signer.switchTo!(signer.using === "external" ? "embedded" : "external")}>Use {signer.using === "external" ? "AUTISTIK wallet" : "my wallet"}</button>}
         </div>
       </div>
@@ -163,7 +177,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
 
       <div className="tx-panel tx-bottom">
         <div className="tx-tabs" role="tablist" aria-label="Account">
-          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Deposit"], ["security", "Security"]] as const).map(([k, name]) => (
+          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Receive"], ["security", "Security"]] as const).map(([k, name]) => (
             <button key={k} type="button" role="tab" aria-selected={btab === k} className={btab === k ? "on" : ""} onClick={() => setBtab(k)}>{name}</button>
           ))}
         </div>

@@ -96,9 +96,9 @@ export function History() {
   );
 }
 
-export function Send({ c, signer, owner, holdings, onDone }: { c: WChain; signer: Signer; owner: string; holdings: Holding[]; onDone: () => void }) {
+export function Send({ c, signer, owner, holdings, start, onDone }: { c: WChain; signer: Signer; owner: string; holdings: Holding[]; start?: string; onDone: () => void }) {
   const list = holdings.filter((h, i) => i === 0 || h.amount > 0);
-  const [token, setToken] = useState<Holding | null>(list[0] ?? null);
+  const [token, setToken] = useState<Holding | null>(list.find((h) => h.address === start) ?? list[0] ?? null);
   const [to, setTo] = useState(""); const [amount, setAmount] = useState("");
   const [review, setReview] = useState(false); const [step, setStep] = useState(""); const [err, setErr] = useState(""); const [done, setDone] = useState<string | null>(null);
   const raw = token ? toUnits(amount || "", token.decimals) : null;

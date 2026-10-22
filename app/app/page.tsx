@@ -25,9 +25,9 @@ const ICONS: Record<string, React.ReactNode> = {
 type Tool = { href: string; icon: keyof typeof ICONS; name: string; text: string };
 const GROUPS: { name: string; tools: Tool[] }[] = [
   { name: "Trade", tools: [
+    { href: "/wallet", icon: "wallet", name: "Wallet", text: "Balances, send and receive" },
     { href: "/wallet?quick=1", icon: "buy", name: "Buy", text: "Any coin, in dollars" },
     { href: "/swap", icon: "swap", name: "Swap", text: "Best price, every DEX" },
-    { href: "/wallet", icon: "wallet", name: "Wallet", text: "Self-custody, limit orders" },
     { href: "/perps", icon: "perps", name: "Perpetuals", text: "Long or short" },
   ] },
   { name: "Discover", tools: [
