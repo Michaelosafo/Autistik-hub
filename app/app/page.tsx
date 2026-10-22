@@ -19,13 +19,19 @@ const ICONS: Record<string, React.ReactNode> = {
   launch: <><path d="M5 15c-1.5 1.3-2 5-2 5s3.7-.5 5-2" /><path d="M9 15 6 12c1.5-4 5-8 13-9-1 8-5 11.5-9 13z" /><circle cx="15" cy="9" r="1.6" /></>,
   lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><path d="M12 15v2" /></>,
   stake: <><path d="M12 21V11" /><path d="M12 11C12 7 9 5 5 5c0 4 3 6 7 6z" /><path d="M12 13c0-4 3-6 7-6 0 4-3 6-7 6z" /></>,
+  arena: <><circle cx="12" cy="12" r="9" /><path d="m12 7 4 3-1.5 4.5h-5L8 10z" /><path d="M12 3v4M21 10l-5 0M3 10h5M9.5 14.5 7 19M14.5 14.5 17 19" /></>,
   rewards: <><rect x="3" y="8" width="18" height="5" rx="1" /><path d="M5 13v8h14v-8M12 8v13" /><path d="M12 8S10.5 3 8 3.5 7 8 12 8zM12 8s1.5-5 4-4.5S17 8 12 8z" /></>,
 };
 
 type Tool = { href: string; icon: keyof typeof ICONS; name: string; text: string };
 const GROUPS: { name: string; tools: Tool[] }[] = [
-  { name: "Trade", tools: [
+  { name: "Wallet", tools: [
     { href: "/wallet", icon: "wallet", name: "Wallet", text: "Balances, send and receive" },
+    { href: "/arena", icon: "arena", name: "Game arena", text: "Holders on a pitch" },
+    { href: "/analytics", icon: "scan", name: "Token scanner", text: "Holders and safety" },
+    { href: "/analytics/pins", icon: "watch", name: "Watchlist", text: "Coins you follow" },
+  ] },
+  { name: "Trade", tools: [
     { href: "/wallet?quick=1", icon: "buy", name: "Buy", text: "Any coin, in dollars" },
     { href: "/swap", icon: "swap", name: "Swap", text: "Best price, every DEX" },
     { href: "/perps", icon: "perps", name: "Perpetuals", text: "Long or short" },
@@ -33,8 +39,6 @@ const GROUPS: { name: string; tools: Tool[] }[] = [
   { name: "Discover", tools: [
     { href: "/launchpad", icon: "trending", name: "Trending", text: "What's being bought" },
     { href: "/momentum", icon: "momentum", name: "Momentum", text: "Coins gaining speed" },
-    { href: "/analytics", icon: "scan", name: "Token scanner", text: "Holders and safety" },
-    { href: "/analytics/pins", icon: "watch", name: "Watchlist", text: "Coins you follow" },
   ] },
   { name: "Build", tools: [
     { href: "/launchpad/new", icon: "launch", name: "Launch Pad", text: "Launch a token, no code" },

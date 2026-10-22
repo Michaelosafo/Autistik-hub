@@ -48,7 +48,7 @@ function status(h: any, last: any) {
   return { cls: "", text: "Holding" };
 }
 
-const VIEWS = [["overview", "Overview"], ["chess", "Chess arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
+const VIEWS = [["overview", "Overview"], ["chess", "Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
 type View = (typeof VIEWS)[number][0];
 
 export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string } }) {
@@ -135,7 +135,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
     ? { buys: move.buysH24 ?? 0, sells: move.sellsH24 }
     : hasLiveTrades(chain) && t.pair ? { buys: ours24.filter((x: any) => x.side === "buy").length, sells: ours24.filter((x: any) => x.side === "sell").length } : null;
   const topSells24 = (events || []).filter((e: any) => e.kind !== "buy" && day(e.created_at)).length;
-  // The member's own wallet, so the chess arena can show their piece.
+  // The member's own wallet, so the game arena can show their player.
   const member = view === "chess" && user ? await walletMember().catch(() => null) : null;
   const myWallet = member ? (chain === "solana" ? member.sol : member.evm) : null;
   const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
@@ -238,21 +238,20 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
 
       {view === "chess" && (
         <div className="card stack">
-          <h2>Chess arena: every holder on the board</h2>
+          <h2>⚽ Game arena: every holder on the pitch</h2>
           <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"}
-            chain={chain} canBuy={isWChain(chain)} me={myWallet} />
+            chain={chain} canBuy={isWChain(chain)} me={myWallet} signedIn={!!user} />
           <details className="chess-help">
-            <summary>How to read the board</summary>
+            <summary>How to watch the match</summary>
             <ul>
-              <li><b>White pieces (bottom) are buyers and holders.</b> <b>Black pieces (top) are sellers.</b> Every tracked holder gets a piece, filling the board row by row.</li>
-              <li><b>Your piece</b> glows gold with a YOU flag. Not signed in? Paste your wallet under &quot;Your player&quot; to find it.</li>
-              <li><b>Live moves</b> pop up over the piece that made them (+ bought, − sold), and the game log lists every move in the time frame.</li>
-              <li><b>Enter the arena</b> (or tap the gold + square): pick an amount and buy in your wallet. Your piece joins the board within a minute.</li>
-              <li><b>Bigger wallet, stronger piece:</b> the biggest buyer or seller is the King, then Queen, Rooks, Bishops, Knights, and smaller wallets are Pawns.</li>
-              <li><b>Who&apos;s winning?</b> The dashed front line moves toward the losing side, and a side in &quot;check&quot; is losing badly.</li>
-              <li><b>The bench</b> holds anyone who didn&apos;t fit on the board. The dot on each holder shows how likely they are to sell (green calm, yellow maybe, red likely).</li>
-              <li>Pick a time frame (1H to All) and tap any piece to see that wallet.</li>
-              <li><b>Simple rule:</b> lots of strong black pieces and white pawns falling back means selling pressure; be careful.</li>
+              <li><b>Green kits are Diamond Hands</b>: wallets still holding, defending their own goal. <b>Red kits are Paper Hands</b>: wallets that sold some in this time frame.</li>
+              <li><b>Shaking and sweating</b> means a holder looks ready to sell (sold before, bought very recently, or linked to other wallets).</li>
+              <li><b>Faded players</b> sold part of their bag: the less they have left, the more see-through they get. <b>💨 Poof:</b> a wallet that sells everything vanishes from the pitch.</li>
+              <li><b>Every new sell pops up</b> as a note at the top of the screen, and the latest buys and sells show over the player who made them.</li>
+              <li><b>Your player</b> has gold hair, a gold kit and a YOU flag. Not signed in? Paste your wallet under &quot;Your player&quot; to find it.</li>
+              <li><b>Join the match</b> (or tap the gold JOIN on the touchline): pick an amount and buy in your wallet. Your player runs on within a minute.</li>
+              <li><b>The keeper</b> on each side is the biggest bag (or biggest seller). The score is buys against sells, and the ball rolls toward the losing side&apos;s goal.</li>
+              <li><b>🔎 Scan a token</b> opens any other token&apos;s match. Pick a time frame (1H to All) and tap any player to see that wallet.</li>
             </ul>
           </details>
         </div>

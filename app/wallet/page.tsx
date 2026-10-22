@@ -1,4 +1,7 @@
 import dynamicImport from "next/dynamic";
+import Link from "next/link";
+import Player from "@/components/arena/Player";
+import { TOKEN_ADDRESS } from "@/lib/groups";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 import { adminState } from "@/lib/admin";
@@ -11,7 +14,7 @@ export const metadata = {
   description: "Your own self-custody crypto wallet: buy, sell and swap any token on BNB Chain, Base, Ethereum, Arbitrum and Solana.",
 };
 
-/** A dollar amount to start a Buy with (from the chess arena), when it is a sensible one. */
+/** A dollar amount to start a Buy with (from the game arena), when it is a sensible one. */
 const usdOf = (v?: string) => { const x = Number(v); return isFinite(x) && x > 0 && x <= 100_000 ? Math.round(x * 100) / 100 : undefined; };
 
 export default async function WalletPage({ searchParams }: { searchParams: { chain?: string; buy?: string; quick?: string; usd?: string } }) {
@@ -21,8 +24,20 @@ export default async function WalletPage({ searchParams }: { searchParams: { cha
   const { admin } = await adminState();
   const start = { chain: searchParams.chain?.slice(0, 12), buy: searchParams.buy?.trim().slice(0, 64), quick: searchParams.quick === "1", usd: usdOf(searchParams.usd) };
   return (
-    <div className="stack" style={{ maxWidth: 1320 }}>
+    <div className="stack wallet-game" style={{ maxWidth: 1320 }}>
       <h1 className="sr-only">AUTISTIK Wallet</h1>
+      {/* The wallet is the player's locker room: straight into a match or the scanner from here. */}
+      <nav className="wg-bar" aria-label="Wallet games">
+        <span className="wg-me" aria-hidden="true">
+          <svg viewBox="-40 -105 80 110"><g className="pl chill"><g className="pl-move"><Player wallet={member?.evm || member?.sol || "autistik-player"} kit="#FFB300" trim="#fff" number={1} you /></g></g></svg>
+        </span>
+        <span className="wg-title"><b>Player wallet</b><small>Trade, then jump into a match</small></span>
+        <span className="wg-links">
+          <Link href="/arena" className="wg-btn arena">⚽ Game arena</Link>
+          <Link href={`/analytics/bsc/${TOKEN_ADDRESS}?view=chess`} className="wg-btn">💎 $AUTISTIK match</Link>
+          <Link href="/analytics" className="wg-btn">🔎 Scanner</Link>
+        </span>
+      </nav>
       <WalletLoader appId={appId} member={member} start={start} />
       {admin && <OrdersAdmin />}
       <p className="muted" style={{ fontSize: ".82em" }}>

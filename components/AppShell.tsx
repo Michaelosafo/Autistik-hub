@@ -9,13 +9,19 @@ import Toaster from "@/components/Toaster";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro"];
+export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string };
 const MENU: { name: string; match: string[]; items: Item[] }[] = [
-  { name: "Trade", match: ["/swap", "/wallet", "/perps", "/trade"], items: [
-    { href: "/wallet", name: "Wallet", note: "Balances, send, receive and trade" },
+  // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
+  { name: "Wallet", match: ["/wallet", "/arena", "/analytics", "/pro"], items: [
+    { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade" },
+    { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match" },
+    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety" },
+    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow" },
+  ] },
+  { name: "Trade", match: ["/swap", "/perps", "/trade"], items: [
     { href: "/swap", name: "Swap", note: "Trade any token at the best price" },
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage" },
   ] },
@@ -31,19 +37,15 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
   { name: "Lock", match: ["/lockers"], items: [
     { href: "/lockers", name: "Lockers", note: "Lock liquidity or team tokens" },
   ] },
-  { name: "Scanner", match: ["/analytics", "/pro"], items: [
-    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety" },
-    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow" },
-  ] },
 ];
 // Phone bar: Swap sits in the middle as the big button; everything else is behind the ⋯ button.
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
   { href: "/", name: "Home", icon: "i-home", match: [] },
   { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/momentum"] },
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
-  { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/wallet", "/perps", "/trade"], main: true },
+  { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
-  { href: "/analytics", name: "Scanner", icon: "i-stats", match: ["/analytics", "/pro"] },
+  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/analytics", "/pro"] },
 ];
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

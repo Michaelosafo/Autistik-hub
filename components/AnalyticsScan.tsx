@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 /** Paste a token address to see its top 40 wallets and dev, and get sell alerts. */
-export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixedToken, label = "Scan", pin }: { signedIn: boolean; chain?: string; token?: string; label?: string; pin?: boolean }) {
+export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixedToken, label = "Scan", pin, view }: { signedIn: boolean; chain?: string; token?: string; label?: string; pin?: boolean; view?: string }) {
   const router = useRouter();
   // "auto" finds the network from the address; BNB Chain and Solana can also be picked by hand.
   const [chain, setChain] = useState(fixedChain || "auto");
@@ -29,10 +29,11 @@ export default function AnalyticsScan({ signedIn, chain: fixedChain, token: fixe
       if (!pr.ok) { setErr(pd.error || "Couldn't pin it. Try again."); return; }
       setToken(""); router.refresh(); return;
     }
-    router.push(d.path); router.refresh();
+    // `view` opens a section of the token page (the game arena scans straight into its own pitch).
+    router.push(view ? `${d.path}?view=${view}` : d.path); router.refresh();
   }
 
-  if (!signedIn) return <Link className="btn primary" href="/login?next=/analytics">Sign in to {fixedToken ? "refresh" : "scan tokens"}</Link>;
+  if (!signedIn) return <Link className="btn primary" href={`/login?next=${view === "chess" ? "/arena" : "/analytics"}`}>Sign in to {fixedToken ? "refresh" : "scan tokens"}</Link>;
   if (fixedToken) return (
     <span className="stack" style={{ gap: 4 }}>
       <button className="btn small" type="button" onClick={() => scan()} disabled={busy}>{busy ? "Refreshing…" : "↻ " + label}</button>
