@@ -11,7 +11,7 @@ type Mode = "signin" | "join" | "forgot";
 
 const TITLES: Record<Mode, [string, string]> = {
   signin: ["Welcome back", "Sign in with Google, Apple or your email."],
-  join: ["Join the Hub", "Create a free account. We'll email you a link to confirm it, then you can chat with Believer and Purity."],
+  join: ["Join the Hub", "Create a free account. We'll email you a link to confirm it. You get a free AUTISTIK wallet too, made for this email."],
   forgot: ["Reset your password", "Enter your email and we'll send you a link to choose a new password."],
 };
 

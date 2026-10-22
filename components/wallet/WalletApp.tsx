@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { WCHAINS, WCHAIN_LIST, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import { TOKEN_ADDRESS } from "@/lib/groups";
-import type { Signer } from "./types";
+import type { Member, Signer } from "./types";
 import MarketForm from "./MarketForm";
 import OrderForm, { OpenOrders } from "./OrderForm";
 import SimpleMode from "./SimpleMode";
@@ -18,7 +18,7 @@ type OType = "market" | "limit" | "stop";
 type BTab = "assets" | "orders" | "history" | "convert" | "send" | "receive" | "security";
 
 /** AUTISTIK Trade: an exchange-style screen on top of the member's own wallet. */
-export default function WalletApp({ signer, start }: { signer: Signer; start: { chain?: string; buy?: string; quick?: boolean } }) {
+export default function WalletApp({ signer, start, member }: { signer: Signer; start: { chain?: string; buy?: string; quick?: boolean }; member?: Member | null }) {
   const [chainKey, setChainKey] = useState<WChainKey>(start.chain && start.chain in WCHAINS ? (start.chain as WChainKey) : "bsc");
   const c = WCHAINS[chainKey];
   const owner = c.kind === "solana" ? signer.sol?.address : signer.evm?.address;
@@ -85,7 +85,7 @@ export default function WalletApp({ signer, start }: { signer: Signer; start: { 
   function switchChain(k: WChainKey) { setChainKey(k); setBaseAddr(FEATURED[k]); setQuoteAddr(WCHAINS[k].native.address); setConvFrom(null); setConvTo(null); }
 
   if (!signer.ready) return <div className="tx-panel tx-dim" style={{ padding: 16 }}>Loading…</div>;
-  if (!signer.active) return <Welcome signer={signer} />;
+  if (!signer.active) return <Welcome signer={signer} member={member} />;
 
   const total = (holdings || []).reduce((s, h) => s + (h.valueUsd || 0), 0);
   const missing = !owner ? (c.kind === "solana" ? "Solana needs the AUTISTIK wallet or a Solana wallet like Phantom." : "Connect an EVM wallet to trade on this network.") : "";
