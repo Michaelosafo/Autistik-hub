@@ -12,8 +12,6 @@ import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
-const TICKER = ["Not a disease", "A community", "Different, not less", "Nothing about us without us", "Every mind on the spectrum", "Not broken", "Neurodiversity is strength", "Autistic and proud"];
-
 // The App's tools, each opening its own screen. [title, what it does, link, tag]
 const PRODUCTS: [string, string, string, string][] = [
   ["Swap", "Trade any token on BNB Chain, Base, Ethereum, Arbitrum and Solana at the best price across every DEX.", "/swap", "Trade"],
@@ -76,8 +74,6 @@ export default async function Home() {
         <div><b>{board.length}</b><span>Tokens trending</span></div>
         <div><b>{GROUPS.length}</b><span>Community groups</span></div>
       </section>
-
-      <div className="ticker" aria-hidden="true"><div>{[...TICKER, ...TICKER].map((t, i) => <span key={i}><i>∞</i> {t.toUpperCase()}</span>)}</div></div>
 
       <section id="products" className="lp-sec">
         <div className="lp-sec-head"><div className="lp-eyebrow">The App</div><h2>Everything in one place</h2><p>Open any tool and connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet.</p></div>
