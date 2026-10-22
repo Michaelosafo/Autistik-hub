@@ -7,7 +7,7 @@ import { GROUPS, CHANNELS } from "@/lib/groups";
 import { PHOTOS } from "@/lib/site";
 
 type Post = { id: string; channel: string; author_id: string; body: string; content_note: string | null; created_at: string; hidden: boolean };
-type Profile = { id: string; alias: string; color: string };
+type Profile = { id: string; alias: string; color: string; is_team?: boolean; team_title?: string | null };
 
 function ago(t: string) {
   const s = Math.max(1, (Date.now() - new Date(t).getTime()) / 1000);
@@ -61,7 +61,9 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
       setHearts(map);
     } else setHearts({});
     if (authors.length) {
-      const { data: pr } = await sb.from("profiles").select("id,alias,color").in("id", authors);
+      // Team columns come with supabase/members-live.sql; without it, names load plain.
+      let { data: pr, error } = await sb.from("profiles").select("id,alias,color,is_team,team_title").in("id", authors);
+      if (error) ({ data: pr } = await sb.from("profiles").select("id,alias,color").in("id", authors));
       setProfiles((old) => ({ ...old, ...Object.fromEntries((pr || []).map((p: Profile) => [p.id, p])) }));
     }
   }, []);
@@ -176,6 +178,7 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
               <div className="post-body">
                 <div className="post-head">
                   <Link className="author-link" href={`/members/${p.author_id}`}><b>{author?.alias || "Member"}</b></Link>
+                  {author?.is_team && <span className="team-badge" title={author.team_title ? `AUTISTIK team · ${author.team_title}` : "AUTISTIK team"}>✓ TEAM</span>}
                   {verified[p.author_id] && <span className="badge v">Verified practitioner</span>}
                   {p.author_id === uid && <span className="badge gold">You</span>}
                   {p.hidden && <span className="badge gold">Hidden by admin</span>}

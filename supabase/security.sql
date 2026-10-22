@@ -76,8 +76,10 @@ create policy "file report" on public.reports for insert to authenticated with c
 drop policy if exists "admins delete fund interest" on public.fund_interest;
 create policy "admins delete fund interest" on public.fund_interest for delete to authenticated using (public.is_admin());
 
--- Hub names: no pretending to be the team, and colours must be plain colours (a colour is used in page styles,
+-- Hub names: unique, no pretending to be the team, and colours must be plain colours (a colour is used in page styles,
 -- so anything else could be used to load outside images and track people).
+alter table public.profiles add column if not exists is_team boolean not null default false;
+alter table public.profiles add column if not exists team_title text check (team_title is null or char_length(team_title) between 2 and 30);
 create or replace function public.profile_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
@@ -86,8 +88,17 @@ begin
   if new.color !~ '^#[0-9A-Fa-f]{6}$' then
     raise exception 'Pick one of the colours shown.' using errcode = 'P0001';
   end if;
-  if not public.is_admin() and new.alias ~* '(admin|moderator|\ymod\y|official|autistik|support team|hub team)' then
+  -- Only the admin decides who is on the team (set_team below).
+  if not public.is_admin() then
+    new.is_team := old.is_team;
+    new.team_title := old.team_title;
+  end if;
+  -- Team words are only for team accounts, so a team name can't be faked.
+  if not public.is_admin() and not old.is_team and new.alias ~* '(admin|moderator|\ymod\y|official|autistik|support team|hub team|\yteam\y|\ystaff\y|\ydev\y|founder)' then
     raise exception 'That name is reserved for the Hub team. Please pick another.' using errcode = 'P0001';
+  end if;
+  if new.alias is distinct from old.alias and exists (select 1 from public.profiles p where lower(p.alias) = lower(new.alias) and p.id <> new.id) then
+    raise exception 'Another member already has that name. Please pick another.' using errcode = 'P0001';
   end if;
   return new;
 end; $$;

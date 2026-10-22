@@ -19,7 +19,8 @@ type NavItem = { href: string; name: string; short?: string; icon: string; railO
 const NAV: NavItem[] = [
   { href: "/", name: "Home", icon: "i-home" },
   { href: "/companions", name: "Chat", icon: "i-kai" },
-  { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
+  { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions", "/members"] },
+  { href: "/live", name: "Live", icon: "i-ses" },
   { href: "/buy", name: "$AUTISTIK", short: "Token", icon: "i-buy", match: ["/buy", "/fund"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet" },
   { href: "/autism", name: "About autism", icon: "i-learn", railOnly: true },

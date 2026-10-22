@@ -8,12 +8,26 @@
 create extension if not exists pgcrypto;
 
 -- ---------- helpers ----------
+-- Meme names like "Diamond-Hand Whale #4821", never the same as another member's (also in members-live.sql).
 create or replace function public.random_alias() returns text
-language sql volatile as $$
-  select (array['Quiet','Bright','Steady','Curious','Gentle','Brave','Calm','Clever','Kind','Patient','Cosmic','Sunny'])[1 + floor(random()*12)::int]
-      || ' ' ||
-         (array['Otter','Comet','Fern','Owl','River','Lantern','Fox','Pebble','Heron','Maple','Nova','Tide'])[1 + floor(random()*12)::int];
-$$;
+language plpgsql volatile security definer set search_path = public as $$
+declare
+  adj text[] := array['Diamond-Hand','Based','Turbo','Giga','Comfy','Smol','Laser-Eyed','Moon','Wagmi','Hodl',
+                      'Galaxy-Brain','Bullish','Sleepy','Rug-Proof','Wen-Lambo','Mega','Cosmic','Frosty','Lucky','Spicy',
+                      'Paper-Hand','Degen','Zoomer','Chad','Sneaky','Gm','Rekt-Proof','Pumped','Chill','Ape'];
+  noun text[] := array['Whale','Shrimp','Ape','Degen','Frog','Goblin','Wizard','Doge','Hodler','Moonboy',
+                       'Gremlin','Penguin','Banana','Rocket','Otter','Llama','Crab','Hamster','Raccoon','Lobster',
+                       'Chimp','Bull','Bear','Kitten','Dolphin','Owl','Fox','Yeti','Panda','Gecko'];
+  name text;
+begin
+  for i in 1..25 loop
+    name := adj[1 + floor(random() * array_length(adj, 1))::int] || ' '
+         || noun[1 + floor(random() * array_length(noun, 1))::int] || ' #'
+         || (1000 + floor(random() * 9000)::int)::text;
+    if not exists (select 1 from public.profiles where lower(alias) = lower(name)) then return name; end if;
+  end loop;
+  return name || floor(random() * 10)::text; -- 25 clashes in a row is practically impossible; this keeps it unique anyway
+end; $$;
 
 create or replace function public.random_color() returns text
 language sql volatile as $$

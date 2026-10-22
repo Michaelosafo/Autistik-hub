@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ProfileEdit from "@/components/ProfileEdit";
+import FollowButton from "@/components/members/FollowButton";
+import ActivityList from "@/components/members/ActivityList";
+import MemberName from "@/components/members/MemberName";
+import { loadProfiles, memberActivity, memberCard } from "@/lib/members";
 import { badgesFor } from "@/lib/badges";
 import { CHANNELS, GROUPS } from "@/lib/groups";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
@@ -24,13 +28,15 @@ export default async function MemberPage({ params }: { params: { id: string } })
   }
   if (!UUID.test(params.id)) notFound();
 
-  const [{ data: prof }, { data: pts }, { data: pro }, { data: groups }, { data: posts }, { data: st }] = await Promise.all([
-    sb.from("profiles").select("id,alias,color,is_admin,created_at").eq("id", params.id).maybeSingle(),
+  const [[prof], { data: pts }, { data: pro }, { data: groups }, { data: posts }, { data: st }, card, activity] = await Promise.all([
+    loadProfiles(sb, [params.id]),
     sb.from("member_points").select("posts,sessions,support,points").eq("user_id", params.id).maybeSingle(),
     sb.from("practitioners").select("role").eq("user_id", params.id).maybeSingle(),
     sb.from("group_members").select("group_id").eq("user_id", params.id),
     sb.from("posts").select("id,channel,body,created_at,hidden").eq("author_id", params.id).eq("hidden", false).order("created_at", { ascending: false }).limit(10),
     sb.from("app_settings").select("qualify_points,round_name").eq("id", 1).maybeSingle(),
+    memberCard(sb, params.id),
+    memberActivity(sb, params.id, 30),
   ]);
   if (!prof) notFound();
 
@@ -46,15 +52,24 @@ export default async function MemberPage({ params }: { params: { id: string } })
 
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
-      <div className="card profile-head">
-        <div className="avatar big" aria-hidden="true" style={{ background: prof.color }}>{prof.alias.charAt(0)}</div>
-        <div className="stack" style={{ gap: 4, minWidth: 0 }}>
-          <div className="label">{mine ? "Your profile" : "Member profile"}</div>
-          <h1 style={{ overflowWrap: "anywhere" }}>{prof.alias}</h1>
+      <div className={prof.is_team ? "card profile-head team" : "card profile-head"}>
+        <div className="avatar big" aria-hidden="true" style={{ background: prof.color || "#6141D4" }}>{prof.alias.charAt(0)}</div>
+        <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
+          <div className="label">{mine ? "Your profile" : prof.is_team ? `AUTISTIK team${prof.team_title ? ` · ${prof.team_title}` : ""}` : "Member profile"}</div>
+          <h1 style={{ overflowWrap: "anywhere" }}><MemberName m={prof} link={false} /></h1>
           <span className="muted" style={{ fontSize: ".9em" }}>Joined {new Date(prof.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })}{pro ? ` · ${pro.role}` : ""}</span>
+          {card && (
+            <div className="follow-stats">
+              <Link href={`/members?tab=followers&id=${prof.id}`}><b>{card.followers}</b> follower{card.followers === 1 ? "" : "s"}</Link>
+              <Link href={`/members?tab=following&id=${prof.id}`}><b>{card.following}</b> following</Link>
+              <span><b>{card.lives}</b> live session{card.lives === 1 ? "" : "s"}</span>
+              {card.wallet && <span className="chip-flag ok" title="This name is tied to a verified wallet. The address stays private.">✓ Wallet connected</span>}
+              {card.follows_me && !mine && <span className="badge v">Follows you</span>}
+            </div>
+          )}
         </div>
+        {card && !mine && <div className="profile-act"><FollowButton id={prof.id} initial={card.i_follow} /></div>}
       </div>
-
       {badges.length > 0 && (
         <div className="card stack">
           <h2>Badges</h2>
@@ -92,20 +107,29 @@ export default async function MemberPage({ params }: { params: { id: string } })
               <tr><th>Email</th><td style={{ overflowWrap: "anywhere" }}>{user.email}</td></tr>
               <tr><th>Wallet</th><td className="mono" style={{ overflowWrap: "anywhere" }}>{wallet || <Link href="/rewards">Link a wallet</Link>}</td></tr>
             </tbody></table>
-            <p className="muted" style={{ fontSize: ".85em" }}>Only you can see this box. Other members see your Hub name, colour, badges, groups and posts, never your email or wallet.</p>
+            <p className="muted" style={{ fontSize: ".85em" }}>Only you can see this box. Other members see your Hub name, colour, badges, groups and activity, and that a wallet is connected. Never your email, the wallet address, balances or trades.</p>
           </div>
         </div>
       )}
 
       <div className="card stack">
-        <h2>Recent posts</h2>
-        {!posts?.length && <div className="empty">No posts yet.</div>}
-        {(posts || []).map((x: any) => (
-          <div key={x.id} className="stack" style={{ gap: 2, borderTop: "1px solid var(--line)", paddingTop: 10 }} data-g={CHANNELS[x.channel]?.group.id}>
-            <span className="where" style={{ fontSize: ".82em" }}>{CHANNELS[x.channel]?.group.name} › #{CHANNELS[x.channel]?.name} · {new Date(x.created_at).toLocaleDateString()}</span>
-            <p style={{ overflowWrap: "anywhere" }}>{x.body.length > 280 ? x.body.slice(0, 280) + "…" : x.body}</p>
-          </div>
-        ))}
+        <h2>Activity</h2>
+        {activity ? (
+          <>
+            <ActivityList items={activity} empty={mine ? "Nothing yet. Scan a coin, join a live session or follow someone and it shows here." : "Nothing to show yet."} />
+            <p className="muted" style={{ fontSize: ".82em" }}>Shows coins scanned, launches, locks, posts, live sessions and follows. Wallet balances, swaps and trades are never shown.</p>
+          </>
+        ) : (
+          <>
+            {!posts?.length && <div className="empty">No posts yet.</div>}
+            {(posts || []).map((x: any) => (
+              <div key={x.id} className="stack" style={{ gap: 2, borderTop: "1px solid var(--line)", paddingTop: 10 }} data-g={CHANNELS[x.channel]?.group.id}>
+                <span className="where" style={{ fontSize: ".82em" }}>{CHANNELS[x.channel]?.group.name} › #{CHANNELS[x.channel]?.name} · {new Date(x.created_at).toLocaleDateString()}</span>
+                <p style={{ overflowWrap: "anywhere" }}>{x.body.length > 280 ? x.body.slice(0, 280) + "…" : x.body}</p>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </div>
   );
