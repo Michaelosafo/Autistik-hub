@@ -1989,3 +1989,87 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 /* Phones: the Home button opens the App too, so Open App takes its place. */
 @media (max-width:600px){ .lp-bar .lp-home{display:none} }
 @media (max-width:440px){ .lp-bar .lp-launch.lp-openapp{padding:12px 16px;font-size:1em} .lp-bar .lp-launch.lp-openapp>svg{display:inline-block;width:16px;height:16px} }
+
+/* ===================== Swap card: pay coin, amount, switch, get coin; and the token sheet ===================== */
+.sc-card{gap:14px}
+.sc-head{display:flex;align-items:baseline;gap:16px}
+.sc-head h1{margin:0;font-family:var(--f-display);font-size:1.5em;color:#F4EEFF;background:none;-webkit-background-clip:initial;background-clip:initial}
+.sc-tab{font-family:var(--f-display);font-size:1.5em;font-weight:700;color:#5f5677;text-decoration:none}
+.sc-tab:hover{color:#B8ADD2}
+.sc-mode{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.74em;font-weight:800;padding:4px 10px;border-radius:99px;background:rgba(123,85,224,.16);color:#B9A6FF;white-space:nowrap;align-self:center}
+.sc-mode.x{background:rgba(245,201,53,.12);color:#F5C935}
+.sc{display:flex;flex-direction:column}
+.sc-box{background:#100e18;border:1px solid #2a2537;border-radius:22px;padding:14px;display:flex;flex-direction:column;gap:4px;transition:border-color .15s}
+.sc-box:focus-within{border-color:rgba(245,201,53,.55)}
+.sc-top{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.sc-pill{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:9px;padding:6px 12px 6px 6px;border-radius:999px;background:#211c2e;border:1px solid #3a3350;color:#F4EEFF;min-width:0;max-width:62%;transition:border-color .15s}
+.sc-pill:hover,.sc-pill:focus-visible{border-color:rgba(245,201,53,.6)}
+.sc-pill:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sc-pill b{font-size:1.08em;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-pill svg{flex:none;color:#B8ADD2}
+.sc-logo{position:relative;flex:none;display:inline-block}
+.sc-logo>img.aw-logo{display:block}
+.sc-logo>.sx-chain-logo{position:absolute;right:-3px;bottom:-3px;border:2px solid #100e18;box-sizing:content-box}
+.sc-have{display:inline-flex;align-items:center;gap:6px;color:#8F84AA;font-size:.88em;font-weight:700;white-space:nowrap}
+.sc-max{all:unset;cursor:pointer;color:#F5C935;font-weight:800;padding:2px 2px 2px 4px}
+.sc-max:hover{color:#FFD84D}
+.sc-amt{width:100%;box-sizing:border-box;background:transparent;border:0;padding:10px 0 0;text-align:center;font-family:var(--f-display);font-size:2.7em;font-weight:700;color:#F4EEFF;letter-spacing:-.02em}
+.sc-amt:focus{outline:none}
+.sc-amt::placeholder{color:#5f5677}
+.sc-usd{text-align:center;color:#8F84AA;font-size:.9em;font-weight:600;padding-bottom:4px}
+.sc-flip{all:unset;cursor:pointer;align-self:center;position:relative;z-index:2;margin:-12px 0;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
+  background:#211c2e;border:4px solid #17141f;color:#F5C935;transition:transform .25s}
+.sc-flip span{display:flex;flex-direction:column;align-items:center;line-height:0}
+.sc-flip span svg{margin:-2px 0}
+.sc-flip:hover{transform:rotate(180deg)}
+.sc-flip:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sc-get{padding:16px 14px}
+.sc-out{display:flex;flex-direction:column;align-items:flex-end;min-width:0}
+.sc-out b{font-family:var(--f-display);font-size:1.45em;font-weight:700;color:#F4EEFF;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.sc-out small{color:#8F84AA;font-size:.8em}
+.sc-extra{margin-top:8px}
+.sc-card .sw-pre{gap:12px}
+
+/* The token sheet */
+.sc-sheet .sc-sheet-in{background:#17141f;color:#F4EEFF;width:min(520px,100%);max-height:88dvh;padding:8px 16px 16px;gap:12px;border-radius:26px 26px 0 0;border:1px solid #2a2537;border-bottom:0}
+.sc-grab{all:unset;cursor:pointer;align-self:center;padding:6px 20px}
+.sc-grab span{display:block;width:44px;height:5px;border-radius:9px;background:#3a3350}
+.sc-search{display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;border-radius:999px;background:#100e18;border:1px solid #2a2537;color:#8F84AA}
+.sc-search:focus-within{border-color:rgba(245,201,53,.6)}
+.sc-search input{flex:1;min-width:0;background:transparent !important;border:0 !important;padding:13px 0 !important;color:#F4EEFF;font:inherit;font-size:1em;box-shadow:none !important}
+.sc-search input:focus{outline:none}
+.sc-search input::placeholder{color:#8F84AA}
+.sc-search button{all:unset;cursor:pointer;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#B8ADD2;font-size:1.3em}
+.sc-search button:hover{background:rgba(255,255,255,.06);color:#F4EEFF}
+.sc-sheet{z-index:300}
+.sc-sheet-in>*:not(.sc-list){flex:none}
+.sc-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px}
+.sc-chips::-webkit-scrollbar{display:none}
+.sc-chip{all:unset;box-sizing:border-box;cursor:pointer;flex:none;height:44px;min-width:44px;padding:0 10px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#100e18;border:1.5px solid #2a2537;color:#F4EEFF;font-size:.9em;white-space:nowrap;transition:border-color .15s}
+.sc-chip:hover,.sc-chip:focus-visible{border-color:rgba(245,201,53,.5)}
+.sc-chip:focus-visible{outline:2px solid #F5C935;outline-offset:2px}
+.sc-chip.on{border-color:#F5C935;background:rgba(245,201,53,.1);padding:0 14px 0 10px}
+.sc-chip b{font-weight:800}
+.sc-chip:disabled{opacity:.4;cursor:not-allowed}
+.sc-star-ico{color:#F5C935;font-size:1.35em;line-height:1}
+.sc-more{margin-left:auto;font-weight:800;color:#B8ADD2}
+.sc-list-head{display:flex;justify-content:space-between;color:#8F84AA;font-size:.85em;font-weight:700;padding:2px 4px 0}
+.sc-list{overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:0 -6px;padding:0 0 4px;min-height:200px}
+.sc-row{display:flex;align-items:center;border-radius:16px}
+.sc-row:hover,.sc-row.on{background:#100e18}
+.sc-row-main{all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:10px 6px 10px 8px;border-radius:16px}
+.sc-row-main:focus-visible{outline:2px solid #F5C935;outline-offset:-2px}
+.sc-row-main:disabled{opacity:.4;cursor:not-allowed}
+.sc-row .sc-logo>.sx-chain-logo{border-color:#17141f}
+.sc-row-name{flex:1;min-width:0;display:flex;flex-direction:column}
+.sc-row-name b{font-size:1.05em;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-row-name small,.sc-row-bal small{color:#8F84AA;font-size:.82em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-row-bal{display:flex;flex-direction:column;align-items:flex-end;text-align:right;max-width:45%}
+.sc-row-bal b{font-weight:800;font-family:var(--f-mono);font-size:.98em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.sc-fav{all:unset;cursor:pointer;flex:none;width:34px;height:40px;display:grid;place-items:center;color:#5f5677;font-size:1.05em}
+.sc-fav:hover{color:#B8ADD2} .sc-fav.on{color:#F5C935}
+.sc-fav:focus-visible{outline:2px solid #F5C935;border-radius:10px}
+.sc-empty{display:flex;align-items:center;justify-content:center;gap:8px;padding:28px 12px;color:#8F84AA;font-size:.9em;text-align:center}
+@media (min-width:700px){ .sc-sheet .sc-sheet-in{border-radius:26px;border-bottom:1px solid #2a2537;max-height:80dvh} }
+@media (max-width:420px){ .sc-amt{font-size:2.3em} .sc-head h1,.sc-tab{font-size:1.3em} }
+@media (prefers-reduced-motion:reduce){ .sc-flip:hover{transform:none} }
