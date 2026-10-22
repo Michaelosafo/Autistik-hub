@@ -163,6 +163,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                       <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
                     </Link>
                   )}
+                  {me && <Link className="me-row" href="/members" onClick={() => setMenu(false)}><Icon id="i-com" /><span>Members<small>Follow people and see your feed</small></span></Link>}
                   {me && (
                     <div className="me-sec">
                       <div className="me-sec-h"><b>🔔 Alerts</b>{alerts.unread > 0 && <span className="badge gold">{alerts.unread} new</span>}<Link href="/analytics" onClick={() => setMenu(false)}>Stats →</Link></div>
