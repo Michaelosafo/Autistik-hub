@@ -29,8 +29,8 @@ export type Signer = {
   exportKey?: (kind: "evm" | "solana") => void;
 };
 
-/** Where the page starts: wallet (?chain, ?buy, ?quick) or staking (?pool; admin tools for the admin). */
-export type Start = { chain?: string; buy?: string; quick?: boolean; pool?: number; admin?: boolean };
+/** Where the page starts: wallet (?chain, ?buy, ?quick, ?usd) or staking (?pool; admin tools for the admin). */
+export type Start = { chain?: string; buy?: string; quick?: boolean; usd?: number; pool?: number; admin?: boolean };
 
 /** The signed-in Hub member: their confirmed email, and the AUTISTIK wallet made for it when they joined (if known). */
 export type Member = { email: string; evm: string | null; sol: string | null };

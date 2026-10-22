@@ -26,6 +26,7 @@ import AutoRefresh from "@/components/AutoRefresh";
 import TrustScore from "@/components/TrustScore";
 import { trustScore } from "@/lib/trust-score";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { walletMember } from "@/lib/privy-server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -46,7 +47,7 @@ function status(h: any, last: any) {
   return { cls: "", text: "Holding" };
 }
 
-const VIEWS = [["overview", "Overview"], ["chess", "Chess battle"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
+const VIEWS = [["overview", "Overview"], ["chess", "Chess arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
 type View = (typeof VIEWS)[number][0];
 
 export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string } }) {
@@ -127,6 +128,9 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const s = (t.security || {}) as any;
   const topShare = top.filter((h: any) => !h.is_contract).reduce((a: number, h: any) => a + (Number(h.pct) || 0), 0);
   const sells24 = (events || []).filter((e: any) => e.kind !== "buy" && Date.now() - Date.parse(e.created_at) < 86_400_000).length;
+  // The member's own wallet, so the chess arena can show their piece.
+  const member = view === "chess" && user ? await walletMember().catch(() => null) : null;
+  const myWallet = member ? (chain === "solana" ? member.sol : member.evm) : null;
   const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
   return (
@@ -224,15 +228,19 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
 
       {view === "chess" && (
         <div className="card stack">
-          <h2>Chess battle: buyers vs sellers</h2>
-          <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"} />
+          <h2>Chess arena: every holder on the board</h2>
+          <Arena holders={(holders || []) as any} events={(events || []) as any} trades={(trades || []) as any} links={(links || []) as any} explorer={c.explorer} token={t.token} symbol={t.symbol || "TOKEN"}
+            chain={chain} canBuy={isWChain(chain)} me={myWallet} />
           <details className="chess-help">
             <summary>How to read the board</summary>
             <ul>
-              <li><b>White pieces (bottom) are buyers and holders.</b> <b>Black pieces (top) are sellers.</b></li>
+              <li><b>White pieces (bottom) are buyers and holders.</b> <b>Black pieces (top) are sellers.</b> Every tracked holder gets a piece, filling the board row by row.</li>
+              <li><b>Your piece</b> glows gold with a YOU flag. Not signed in? Paste your wallet under &quot;Your player&quot; to find it.</li>
+              <li><b>Live moves</b> pop up over the piece that made them (+ bought, − sold), and the game log lists every move in the time frame.</li>
+              <li><b>Enter the arena</b> (or tap the gold + square): pick an amount and buy in your wallet. Your piece joins the board within a minute.</li>
               <li><b>Bigger wallet, stronger piece:</b> the biggest buyer or seller is the King, then Queen, Rooks, Bishops, Knights, and smaller wallets are Pawns.</li>
-              <li><b>Who&apos;s winning?</b> The side with more buying or selling in the time frame pushes its pawns forward. A side in &quot;check&quot; is losing badly.</li>
-              <li><b>The bench</b> shows holders who didn&apos;t move. Their colour shows how likely they are to sell (green calm, yellow maybe, red likely).</li>
+              <li><b>Who&apos;s winning?</b> The dashed front line moves toward the losing side, and a side in &quot;check&quot; is losing badly.</li>
+              <li><b>The bench</b> holds anyone who didn&apos;t fit on the board. The dot on each holder shows how likely they are to sell (green calm, yellow maybe, red likely).</li>
               <li>Pick a time frame (1H to All) and tap any piece to see that wallet.</li>
               <li><b>Simple rule:</b> lots of strong black pieces and white pawns falling back means selling pressure; be careful.</li>
             </ul>
