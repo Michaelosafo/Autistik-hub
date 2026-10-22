@@ -15,4 +15,4 @@ export function mfaStep(user: User | null | undefined, aal: string | null | unde
 }
 
 /** Pages a signed-in member can still open before typing their 2-step code. */
-export const MFA_FREE = /^\/(security|auth|login|safety|api|\.well-known)(\/|$)|\.[a-z0-9]+$/i;
+export const MFA_FREE = /^\/(security|auth|login|safety|privacy|api|\.well-known)(\/|$)|\.[a-z0-9]+$/i;

@@ -11,6 +11,7 @@ export default function Safety() {
         stats={[["0", "health data on-chain"], ["Hub names", "no real names"], ["18+", "adults only"]]} />
       <div className="card stack">
         <h2>Our promises</h2>
+        <p className="muted" style={{ margin: 0 }}>The full details are in our <a href="/privacy">privacy policy</a>.</p>
         <ul className="stack" style={{ margin: 0, paddingLeft: 20, gap: 8 }}>
           <li>Nothing about your health, diagnosis or feelings is ever put on the blockchain.</li>
           <li>You get a Hub name. Your real name and email are never shown to other members.</li>
