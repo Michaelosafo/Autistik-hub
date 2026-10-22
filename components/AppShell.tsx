@@ -45,13 +45,15 @@ const MORE: { name: string; items: Item[] }[] = [
     { href: "/", name: "Home", note: "The AUTISTIK main page", icon: "i-home" },
     { href: "/app", name: "All tools", note: "Every App tool on one page", icon: "i-grid" },
     { href: "/companions", name: "Ask the bot", note: "Chat with Believer, Purity and the AUTISTIK bot", icon: "i-kai" },
+    { href: "/live", name: "Live hub", note: "Join the team's live sessions, get airdrops", icon: "i-ses" },
     { href: "/community", name: "Community", note: "Groups, posts and live sessions", icon: "i-com" },
     { href: "/buy", name: "$AUTISTIK", note: "How to buy the token", icon: "i-buy" },
     { href: "/autism", name: "About autism", note: "Guides and support", icon: "i-learn" },
     { href: "/safety", name: "Safety", note: "Stay safe in crypto", icon: "i-safe" },
   ] },
   { name: "Account", items: [
-    { href: "/me", name: "My profile", note: "Your name, colour and posts", icon: "i-user" },
+    { href: "/me", name: "My profile", note: "Your meme name, followers and activity", icon: "i-user" },
+    { href: "/members", name: "Members", note: "Follow people and see what they're up to", icon: "i-com" },
     { href: "/security", name: "Account security", note: "Your authenticator app", icon: "i-key" },
   ] },
 ];

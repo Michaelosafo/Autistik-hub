@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { createWalletClient, custom, getAddress } from "viem";
 import { bsc } from "viem/chains";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { linkMessage } from "@/lib/wallet";
+import { linkWallet } from "@/lib/wallet-link-client";
 
 const AIRDROP = process.env.NEXT_PUBLIC_AIRDROP_CONTRACT as `0x${string}` | undefined;
 const CLAIM_ABI = [
@@ -30,20 +30,11 @@ export default function WalletLink({ uid, initial }: { uid: string; initial: str
   }, [wallet]);
 
   async function link() {
-    const eth = await pickWallet();
-    if (!eth) return;
     setBusy(true); setStatus("Check your wallet app…");
     try {
-      const client = createWalletClient({ chain: bsc, transport: custom(eth) });
-      const [address] = await client.requestAddresses();
-      const issued = new Date().toISOString();
-      const signature = await client.signMessage({ account: address, message: linkMessage(uid, issued) });
-      const res = await fetch("/api/wallet", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address, issued, signature }) });
-      const data = await res.json();
-      if (!res.ok) { setStatus(data.error || "Couldn't link your wallet."); return; }
-      setWallet(data.address); setStatus("Wallet linked."); router.refresh();
+      setWallet(await linkWallet(uid)); setStatus("Wallet linked."); router.refresh();
     } catch (e: any) {
-      setStatus(e?.shortMessage || "You cancelled in your wallet. Nothing was linked.");
+      setStatus(e.message === "No wallet chosen." ? "" : e.message);
     } finally { setBusy(false); }
   }
   async function unlink() {

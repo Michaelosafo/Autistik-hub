@@ -47,8 +47,8 @@ export function buildCsp(nonce: string) {
     "font-src 'self' data: https://fonts.gstatic.com https://fonts.reown.com https://vercel.live",
     "img-src 'self' data: blob: https:",
     `connect-src 'self' https: wss:${dev ? " ws: http://localhost:* http://127.0.0.1:*" : ""}`,
-    // The built-in wallet (Privy) keeps keys in its own secure frame.
-    "frame-src https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io https://dexscreener.com https://*.walletconnect.com https://*.walletconnect.org https://verify.walletconnect.org https://verify.walletconnect.com https://secure.walletconnect.org https://*.reown.com",
+    // YouTube live sessions play on /live. The built-in wallet (Privy) keeps keys in its own secure frame.
+    "frame-src https://www.youtube-nocookie.com https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io https://dexscreener.com https://*.walletconnect.com https://*.walletconnect.org https://verify.walletconnect.org https://verify.walletconnect.com https://secure.walletconnect.org https://*.reown.com",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     "media-src 'self' data: blob:",
