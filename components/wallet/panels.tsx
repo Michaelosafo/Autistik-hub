@@ -2,13 +2,14 @@
 import { useEffect, useState } from "react";
 import { encodeFunctionData, erc20Abi, getAddress, isAddress } from "viem";
 import { FEE_PERCENT, WCHAINS, isNative, isTokenAddress, toUnits, type WChain, type WToken } from "@/lib/wallet-chains";
-import type { Signer } from "./types";
+import type { Member, Signer } from "./types";
 import { GAS_RESERVE } from "./MarketForm";
 import { amt, api, friendlyError, Logo, sendSol, store, usd, waitEvm, type Holding, type TokenInfo, type Trade } from "./util";
 
 /** First visit: pick the built-in AUTISTIK wallet or connect your own. */
-export function Welcome({ signer }: { signer: Signer }) {
+export function Welcome({ signer, member }: { signer: Signer; member?: Member | null }) {
   const builtIn = !!signer.loginEmbedded;
+  const ready = member?.evm || member?.sol;
   return (
     <div className="stack" style={{ gap: 14 }}>
       <section className="tx-welcome">
@@ -17,8 +18,10 @@ export function Welcome({ signer }: { signer: Signer }) {
         <p>Buy and sell on BNB Chain, Base, Ethereum, Arbitrum and Solana at the best price across every DEX, including tokens launched on AUTISTIK.</p>
         <div className="tx-choose">
           <button type="button" className="tx-choice main" onClick={signer.loginEmbedded || signer.login} disabled={!builtIn}>
-            <b>Use AUTISTIK wallet</b>
-            <span>{builtIn ? "Sign in with email or Face ID. A wallet is created for you. No seed phrase, no app." : "Opening soon."}</span>
+            <b>{ready ? "Open my AUTISTIK wallet" : "Use AUTISTIK wallet"}</b>
+            <span>{!builtIn ? "Opening soon."
+              : member ? `We'll email a code to ${member.email}. First time: you'll also add an authenticator app. No seed phrase.`
+              : "Free for every member. Sign in or join with your email, and a wallet is made for you."}</span>
           </button>
           <button type="button" className="tx-choice" onClick={signer.loginExternal || signer.login}>
             <b>Connect my wallet</b>
@@ -26,8 +29,18 @@ export function Welcome({ signer }: { signer: Signer }) {
           </button>
         </div>
       </section>
+      {ready && (
+        <div className="card aw-ready">
+          <b>Your AUTISTIK wallet is ready</b>
+          <p className="muted" style={{ margin: "4px 0 0" }}>Made for {member!.email} when you joined. Open it to see your balance, add funds and trade.</p>
+          <dl className="aw-addrs">
+            {member!.evm && <div><dt>BNB Chain, Base, Ethereum, Arbitrum</dt><dd className="mono">{member!.evm}</dd></div>}
+            {member!.sol && <div><dt>Solana</dt><dd className="mono">{member!.sol}</dd></div>}
+          </dl>
+        </div>
+      )}
       <div className="aw-why">
-        <div className="card"><b>Only you control it</b><p className="muted">AUTISTIK never holds your money or your keys. Every trade needs your approval.</p></div>
+        <div className="card"><b>Only you control it</b><p className="muted">AUTISTIK never holds your money or your keys. Every trade needs your approval{builtIn ? " and a code from your authenticator app" : ""}.</p></div>
         <div className="card"><b>Best price, every DEX</b><p className="muted">Each order is routed across all pools. Trading fee {FEE_PERCENT}%.</p></div>
         <div className="card"><b>Scam protection</b><p className="muted">Honeypot and tax checks before you buy, price-impact limits and exact approvals.</p></div>
       </div>
@@ -170,6 +183,7 @@ export function Security({ signer }: { signer: Signer }) {
     <div className="stack" style={{ gap: 12, maxWidth: 620 }}>
       <ul className="aw-sec">
         <li><b>Self-custody.</b> Only you can move your funds. AUTISTIK never holds your money or keys.</li>
+        {signer.mode === "privy" && signer.using === "embedded" && <li><b>Authenticator app: on.</b> Your AUTISTIK wallet asks for a 6-digit code from your app before it sends anything or shows its key.</li>}
         <li><b>Every trade is previewed</b> and needs your approval. Trades always pay out to your own wallet.</li>
         <li><b>Exact approvals only.</b> A trade can only use the amount you&apos;re trading, never your whole balance.</li>
         <li><b>Scam checks</b> on every token before you buy. Honeypots are blocked.</li>

@@ -3,6 +3,7 @@ import ProHero from "@/components/ProHero";
 import Guide from "@/components/Guide";
 import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
 import WalletLoader from "@/components/wallet/WalletLoader";
+import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 import { adminState } from "@/lib/admin";
 
 const StakeAdmin = dynamicImport(() => import("@/components/stake/StakeAdmin"), { ssr: false });
@@ -13,10 +14,10 @@ export const metadata = {
   description: "Stake $AUTISTIK and earn BNB from platform fees. Token teams can open staking pools for their own communities.",
 };
 
-const clean = (v: string | undefined) => (v && /^[a-z0-9]{10,40}$/i.test(v.trim()) ? v.trim() : null);
-
 export default async function StakePage({ searchParams }: { searchParams: { pool?: string } }) {
-  const appId = clean(process.env.PRIVY_APP_ID) || clean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
+  // Privy's app ID is public (it only names the app). Read at request time so adding it in Vercel needs no code change.
+  const appId = PRIVY_APP_ID;
+  const member = appId ? await walletMember() : null;
   const { admin } = await adminState();
   const pool = /^\d{1,6}$/.test(searchParams.pool || "") ? Number(searchParams.pool) : undefined;
   return (
@@ -29,7 +30,7 @@ export default async function StakePage({ searchParams }: { searchParams: { pool
         "Rewards build up every second. Tap Collect any time. Withdraw when your lock ends.",
         "Token teams: open Create a pool, add rewards, and share the link with your holders.",
       ]} />
-      <WalletLoader appId={appId} start={{ pool, admin }} app="stake" />
+      <WalletLoader appId={appId} member={member} start={{ pool, admin }} app="stake" />
       {admin && <StakeAdmin />}
     </div>
   );
