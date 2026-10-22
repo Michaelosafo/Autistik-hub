@@ -3,6 +3,7 @@ import { useState } from "react";
 import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } from "viem";
 import { KYBER_ROUTER, isTokenAddress, type WChain, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "./types";
+import { reportActivity } from "@/lib/activity-client";
 
 export type Risk = { level: "ok" | "warn" | "danger" | "unknown"; notes: string[]; buyTax: number; sellTax: number; honeypot: boolean };
 export type TokenInfo = WToken & { priceUsd: number | null; risk: Risk };
@@ -26,7 +27,10 @@ export const store = {
   get<T>(k: string, d: T): T { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k: string, v: unknown) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
 };
-export function addTrade(t: Trade) { store.set("aw-history", [t, ...store.get<Trade[]>("aw-history", [])].slice(0, 50)); }
+export function addTrade(t: Trade) {
+  store.set("aw-history", [t, ...store.get<Trade[]>("aw-history", [])].slice(0, 50));
+  reportActivity("swap", t.chain, t.hash, `${t.side === "convert" ? "Swapped" : t.side === "buy" ? "Bought" : "Sold"} ${t.pay} → ${t.get}`);
+}
 
 export function Logo({ t, size = 34 }: { t: { symbol: string; logo?: string | null }; size?: number }) {
   const [bad, setBad] = useState(false);

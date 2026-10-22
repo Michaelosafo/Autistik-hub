@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPublicClient, createWalletClient, custom, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
 import { CHAINS, LAUNCH_TOKEN_ABI, isSolana, liveChains, viemChain, type ChainKey, type Pads } from "@/lib/launchpad";
 import { SolAddLiquidity } from "@/components/SolanaLaunch";
+import { reportActivity } from "@/lib/activity-client";
 
 const ROUTER_ABI = parseAbi([
   "function factory() view returns (address)",
@@ -159,6 +160,7 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
       const pair = (await pub.readContract({ address: factory, abi: FACTORY_ABI, functionName: "getPair", args: [token, weth] })) as `0x${string}`;
       const after = (await pub.readContract({ address: pair, abi: ERC20_ABI, functionName: "balanceOf", args: [acc] })) as bigint;
       setLp({ pair, amount: after - before, hash });
+      reportActivity("liquidity", c.key, hash, `Added ${amtToken} ${pool.symbol} + ${amtCoin} ${c.coin} on ${c.name}`);
       setMsg("✅ Liquidity added. The LP tokens are in your wallet.");
       setAmtToken(""); setAmtCoin("");
       setPool((p) => (p ? { ...p, pair } : p));
@@ -176,6 +178,7 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
       const { w, acc, vc } = await wallet();
       const hash = await w.writeContract({ account: acc, chain: vc, address: lp.pair, abi: ERC20_ABI, functionName: "transfer", args: [DEAD, lp.amount] });
       await pub.waitForTransactionReceipt({ hash });
+      reportActivity("lp-burn", c.key, hash, `Burned LP tokens on ${c.name}`);
       setMsg("🔥 LP tokens burned. This liquidity can never be removed.");
       setLp(null);
     } catch (e: any) {

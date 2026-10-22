@@ -49,7 +49,7 @@ const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /** The App's frame: a top bar with menus and Connect Wallet (like an exchange), and a bottom bar on phones. */
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ admin, children }: { admin?: boolean; children: React.ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
@@ -99,6 +99,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
         <div className="ax-right">
+          {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
+          {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
           <span className="ax-chain" title="Network"><i />BNB Chain</span>
           {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
           {acct ? (
@@ -144,6 +146,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <div key={m.name}><small>{m.name}</small>{m.items.map((i) => <Link key={i.href} role="menuitem" href={i.href} onClick={() => setMore(false)}>{i.name}</Link>)}</div>
             ))}
             <div><small>Website</small><Link href="/" onClick={() => setMore(false)}>Home</Link><Link href="/community" onClick={() => setMore(false)}>Community</Link></div>
+            {admin && <div><small>Owner</small><Link href="/admin" onClick={() => setMore(false)}>Admin: everything happening</Link></div>}
           </div>
         </div>
       )}
