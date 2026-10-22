@@ -38,8 +38,9 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
   // Wallet (everything you own on every network), Simple (discover and buy in one tap) or Pro (exchange screen with
   // charts and orders). Remembered per device; a Buy link opens the trade screen.
   const [mode, setModeState] = useState<"wallet" | "simple" | "pro">("wallet");
-  useEffect(() => { setModeState(start.quick ? "simple" : start.buy ? store.get<"simple" | "pro">("aw-trade-mode", "pro") : store.get("aw-mode", "wallet")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const setMode = (m: "wallet" | "simple" | "pro") => { setModeState(m); store.set("aw-mode", m); if (m !== "wallet") store.set("aw-trade-mode", m); };
+  // The page always opens on Wallet; only a Buy link opens the trade screen (the one used last).
+  useEffect(() => { if (start.quick || start.buy) setModeState(start.quick ? "simple" : store.get<"simple" | "pro">("aw-trade-mode", "pro")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMode = (m: "wallet" | "simple" | "pro") => { setModeState(m); if (m !== "wallet") store.set("aw-trade-mode", m); };
 
   useEffect(() => { setCustom(store.get(`aw-tokens-${chainKey}`, [])); }, [chainKey]);
   const addCustom = useCallback((t: WToken) => setCustom((list) => {
@@ -139,6 +140,10 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
         <div className="tx-acct">
           <span className="tx-acct-bal">{holdings ? usd(total) : "…"}</span>
           <span className="tx-dim">{signer.using === "external" ? "Your wallet" : signer.mode === "privy" ? "AUTISTIK wallet" : "Wallet"}{owner ? ` · ${short(owner)}` : ""}</span>
+          <span className="tx-acct-btns">
+            <button type="button" className="tx-mini" onClick={() => { setBtab("receive"); document.querySelector(".tx-bottom")?.scrollIntoView({ behavior: "smooth" }); }}>↓ Receive</button>
+            <button type="button" className="tx-mini" onClick={() => { setBtab("send"); document.querySelector(".tx-bottom")?.scrollIntoView({ behavior: "smooth" }); }}>↑ Send</button>
+          </span>
           {signer.canSwitch && signer.switchTo && <button type="button" className="aw-link" onClick={() => signer.switchTo!(signer.using === "external" ? "embedded" : "external")}>Use {signer.using === "external" ? "AUTISTIK wallet" : "my wallet"}</button>}
         </div>
       </div>
@@ -172,7 +177,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
 
       <div className="tx-panel tx-bottom">
         <div className="tx-tabs" role="tablist" aria-label="Account">
-          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Deposit"], ["security", "Security"]] as const).map(([k, name]) => (
+          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Receive"], ["security", "Security"]] as const).map(([k, name]) => (
             <button key={k} type="button" role="tab" aria-selected={btab === k} className={btab === k ? "on" : ""} onClick={() => setBtab(k)}>{name}</button>
           ))}
         </div>

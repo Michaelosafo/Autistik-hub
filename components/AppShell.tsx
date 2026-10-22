@@ -15,8 +15,8 @@ export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.start
 type Item = { href: string; name: string; note?: string };
 const MENU: { name: string; match: string[]; items: Item[] }[] = [
   { name: "Trade", match: ["/swap", "/wallet", "/perps", "/trade"], items: [
+    { href: "/wallet", name: "Wallet", note: "Balances, send, receive and trade" },
     { href: "/swap", name: "Swap", note: "Trade any token at the best price" },
-    { href: "/wallet", name: "Pro trading", note: "Chart, limit and stop-loss orders" },
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage" },
   ] },
   { name: "Earn", match: ["/stake", "/rewards"], items: [

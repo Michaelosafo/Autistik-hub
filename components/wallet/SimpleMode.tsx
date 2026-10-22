@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { IMPACT_BLOCK, IMPACT_CONFIRM, MAX_SLIPPAGE_BPS, WCHAIN_LIST, isNative, isTokenAddress, toUnits, type WChain, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "./types";
 import { GAS_RESERVE } from "./MarketForm";
-import { Receive } from "./panels";
+import { Receive, Send } from "./panels";
 import { LISTINGS } from "@/lib/listings";
 import { addTrade, amt, api, friendlyError, Logo, pct, raw2num, runTrade, usd, type Holding, type Quote, type TokenInfo } from "./util";
 
@@ -31,6 +31,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
   });
   const [sell, setSell] = useState<Holding | null>(null);
   const [money, setMoney] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     setLists(null);
@@ -56,8 +57,9 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
             {WCHAIN_LIST.map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
           </select>
         </div>
-        <div className="sm-actions">
-          <button type="button" className="sm-btn main" onClick={() => setMoney(true)}>Add money</button>
+        <div className="sm-actions three">
+          <button type="button" className="sm-btn main" onClick={() => setMoney(true)}>↓ Receive</button>
+          <button type="button" className="sm-btn" onClick={() => setSending(true)}>↑ Send</button>
           <button type="button" className="sm-btn" onClick={() => document.getElementById("sm-mine")?.scrollIntoView({ behavior: "smooth" })}>Sell</button>
         </div>
       </section>
@@ -113,8 +115,13 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
 
       {buy && <BuySheet c={c} signer={signer} owner={owner} coin={buy} nat={nat} startUsd={buy.token === startBuy ? startUsd : undefined} onAdd={onAdd} onMoney={() => { setBuy(null); setMoney(true); }} onClose={() => setBuy(null)} onDone={onDone} />}
       {sell && <SellSheet c={c} signer={signer} owner={owner} h={sell} onClose={() => setSell(null)} onDone={onDone} />}
+      {sending && (
+        <Sheet title={`Send from ${c.name}`} onClose={() => setSending(false)}>
+          {holdings ? <Send c={c} signer={signer} owner={owner} holdings={holdings} onDone={onDone} /> : <div className="tx-dim">Loading balances…</div>}
+        </Sheet>
+      )}
       {money && (
-        <Sheet title={`Add money on ${c.name}`} onClose={() => setMoney(false)}>
+        <Sheet title={`Receive or add money on ${c.name}`} onClose={() => setMoney(false)}>
           <ol className="sm-steps">
             <li>Buy <b>{c.native.symbol}</b> on an exchange like Binance (card, bank or mobile money).</li>
             <li>Withdraw it to your address below. Pick the network <b>{c.key === "bsc" ? "BNB Smart Chain (BEP20)" : c.name}</b>.</li>

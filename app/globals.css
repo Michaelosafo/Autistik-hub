@@ -2194,3 +2194,7 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 .pf-sheet .pf-act span{background:color-mix(in srgb,var(--tx-ink) 8%,transparent);border-color:rgba(127,127,127,.25)}
 .pf-sheet .pf-act:first-child span{background:#F0B90B;color:#14151a;border-color:#F0B90B}
 @media (max-width:420px){ .pf-act{font-size:.72em} .pf-act span{width:42px;height:42px} }
+.sm-actions.three{grid-template-columns:repeat(3,1fr)}
+.tx-acct-btns{display:flex;gap:6px;margin:4px 0 2px}
+.tx-mini{all:unset;cursor:pointer;padding:4px 10px;border-radius:999px;font-weight:700;font-size:.95em;background:var(--tx-p2);border:1px solid var(--tx-line);color:var(--tx-ink)}
+.tx-mini:first-child{background:#F0B90B;border-color:#F0B90B;color:#14151a}
