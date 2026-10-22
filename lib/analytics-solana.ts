@@ -30,11 +30,15 @@ async function rpc(method: string, params: unknown[], url = RPC): Promise<any> {
   return j.result;
 }
 
-/** Up to 100 accounts per call, parsed. Missing accounts come back as null. */
+/**
+ * Accounts read in batches, parsed. Missing accounts come back as null. The free node now takes at most 10 per call
+ * (and sometimes refuses), so batches are 10 and a refused batch is read again from the other free node.
+ */
 async function accounts(keys: string[]): Promise<any[]> {
   const out: any[] = [];
-  for (let i = 0; i < keys.length; i += 100) {
-    const r = await rpc("getMultipleAccounts", [keys.slice(i, i + 100), { encoding: "jsonParsed" }]);
+  for (let i = 0; i < keys.length; i += 10) {
+    const params = [keys.slice(i, i + 10), { encoding: "jsonParsed" }];
+    const r = await rpc("getMultipleAccounts", params).catch(() => rpc("getMultipleAccounts", params, INDEXED_RPC));
     out.push(...(r?.value || []));
   }
   return out;

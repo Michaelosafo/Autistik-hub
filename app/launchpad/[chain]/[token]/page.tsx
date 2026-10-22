@@ -10,7 +10,7 @@ import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { CHAINS, LOCKS, dexscreenerUrl, isLock, isSolana, type ChainKey } from "@/lib/launchpad";
 import { getMarkets, usd } from "@/lib/market";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import VerifySource from "@/components/VerifySource";
@@ -24,9 +24,9 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   // Solana addresses are case-sensitive base58; EVM ones get their checksum.
   const token = sol ? params.token : getAddress(params.token);
   const sb = supabaseServer();
-  const [{ data: launch }, { data: { user } }, board, access] = await Promise.all([
+  const [{ data: launch }, user, board, access] = await Promise.all([
     sb.from("launches").select("*").eq("chain", c.key).eq("token", token).maybeSingle(),
-    sb.auth.getUser(),
+    currentUser(),
     getBoard(60),
     launchAccess(),
   ]);

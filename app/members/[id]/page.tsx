@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import ProfileEdit from "@/components/ProfileEdit";
 import { badgesFor } from "@/lib/badges";
 import { CHANNELS, GROUPS } from "@/lib/groups";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Member · AUTISTIK Hub" };
@@ -12,7 +12,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function MemberPage({ params }: { params: { id: string } }) {
   const sb = supabaseServer();
-  const { data: { user } } = await sb.auth.getUser();
+  const user = await currentUser();
   if (!user) {
     return (
       <div className="stack" style={{ maxWidth: 640 }}>

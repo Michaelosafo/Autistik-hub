@@ -601,6 +601,10 @@ a.alert-row:hover{background:var(--surface-2)}
 .an-stats div{background:var(--surface-2);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .an-stats span{font-size:.74em;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:700}
 .an-stats b{font-size:1.2em;font-family:var(--f-display)}
+.an-stats b span{font-size:inherit;color:inherit;text-transform:none;letter-spacing:0;font-weight:inherit}
+.an-stats b span.up{color:var(--teal)}
+.an-stats b span.down{color:var(--alert)}
+.an-stats small{font-size:.72em;color:var(--muted)}
 .chip-flag{font-size:.78em;font-weight:700;padding:4px 10px;border-radius:999px}
 .chip-flag.ok{background:var(--teal-soft);color:var(--teal)}
 .chip-flag.bad{background:var(--alert-soft);color:var(--alert)}

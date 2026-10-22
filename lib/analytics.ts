@@ -391,8 +391,14 @@ async function findPair(chain: AChain, token: string): Promise<string | null> {
   } catch { return null; }
 }
 
-const LOOKBACK = 10_000n; // first look back about 2 hours on BNB Chain
+const LOOKBACK = 10_000n; // first look back about an hour on BNB Chain
 const CHUNK = 2_500n;
+// Free nodes only keep logs for recent blocks (older reads are "archive" and need a paid key), and some of their
+// servers are a block or two behind the newest one. So a token that fell far behind skips ahead instead of being
+// stuck retrying old blocks, and reads stop a few blocks short of the newest.
+const MAX_GAP = LOOKBACK;
+const HEAD_MARGIN = 3n;
+const tooOld = (e: unknown) => /archive|pruned|missing trie|could not be found|not available|beyond current head/i.test(String((e as Error)?.message || e));
 
 /**
  * Reads every buy and sell through the token's main pool since the last check, saves them, and alerts watchers
@@ -408,18 +414,28 @@ export async function syncTrades(chain: AChain, token: string, maxChunks = 8): P
   // Solana trades aren't read from logs; its sells are caught by the balance checks instead.
   if (!hasLiveTrades(chain)) { await sb.from("tracked_tokens").update({ trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
   const lc = logClient(chain);
-  const head = await lc.getBlockNumber();
+  const head = (await lc.getBlockNumber()) - HEAD_MARGIN;
   let from = t.last_block ? BigInt(t.last_block) + 1n : head - LOOKBACK;
-  if (head - from > LOOKBACK * 4n) from = head - LOOKBACK * 4n;
+  if (head - from > MAX_GAP) from = head - MAX_GAP;
   if (from < 0n) from = 0n;
   // Read at most `maxChunks` pieces per call and remember where we stopped, so a slow call never loses progress.
-  const latest = from + CHUNK * BigInt(maxChunks) - 1n < head ? from + CHUNK * BigInt(maxChunks) - 1n : head;
+  let latest = from + CHUNK * BigInt(maxChunks) - 1n < head ? from + CHUNK * BigInt(maxChunks) - 1n : head;
   if (from > latest) { await sb.from("tracked_tokens").update({ pair, trades_at: new Date().toISOString() }).eq("chain", chain).eq("token", token); return 0; }
 
-  const logs: any[] = [];
-  for (let a = from; a <= latest; a += CHUNK) {
-    const b = a + CHUNK - 1n > latest ? latest : a + CHUNK - 1n;
-    logs.push(...(await lc.getLogs({ address: token as `0x${string}`, event: TRANSFER, fromBlock: a, toBlock: b } as any)));
+  const read = async (a0: bigint, b0: bigint) => {
+    const out: any[] = [];
+    for (let a = a0; a <= b0; a += CHUNK) {
+      const b = a + CHUNK - 1n > b0 ? b0 : a + CHUNK - 1n;
+      out.push(...(await lc.getLogs({ address: token as `0x${string}`, event: TRANSFER, fromBlock: a, toBlock: b } as any)));
+    }
+    return out;
+  };
+  let logs: any[];
+  try { logs = await read(from, latest); } catch (e) {
+    if (!tooOld(e)) throw e;
+    // The node no longer has these blocks: jump to the newest ones (one chunk short of the tip) and carry on from there.
+    from = head - CHUNK + 1n; latest = head;
+    logs = await read(from, latest);
   }
 
   // Turn pool transfers into trades. When a router passes tokens on in the same transaction, credit the real wallet.

@@ -33,6 +33,7 @@ export const maxDuration = 30;
 
 const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);
 const pct = (n: unknown) => { const v = Number(n); return !isFinite(v) ? "–" : v >= 10 ? v.toFixed(1) + "%" : v >= 0.01 ? v.toFixed(2) + "%" : "<0.01%"; };
+const n0 = (n: number) => Intl.NumberFormat("en-US").format(n);
 const amt = (n: unknown) => Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(Number(n) || 0);
 
 export async function generateMetadata({ params }: { params: { chain: string; token: string } }) {
@@ -127,7 +128,13 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const devEvents = (events || []).filter((e: any) => e.is_dev && e.kind !== "buy");
   const s = (t.security || {}) as any;
   const topShare = top.filter((h: any) => !h.is_contract).reduce((a: number, h: any) => a + (Number(h.pct) || 0), 0);
-  const sells24 = (events || []).filter((e: any) => e.kind !== "buy" && Date.now() - Date.parse(e.created_at) < 86_400_000).length;
+  // 24-hour buys and sells: every trade in the token's pools (DexScreener), else the trades we read ourselves.
+  const day = (at: string) => Date.now() - Date.parse(at) < 86_400_000;
+  const ours24 = (trades || []).filter((x: any) => day(x.at));
+  const flow24 = move?.sellsH24 != null
+    ? { buys: move.buysH24 ?? 0, sells: move.sellsH24 }
+    : hasLiveTrades(chain) && t.pair ? { buys: ours24.filter((x: any) => x.side === "buy").length, sells: ours24.filter((x: any) => x.side === "sell").length } : null;
+  const topSells24 = (events || []).filter((e: any) => e.kind !== "buy" && day(e.created_at)).length;
   // The member's own wallet, so the chess arena can show their piece.
   const member = view === "chess" && user ? await walletMember().catch(() => null) : null;
   const myWallet = member ? (chain === "solana" ? member.sol : member.evm) : null;
@@ -162,7 +169,10 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         <p className="muted" style={{ fontSize: ".85em" }}>Checked {heldFor(t.checked_at) || "just now"} ago.</p>
         <div className="an-stats">
           <div><span>Top wallets hold</span><b>{pct(topShare)}</b></div>
-          <div><span>Sells in 24 h</span><b>{sells24}</b></div>
+          <div><span>Buys / sells 24 h</span>
+            <b>{flow24 ? <><span className="up">{n0(flow24.buys)}</span> / <span className="down">{n0(flow24.sells)}</span></> : "–"}</b>
+            <small>{topSells24 ? `${topSells24} by top wallets` : "None by top wallets"}</small>
+          </div>
           <div><span>Holders</span><b>{s.holderCount ? Intl.NumberFormat("en-US").format(s.holderCount) : "–"}</b></div>
           <div><span>Buy / sell tax</span><b>{s.buyTax == null ? "–" : `${Math.round(s.buyTax)}% / ${Math.round(s.sellTax ?? 0)}%`}</b></div>
         </div>

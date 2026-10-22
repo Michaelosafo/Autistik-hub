@@ -3,14 +3,14 @@ import Guide from "@/components/Guide";
 import SessionCard from "@/components/SessionCard";
 import SessionForms from "@/components/SessionForms";
 import ProHero from "@/components/ProHero";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Live sessions · AUTISTIK Hub" };
 
 export default async function SessionsPage() {
   const sb = supabaseServer();
-  const { data: { user } } = await sb.auth.getUser();
+  const user = await currentUser();
   const { data: sessions } = await sb.from("sessions").select("*").gte("starts_at", new Date(Date.now() - 3 * 3600e3).toISOString()).order("starts_at");
   let seats: Record<string, number> = {};
   let admin = false;

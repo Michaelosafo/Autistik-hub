@@ -2,7 +2,7 @@ import { json } from "@/lib/ai";
 import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { pushKey } from "@/lib/push";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +16,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "push-subscribe", 20, 3600);
   if (slow) return slow;
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in." }, 401);
   const b = await req.json().catch(() => null);
   const endpoint = String(b?.endpoint || ""), p256dh = String(b?.keys?.p256dh || ""), auth = String(b?.keys?.auth || "");
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
 // Stop alerts on this device.
 export async function DELETE(req: Request) {
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in." }, 401);
   const b = await req.json().catch(() => null);
   await supabaseService().from("push_subscriptions").delete().eq("user_id", user.id).eq("endpoint", String(b?.endpoint || ""));

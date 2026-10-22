@@ -5,7 +5,7 @@ import { json } from "@/lib/ai";
 import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
 import { padOn } from "@/lib/launchpad-server";
 import { getMarkets } from "@/lib/market";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { adminState, launchAccess } from "@/lib/admin";
 
 export const runtime = "nodejs";
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const slow = await rateLimit(req, "eligibility", 20, 600);
   if (slow) return slow;
   if (!(await launchAccess()).allowed) return json({ error: "The Launch Pad is coming soon." }, 403);
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in first." }, 401);
   const { admin } = await adminState();
   // Per account too, so one AUTISTIK bag can't be passed around to get permits for many wallets quickly.

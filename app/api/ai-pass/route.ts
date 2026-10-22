@@ -3,7 +3,7 @@ import { createPublicClient, getAddress, http } from "viem";
 import { json } from "@/lib/ai";
 import { AI_FREE_PER_DAY, AI_PASS_DAYS, AI_PASS_USD, passTag } from "@/lib/aipass";
 import { CHAINS } from "@/lib/launchpad";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { TREASURY, bnbPriceUsd, weiFor } from "@/lib/trending";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ const MAX_AGE_SECONDS = 48 * 3600;
 const SLACK = 95n;
 
 async function signedInUser() {
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   return user;
 }
 

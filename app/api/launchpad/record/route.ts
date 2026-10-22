@@ -6,7 +6,7 @@ import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, isSolana, type
 import { SOL_ADDR, verifyLaunch } from "@/lib/solana-launch";
 import { padOn } from "@/lib/launchpad-server";
 import { LOCKER_ABI } from "@/lib/locker";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import { isAChain, scanToken } from "@/lib/analytics";
 import { submitVerify } from "@/lib/launch-verify";
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const [name, symbol] = await Promise.all([read("name"), read("symbol")]).catch(() => ["", ""]);
 
   // The launch is only tied to this account if the account's linked wallet is the one that launched it.
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   let owner: string | null = null;
   if (user) {
     const { data: w } = await supabaseService().from("wallets").select("address").eq("user_id", user.id);
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
 
 /** Account that launched it: only when the account's linked wallet is the token's creator. */
 async function ownerOf(creator: string, sameCase: boolean) {
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return null;
   const { data: w } = await supabaseService().from("wallets").select("address").eq("user_id", user.id);
   return (w || []).some((x: any) => (sameCase ? String(x.address) === creator : String(x.address).toLowerCase() === creator.toLowerCase())) ? user.id : null;

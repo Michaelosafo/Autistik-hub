@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { clientIp, rateLimit } from "@/lib/ratelimit";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   const ip = clientIp(req);
   const salt = process.env.IP_HASH_SALT || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const ipHash = ip && ip !== "unknown" && salt ? createHmac("sha256", salt).update(ip).digest("hex").slice(0, 32) : null;
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   await supabaseService().from("page_views").insert({ path, visitor, ip_hash: ipHash, user_id: user?.id ?? null, country, device, referrer: ref });
   const res = new Response(null, { status: 204 });
   if (fresh) res.headers.append("set-cookie", `hv=${visitor}; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax`);

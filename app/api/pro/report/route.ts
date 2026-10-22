@@ -7,7 +7,7 @@ import { confluence, trackRecord, whales } from "@/lib/analytics-pro";
 import { usd } from "@/lib/analytics-zones";
 import { PRO_REPORTS_PER_DAY } from "@/lib/pro";
 import { isPro } from "@/lib/pro-server";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,7 +26,7 @@ End with: "Not financial advice."`;
 // A plain-English analyst report for one token, written from all the Pro signals. Pro members only.
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) return json({ error: "The analyst is coming soon." }, 503);
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in." }, 401);
   if (!(await isPro(user.id))) return json({ error: "The analyst report is part of AUTISTIK Pro.", needPro: true }, 402);
   const slow = await rateLimit(null, "pro-report", PRO_REPORTS_PER_DAY, 86400, user.id);
