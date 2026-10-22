@@ -2,17 +2,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberLite } from "@/components/members/MemberName";
 
 // Team columns arrive with supabase/members-live.sql. Until it's run, profiles load without them.
-const FULL = "id,alias,color,is_admin,created_at,is_team,team_title";
+const FULL = "id,alias,color,is_admin,created_at,is_team,team_title,handle,holdings_share";
+const MID = "id,alias,color,is_admin,created_at,is_team,team_title";
 const BASIC = "id,alias,color,is_admin,created_at";
 
-export async function loadProfiles(sb: SupabaseClient, ids?: string[], extra?: (q: any) => any): Promise<(MemberLite & { is_admin: boolean; created_at: string })[]> {
+export async function loadProfiles(sb: SupabaseClient, ids?: string[], extra?: (q: any) => any): Promise<(MemberLite & { is_admin: boolean; created_at: string; holdings_share?: string })[]> {
   const run = (cols: string) => {
     let q: any = sb.from("profiles").select(cols);
     if (ids) q = q.in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
     return extra ? extra(q) : q;
   };
   let { data, error } = await run(FULL);
-  if (error && /is_team|team_title|column/i.test(error.message)) ({ data } = await run(BASIC));
+  if (error && /column/i.test(error.message)) ({ data, error } = await run(MID));
+  if (error && /column/i.test(error.message)) ({ data } = await run(BASIC));
   return (data || []) as any;
 }
 

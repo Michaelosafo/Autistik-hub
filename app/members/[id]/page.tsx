@@ -5,6 +5,9 @@ import FollowButton from "@/components/members/FollowButton";
 import ActivityList from "@/components/members/ActivityList";
 import MemberName from "@/components/members/MemberName";
 import { loadProfiles, memberActivity, memberCard } from "@/lib/members";
+import HoldingsCard from "@/components/members/HoldingsCard";
+import HoldingsShare from "@/components/members/HoldingsShare";
+import { sharedHoldings } from "@/lib/holdings";
 import { badgesFor } from "@/lib/badges";
 import { CHANNELS, GROUPS } from "@/lib/groups";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
@@ -14,7 +17,7 @@ export const metadata = { title: "Member · AUTISTIK Hub" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export default async function MemberPage({ params }: { params: { id: string } }) {
+export default async function MemberPage({ params, searchParams }: { params: { id: string }; searchParams: { share?: string } }) {
   const sb = supabaseServer();
   const user = await currentUser();
   if (!user) {
@@ -38,6 +41,7 @@ export default async function MemberPage({ params }: { params: { id: string } })
     memberCard(sb, params.id),
     memberActivity(sb, params.id, 30),
   ]);
+  const holdings = prof ? await sharedHoldings(params.id, user.id, searchParams.share) : null;
   if (!prof) notFound();
 
   const mine = prof.id === user.id;
@@ -56,7 +60,8 @@ export default async function MemberPage({ params }: { params: { id: string } })
         <div className="avatar big" aria-hidden="true" style={{ background: prof.color || "#6141D4" }}>{prof.alias.charAt(0)}</div>
         <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
           <div className="label">{mine ? "Your profile" : prof.is_team ? `AUTISTIK team${prof.team_title ? ` · ${prof.team_title}` : ""}` : "Member profile"}</div>
-          <h1 style={{ overflowWrap: "anywhere" }}><MemberName m={prof} link={false} /></h1>
+          <h1 style={{ overflowWrap: "anywhere" }}><MemberName m={prof} link={false} handle={false} /></h1>
+          {prof.handle && <span className="mhandle big">@{prof.handle}</span>}
           <span className="muted" style={{ fontSize: ".9em" }}>Joined {new Date(prof.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })}{pro ? ` · ${pro.role}` : ""}</span>
           {card && (
             <div className="follow-stats">
@@ -100,15 +105,22 @@ export default async function MemberPage({ params }: { params: { id: string } })
 
       {mine && (
         <div className="grid2" style={{ alignItems: "start" }}>
-          <ProfileEdit alias={prof.alias} color={prof.color} />
+          <ProfileEdit alias={prof.alias} color={prof.color || "#6141D4"} handle={prof.handle ?? null} />
           <div className="card stack">
             <h2>Private to you</h2>
             <table><tbody>
-              <tr><th>Email</th><td style={{ overflowWrap: "anywhere" }}>{user.email}</td></tr>
               <tr><th>Wallet</th><td className="mono" style={{ overflowWrap: "anywhere" }}>{wallet || <Link href="/rewards">Link a wallet</Link>}</td></tr>
             </tbody></table>
-            <p className="muted" style={{ fontSize: ".85em" }}>Only you can see this box. Other members see your Hub name, colour, badges, groups and activity, and that a wallet is connected. Never your email, the wallet address, balances or trades.</p>
+            <p className="muted" style={{ fontSize: ".85em" }}>Only you can see this box. Other members see your nickname, @handle, badges, groups and activity, and that a wallet is connected. Never your email or wallet address. Your holdings only if you share them (below).</p>
           </div>
+        </div>
+      )}
+
+      {(holdings || mine) && (
+        <div className="grid2" style={{ alignItems: "start" }}>
+          {holdings ? <HoldingsCard items={holdings} mine={mine} how={mine ? ({ public: "Everyone can see", followers: "Followers can see" } as Record<string, string>)[prof.holdings_share || ""] || "Only you can see" : searchParams.share ? "Shared with you" : prof.holdings_share === "followers" ? "Shared with followers" : "Shared publicly"} />
+            : <div className="card stack"><h2>Holdings</h2><div className="empty"><Link href="/rewards">Link a wallet</Link> to see your holdings here.</div></div>}
+          {mine && prof.holdings_share !== undefined && <HoldingsShare uid={prof.id} initial={(prof.holdings_share as any) || "private"} />}
         </div>
       )}
 
@@ -117,7 +129,7 @@ export default async function MemberPage({ params }: { params: { id: string } })
         {activity ? (
           <>
             <ActivityList items={activity} empty={mine ? "Nothing yet. Scan a coin, join a live session or follow someone and it shows here." : "Nothing to show yet."} />
-            <p className="muted" style={{ fontSize: ".82em" }}>Shows coins scanned, launches, locks, posts, live sessions and follows. Wallet balances, swaps and trades are never shown.</p>
+            <p className="muted" style={{ fontSize: ".82em" }}>Shows coins scanned, launches, locks, posts, live sessions and follows. Swaps and trades are never shown, and holdings only when the member chooses to share them.</p>
           </>
         ) : (
           <>

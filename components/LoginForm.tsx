@@ -1,10 +1,11 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { MIN_PASSWORD, authMessage } from "@/lib/auth";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 import type { Providers } from "@/lib/auth-providers";
+import { memeName, nicknameProblem } from "@/lib/names";
 import HumanCheck, { TURNSTILE_SITE_KEY, type HumanCheckHandle } from "@/components/HumanCheck";
 
 type Mode = "signin" | "join" | "forgot";
@@ -27,6 +28,8 @@ function strength(pw: string) {
 export default function LoginForm({ next, initialError, initialMode, providers = { google: true, apple: true } }: { next: string; initialError: string; initialMode: Mode; providers?: Providers }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
+  const [nick, setNick] = useState("");
+  useEffect(() => { setNick(memeName()); }, []); // after loading, so the server and browser agree on the page
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [show, setShow] = useState(false);
@@ -57,6 +60,8 @@ export default function LoginForm({ next, initialError, initialMode, providers =
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(em)) { setError("Please enter a valid email address."); return; }
     if (!SUPABASE_CONFIGURED) { setError("Sign-in isn't set up on this site yet. The site owner needs to add the Supabase settings in Vercel and redeploy."); return; }
     if (mode === "join") {
+      const bad = nicknameProblem(nick);
+      if (bad) { setError(bad); return; }
       if (!adult || !rules) { setError("Please tick both boxes to join."); return; }
       if (password.length < MIN_PASSWORD) { setError(`Your password needs at least ${MIN_PASSWORD} characters.`); return; }
       if (!/[a-z]/i.test(password) || !/\d/.test(password)) { setError("Your password needs at least one letter and one number."); return; }
@@ -71,7 +76,7 @@ export default function LoginForm({ next, initialError, initialMode, providers =
         // A full page load, so the 2-step code is asked for straight away (see middleware.ts).
         window.location.assign(next);
       } else if (mode === "join") {
-        const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true }, captchaToken: captchaToken() } });
+        const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true, nickname: nick.trim().replace(/\s+/g, " ") }, captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); return; }
         if (data.session) { window.location.assign(next); return; } // email confirmation switched off
         // An email that's already registered gets the same answer as a new one, so this form can't be used to
@@ -195,6 +200,17 @@ export default function LoginForm({ next, initialError, initialMode, providers =
       )}
 
       <form className="stack" onSubmit={submit} noValidate>
+        {mode === "join" && (
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="field"><span>Nickname</span>
+              <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                <input id="loginNick" type="text" autoComplete="nickname" maxLength={40} required value={nick} onChange={(e) => setNick(e.target.value)} style={{ flex: 1, minWidth: 0 }} />
+                <button className="btn small" type="button" onClick={() => setNick(memeName())} aria-label="Suggest another meme name">🎲</button>
+              </div>
+            </label>
+            <span className="muted" style={{ fontSize: ".82em" }}>This is how members see and find you, with an @handle like on X. Your email is never shown to anyone. You can change it later.</span>
+          </div>
+        )}
         <label className="field"><span>Email</span>
           <input id="loginEmail" type="email" inputMode="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </label>

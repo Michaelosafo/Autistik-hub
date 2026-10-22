@@ -9,6 +9,10 @@
 -- 5. Team accounts carry a gold TEAM badge everywhere their name shows. Only the admin can make someone team.
 -- 6. Profiles show what a member has been up to: coins scanned, tokens launched, posts, live sessions, follows.
 --    Never wallet balances, swaps or trades.
+-- 7. Like X: every member has a display name and a unique @handle. New members can pick a nickname when they
+--    sign up (otherwise they get a meme name). Emails are never shown to anyone.
+-- 8. Wallet holdings are private. A member can choose to show them to everyone, to followers, or to people they
+--    send a private link to. The wallet address itself is never shown, only what it holds.
 -- 4. Admin airdrops: the admin page lists the joined members' wallets and keeps a record of every token
 --    transfer the owner signs in their own wallet. The database never holds or sees a private key.
 -- =====================================================================
@@ -230,6 +234,130 @@ begin
 end; $$;
 revoke all on function public.member_activity(uuid, int) from public, anon;
 grant execute on function public.member_activity(uuid, int) to authenticated;
+
+-- ---------- 7. @handles and the sign-up nickname ----------
+alter table public.profiles add column if not exists handle text;
+
+-- A free handle made from a name: "Diamond-Hand Whale #4821" → diamondhandwhale4821. Lowercase letters, digits
+-- and _, 3 to 20 long. Adds a number if it's taken. Team words are kept for team accounts.
+create or replace function public.make_handle(p_base text, p_me uuid default null) returns text
+language plpgsql volatile security definer set search_path = public as $$
+declare base text; h text;
+begin
+  base := left(regexp_replace(lower(coalesce(p_base, '')), '[^a-z0-9_]', '', 'g'), 15);
+  if base ~ '(admin|moderator|official|autistik|team|staff|founder)' then base := regexp_replace(base, '(admin|moderator|official|autistik|team|staff|founder)', '', 'g'); end if;
+  if char_length(base) < 3 then base := 'member'; end if;
+  h := base;
+  for i in 1..30 loop
+    if not exists (select 1 from public.profiles where handle = h and id is distinct from p_me) then return h; end if;
+    h := left(base, 15) || (10 + floor(random() * 99990)::int)::text;
+  end loop;
+  return left(base, 12) || floor(random() * 1e8)::bigint::text;
+end; $$;
+revoke all on function public.make_handle(text, uuid) from public, anon, authenticated;
+
+update public.profiles set handle = public.make_handle(alias, id) where handle is null;
+create unique index if not exists profiles_handle_key on public.profiles (handle);
+do $$ begin
+  alter table public.profiles add constraint profiles_handle_format check (handle ~ '^[a-z0-9_]{3,20}$');
+exception when duplicate_object then null; end $$;
+
+-- Fill the handle on new profiles.
+create or replace function public.profile_defaults() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.handle is null then new.handle := public.make_handle(new.alias, new.id); end if;
+  return new;
+end; $$;
+revoke all on function public.profile_defaults() from public, anon, authenticated;
+drop trigger if exists profile_defaults on public.profiles;
+create trigger profile_defaults before insert on public.profiles for each row execute function public.profile_defaults();
+
+-- Sign-up: the nickname typed on the sign-up form becomes the display name (if it's allowed and free), otherwise
+-- a meme name. Names from Google or Apple are never used, so real names don't leak.
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare nick text := btrim(regexp_replace(coalesce(new.raw_user_meta_data->>'nickname', ''), '\s+', ' ', 'g'));
+begin
+  if char_length(nick) not between 2 and 40
+     or nick ~* '(admin|moderator|\ymod\y|official|autistik|support team|hub team|\yteam\y|\ystaff\y|\ydev\y|founder|@)'
+     or exists (select 1 from public.profiles where lower(alias) = lower(nick)) then
+    nick := public.random_alias();
+  end if;
+  insert into public.profiles (id, alias, confirmed_adult)
+  values (new.id, nick, coalesce((new.raw_user_meta_data->>'confirmed_adult')::boolean, false))
+  on conflict (id) do nothing;
+  return new;
+end; $$;
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+
+-- Members can change their @handle on their profile; it has to be free, 3-20 letters, digits or _, and team
+-- words are kept for team accounts.
+create or replace function public.handle_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or new.handle is not distinct from old.handle then return new; end if;
+  new.handle := lower(btrim(coalesce(new.handle, '')));
+  if new.handle !~ '^[a-z0-9_]{3,20}$' then
+    raise exception 'Your @handle needs 3 to 20 letters, numbers or _.' using errcode = 'P0001';
+  end if;
+  if not public.is_admin() and not old.is_team and new.handle ~ '(admin|moderator|official|autistik|team|staff|founder)' then
+    raise exception 'That @handle is reserved for the Hub team. Please pick another.' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.profiles where handle = new.handle and id <> new.id) then
+    raise exception 'That @handle is taken. Please pick another.' using errcode = 'P0001';
+  end if;
+  return new;
+end; $$;
+revoke all on function public.handle_guard() from public, anon, authenticated;
+drop trigger if exists handle_guard on public.profiles;
+create trigger handle_guard before update of handle on public.profiles for each row execute function public.handle_guard();
+
+-- ---------- 8. Sharing holdings ----------
+alter table public.profiles add column if not exists holdings_share text not null default 'private';
+do $$ begin
+  alter table public.profiles add constraint profiles_holdings_share check (holdings_share in ('private', 'followers', 'public'));
+exception when duplicate_object then null; end $$;
+
+-- Private share links live in their own table, so nobody can read another member's link.
+create table if not exists public.holdings_links (
+  user_id uuid primary key references public.profiles(id) on delete cascade,
+  key text not null unique,
+  created_at timestamptz not null default now()
+);
+alter table public.holdings_links enable row level security;
+drop policy if exists "own link" on public.holdings_links;
+create policy "own link" on public.holdings_links for select to authenticated using (user_id = auth.uid());
+drop policy if exists "remove own link" on public.holdings_links;
+create policy "remove own link" on public.holdings_links for delete to authenticated using (user_id = auth.uid());
+
+-- A new private link (the old one stops working).
+create or replace function public.new_holdings_link() returns text
+language plpgsql volatile security definer set search_path = public, extensions as $$
+declare k text := encode(gen_random_bytes(16), 'hex');
+begin
+  if auth.uid() is null then raise exception 'Sign in first.' using errcode = 'P0001'; end if;
+  insert into public.holdings_links (user_id, key) values (auth.uid(), k)
+  on conflict (user_id) do update set key = excluded.key, created_at = now();
+  return k;
+end; $$;
+revoke all on function public.new_holdings_link() from public, anon;
+grant execute on function public.new_holdings_link() to authenticated;
+
+-- The wallet whose holdings a viewer may see on a profile, or null. Only the website's server can call this (it
+-- passes who is looking); it uses the address to look up balances and shows the balances, never the address.
+drop function if exists public.holdings_wallet(uuid, text);
+create or replace function public.holdings_wallet(p_id uuid, p_viewer uuid, p_key text default null) returns text
+language sql stable security definer set search_path = public as $$
+  select w.address from public.wallets w join public.profiles p on p.id = w.user_id
+  where w.user_id = p_id and p_viewer is not null and (
+    p_id = p_viewer
+    or p.holdings_share = 'public'
+    or (p.holdings_share = 'followers' and exists (select 1 from public.follows f where f.follower_id = p_viewer and f.followee_id = p_id))
+    or (p_key is not null and exists (select 1 from public.holdings_links l where l.user_id = p_id and l.key = p_key))
+  );
+$$;
+revoke all on function public.holdings_wallet(uuid, uuid, text) from public, anon, authenticated;
 
 -- ---------- 2-step verification rules on the new tables (same as user-2fa.sql) ----------
 do $$
