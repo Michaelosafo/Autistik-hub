@@ -15,6 +15,14 @@ import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
+// "Why autism?", answered on the first screen. [question, answer, icon]
+const WHY: { q: string; a: string; icon: IconName }[] = [
+  { q: "Why autism?", a: "Around 1 in 100 people are autistic, yet autistic people are still misunderstood, left out of work and online spaces, and rarely asked what they need. We chose one cause that matters and built a whole ecosystem around it.", icon: "heart" },
+  { q: "Why should anyone care?", a: "Every swap, stake and launch here helps fund real support for autistic people and families: therapy, equipment, education and everyday essentials. And the tools are calmer and safer for everyone, in plain words.", icon: "groups" },
+  { q: "Who builds it?", a: "AUTISTIK is built by and for the autistic community and the people who love them. Autistic people lead here; supporters, families and practitioners join in. Nothing about us without us.", icon: "chat" },
+  { q: "Where did the idea come from?", a: "From one belief: autism is not a disease, it's a community. Crypto is great at bringing people together around a token, so we gave that token a purpose: a welcoming home for autistic people that gives back.", icon: "launch" },
+];
+
 // The App's main tools, each opening its own screen.
 const PRODUCTS: { title: string; text: string; href: string; tag: string; icon: IconName; points: string[] }[] = [
   { title: "Swap", text: "Trade any token at the best price across every DEX.", href: "/swap", tag: "Trade", icon: "swap", points: ["BNB Chain, Base, Ethereum, Arbitrum, Solana", "Cross-chain in one step"] },
@@ -82,6 +90,7 @@ export default async function Home() {
           <div className="lp-eyebrow">Autism awareness × Web3</div>
           <h1>Autism is not a disease. <span>It&apos;s a community.</span></h1>
           <p>AUTISTIK is a home for autistic people and supporters, with its own token and simple, safe tools to swap, stake, lock and launch coins.</p>
+          <p className="lp-why"><b>Why autism?</b> Around 1 in 100 people are autistic, yet most apps and crypto tools are loud, confusing and built without them. AUTISTIK is built around their needs, and part of the trading activity goes back to autistic people through the AUTISTIK Fund.</p>
           <div className="lp-ctas">
             <Link href="/app" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
@@ -97,6 +106,22 @@ export default async function Home() {
         <div><b>{usd(m?.liquidityUsd)}</b><span>Liquidity</span></div>
         <div><b>{board.length}</b><span>Tokens trending</span></div>
         <div><b>{GROUPS.length}</b><span>Community groups</span></div>
+      </section>
+
+      <section id="why" className="lp-sec">
+        <div className="lp-head">
+          <div><div className="lp-eyebrow">Why AUTISTIK</div><h2>An ecosystem with a reason to exist</h2><p>Most crypto projects are built around a meme. AUTISTIK is built around people.</p></div>
+          <Link href="/autism" className="lp-more">About autism <Arrow /></Link>
+        </div>
+        <div className="lp-why-grid">
+          {WHY.map((w) => (
+            <div key={w.q} className="lp-why-card">
+              <span className="lp-ico"><ToolIcon name={w.icon} /></span>
+              <h3>{w.q}</h3>
+              <p>{w.a}</p>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section id="products" className="lp-sec">
