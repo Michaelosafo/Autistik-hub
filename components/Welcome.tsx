@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 /** How long the page takes to open after "Go to site". */
 const OPEN_MS = 800;
@@ -10,20 +11,17 @@ const ARENA_MS = 1200;
 /**
  * The first thing a visitor sees: Autistik, the AUTISTIK mascot, says hi, then a second later tells them about the
  * game arena. "Go to site" (or Escape) opens the page around it; "Play the arena" goes straight to the arena.
- * Shown once on every visit. With calm mode or reduced motion nothing
- * moves and the page appears straight away. The layout's early script hides it before the page paints when it was
- * already shown this visit, so it never flashes.
+ * Shown every time the site is opened or reloaded (moving between pages inside the site doesn't bring it back).
+ * With calm mode or reduced motion nothing moves and the page appears straight away.
  */
 export default function Welcome() {
   const [phase, setPhase] = useState<"hello" | "open" | "gone">("hello");
   const [line, setLine] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const go = useRef<HTMLButtonElement>(null);
+  const router = useRouter();
 
   const open = () => {
-    try {
-      sessionStorage.setItem("welcomed", "1");
-    } catch {}
     const still = document.documentElement.dataset.calm === "on" || matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (still) { setPhase("gone"); return; }
     setPhase("open");
@@ -31,9 +29,6 @@ export default function Welcome() {
   };
 
   useEffect(() => {
-    let seen = false;
-    try { seen = sessionStorage.getItem("welcomed") === "1"; } catch {}
-    if (seen) { setPhase("gone"); return; }
     go.current?.focus();
     const t = setTimeout(() => setLine(1), ARENA_MS);
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") open(); };
@@ -59,7 +54,7 @@ export default function Welcome() {
         <Mascot />
         <div className="welcome-btns">
           <button ref={go} type="button" className="welcome-go" onClick={open}>Go to site <span aria-hidden="true">→</span></button>
-          {line === 1 && <a className="welcome-go arena" href="/arena" onClick={() => { try { sessionStorage.setItem("welcomed", "1"); } catch {} }}>⚽ Play the arena</a>}
+          {line === 1 && <button type="button" className="welcome-go arena" onClick={() => { setPhase("gone"); router.push("/arena"); }}>⚽ Play the arena</button>}
         </div>
       </div>
     </div>
