@@ -23,6 +23,8 @@ import { stateOf, type SignalState } from "@/lib/analytics-alerts";
 import { ACHAINS, checkToken, hasLiveTrades, heldFor, isAChain, isChainAddress, syncTrades } from "@/lib/analytics";
 import { walletUrl } from "@/lib/explorer";
 import AutoRefresh from "@/components/AutoRefresh";
+import TrustScore from "@/components/TrustScore";
+import { trustScore } from "@/lib/trust-score";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -125,7 +127,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const s = (t.security || {}) as any;
   const topShare = top.filter((h: any) => !h.is_contract).reduce((a: number, h: any) => a + (Number(h.pct) || 0), 0);
   const sells24 = (events || []).filter((e: any) => e.kind !== "buy" && Date.now() - Date.parse(e.created_at) < 86_400_000).length;
-  const flag = (ok: boolean | null | undefined, good: string, bad: string) => ok == null ? null : <span className={"chip-flag " + (ok ? "ok" : "bad")}>{ok ? "✓ " + good : "⚠ " + bad}</span>;
+  const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
   return (
     <div className="stack" style={{ maxWidth: 1040 }}>
@@ -152,19 +154,13 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
             <AnalyticsScan signedIn={!!user} chain={chain} token={t.token} label="Refresh" />
           </div>
         </div>
+        <TrustScore t={trust} />
         <p className="muted" style={{ fontSize: ".85em" }}>Checked {heldFor(t.checked_at) || "just now"} ago.</p>
         <div className="an-stats">
           <div><span>Top wallets hold</span><b>{pct(topShare)}</b></div>
           <div><span>Sells in 24 h</span><b>{sells24}</b></div>
           <div><span>Holders</span><b>{s.holderCount ? Intl.NumberFormat("en-US").format(s.holderCount) : "–"}</b></div>
           <div><span>Buy / sell tax</span><b>{s.buyTax == null ? "–" : `${Math.round(s.buyTax)}% / ${Math.round(s.sellTax ?? 0)}%`}</b></div>
-        </div>
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          {flag(s.honeypot === false ? true : s.honeypot === true ? false : null, "Not a honeypot", "Honeypot: you may not be able to sell")}
-          {flag(s.openSource, "Code is public", "Code is hidden")}
-          {flag(s.mintable === false ? true : s.mintable === true ? false : null, "No new tokens can be made", "Owner can make new tokens")}
-          {flag(s.canTakeBack === false ? true : s.canTakeBack === true ? false : null, "Ownership can't be taken back", "Ownership can be taken back")}
-          {flag(s.freezable === false ? true : s.freezable === true ? false : null, "Wallets can't be frozen", "The owner can freeze your tokens")}
         </div>
       </div>
 
