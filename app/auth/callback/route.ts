@@ -21,7 +21,12 @@ export async function GET(request: Request) {
     }
     // Their AUTISTIK wallet, made the moment the email is confirmed (Google and Apple confirm it for us).
     if (!error && data?.user?.email_confirmed_at) await ensureMemberWallet(data.user.email);
-    if (error) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent("Open the link in the same browser you signed up in, or sign in with your password.")}`, url.origin));
+    if (error) {
+      const why = url.searchParams.get("adult") === "1"
+        ? "Signing in with Google or Apple didn't finish. Please try again in this same browser, or use your email."
+        : "Open the link in the same browser you signed up in, or sign in with your password.";
+      return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(why)}`, url.origin));
+    }
     // First time in (e.g. a new Google account): offer 2-step verification before going on.
     const created = Date.parse(data?.user?.created_at || "");
     if (next !== "/reset-password" && Date.now() - created < 10 * 60 * 1000) return NextResponse.redirect(welcomeUrl(new URL(next, url.origin), url.origin));

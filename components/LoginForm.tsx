@@ -4,6 +4,7 @@ import Link from "next/link";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { MIN_PASSWORD, authMessage } from "@/lib/auth";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/env";
+import type { Providers } from "@/lib/auth-providers";
 import HumanCheck, { TURNSTILE_SITE_KEY, type HumanCheckHandle } from "@/components/HumanCheck";
 
 type Mode = "signin" | "join" | "forgot";
@@ -23,7 +24,7 @@ function strength(pw: string) {
   return s; // 0–4
 }
 
-export default function LoginForm({ next, initialError, initialMode }: { next: string; initialError: string; initialMode: Mode }) {
+export default function LoginForm({ next, initialError, initialMode, providers = { google: true, apple: true } }: { next: string; initialError: string; initialMode: Mode; providers?: Providers }) {
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -124,10 +125,13 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
   async function social(provider: "google" | "apple") {
     setError("");
     if (!SUPABASE_CONFIGURED) { setError("Sign-in isn't set up on this site yet."); return; }
+    const name = provider === "google" ? "Google" : "Apple";
+    // Switched off in Supabase: say so here, instead of sending them to an error page.
+    if (!providers[provider]) { setError(`${name} sign-in is being switched on and will work soon. For now, create an account with your email (Gmail works) and a password.`); return; }
     setBusy(true);
     const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo: confirmUrl(next) + "&adult=1" } });
     // On success the browser leaves for Google or Apple, so we only get here on an error.
-    if (error) { setBusy(false); setError(/not enabled|unsupported provider/i.test(error.message) ? `${provider === "google" ? "Google" : "Apple"} sign-in isn't switched on yet. Use your email for now.` : authMessage(error.message)); }
+    if (error) { setBusy(false); setError(/not enabled|unsupported provider/i.test(error.message) ? `${name} sign-in isn't switched on yet. Use your email for now.` : authMessage(error.message)); }
   }
 
   const [title, sub] = TITLES[mode];
