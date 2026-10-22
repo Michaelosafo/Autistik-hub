@@ -25,7 +25,7 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
   const sb = supabaseServer();
   const tab: Tab = (["feed", "find", "followers", "following"] as const).find((t) => t === searchParams.tab) || "feed";
   const who = searchParams.id && UUID.test(searchParams.id) ? searchParams.id : user.id;
-  const q = String(searchParams.q || "").replace(/[%_,()\\]/g, " ").trim().slice(0, 40);
+  const q = String(searchParams.q || "").replace(/^\s*@/, "").replace(/[%,()\\*]/g, " ").trim().slice(0, 40);
 
   const { data: mine } = await sb.from("follows").select("followee_id").eq("follower_id", user.id);
   const following = new Set((mine || []).map((f: any) => f.followee_id as string));
@@ -44,7 +44,10 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
     feed = (p || []) as any; joins = (j || []) as any;
     people = await loadProfiles(sb, [...new Set([...feed.map((x) => x.author_id), ...joins.map((x) => x.user_id)])]);
   } else if (tab === "find") {
-    people = await loadProfiles(sb, undefined, (x) => (q ? x.ilike("alias", `%${q}%`) : x).order("created_at", { ascending: false }).limit(60));
+    // Search by nickname or @handle (handles arrive with members-live.sql; before that, nicknames only).
+    const find = (byHandle: boolean) => loadProfiles(sb, undefined, (x) => (q ? (byHandle ? x.or(`alias.ilike.%${q}%,handle.ilike.%${q}%`) : x.ilike("alias", `%${q}%`)) : x).order("created_at", { ascending: false }).limit(60));
+    people = await find(true);
+    if (!people.length && q) people = await find(false);
     people.sort((a, b) => Number(!!b.is_team) - Number(!!a.is_team));
   } else if (tab === "followers" || tab === "following") {
     const { data: f } = tab === "followers"
@@ -75,7 +78,7 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
       <div className="page-head"><div className="label">Members</div><h1>Follow each other</h1>
-        <p className="muted">Everyone gets a one-of-a-kind meme name on sign-up. Team accounts wear a gold <span className="team-badge">✓ TEAM</span> badge, so you always know it&apos;s really us.</p></div>
+        <p className="muted">Like X: everyone has a nickname and an @handle you can search. Team accounts wear a gold <span className="team-badge">✓ TEAM</span> badge, so you always know it&apos;s really us.</p></div>
       <nav className="chips" aria-label="Members">
         {tabs.map(([t, name]) => <Link key={t} className="chip" aria-current={tab === t ? "page" : undefined} href={`/members?tab=${t}`}>{name}{t === "following" && following.size ? ` (${following.size})` : ""}</Link>)}
         <Link className="chip" href="/live">🎙️ Live hub</Link>
@@ -102,7 +105,7 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
         <div className="card stack">
           <form className="row" action="/members" method="get" style={{ gap: 8 }}>
             <input type="hidden" name="tab" value="find" />
-            <input type="search" name="q" defaultValue={q} placeholder="Search a name, like Whale or #4821" aria-label="Search members" style={{ flex: 1, minWidth: 0 }} />
+            <input type="search" name="q" defaultValue={String(searchParams.q || "").slice(0, 41)} placeholder="Search a nickname or @handle" aria-label="Search members" style={{ flex: 1, minWidth: 0 }} />
             <button className="btn primary" type="submit">Search</button>
           </form>
           {!people.length && <div className="empty">No members match that name.</div>}

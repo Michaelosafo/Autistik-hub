@@ -2590,3 +2590,21 @@ h1 .team-badge{font-size:.38em}
 @media (max-width:1000px){.lp-why-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.lp-why-grid{grid-template-columns:1fr;gap:10px}.lp-why-card{padding:16px}}
 .welcome-bubble{max-width:380px;text-align:center}
+
+/* ---------- @handles, holdings sharing ---------- */
+.mname-col{display:inline-flex;flex-direction:column;min-width:0;line-height:1.25}
+.mhandle{color:var(--muted);font-weight:400;font-size:.86em;overflow-wrap:anywhere}
+.mhandle.big{font-size:1em;margin-top:-2px}
+.handle-in{display:flex;align-items:center;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);padding-left:12px}
+.handle-in span{color:var(--muted);font-weight:700}
+.handle-in input{border:0;background:transparent;flex:1;min-width:0;padding-left:4px}
+.share-modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.share-mode{display:flex;flex-direction:column;gap:2px;text-align:left;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:inherit;font:inherit;cursor:pointer}
+.share-mode small{color:var(--muted);font-size:.8em}
+.share-mode[aria-checked="true"]{border-color:var(--teal);background:var(--teal-soft)}
+.hold-total{font-family:var(--f-display);font-size:1.6em;font-weight:700}
+.hold-total small{font-family:var(--f-body);font-size:.5em;font-weight:400;color:var(--muted)}
+.holdings{list-style:none;margin:0;padding:0;display:grid}
+.holdings li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
+.holdings li:first-child{border-top:0}
+@media (max-width:640px){.share-modes{grid-template-columns:1fr}}
