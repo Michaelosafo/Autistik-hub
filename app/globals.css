@@ -2010,15 +2010,23 @@ html[data-calm=on] .ax-sheet-in{animation:none}
 :root[data-calm="on"] .toast{animation:none}
 @media (prefers-reduced-motion:reduce){ .toast{animation:none} }
 
-/* Main page: Open App is the biggest thing in the top bar, with a soft glow so it's easy to find. */
-.lp-bar .lp-openapp{padding:13px 24px;font-size:1.06em;border-radius:18px;white-space:nowrap;box-shadow:0 0 0 3px rgba(240,185,11,.28),0 10px 30px rgba(240,185,11,.45),0 -3px 0 rgba(0,0,0,.18) inset;animation:openAppGlow 2.6s ease-in-out infinite}
-.lp-bar .lp-openapp svg{width:20px;height:20px}
-@keyframes openAppGlow{0%,100%{box-shadow:0 0 0 3px rgba(240,185,11,.28),0 10px 30px rgba(240,185,11,.4),0 -3px 0 rgba(0,0,0,.18) inset}50%{box-shadow:0 0 0 6px rgba(240,185,11,.16),0 10px 34px rgba(240,185,11,.6),0 -3px 0 rgba(0,0,0,.18) inset}}
-:root[data-calm="on"] .lp-bar .lp-openapp{animation:none}
-@media (prefers-reduced-motion:reduce){ .lp-bar .lp-openapp{animation:none} }
+/* Main page: Open App is a clean gold button, the same height and shape as the buttons beside it (and the App's ☰ Menu),
+   with an app-grid icon so it reads as "the App" at a glance. No glowing halo. */
+.lp-openapp{display:inline-flex;align-items:center;gap:10px;height:46px;padding:0 8px 0 6px;border-radius:16px;white-space:nowrap;text-decoration:none;font-weight:800;font-size:1em;color:#191326 !important;
+  background:linear-gradient(180deg,#FFD84D,#F0B90B);border:1px solid #FFE27A;box-shadow:0 6px 18px rgba(240,185,11,.28),0 -2px 0 rgba(0,0,0,.14) inset;transition:transform .12s,box-shadow .12s}
+.lp-bar .lp-openapp,.lp-bar .lp-launch.bot,.lp-bar .lp-signin{flex:none}
+.lp-bar .lp-nav a{white-space:nowrap}
+.lp-openapp:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(240,185,11,.4),0 -2px 0 rgba(0,0,0,.14) inset}
+.lp-openapp:focus-visible{outline:3px solid #F4EEFF;outline-offset:2px}
+.lp-openapp>i{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#191326;color:var(--gold,#F0B90B)}
+.lp-openapp>i svg{width:18px;height:18px}
+.lp-openapp .lp-oa-go{width:18px;height:18px;margin-right:4px;transition:transform .12s}
+.lp-openapp:hover .lp-oa-go{transform:translateX(2px)}
 /* Phones: the Home button opens the App too, so Open App takes its place. */
 @media (max-width:600px){ .lp-bar .lp-home{display:none} }
-@media (max-width:440px){ .lp-bar .lp-launch.lp-openapp{padding:12px 16px;font-size:1em} .lp-bar .lp-launch.lp-openapp>svg{display:inline-block;width:16px;height:16px} }
+@media (max-width:440px){ .lp-openapp{height:44px;gap:8px;font-size:.95em} .lp-openapp>i{width:32px;height:32px} }
+@media (max-width:380px){ .lp-bar{gap:8px;padding-left:12px;padding-right:12px} .lp-signin{padding:10px} }
+@media (max-width:400px){ .lp-openapp>i{display:none} .lp-openapp{padding:0 12px 0 16px;gap:6px} .lp-openapp .lp-oa-go{margin-right:0} }
 
 /* ===================== Swap card: pay coin, amount, switch, get coin; and the token sheet ===================== */
 .sc-card{gap:14px}
