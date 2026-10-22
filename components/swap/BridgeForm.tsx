@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } from "viem";
 import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, toUnits, WSOL } from "@/lib/wallet-chains";
 import { isXAddress, isXNative, lifiDiamond, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
@@ -8,6 +8,7 @@ import { addTrade, amt, api, friendlyError, raw2num, sendSol, short, store, usd,
 import { toast } from "@/lib/toast";
 import { GAS_RESERVE } from "@/components/wallet/MarketForm";
 import { ChainBadge, XTokenPicker } from "./parts";
+import type { CardIO } from "./SwapCard";
 
 const pc = (c: XChain): any => createPublicClient({ chain: c.viem, transport: http(c.rpc, { timeout: 10_000 }) });
 const explorerTx = (c: XChain, h: string) => `${c.explorer}/tx/${h}`;
@@ -37,9 +38,11 @@ type Stage = { at: 0 | 1 | 2 | 3; hash?: string; receive?: string | null; link?:
  * the best DEX on each side); the member's own wallet signs on the "from" network and the coins arrive at their
  * address on the "to" network.
  */
-export default function BridgeForm({ signer, from, to, fromToken, toToken, onFromToken, onToToken, logos }: {
+export default function BridgeForm({ signer, from, to, fromToken, toToken, onFromToken, onToToken, logos, card }: {
   signer: Signer; from: XChain; to: XChain; fromToken: XToken | null; toToken: XToken | null;
   onFromToken: (t: XToken) => void; onToToken: (t: XToken) => void; logos: Record<number, string>;
+  /** Draws the amount and the two coins itself (the Swap card); otherwise the plain fields below. */
+  card?: (io: CardIO) => ReactNode;
 }) {
   const owner = (from.kind === "solana" ? signer.sol?.address : signer.evm?.address) ?? null;
   const mine = (to.kind === "solana" ? signer.sol?.address : signer.evm?.address) ?? "";
@@ -170,6 +173,22 @@ export default function BridgeForm({ signer, from, to, fromToken, toToken, onFro
   const connect = signer.loginExternal ?? signer.login;
   return (
     <div className="stack tx-form" style={{ gap: 10 }}>
+      {card ? card({
+        amount, setAmount, balance: owner ? balNum ?? 0 : null, onMax: bal != null ? () => part(100) : null,
+        inUsd: q?.fromUsd ?? (fromToken?.priceUsd && Number(amount) ? fromToken.priceUsd * Number(amount) : null),
+        out: quoting && !q ? <span className="tx-dim">…</span> : q ? amt(out) : <span className="tx-dim">0</span>, outUsd: q?.toUsd ?? null,
+        toExtra: owner && (cross || editTo || !toOk) ? (
+          <div className="sc-extra">
+            <div className="sx-on"><ChainBadge c={to} logo={logos[to.id]} size={14} /> Arrives on {to.name}
+              {toOk && !editTo ? <> · to <button type="button" className="sx-link" onClick={() => setEditTo(true)}>{toAddress === mine ? "your wallet" : short(toAddress)} ✎</button></> : null}
+            </div>
+            {(editTo || !toOk) && (
+              <input className="sx-addr" value={receiver} onChange={(e) => setReceiver(e.target.value)} spellCheck={false} autoComplete="off"
+                placeholder={`Your ${to.name} address`} aria-label={`Receive at (${to.name} address)`} />
+            )}
+          </div>
+        ) : null,
+      }) : <>
       <div className="tx-field">
         <div className="row tx-field-top"><span>You pay</span>{balNum != null && <span>Available <b>{amt(balNum)} {fromToken?.symbol}</b></span>}</div>
         <div className="row tx-field-mid">
@@ -193,6 +212,7 @@ export default function BridgeForm({ signer, from, to, fromToken, toToken, onFro
             placeholder={`Your ${to.name} address`} aria-label={`Receive at (${to.name} address)`} />
         )}
       </div>
+      </>}
 
       {qErr && <div className="scan-err">{qErr}</div>}
 

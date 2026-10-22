@@ -18,8 +18,7 @@ export function NetPicker({ label, value, onPick, logos, allow, tag, hint, compa
   /** A small chip (logo, name, ▾) that sits inside another row, instead of a card with its label. */
   compact?: boolean;
 }) {
-  const [open, setOpen] = useState(false); const [q, setQ] = useState("");
-  const list = XCHAIN_LIST.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+  const [open, setOpen] = useState(false);
   return (
     <>
       {compact ? (
@@ -32,25 +31,39 @@ export function NetPicker({ label, value, onPick, logos, allow, tag, hint, compa
           <span className="sx-net-in"><ChainBadge c={value} logo={logos[value.id]} size={24} /><b>{value.name}</b><span aria-hidden="true" className="tx-caret">▾</span></span>
         </button>
       )}
-      {open && (
-        <div className="aw-sheet" role="dialog" aria-label={`${label} network`} onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
-          <div className="aw-sheet-in sx-sheet">
-            <div className="row" style={{ justifyContent: "space-between" }}><b>{label} network</b><button type="button" className="btn small" onClick={() => setOpen(false)}>Close</button></div>
-            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${XCHAIN_LIST.length} networks`} spellCheck={false} autoComplete="off" />
-            <div className="sx-grid">
-              {list.map((c) => { const why = allow?.(c) ?? null; return (
-                <button key={c.id} type="button" className={"sx-grid-item" + (c.id === value.id ? " on" : "")} disabled={!!why} title={why || c.name}
-                  onClick={() => { onPick(c); setOpen(false); setQ(""); }}>
-                  <ChainBadge c={c} logo={logos[c.id]} size={30} /><span>{c.name}</span>
-                </button>
-              ); })}
-            </div>
-            {!list.length && <small className="muted">No network called “{q}”.</small>}
-          </div>
-        </div>
-      )}
+      {open && <NetGrid label={label} value={value} onPick={onPick} logos={logos} allow={allow} onClose={() => setOpen(false)} />}
     </>
   );
+}
+
+/** The sheet behind the network picker: a searchable grid of every network the swap reaches. */
+export function NetGrid({ label, value, onPick, logos, allow, onClose }: {
+  label: string; value: XChain | null; onPick: (c: XChain) => void; logos: Record<number, string>; allow?: (c: XChain) => string | null; onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const list = XCHAIN_LIST.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="aw-sheet" role="dialog" aria-label={`${label} network`} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="aw-sheet-in sx-sheet">
+        <div className="row" style={{ justifyContent: "space-between" }}><b>{label} network</b><button type="button" className="btn small" onClick={onClose}>Close</button></div>
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${XCHAIN_LIST.length} networks`} spellCheck={false} autoComplete="off" />
+        <div className="sx-grid">
+          {list.map((c) => { const why = allow?.(c) ?? null; return (
+            <button key={c.id} type="button" className={"sx-grid-item" + (c.id === value?.id ? " on" : "")} disabled={!!why} title={why || c.name}
+              onClick={() => { onPick(c); onClose(); }}>
+              <ChainBadge c={c} logo={logos[c.id]} size={30} /><span>{c.name}</span>
+            </button>
+          ); })}
+        </div>
+        {!list.length && <small className="muted">No network called “{q}”.</small>}
+      </div>
+    </div>
+  );
+}
+
+/** A coin's logo with its network's badge in the corner. */
+export function TokenLogo({ t, c, logos, size = 32 }: { t: { symbol: string; logo?: string | null }; c: XChain; logos: Record<number, string>; size?: number }) {
+  return <span className="sc-logo" style={{ width: size, height: size }}><Logo t={t} size={size} /><ChainBadge c={c} logo={logos[c.id]} size={Math.round(size * 0.44)} /></span>;
 }
 
 /** Pick a coin on any network: popular ones first, search by name, or paste an address. */

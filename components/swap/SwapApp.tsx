@@ -1,13 +1,13 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { WCHAINS, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "@/components/wallet/types";
 import MarketForm from "@/components/wallet/MarketForm";
-import { api, store, TokenPicker, type Holding, type TokenInfo } from "@/components/wallet/util";
-import { XCHAINS, XCHAIN_BY_KEY, XCHAIN_LIST, xNative, type XChain, type XToken } from "@/lib/bridge-chains";
+import { api, store, type Holding } from "@/components/wallet/util";
+import { XCHAINS, XCHAIN_BY_KEY, XCHAIN_LIST, isXNative, xNative, type XChain, type XToken } from "@/lib/bridge-chains";
 import BridgeForm from "./BridgeForm";
-import { NetPicker } from "./parts";
+import { SwapPanels, type CardIO, type Side } from "./SwapCard";
 
 /** What each network's swap opens with: the chain's coin -> AUTISTIK (BNB Chain) or USDC. */
 const DEFAULT_TO: Record<WChainKey, string> = {
@@ -16,9 +16,17 @@ const DEFAULT_TO: Record<WChainKey, string> = {
 
 const nativeOf = (c: XChain): XToken => ({ address: xNative(c), symbol: c.native.symbol, name: c.native.symbol, decimals: c.native.decimals, logo: null });
 
+/** A network's opening "get" coin: AUTISTIK or USDC on the Wallet's networks. */
+const defaultTo = (net: XChain): XToken | null => {
+  if (!net.wchain) return null;
+  const c = WCHAINS[net.wchain];
+  return c.tokens.find((t) => t.symbol === DEFAULT_TO[net.wchain!]) || c.tokens[0] || null;
+};
+
 /**
- * The App's Swap card: pick a network and a coin to pay with, and a network and a coin to get. On one of the Wallet's
- * own networks it is the Wallet engine (KyberSwap / Jupiter); anywhere else, or across networks, LI.FI finds the route.
+ * The App's Swap card: the coin you pay with and the coin you get, each picked (with its network) from the token
+ * sheet. On one of the Wallet's own networks it is the Wallet engine (KyberSwap / Jupiter); anywhere else, or across
+ * networks, LI.FI finds the route.
  */
 export default function SwapApp({ signer, start }: { signer: Signer; start: { chain?: string; buy?: string } }) {
   const first = (start.chain && XCHAIN_BY_KEY[start.chain]) || XCHAIN_BY_KEY.bsc;
@@ -27,143 +35,96 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   const [logos, setLogos] = useState<Record<number, string>>({});
   useEffect(() => { api<{ logos: Record<number, string> }>("x-chains", {}).then((d) => setLogos(d.logos)).catch(() => {}); }, []);
   const local = fromNet.id === toNet.id && fromNet.wchain ? fromNet.wchain : null;
-
-  const [xFrom, setXFrom] = useState<XToken | null>(nativeOf(first));
-  const [xTo, setXTo] = useState<XToken | null>(null);
-  // A coin to get on a network: its own coin when crossing, else the first popular coin there (USDC, USDT…).
-  const pickTo = useCallback((net: XChain, from: XChain) => {
-    if (net.id !== from.id) { setXTo(nativeOf(net)); return; }
-    setXTo(null);
-    api<{ tokens: XToken[] }>("x-tokens", { chain: net.id, q: "" }).then((d) => setXTo(d.tokens.find((t) => t.address !== xNative(net)) || null)).catch(() => {});
-  }, []);
-  function chooseFrom(n: XChain) {
-    setAuto(false);
-    // While both sides are on one network, moving "From" moves both.
-    const to = toNet.id === fromNet.id ? n : toNet;
-    setFromNet(n); setToNet(to); setXFrom(nativeOf(n)); pickTo(to, n);
-    if (to.id === n.id && n.wchain) switchChain(n.wchain);
-  }
-  // Once the member picks where to receive, a pasted address no longer moves it.
-  const [toPicked, setToPicked] = useState(false);
-  function chooseTo(n: XChain) {
-    setToPicked(true);
-    setToNet(n); pickTo(n, fromNet);
-    // Back on the pay network: keep the coin they pay with.
-    if (n.id === fromNet.id && n.wchain) { switchChain(n.wchain); if (xFrom) setFromAddr(xFrom.address); }
-  }
   const solFromOk = (c: XChain) => (c.kind === "solana" && signer.mode === "browser" ? "Solana needs the AUTISTIK wallet" : null);
 
-  const [chainKey, setChainKey] = useState<WChainKey>(first.wchain || "bsc");
+  const [xFrom, setXFrom] = useState<XToken | null>(nativeOf(first));
+  const [xTo, setXTo] = useState<XToken | null>(defaultTo(first));
+  // A coin to get on a network: its own coin when crossing, else AUTISTIK / USDC or the first popular coin there.
+  const pickTo = useCallback((net: XChain, from: XChain, avoid?: XToken | null) => {
+    if (net.id !== from.id) { setXTo(nativeOf(net)); return; }
+    const d = defaultTo(net);
+    if (d) { setXTo(avoid && d.address.toLowerCase() === avoid.address.toLowerCase() ? nativeOf(net) : d); return; }
+    setXTo(null);
+    api<{ tokens: XToken[] }>("x-tokens", { chain: net.id, q: "" }).then((r) => setXTo(r.tokens.find((t) => t.address !== xNative(net)) || null)).catch(() => {});
+  }, []);
+  useEffect(() => { if (!xTo) pickTo(first, first); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A link with a coin (?buy=0x…): get that coin, paying with its network's own coin.
+  useEffect(() => {
+    if (!start.buy) return;
+    api<{ chain: number; token: XToken }>("x-detect", { address: start.buy }).then((d) => {
+      const net = XCHAINS[d.chain];
+      setFromNet(net); setXFrom(nativeOf(net)); setToNet(net); setXTo(d.token);
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Once the member picks where to receive, changing the pay coin's network no longer moves it.
+  const [toPicked, setToPicked] = useState(false);
+  const isSame = (a: XToken | null, b: XToken | null) => !!a && !!b && a.address.toLowerCase() === b.address.toLowerCase();
+  function flip() {
+    if (solFromOk(toNet)) return;
+    setFromNet(toNet); setToNet(fromNet); setXFrom(xTo || nativeOf(toNet)); setXTo(xFrom);
+  }
+  function pick(side: Side, net: XChain, t: XToken) {
+    if (side === "from") {
+      if (net.id === toNet.id && isSame(t, xTo)) return flip();
+      // While both sides are on one network, moving "pay" moves both.
+      const follow = toNet.id === fromNet.id && net.id !== fromNet.id && !toPicked;
+      setFromNet(net); setXFrom(t);
+      if (follow) { setToNet(net); pickTo(net, net, t); }
+    } else {
+      if (net.id === fromNet.id && isSame(t, xFrom)) return flip();
+      setToPicked(true); setToNet(net); setXTo(t);
+    }
+  }
+
+  // The Wallet engine, for a swap on one of its own networks.
+  const chainKey: WChainKey = local || "bsc";
   const c = WCHAINS[chainKey];
   const owner = (c.kind === "solana" ? signer.sol?.address : signer.evm?.address) ?? null;
   const [holdings, setHoldings] = useState<Holding[] | null>(null);
-  const [custom, setCustom] = useState<WToken[]>([]);
-  const [fromAddr, setFromAddr] = useState(c.native.address);
-  const [toAddr, setToAddr] = useState<string>(start.buy || c.tokens.find((t) => t.symbol === DEFAULT_TO[chainKey])?.address || c.tokens[0].address);
-
-  useEffect(() => { setCustom(store.get(`aw-tokens-${chainKey}`, [])); }, [chainKey]);
-  const addCustom = useCallback((t: WToken) => setCustom((list) => {
-    if ([...list, ...c.tokens].some((x) => x.address.toLowerCase() === t.address.toLowerCase())) return list;
-    const next = [...list, { address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, logo: t.logo }].slice(-25);
-    store.set(`aw-tokens-${chainKey}`, next);
-    return next;
-  }), [c, chainKey]);
-
   const load = useCallback(async () => {
-    if (!owner) { setHoldings(null); return; }
+    setHoldings(null);
+    if (!owner || !local) return;
     const d = await api<{ holdings: Holding[] }>("balances", { chain: chainKey, owner, extra: store.get<WToken[]>(`aw-tokens-${chainKey}`, []).map((t) => t.address) }).catch(() => ({ holdings: [] as Holding[] }));
     setHoldings(d.holdings);
-  }, [chainKey, owner]);
+  }, [chainKey, owner, local]);
   useEffect(() => { load(); }, [load]);
-
+  const toW = (t: XToken | null): WToken | null => (!t ? null : isXNative(fromNet, t.address) ? c.native : { address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, logo: t.logo });
+  const from = local ? toW(xFrom) : null, to = local ? toW(xTo) : null;
   const tokens = useMemo(() => {
     const m = new Map<string, WToken>();
-    for (const t of [c.native, ...(holdings || []), ...c.tokens, ...custom]) if (!m.has(t.address.toLowerCase())) m.set(t.address.toLowerCase(), t);
+    for (const t of [c.native, ...(holdings || []), ...c.tokens]) if (!m.has(t.address.toLowerCase())) m.set(t.address.toLowerCase(), t);
     return [...m.values()];
-  }, [c, holdings, custom]);
-  const find = (a: string) => tokens.find((t) => t.address.toLowerCase() === a.toLowerCase()) ?? null;
+  }, [c, holdings]);
   const balanceOf = (a: string) => holdings?.find((h) => h.address.toLowerCase() === a.toLowerCase());
-  const from = find(fromAddr), to = find(toAddr);
 
-  // A coin from a link (?buy=0x…) that isn't in the list yet.
-  useEffect(() => {
-    if (!to && toAddr) api<{ token: TokenInfo }>("token", { chain: chainKey, address: toAddr }).then((d) => addCustom(d.token)).catch(() => {});
-  }, [to, toAddr, chainKey, addCustom]);
-
-  function switchChain(k: WChainKey) {
-    const n = WCHAINS[k];
-    setChainKey(k); setHoldings(null);
-    setFromAddr(n.native.address);
-    setToAddr(n.tokens.find((t) => t.symbol === DEFAULT_TO[k])?.address || n.tokens[0].address);
-  }
-  const flip = () => { const f = fromAddr; setFromAddr(toAddr); setToAddr(f); };
-
-  // Paste the contract address of the coin to pay with: the swap finds its network and fills in the "pay" side.
-  // The member picks where to receive (until then it is the same network, getting its own coin).
-  const [ca, setCa] = useState(""); const [finding, setFinding] = useState(false); const [found, setFound] = useState<{ ok: boolean; text: string } | null>(null);
-  const [auto, setAuto] = useState(false);
-  const caSeq = useRef(0);
-  const toPickedRef = useRef(toPicked); toPickedRef.current = toPicked;
-  const toNetRef = useRef(toNet); toNetRef.current = toNet;
-  const detect = useCallback(async (raw: string) => {
-    const a = raw.trim();
-    setFound(null);
-    if (!/^0x[0-9a-fA-F]{40}$/.test(a) && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) { setFinding(false); return; }
-    const id = ++caSeq.current; setFinding(true);
-    try {
-      const d = await api<{ chain: number; token: XToken }>("x-detect", { address: a });
-      if (id !== caSeq.current) return;
-      const net = XCHAINS[d.chain];
-      const to = toPickedRef.current ? toNetRef.current : net;
-      setFromNet(net); setXFrom(d.token); setAuto(true);
-      setToNet(to); setXTo(nativeOf(to));
-      if (to.id === net.id && net.wchain) { switchChain(net.wchain); setFromAddr(d.token.address); setToAddr(WCHAINS[net.wchain].native.address); }
-      setFound({ ok: true, text: `Paying with ${d.token.symbol} on ${net.name}` });
-    } catch (e: any) { if (id === caSeq.current) setFound({ ok: false, text: e.message }); }
-    if (id === caSeq.current) setFinding(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // A link with a coin but no network (?buy=0x…): find the network too.
-  useEffect(() => { if (start.buy && !start.chain) detect(start.buy); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const owners = { evm: signer.evm?.address, sol: signer.sol?.address };
+  const card = (io: CardIO) => (
+    <SwapPanels io={io} from={{ net: fromNet, token: xFrom }} to={{ net: toNet, token: xTo }} logos={logos} owners={owners} allow={solFromOk} onPick={pick} onFlip={flip} />
+  );
+  // Before a wallet is connected the card still works: pick coins and type an amount.
+  const [preAmount, setPreAmount] = useState("");
+  const cross = fromNet.id !== toNet.id;
 
   return (
     <div className="sw">
-      <div className="sw-card">
-        <div className="sw-head">
-          <div><h1>Swap <span>anywhere</span></h1><small>Any coin, any network, in one swap</small>
-            <div className="sw-badges"><span className="g">Best price</span><span>Your keys</span><span className="v">{XCHAIN_LIST.length} networks</span></div>
-          </div>
-        </div>
-
-        {/* One row: the network to swap on, then the coin's address. Pasting an address picks the network by itself. */}
-        <div className={"sx-ca" + (found ? (found.ok ? " ok" : " bad") : "")}>
-          <NetPicker compact label="Network" value={fromNet} onPick={chooseFrom} logos={logos} allow={solFromOk} tag={auto ? "auto" : undefined} />
-          <input value={ca} onChange={(e) => { setCa(e.target.value); detect(e.target.value); }} placeholder="Paste token address (CA)" spellCheck={false} autoComplete="off" aria-label="Paste the contract address of the coin you pay with" />
-          {ca && <button type="button" className="sx-ca-x" onClick={() => { setCa(""); detect(""); }} aria-label="Clear the address">×</button>}
-          {finding ? <span className="sx-ca-note"><span className="aw-spin" /> Finding…</span> : found ? <span className="sx-ca-note">{found.ok ? "✓ " : ""}{found.text}</span> : null}
-        </div>
-
-        <div className={"sx-recv" + (local ? "" : " cross")}>
-          <span>Receive on</span>
-          <NetPicker compact label="Receive on" value={toNet} onPick={chooseTo} logos={logos} hint={auto && !toPicked ? "choose" : undefined} />
-          <small>{fromNet.id === toNet.id ? "Same network · best price" : <><i className="sx-arc" aria-hidden="true">∞</i>Cross-chain in one step</>}</small>
+      <div className="sw-card sc-card">
+        <div className="sc-head">
+          <h1>Swap</h1>
+          <Link href="/wallet" className="sc-tab">Limit</Link>
+          <span className={"sc-mode" + (cross ? " x" : "")}>{cross ? <><i className="sx-arc" aria-hidden="true">∞</i>{fromNet.name} → {toNet.name}</> : `${XCHAIN_LIST.length} networks`}</span>
         </div>
 
         {!local ? (
           <BridgeForm key={`${fromNet.id}-${toNet.id}`} signer={signer} from={fromNet} to={toNet} fromToken={xFrom} toToken={xTo}
-            onFromToken={setXFrom} onToToken={setXTo} logos={logos} />
+            onFromToken={setXFrom} onToToken={setXTo} logos={logos} card={card} />
         ) : owner && from && to ? (
-          <>
-            <MarketForm key={`${chainKey}-${fromAddr}-${toAddr}`} c={c} signer={signer} owner={owner} from={from} to={to} side="convert" tokens={tokens}
-              balanceOf={balanceOf} onAdd={addCustom} onFrom={(t) => setFromAddr(t.address)} onTo={(t) => setToAddr(t.address)} onDone={load} />
-            <button type="button" className="sw-flip" onClick={flip} aria-label="Switch the two tokens">⇅ Switch</button>
-          </>
+          <MarketForm key={`${chainKey}-${from.address}-${to.address}`} c={c} signer={signer} owner={owner} from={from} to={to} side="convert" tokens={tokens}
+            balanceOf={balanceOf} onAdd={() => {}} onDone={() => { load(); }} card={card} />
         ) : (
           <div className="sw-pre">
-            <div className="tx-field"><div className="row tx-field-top"><span>You pay</span></div>
-              <div className="row tx-field-mid"><div className="tx-out"><span className="tx-dim">0.00</span></div><TokenPicker c={c} tokens={tokens} value={from} onPick={(t) => setFromAddr(t.address)} onAdd={addCustom} label="From" balanceOf={balanceOf} /></div></div>
-            <button type="button" className="sw-flip" onClick={flip} aria-label="Switch the two tokens">⇅</button>
-            <div className="tx-field"><div className="row tx-field-top"><span>You get</span></div>
-              <div className="row tx-field-mid"><div className="tx-out"><span className="tx-dim">0.00</span></div><TokenPicker c={c} tokens={tokens} value={to} onPick={(t) => setToAddr(t.address)} onAdd={addCustom} label="To" balanceOf={balanceOf} /></div></div>
+            {card({ amount: preAmount, setAmount: setPreAmount, balance: null, onMax: null, inUsd: null, out: <span className="tx-dim">0</span>, outUsd: null })}
             <button type="button" className="sw-connect" onClick={signer.loginExternal ?? signer.login}>Connect Wallet</button>
             {signer.loginEmbedded && <button type="button" className="sw-alt" onClick={signer.loginEmbedded}>or use the AUTISTIK wallet (email, Google, Apple)</button>}
           </div>
@@ -171,7 +132,6 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
       </div>
 
       <div className="sw-links">
-        <Link href="/wallet">Limit &amp; stop-loss orders →</Link>
         {local && to && <Link href={`/analytics/${chainKey}/${to.address}`}>Scan {to.symbol} →</Link>}
         <Link href="/stake">Stake AUTISTIK, earn BNB →</Link>
       </div>

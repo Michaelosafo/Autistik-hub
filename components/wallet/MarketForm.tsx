@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, MAX_SLIPPAGE_BPS, isNative, toUnits, type WChain, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "./types";
+import type { CardIO } from "@/components/swap/SwapCard";
 import { toast } from "@/lib/toast";
 import { addTrade, amt, api, friendlyError, raw2num, RiskBox, runTrade, short, store, TokenPicker, usd, type Holding, type Quote, type TokenInfo } from "./util";
 
@@ -12,10 +13,12 @@ export const GAS_RESERVE: Record<WChainKey, string> = { bsc: "0.002", ethereum: 
  * A market trade: pay `from`, get `to` at the best price right now. Used by the Buy/Sell panel (tokens fixed) and by
  * Convert (any token to any token, with pickers).
  */
-export default function MarketForm({ c, signer, owner, from, to, side, tokens, balanceOf, onAdd, onFrom, onTo, onDone }: {
+export default function MarketForm({ c, signer, owner, from, to, side, tokens, balanceOf, onAdd, onFrom, onTo, onDone, card }: {
   c: WChain; signer: Signer; owner: string; from: WToken | null; to: WToken | null; side: "buy" | "sell" | "convert";
   tokens: WToken[]; balanceOf: (a: string) => Holding | undefined; onAdd: (t: WToken) => void;
   onFrom?: (t: WToken) => void; onTo?: (t: WToken) => void; onDone: () => void;
+  /** Draws the amount and the two coins itself (the Swap card); otherwise the plain fields below. */
+  card?: (io: CardIO) => ReactNode;
 }) {
   const [amount, setAmount] = useState("");
   const [infoTo, setInfoTo] = useState<TokenInfo | null>(null);
@@ -84,6 +87,11 @@ export default function MarketForm({ c, signer, owner, from, to, side, tokens, b
   const cta = side === "buy" ? `Buy ${to?.symbol || ""}` : side === "sell" ? `Sell ${from?.symbol || ""}` : "Convert";
   return (
     <div className="stack tx-form" style={{ gap: 10 }}>
+      {card ? card({
+        amount, setAmount, balance: bal ? bal.amount : 0, onMax: bal ? () => part(100) : null,
+        inUsd: q?.inUsd ?? (infoFrom?.priceUsd && Number(amount) ? infoFrom.priceUsd * Number(amount) : null),
+        out: quoting ? <span className="tx-dim">…</span> : q ? amt(out) : <span className="tx-dim">0</span>, outUsd: q?.outUsd ?? null,
+      }) : <>
       <div className="tx-field">
         <div className="row tx-field-top"><span>{side === "buy" ? "Spend" : side === "sell" ? "Sell amount" : "From"}</span>{bal && <span>Available <b>{amt(bal.amount)} {from?.symbol}</b></span>}</div>
         <div className="row tx-field-mid">
@@ -99,6 +107,7 @@ export default function MarketForm({ c, signer, owner, from, to, side, tokens, b
           {onTo ? <TokenPicker c={c} tokens={tokens} value={to} onPick={onTo} onAdd={onAdd} label="To" balanceOf={balanceOf} /> : <span className="tx-unit">{to?.symbol}</span>}
         </div>
       </div>
+      </>}
 
       {side !== "sell" && infoTo && to && !isNative(c, to.address) && <RiskBox r={infoTo.risk} symbol={to.symbol} />}
       {qErr && <div className="scan-err">{qErr}</div>}
