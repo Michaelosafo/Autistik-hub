@@ -6,6 +6,7 @@ import type { Member, Signer } from "./types";
 import MarketForm from "./MarketForm";
 import OrderForm, { OpenOrders } from "./OrderForm";
 import SimpleMode from "./SimpleMode";
+import Portfolio from "./Portfolio";
 import { Assets, History, Receive, Security, Send, Welcome } from "./panels";
 import { api, pct, short, store, TokenPicker, usd, type Holding, type Market, type TokenInfo } from "./util";
 
@@ -34,10 +35,11 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
   const [chart, setChart] = useState(true);
   const [convFrom, setConvFrom] = useState<WToken | null>(null);
   const [convTo, setConvTo] = useState<WToken | null>(null);
-  // Simple (beginners: discover and buy in one tap) or Pro (exchange screen with charts and orders). Remembered per device.
-  const [mode, setModeState] = useState<"simple" | "pro">("simple");
-  useEffect(() => { setModeState(start.quick ? "simple" : store.get("aw-mode", start.buy ? "pro" : "simple")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const setMode = (m: "simple" | "pro") => { setModeState(m); store.set("aw-mode", m); };
+  // Wallet (everything you own on every network), Simple (discover and buy in one tap) or Pro (exchange screen with
+  // charts and orders). Remembered per device; a Buy link opens the trade screen.
+  const [mode, setModeState] = useState<"wallet" | "simple" | "pro">("wallet");
+  useEffect(() => { setModeState(start.quick ? "simple" : start.buy ? store.get<"simple" | "pro">("aw-trade-mode", "pro") : store.get("aw-mode", "wallet")); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const setMode = (m: "wallet" | "simple" | "pro") => { setModeState(m); store.set("aw-mode", m); if (m !== "wallet") store.set("aw-trade-mode", m); };
 
   useEffect(() => { setCustom(store.get(`aw-tokens-${chainKey}`, [])); }, [chainKey]);
   const addCustom = useCallback((t: WToken) => setCustom((list) => {
@@ -93,8 +95,15 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
 
   const toggle = (
     <div className="tx-mode" role="tablist" aria-label="Screen">
+      <button type="button" role="tab" aria-selected={mode === "wallet"} className={mode === "wallet" ? "on" : ""} onClick={() => setMode("wallet")}>Wallet</button>
       <button type="button" role="tab" aria-selected={mode === "simple"} className={mode === "simple" ? "on" : ""} onClick={() => setMode("simple")}>Simple</button>
       <button type="button" role="tab" aria-selected={mode === "pro"} className={mode === "pro" ? "on" : ""} onClick={() => setMode("pro")}>Pro</button>
+    </div>
+  );
+  if (mode === "wallet") return (
+    <div className="tx">
+      {toggle}
+      <Portfolio signer={signer} onTrade={(k, m, token) => { switchChain(k); if (m === "pro" && token && token.toLowerCase() !== WCHAINS[k].native.address.toLowerCase()) setBaseAddr(token); setMode(m); }} />
     </div>
   );
   if (mode === "simple") return (
