@@ -2580,3 +2580,13 @@ h1 .team-badge{font-size:.38em}
 }
 .join-live>.btn{align-self:flex-start}
 @media (max-width:640px){.join-live>.btn{align-self:stretch}}
+/* "Why autism?": one line in the hero and four short answers under the numbers (app/page.tsx) */
+.lp-hero p.lp-why{margin-top:14px;padding:12px 16px;border-left:3px solid var(--gold,#F0B90B);border-radius:0 12px 12px 0;background:rgba(240,185,11,.07);color:#D9D4E8;font-size:1em}
+.lp-why b{color:var(--gold,#F0B90B)}
+.lp-why-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.lp-why-card{display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:16px;background:var(--lp-card);border:1px solid var(--lp-line)}
+.lp-why-card h3{font-family:var(--f-body);font-size:1.05em;font-weight:800;margin:4px 0 0;color:#F4EEFF}
+.lp-why-card p{color:#A9A4BC;font-size:.92em;margin:0}
+@media (max-width:1000px){.lp-why-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.lp-why-grid{grid-template-columns:1fr;gap:10px}.lp-why-card{padding:16px}}
+.welcome-bubble{max-width:380px;text-align:center}
