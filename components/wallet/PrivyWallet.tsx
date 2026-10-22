@@ -1,12 +1,13 @@
 "use client";
 import { useState } from "react";
-import { PrivyProvider, useConnectWallet, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
+import { PrivyProvider, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useExportWallet as useSolExport, useSignTransaction, useWallets as useSolWallets } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { bsc } from "viem/chains";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { XCHAIN_LIST } from "@/lib/bridge-chains";
-import { WALLETCONNECT_ID } from "@/lib/connect";
+import { WALLETCONNECT_ID, disconnectWallet, pickWallet } from "@/lib/connect";
+import { useSiteWallet } from "./site-wallet";
 import WalletApp from "./WalletApp";
 import StakeApp from "@/components/stake/StakeApp";
 import SwapApp from "@/components/swap/SwapApp";
@@ -49,9 +50,27 @@ const typedJson = (typed: { domain: any; types: any; primaryType: string; messag
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 
+/** A wallet Privy knows (built-in or connected through Privy) as what the screens sign with. */
+const fromPrivy = (ev: any): Signer["evm"] => ev ? {
+  address: ev.address,
+  async send(chainId, tx) {
+    await ev.switchChain(chainId);
+    const p = await ev.getEthereumProvider();
+    return p.request({ method: "eth_sendTransaction", params: [{ from: ev.address, to: tx.to, data: tx.data, value: "0x" + BigInt(tx.value).toString(16) }] });
+  },
+  async signTyped(chainId, typed) {
+    await ev.switchChain(chainId);
+    const p = await ev.getEthereumProvider();
+    return p.request({ method: "eth_signTypedData_v4", params: [ev.address, typedJson(typed)] });
+  },
+  async signMessage(message) {
+    const p = await ev.getEthereumProvider();
+    return p.request({ method: "personal_sign", params: [hexMsg(message), ev.address] });
+  },
+} : null;
+
 function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" | "swap" }) {
   const { ready, authenticated, user, login, logout } = usePrivy();
-  const { connectWallet } = useConnectWallet();
   const { wallets } = useWallets();
   const { wallets: solWallets } = useSolWallets();
   const { signTransaction } = useSignTransaction();
@@ -60,34 +79,23 @@ function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" | "swap"
   const [prefer, setPrefer] = useState<"embedded" | "external" | null>(null);
   // The built-in wallet, or a wallet the member connected (MetaMask, Trust, Phantom…). They pick which one trades.
   const evmEmbedded: any = wallets.find((w) => w.walletClientType === "privy");
-  const evmExternal: any = wallets.find((w) => w.walletClientType !== "privy");
+  const privyExternal: any = wallets.find((w) => w.walletClientType !== "privy");
+  // A wallet connected from the top bar (or any Connect button on the site) counts too: once approved in the
+  // wallet, the swap uses it straight away, with no second sign-in.
+  const site = useSiteWallet();
   const solEmbedded: any = solWallets.find((w: any) => /privy/i.test(w?.standardWallet?.name || ""));
   const solExternal: any = solWallets.find((w: any) => !/privy/i.test(w?.standardWallet?.name || ""));
-  const using: "embedded" | "external" = prefer ?? (evmExternal || solExternal ? "external" : "embedded");
-  const ev: any = using === "external" ? evmExternal || evmEmbedded : evmEmbedded || evmExternal;
+  const evmOwn = fromPrivy(privyExternal) || site.evm;
+  const evmBuilt = fromPrivy(evmEmbedded);
+  const using: "embedded" | "external" = prefer ?? (evmOwn || solExternal ? "external" : "embedded");
+  const evm = using === "external" ? evmOwn || evmBuilt : evmBuilt || evmOwn;
   const sw: any = using === "external" ? solExternal || solEmbedded : solEmbedded || solExternal;
 
   const signer: Signer = {
-    mode: "privy", ready, active: ready && authenticated && (!!ev || !!sw),
+    mode: "privy", ready: ready && site.ready, active: (ready && authenticated && !!sw) || !!evm,
     label: user?.email?.address || null,
-    using, canSwitch: !!(evmEmbedded || solEmbedded) && !!(evmExternal || solExternal), switchTo: setPrefer,
-    evm: ev ? {
-      address: ev.address,
-      async send(chainId, tx) {
-        await ev.switchChain(chainId);
-        const p = await ev.getEthereumProvider();
-        return p.request({ method: "eth_sendTransaction", params: [{ from: ev.address, to: tx.to, data: tx.data, value: "0x" + BigInt(tx.value).toString(16) }] });
-      },
-      async signTyped(chainId, typed) {
-        await ev.switchChain(chainId);
-        const p = await ev.getEthereumProvider();
-        return p.request({ method: "eth_signTypedData_v4", params: [ev.address, typedJson(typed)] });
-      },
-      async signMessage(message) {
-        const p = await ev.getEthereumProvider();
-        return p.request({ method: "personal_sign", params: [hexMsg(message), ev.address] });
-      },
-    } : null,
+    using, canSwitch: !!(evmEmbedded || solEmbedded) && !!(evmOwn || solExternal), switchTo: setPrefer,
+    evm,
     sol: sw ? {
       address: sw.address,
       async sign(txBase64) {
@@ -97,8 +105,9 @@ function Inner({ start, app }: { start: Start; app?: "wallet" | "stake" | "swap"
     } : null,
     login,
     loginEmbedded: () => { setPrefer("embedded"); login({ loginMethods: ["email", "google", "apple", "passkey"] }); },
-    loginExternal: () => { setPrefer("external"); if (authenticated) connectWallet(); else login({ loginMethods: ["wallet"] }); },
-    logout: () => { setPrefer(null); logout(); },
+    // Connect a wallet with the site's own window: approve once in the wallet and this browser stays connected.
+    loginExternal: () => { setPrefer("external"); pickWallet({ fresh: true }); },
+    logout: () => { setPrefer(null); disconnectWallet(); if (authenticated) logout(); },
     exportKey: (kind) => { (kind === "evm" ? exportWallet({ address: evmEmbedded?.address }) : exportSol({ address: solEmbedded?.address })).catch(() => {}); },
   };
   return app === "stake" ? <StakeApp signer={signer} start={start} /> : app === "swap" ? <SwapApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} />;

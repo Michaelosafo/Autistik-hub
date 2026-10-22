@@ -11,19 +11,27 @@ export function ChainBadge({ c, logo, size = 22 }: { c: XChain; logo?: string; s
 }
 
 /** Pick a network: a searchable grid of every network the swap reaches. */
-export function NetPicker({ label, value, onPick, logos, allow, tag, hint }: {
+export function NetPicker({ label, value, onPick, logos, allow, tag, hint, compact }: {
   label: string; value: XChain; onPick: (c: XChain) => void; logos: Record<number, string>; allow?: (c: XChain) => string | null;
   /** A small badge by the label, e.g. "auto" when the network came from a pasted address. */
   tag?: string; hint?: string;
+  /** A small chip (logo, name, ▾) that sits inside another row, instead of a card with its label. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false); const [q, setQ] = useState("");
   const list = XCHAIN_LIST.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <>
-      <button type="button" className={"sx-net" + (hint ? " ask" : "")} onClick={() => setOpen(true)} aria-label={`${label}: ${value.name}`}>
-        <small>{label}{tag && <em className="sx-tag">{tag}</em>}{hint && <em className="sx-hint">{hint}</em>}</small>
-        <span className="sx-net-in"><ChainBadge c={value} logo={logos[value.id]} size={24} /><b>{value.name}</b><span aria-hidden="true" className="tx-caret">▾</span></span>
-      </button>
+      {compact ? (
+        <button type="button" className={"sx-chip" + (hint ? " ask" : "")} onClick={() => setOpen(true)} aria-label={`${label}: ${value.name}. Change network`}>
+          <ChainBadge c={value} logo={logos[value.id]} size={20} /><b>{value.name}</b>{tag && <em className="sx-tag">{tag}</em>}{hint && <em className="sx-hint">{hint}</em>}<span aria-hidden="true" className="tx-caret">▾</span>
+        </button>
+      ) : (
+        <button type="button" className={"sx-net" + (hint ? " ask" : "")} onClick={() => setOpen(true)} aria-label={`${label}: ${value.name}`}>
+          <small>{label}{tag && <em className="sx-tag">{tag}</em>}{hint && <em className="sx-hint">{hint}</em>}</small>
+          <span className="sx-net-in"><ChainBadge c={value} logo={logos[value.id]} size={24} /><b>{value.name}</b><span aria-hidden="true" className="tx-caret">▾</span></span>
+        </button>
+      )}
       {open && (
         <div className="aw-sheet" role="dialog" aria-label={`${label} network`} onClick={(e) => e.target === e.currentTarget && setOpen(false)}>
           <div className="aw-sheet-in sx-sheet">

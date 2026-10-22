@@ -51,7 +51,6 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
     // Back on the pay network: keep the coin they pay with.
     if (n.id === fromNet.id && n.wchain) { switchChain(n.wchain); if (xFrom) setFromAddr(xFrom.address); }
   }
-  const flipNets = () => { const f = fromNet, t = toNet, a = xFrom, b = xTo; setFromNet(t); setToNet(f); setXFrom(b); setXTo(a); setAuto(false); setToPicked(true); };
   const solFromOk = (c: XChain) => (c.kind === "solana" && signer.mode === "browser" ? "Solana needs the AUTISTIK wallet" : null);
 
   const [chainKey, setChainKey] = useState<WChainKey>(first.wchain || "bsc");
@@ -135,18 +134,19 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
           </div>
         </div>
 
-        <label className={"sx-ca" + (found ? (found.ok ? " ok" : " bad") : "")}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v1h2a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2V5a1 1 0 0 1 1-1zm0 2v1h6V6z" fill="currentColor" /></svg>
-          <input value={ca} onChange={(e) => { setCa(e.target.value); detect(e.target.value); }} placeholder="Paste the contract address (CA) you pay with" spellCheck={false} autoComplete="off" aria-label="Paste the contract address of the coin you pay with" />
+        {/* One row: the network to swap on, then the coin's address. Pasting an address picks the network by itself. */}
+        <div className={"sx-ca" + (found ? (found.ok ? " ok" : " bad") : "")}>
+          <NetPicker compact label="Network" value={fromNet} onPick={chooseFrom} logos={logos} allow={solFromOk} tag={auto ? "auto" : undefined} />
+          <input value={ca} onChange={(e) => { setCa(e.target.value); detect(e.target.value); }} placeholder="Paste token address (CA)" spellCheck={false} autoComplete="off" aria-label="Paste the contract address of the coin you pay with" />
+          {ca && <button type="button" className="sx-ca-x" onClick={() => { setCa(""); detect(""); }} aria-label="Clear the address">×</button>}
           {finding ? <span className="sx-ca-note"><span className="aw-spin" /> Finding…</span> : found ? <span className="sx-ca-note">{found.ok ? "✓ " : ""}{found.text}</span> : null}
-        </label>
-
-        <div className={"sx-bar" + (local ? "" : " cross")}>
-          <NetPicker label="Pay on" value={fromNet} onPick={chooseFrom} logos={logos} allow={solFromOk} tag={auto ? "auto" : undefined} />
-          <button type="button" className="sx-swapnets" onClick={flipNets} aria-label="Switch the two networks"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13l-3-3M20 16H7l3 3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
-          <NetPicker label="Receive on" value={toNet} onPick={chooseTo} logos={logos} hint={auto && !toPicked ? "choose" : undefined} />
         </div>
-        <div className="sx-mode">{local ? <>Same network · best price across every DEX</> : fromNet.id === toNet.id ? <>Best price across every DEX on {fromNet.name}</> : <><i className="sx-arc" aria-hidden="true">∞</i>Cross-chain · bridge and swap in one step</>}</div>
+
+        <div className={"sx-recv" + (local ? "" : " cross")}>
+          <span>Receive on</span>
+          <NetPicker compact label="Receive on" value={toNet} onPick={chooseTo} logos={logos} hint={auto && !toPicked ? "choose" : undefined} />
+          <small>{fromNet.id === toNet.id ? "Same network · best price" : <><i className="sx-arc" aria-hidden="true">∞</i>Cross-chain in one step</>}</small>
+        </div>
 
         {!local ? (
           <BridgeForm key={`${fromNet.id}-${toNet.id}`} signer={signer} from={fromNet} to={toNet} fromToken={xFrom} toToken={xTo}

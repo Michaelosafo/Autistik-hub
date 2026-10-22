@@ -1,6 +1,7 @@
 "use client";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
+import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
@@ -101,7 +102,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   }
 
   // The front page is the website (its own header, no menus); trading tools open inside the App frame.
-  if (path === "/") return <><Sprites /><Tracker /><WalletPicker />{children}</>;
+  if (path === "/") return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
   if (isAppPath(path)) return <><Sprites /><AppShell>{children}</AppShell></>;
 
   return (
@@ -189,7 +190,8 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>
           <Tracker />
-      <WalletPicker />
+          <WalletPicker />
+          <Toaster />
           <div className="page">{children}</div>
           <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety &amp; privacy</Link></footer>
         </main>

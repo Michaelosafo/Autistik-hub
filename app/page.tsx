@@ -50,7 +50,7 @@ export default async function Home() {
         {user
           ? <Link href="/me" className="lp-signin" aria-label="My profile"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></Link>
           : <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
-        <Link href="/app" className="lp-launch">Open App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></Link>
+        <Link href="/app" className="lp-launch lp-openapp" aria-label="Open the AUTISTIK App">Open App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" /></svg></Link>
       </header>
 
       <section className="lp-hero">

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
+import Toaster from "@/components/Toaster";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
@@ -123,6 +124,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <Tracker />
       <WalletPicker />
+      <Toaster />
       <main className="ax-main">{children}</main>
       <footer className="ax-foot">
         <Link href="/app">All tools</Link><Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link>
