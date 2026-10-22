@@ -10,7 +10,7 @@ type Mode = "signin" | "join" | "forgot";
 
 const TITLES: Record<Mode, [string, string]> = {
   signin: ["Welcome back", "Sign in with Google, Apple or your email."],
-  join: ["Join the Hub", "Create a free account. We'll email you a 6-digit code to confirm it, then you'll add an authenticator app to keep it safe. You get a free AUTISTIK wallet too, made for this email."],
+  join: ["Join the Hub", "Create a free account. We'll email you a 6-digit code to confirm it. You get a free AUTISTIK wallet too, made for this email."],
   forgot: ["Reset your password", "Enter your email and we'll send you a link to choose a new password."],
 };
 
@@ -105,7 +105,8 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     const { error } = await sb.auth.verifyOtp({ email: email.trim().toLowerCase(), token, type: sent === "confirm" ? "signup" : "email" });
     setBusy(false);
     if (error) { setError(/expired|invalid/i.test(error.message) ? "That code didn't work or has expired. Check the newest email, or send a new one." : authMessage(error.message)); return; }
-    window.location.assign(sent === "confirm" ? `/security?next=${encodeURIComponent(next)}` : next);
+    // New accounts see the (optional, recommended) 2-step verification offer first.
+    window.location.assign(sent === "confirm" ? `/security?welcome=1&next=${encodeURIComponent(next)}` : next);
   }
 
   async function magicLink() {
@@ -210,6 +211,7 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
             <label className="field"><span>Type the password again</span>
               <input id="loginPassword2" type={show ? "text" : "password"} autoComplete="new-password" required value={password2} onChange={(e) => setPassword2(e.target.value)} />
             </label>
+            <div className="notice" style={{ fontSize: ".88em" }}>🔐 <b>Tip:</b> after joining, turn on <b>2-step verification</b> (a code from an app on your phone). It&apos;s optional, but it makes your account much harder to break into.</div>
             <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap" }}><input id="loginAdult" type="checkbox" checked={adult} onChange={(e) => setAdult(e.target.checked)} /> <span>I am 18 or older.</span></label>
             <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap" }}><input id="loginRules" type="checkbox" checked={rules} onChange={(e) => setRules(e.target.checked)} /> <span>I&apos;ve read the <Link href="/safety" target="_blank">community guidelines</Link> and will follow them.</span></label>
           </>

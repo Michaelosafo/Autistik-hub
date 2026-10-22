@@ -30,7 +30,7 @@ function Icon({ id }: { id: string }) {
   return <svg aria-hidden="true"><use href={"#" + id} /></svg>;
 }
 
-export default function Shell({ me, children }: { me: { alias: string; color: string; is_admin: boolean } | null; children: React.ReactNode }) {
+export default function Shell({ me, children }: { me: { alias: string; color: string; is_admin: boolean; mfa?: boolean } | null; children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [calm, setCalm] = useState(false);
@@ -182,7 +182,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                     <InstallApp />
                   </div>
                   {me?.is_admin && <Link className="me-row adm" href="/admin" onClick={() => setMenu(false)}><Icon id="i-adm" /><span>Admin<small>Everything happening on the site</small></span></Link>}
-                  {me && <Link className="me-row" href="/security" onClick={() => setMenu(false)}><Icon id="i-safe" /><span>Account security<small>Your authenticator app</small></span></Link>}
+                  {me && <Link className="me-row" href="/security" onClick={() => setMenu(false)}><Icon id="i-safe" /><span>Account security<small>{me.mfa ? "2-step verification is on ✓" : "Recommended: turn on 2-step verification"}</small></span></Link>}
                   {me
                     ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
                     : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}

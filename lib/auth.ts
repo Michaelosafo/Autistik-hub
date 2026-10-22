@@ -29,3 +29,11 @@ export function authMessage(raw: string | undefined | null): string {
   if (m.includes("signups not allowed") || m.includes("signup is disabled")) return "New accounts are switched off right now. Please try again later.";
   return raw ? String(raw) : "Something went wrong. Please try again.";
 }
+
+/** The "make your account more secure" page for a new account, then on to where they were going. */
+export function welcomeUrl(done: URL, origin: string) {
+  const to = new URL("/security", origin);
+  to.searchParams.set("welcome", "1");
+  to.searchParams.set("next", done.pathname + done.search);
+  return to;
+}

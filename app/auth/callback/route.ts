@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { safeNext } from "@/lib/auth";
+import { safeNext, welcomeUrl } from "@/lib/auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { ensureMemberWallet } from "@/lib/privy-server";
 
@@ -22,6 +22,9 @@ export async function GET(request: Request) {
     // Their AUTISTIK wallet, made the moment the email is confirmed (Google and Apple confirm it for us).
     if (!error && data?.user?.email_confirmed_at) await ensureMemberWallet(data.user.email);
     if (error) return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent("Open the link in the same browser you signed up in, or sign in with your password.")}`, url.origin));
+    // First time in (e.g. a new Google account): offer 2-step verification before going on.
+    const created = Date.parse(data?.user?.created_at || "");
+    if (next !== "/reset-password" && Date.now() - created < 10 * 60 * 1000) return NextResponse.redirect(welcomeUrl(new URL(next, url.origin), url.origin));
   }
   return NextResponse.redirect(new URL(next, url.origin));
 }
