@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
 import Welcome from "@/components/Welcome";
 import { headers } from "next/headers";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "AUTISTIK Hub",
@@ -18,7 +18,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const nonce = headers().get("x-nonce") ?? undefined;
   const sb = supabaseServer();
-  const { data: { user } } = await sb.auth.getUser();
+  const user = await currentUser();
   let me: { alias: string; color: string; is_admin: boolean } | null = null;
   if (user) {
     // The Admin menu item only shows for the owner (see supabase/admin-lock.sql).

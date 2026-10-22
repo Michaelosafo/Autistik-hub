@@ -3,14 +3,14 @@ import Guide from "@/components/Guide";
 import WalletLink from "@/components/WalletLink";
 import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
 import ProHero from "@/components/ProHero";
-import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Rewards · AUTISTIK Hub" };
 
 export default async function Rewards() {
   const sb = supabaseServer();
-  const { data: { user } } = await sb.auth.getUser();
+  const user = await currentUser();
   const { data: settings } = await sb.from("app_settings").select("*").eq("id", 1).single();
   const need = settings?.qualify_points ?? 50;
   let me: any = null, board: any[] = [], wallet: string | null = null, rank = 0;

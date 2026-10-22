@@ -3,7 +3,7 @@ import { json } from "@/lib/ai";
 import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { isAChain, isChainAddress, scanToken } from "@/lib/analytics";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { checkSignals } from "@/lib/analytics-alerts";
 import { FREE_PINS, PRO_PINS } from "@/lib/pro";
 import { isPro } from "@/lib/pro-server";
@@ -16,7 +16,7 @@ export const maxDuration = 30;
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "analytics-pin", 60, 600);
   if (slow) return slow;
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in to pin tokens." }, 401);
   const body = await req.json().catch(() => null);
   const chain = body?.chain, raw = String(body?.token || "");

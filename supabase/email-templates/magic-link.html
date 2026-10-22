@@ -7,6 +7,8 @@
       <h1 style="margin:0 0 14px;font-size:22px;line-height:1.25;color:#141830">Your sign-in link</h1>
       <p style="margin:0 0 22px;font-size:15px;line-height:1.6">Press the button to sign in to the AUTISTIK Hub. The link works once and expires soon.</p>
       <p style="margin:0 0 24px"><a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=magiclink&next=/companions" style="display:inline-block;background:#141830;color:#FFFFFF;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 22px;border-radius:10px">Sign me in</a></p>
+      <p style="margin:0 0 6px;font-size:14px;color:#5A6079">Or type this code on the sign-in page:</p>
+      <p style="margin:0 0 22px;font-family:Consolas,Menlo,monospace;font-size:30px;letter-spacing:8px;font-weight:bold;color:#141830">{{ .Token }}</p>
       <p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#5A6079">Didn't ask for this? You can ignore this email.</p>
       <p style="margin:0;font-size:13px;line-height:1.5;color:#5A6079">We will never ask for your password, seed phrase or private key.</p>
     </div>

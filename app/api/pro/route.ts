@@ -7,7 +7,7 @@ import { CHAINS } from "@/lib/launchpad";
 import { TREASURY } from "@/lib/trending";
 import { PRO_DAYS, PRO_TOKEN, PRO_USD } from "@/lib/pro";
 import { autistikPriceUsd, proUntil, unitsFor } from "@/lib/pro-server";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ async function decimals() {
   try { return Number(await bsc().readContract({ address: PRO_TOKEN, abi: erc20Abi, functionName: "decimals" } as any)); } catch { return 9; }
 }
 async function signedIn() {
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   return user;
 }
 
