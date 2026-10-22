@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { rateLimit } from "@/lib/ratelimit";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { isPro } from "@/lib/pro-server";
 import { getPrefs } from "@/lib/momentum-server";
 import { FREE_ALERTS_PER_DAY, PRO_ALERTS_PER_DAY, isMomentumChain } from "@/lib/momentum";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 /** Your momentum alert settings. */
 export async function GET() {
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ signedIn: false });
   const [prefs, pro] = await Promise.all([getPrefs(user.id), isPro(user.id)]);
   return json({ signedIn: true, prefs, pro, perDay: pro ? PRO_ALERTS_PER_DAY : FREE_ALERTS_PER_DAY });
@@ -21,7 +21,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "momentum-alerts", 30, 600);
   if (slow) return slow;
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in to get alerts." }, 401);
   const b = await req.json().catch(() => null);
   const chains = Array.isArray(b?.chains) ? [...new Set(b.chains.filter(isMomentumChain))] : [];

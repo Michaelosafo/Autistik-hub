@@ -181,6 +181,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                     </button>
                     <InstallApp />
                   </div>
+                  {me && <Link className="me-row" href="/security" onClick={() => setMenu(false)}><Icon id="i-safe" /><span>Account security<small>Your authenticator app</small></span></Link>}
                   {me
                     ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
                     : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}

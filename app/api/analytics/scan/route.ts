@@ -3,7 +3,7 @@ import { logActivity } from "@/lib/activity";
 import { rateLimit } from "@/lib/ratelimit";
 import { ACHAINS, isAChain, isChainAddress, scanToken } from "@/lib/analytics";
 import { detectChain } from "@/lib/analytics-detect";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,7 +12,7 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "analytics-scan", 30, 600);
   if (slow) return slow;
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return json({ error: "Please sign in to scan tokens." }, 401);
   const perUser = await rateLimit(null, "analytics-scan-user", 15, 3600, user.id);
   if (perUser) return perUser;

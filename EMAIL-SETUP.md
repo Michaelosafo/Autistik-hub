@@ -31,7 +31,10 @@ Press **Save**. Then **Authentication → Rate Limits**: set "emails per hour" t
 **Authentication → Sign In / Providers → Email**:
 - **Enable Email provider:** on
 - **Confirm email:** **on** (people must press the link before they can sign in)
-- **Minimum password length:** `8`
+- **Minimum password length:** `10`
+- **Password requirements:** letters and digits
+- **Email OTP expiration:** `600` seconds (the 6-digit code in the email works for 10 minutes)
+- **Email OTP length:** `6`
 - Save.
 
 **Authentication → URL Configuration**:
@@ -52,10 +55,11 @@ These links work even if someone signs up on their laptop and opens the email on
 
 ## 5. Test it
 1. Open the Hub in a private window → **Sign in / Join** → **Create account**.
-2. Use an email you can check, a password of 8+ characters, tick both boxes → **Create my account**.
-3. The email "Confirm your AUTISTIK Hub email" arrives → press **Confirm my email**.
-4. You land on Believer & Purity, signed in, with a welcome note. Say hello.
-5. Sign out → sign in with the same email and password. Then try **Forgot your password?**.
+2. Use an email you can check, a password of 10+ characters with letters and numbers, tick both boxes → **Create my account**.
+3. The email "Confirm your AUTISTIK Hub email" arrives with a 6-digit code. Type it on the page (or press **Confirm my email**).
+4. The Hub asks you to add an authenticator app (every account needs one). Scan the QR code, type the app's code.
+5. You land on Believer & Purity, signed in. Say hello.
+6. Sign out → sign in with the same email and password, then the 6-digit code from your authenticator app. Then try **Forgot your password?**.
 
 **Didn't get the email?** Check spam. In Resend → **Emails** you can see whether it was sent. In Supabase → **Logs → Auth** you can see errors.
 

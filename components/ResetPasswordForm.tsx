@@ -17,6 +17,7 @@ export default function ResetPasswordForm({ email }: { email: string }) {
     e.preventDefault();
     setError("");
     if (pw.length < MIN_PASSWORD) { setError(`Your password needs at least ${MIN_PASSWORD} characters.`); return; }
+    if (!/[a-z]/i.test(pw) || !/\d/.test(pw)) { setError("Your password needs at least one letter and one number."); return; }
     if (pw !== pw2) { setError("The two passwords don't match."); return; }
     setBusy(true);
     const { error } = await supabaseBrowser().auth.updateUser({ password: pw });

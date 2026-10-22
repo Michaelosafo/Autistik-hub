@@ -1,7 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { MIN_PASSWORD, authMessage } from "@/lib/auth";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/env";
@@ -11,7 +10,7 @@ type Mode = "signin" | "join" | "forgot";
 
 const TITLES: Record<Mode, [string, string]> = {
   signin: ["Welcome back", "Sign in with Google, Apple or your email."],
-  join: ["Join the Hub", "Create a free account. We'll email you a link to confirm it, then you can chat with Believer and Purity."],
+  join: ["Join the Hub", "Create a free account. We'll email you a 6-digit code to confirm it, then you'll add an authenticator app to keep it safe."],
   forgot: ["Reset your password", "Enter your email and we'll send you a link to choose a new password."],
 };
 
@@ -25,7 +24,6 @@ function strength(pw: string) {
 }
 
 export default function LoginForm({ next, initialError, initialMode }: { next: string; initialError: string; initialMode: Mode }) {
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,6 +36,7 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
   const [sent, setSent] = useState<"" | "confirm" | "reset" | "link">("");
   const [canResend, setCanResend] = useState(false);
   const [captcha, setCaptcha] = useState("");
+  const [otp, setOtp] = useState("");
   const human = useRef<HumanCheckHandle>(null);
   const sb = supabaseBrowser();
   // Each "are you human" token works once, so get a fresh one after every try.
@@ -59,6 +58,7 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     if (mode === "join") {
       if (!adult || !rules) { setError("Please tick both boxes to join."); return; }
       if (password.length < MIN_PASSWORD) { setError(`Your password needs at least ${MIN_PASSWORD} characters.`); return; }
+      if (!/[a-z]/i.test(password) || !/\d/.test(password)) { setError("Your password needs at least one letter and one number."); return; }
       if (password !== password2) { setError("The two passwords don't match."); return; }
     }
     if (needCaptcha()) return;
@@ -67,11 +67,12 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
       if (mode === "signin") {
         const { error } = await sb.auth.signInWithPassword({ email: em, password, options: { captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); setCanResend(/not confirmed/i.test(error.message)); return; }
-        router.push(next); router.refresh();
+        // A full page load, so the 2-step code is asked for straight away (see middleware.ts).
+        window.location.assign(next);
       } else if (mode === "join") {
         const { data, error } = await sb.auth.signUp({ email: em, password, options: { emailRedirectTo: confirmUrl(next), data: { confirmed_adult: true }, captchaToken: captchaToken() } });
         if (error) { setError(authMessage(error.message)); return; }
-        if (data.session) { router.push(next); router.refresh(); return; } // email confirmation switched off
+        if (data.session) { window.location.assign(next); return; } // email confirmation switched off
         // An email that's already registered gets the same answer as a new one, so this form can't be used to
         // find out who has an account. (Supabase sends nothing in that case; the screen says what to do.)
         setSent("confirm"); setCanResend(true);
@@ -93,6 +94,18 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
     const { error } = await sb.auth.resend({ type: "signup", email: em, options: { emailRedirectTo: confirmUrl(next), captchaToken: captchaToken() } });
     setBusy(false); human.current?.reset();
     if (error) setError(authMessage(error.message)); else setSent("confirm");
+  }
+
+  // The email has a 6-digit code as well as the button, so it works even when the link opens in another browser.
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    const token = otp.replace(/\D/g, "");
+    if (token.length < 6) { setError("Type the 6-digit code from the email."); return; }
+    setBusy(true); setError("");
+    const { error } = await sb.auth.verifyOtp({ email: email.trim().toLowerCase(), token, type: sent === "confirm" ? "signup" : "email" });
+    setBusy(false);
+    if (error) { setError(/expired|invalid/i.test(error.message) ? "That code didn't work or has expired. Check the newest email, or send a new one." : authMessage(error.message)); return; }
+    window.location.assign(sent === "confirm" ? `/security?next=${encodeURIComponent(next)}` : next);
   }
 
   async function magicLink() {
@@ -125,9 +138,18 @@ export default function LoginForm({ next, initialError, initialMode }: { next: s
         <div className="label">Check your email</div>
         <h1>{sent === "confirm" ? "Confirm your email" : sent === "reset" ? "Password link sent" : "Sign-in link sent"}</h1>
         <p>If <b>{email.trim()}</b> {sent === "confirm" ? "is new here" : "has an account"}, we&apos;ve sent it an email.{" "}
-          {sent === "confirm" ? "Open it and press Confirm my email. Then you're in, and Believer and Purity are ready to chat."
+          {sent === "confirm" ? "Type the 6-digit code from it below (or press Confirm my email in the email)."
             : sent === "reset" ? "Open it and press Choose a new password."
-            : "Open it and press Sign me in."}</p>
+            : "Type the 6-digit code from it below (or press Sign me in in the email)."}</p>
+        {sent !== "reset" && (
+          <form className="stack" onSubmit={verifyCode} style={{ gap: 8 }}>
+            <label className="field"><span>Code from the email</span>
+              <input id="emailCode" inputMode="numeric" autoComplete="one-time-code" maxLength={12} required value={otp} onChange={(e) => setOtp(e.target.value)} autoFocus
+                style={{ fontSize: "1.4em", letterSpacing: ".2em", maxWidth: 240 }} />
+            </label>
+            <button className="btn primary" type="submit" disabled={busy} style={{ alignSelf: "flex-start" }}>{busy ? "Checking…" : sent === "confirm" ? "Confirm my email" : "Sign me in"}</button>
+          </form>
+        )}
         {sent === "confirm" && <p className="muted" style={{ margin: 0 }}>Already have an account with this email? Nothing new is sent: just <button className="linkish" type="button" onClick={() => switchTo("signin")}>sign in</button> or reset your password.</p>}
         {sent !== "confirm" && <p className="muted" style={{ margin: 0 }}>No email after a few minutes? The address may not have an account yet: <button className="linkish" type="button" onClick={() => switchTo("join")}>create one</button>.</p>}
         <div className="notice" style={{ fontSize: ".9em" }}>It comes from AUTISTIK Hub and usually arrives within a minute. Check your spam or promotions folder if you can&apos;t see it.</div>

@@ -7,11 +7,11 @@ export function safeNext(v: string | null | undefined, fallback = "/companions")
   try { u = new URL(s, "https://this.site"); } catch { return fallback; }
   if (u.origin !== "https://this.site") return fallback;
   // Never send people back to the sign-in pages themselves (that would loop).
-  if (/^\/(login|auth|reset-password)(\/|\?|$)/.test(u.pathname)) return fallback;
+  if (/^\/(login|auth|reset-password|security)(\/|\?|$)/.test(u.pathname)) return fallback;
   return u.pathname + u.search + u.hash;
 }
 
-export const MIN_PASSWORD = 8;
+export const MIN_PASSWORD = 10;
 
 /** Plain-language versions of Supabase's sign-in errors. */
 export function authMessage(raw: string | undefined | null): string {

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { AI_FREE_PER_DAY, AI_PASS_DAYS, AI_PASS_USD } from "@/lib/aipass";
 import { rateLimit } from "@/lib/ratelimit";
 
@@ -42,7 +42,7 @@ export function logCost(model: string, feature: "chat" | "draw" | "launch", usag
 export async function guardAI(who = "Believer and Purity", opts: { cost?: number; needsPass?: boolean } = {}): Promise<{ uid: string; freeLeft?: number; premium: boolean } | { error: Response }> {
   const plural = who.includes(" and ");
   if (!process.env.ANTHROPIC_API_KEY) return { error: json({ error: `${who} ${plural ? "are" : "is"} coming soon. Check back shortly!` }, 503) };
-  const { data: { user } } = await supabaseServer().auth.getUser();
+  const user = await currentUser();
   if (!user) return { error: json({ error: `Please sign in to talk with ${who}.` }, 401) };
   if (!user.email_confirmed_at && !user.phone_confirmed_at) return { error: json({ error: `Please confirm your email first. Open the email from AUTISTIK Hub and press Confirm, then try again.` }, 403) };
   // No more than 12 AI requests a minute per account, so a script can't burn through the credit.
