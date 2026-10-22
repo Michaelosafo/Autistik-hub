@@ -8,6 +8,7 @@ import { getMarkets } from "@/lib/market";
 import { LINKS, PHOTOS } from "@/lib/site";
 import { getBoard, trending } from "@/lib/board";
 import { currentUser } from "@/lib/supabase/server";
+import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,7 @@ const usd = (v: number | null | undefined) => (v == null ? "–" : v >= 1e6 ? `$
 
 /** The website's front page: what AUTISTIK is, with one button into the App. */
 export default async function Home() {
-  const [board, markets, user] = await Promise.all([getBoard(60), getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }]), currentUser().catch(() => null)]);
+  const [board, markets, user, { owner }] = await Promise.all([getBoard(60), getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }]), currentUser().catch(() => null), adminState()]);
   const m = markets[TOKEN_ADDRESS.toLowerCase()];
 
   return (
@@ -47,6 +48,7 @@ export default async function Home() {
         <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
         {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
+        {user && owner && <Link href="/admin" className="lp-signin lp-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
         {user
           ? <Link href="/me" className="lp-signin" aria-label="My profile"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></Link>
           : <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}

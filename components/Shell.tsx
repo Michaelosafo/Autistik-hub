@@ -103,7 +103,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
 
   // The front page is the website (its own header, no menus); trading tools open inside the App frame.
   if (path === "/") return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
-  if (isAppPath(path)) return <><Sprites /><AppShell>{children}</AppShell></>;
+  if (isAppPath(path)) return <><Sprites /><AppShell admin={!!me?.is_admin}>{children}</AppShell></>;
 
   return (
     <>
@@ -181,6 +181,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                     </button>
                     <InstallApp />
                   </div>
+                  {me?.is_admin && <Link className="me-row adm" href="/admin" onClick={() => setMenu(false)}><Icon id="i-adm" /><span>Admin<small>Everything happening on the site</small></span></Link>}
                   {me && <Link className="me-row" href="/security" onClick={() => setMenu(false)}><Icon id="i-safe" /><span>Account security<small>Your authenticator app</small></span></Link>}
                   {me
                     ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>

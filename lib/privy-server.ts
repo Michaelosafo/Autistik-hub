@@ -69,3 +69,32 @@ export async function walletMember(): Promise<WalletMember | null> {
   const w = await ensureMemberWallet(user.email);
   return { email: user.email.toLowerCase(), evm: w?.evm ?? null, sol: w?.sol ?? null };
 }
+
+/** Admin only: the newest built-in wallets (up to `max` members), for the admin activity view. Null if Privy isn't set up. */
+export async function recentMemberWallets(max = 300): Promise<{ total: number; more: boolean; rows: { at: number; email: string | null; evm: string | null; sol: string | null }[] } | null> {
+  if (!privyServerReady()) return null;
+  const rows: { at: number; email: string | null; evm: string | null; sol: string | null }[] = [];
+  let cursor: string | null = null, more = false;
+  try {
+    for (let page = 0; page < Math.ceil(max / 100); page++) {
+      const r: Response = await fetch(`https://api.privy.io/v1/users?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {
+        headers: { "privy-app-id": PRIVY_APP_ID!, authorization: "Basic " + Buffer.from(`${PRIVY_APP_ID}:${SECRET}`).toString("base64") },
+        cache: "no-store", signal: AbortSignal.timeout(6000),
+      });
+      if (!r.ok) return rows.length ? { total: rows.length, more: true, rows } : null;
+      const d = await r.json();
+      for (const u of d?.data || []) {
+        const w = walletsOf(u);
+        if (!w.evm && !w.sol) continue;
+        rows.push({ at: Number(u.created_at) * 1000, email: (u.linked_accounts || []).find((a: any) => a?.type === "email")?.address ?? null, ...w });
+      }
+      cursor = d?.next_cursor || null;
+      more = !!cursor;
+      if (!cursor) break;
+    }
+  } catch {
+    if (!rows.length) return null;
+  }
+  rows.sort((a, b) => b.at - a.at);
+  return { total: rows.length, more, rows };
+}

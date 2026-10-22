@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { parseUnits } from "viem";
 import type { Wallet } from "@wallet-standard/base";
 import { CHAINS, SOL_POOL_COST, type LaunchPlan } from "@/lib/launchpad";
+import { reportActivity } from "@/lib/activity-client";
 import { connectSol, signAndSend, solErr, solLaunchApi, solWallets, type SolWallet } from "@/lib/sol-wallet";
 
 const c = CHAINS.solana;
@@ -131,7 +132,8 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
     try {
       setMsg("Confirm in your wallet…");
       const r = await solLaunchApi<{ tx: string; lpMint: string }>("add", { owner: sw.account.address, pool: pool.pool, side: last, amount: last === "sol" ? amtSol : amtTok, decimals: pool.decimals });
-      await signAndSend(sw, r.tx);
+      const sig = await signAndSend(sw, r.tx);
+      reportActivity("liquidity", "solana", sig, `Added ${amtSol} SOL + ${amtTok} ${pool.symbol} on Solana`);
       setLp(r.lpMint); setAmtSol(""); setAmtTok("");
       setMsg("✅ Liquidity added. The LP tokens are in your wallet.");
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
@@ -143,7 +145,7 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
     setBusy(true); setMsg("Confirm the burn in your wallet…");
     try {
       const r = await solLaunchApi<{ tx: string }>("burn", { owner: sw.account.address, lpMint: lp });
-      await signAndSend(sw, r.tx);
+      reportActivity("lp-burn", "solana", await signAndSend(sw, r.tx), "Burned LP tokens on Solana");
       setLp(null); setMsg("🔥 LP tokens burned. This liquidity can never be removed.");
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
   }
