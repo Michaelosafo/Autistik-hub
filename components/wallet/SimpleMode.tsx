@@ -16,9 +16,9 @@ const PRESETS = [5, 10, 25, 50, 100];
 const badgeFromRisk = (r: TokenInfo["risk"]): Badge => (r.honeypot ? "scam" : r.level === "danger" ? "risky" : r.level === "ok" ? "safer" : "caution");
 
 /** Beginner screen: find a coin, see if it looks safe, buy with a dollar amount in one tap, sell in one tap. */
-export default function SimpleMode({ c, onChain, signer, owner, holdings, balanceOf, onAdd, onDone, startBuy }: {
+export default function SimpleMode({ c, onChain, signer, owner, holdings, balanceOf, onAdd, onDone, startBuy, startUsd }: {
   c: WChain; onChain: (k: WChainKey) => void; signer: Signer; owner: string; holdings: Holding[] | null;
-  balanceOf: (a: string) => Holding | undefined; onAdd: (t: WToken) => void; onDone: () => void; startBuy?: string;
+  balanceOf: (a: string) => Holding | undefined; onAdd: (t: WToken) => void; onDone: () => void; startBuy?: string; startUsd?: number;
 }) {
   const [lists, setLists] = useState<Lists | null>(null);
   const [tab, setTab] = useState<"trending" | "fresh">("trending");
@@ -111,7 +111,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
         ))}
       </section>
 
-      {buy && <BuySheet c={c} signer={signer} owner={owner} coin={buy} nat={nat} onAdd={onAdd} onMoney={() => { setBuy(null); setMoney(true); }} onClose={() => setBuy(null)} onDone={onDone} />}
+      {buy && <BuySheet c={c} signer={signer} owner={owner} coin={buy} nat={nat} startUsd={buy.token === startBuy ? startUsd : undefined} onAdd={onAdd} onMoney={() => { setBuy(null); setMoney(true); }} onClose={() => setBuy(null)} onDone={onDone} />}
       {sell && <SellSheet c={c} signer={signer} owner={owner} h={sell} onClose={() => setSell(null)} onDone={onDone} />}
       {money && (
         <Sheet title={`Add money on ${c.name}`} onClose={() => setMoney(false)}>
@@ -153,12 +153,13 @@ function useQuote(c: WChain, tokenIn: string, tokenOut: string, raw: bigint | nu
   return { q, err, busy };
 }
 
-function BuySheet({ c, signer, owner, coin, nat, onAdd, onMoney, onClose, onDone }: {
-  c: WChain; signer: Signer; owner: string; coin: Partial<Coin> & { token: string }; nat: Holding | undefined;
+function BuySheet({ c, signer, owner, coin, nat, startUsd, onAdd, onMoney, onClose, onDone }: {
+  c: WChain; signer: Signer; owner: string; coin: Partial<Coin> & { token: string }; nat: Holding | undefined; startUsd?: number;
   onAdd: (t: WToken) => void; onMoney: () => void; onClose: () => void; onDone: () => void;
 }) {
   const [info, setInfo] = useState<TokenInfo | null>(null); const [infoErr, setInfoErr] = useState("");
-  const [usdAmt, setUsdAmt] = useState(10); const [custom, setCustom] = useState("");
+  const [usdAmt, setUsdAmt] = useState(startUsd && PRESETS.includes(startUsd) ? startUsd : 10);
+  const [custom, setCustom] = useState(startUsd && !PRESETS.includes(startUsd) ? String(startUsd) : "");
   const [ack, setAck] = useState(false); const [step, setStep] = useState(""); const [err, setErr] = useState(""); const [done, setDone] = useState<string | null>(null);
   useEffect(() => { api<{ token: TokenInfo }>("token", { chain: c.key, address: coin.token }).then((d) => { setInfo(d.token); onAdd(d.token); }).catch((e) => setInfoErr(e.message)); }, [c.key, coin.token]); // eslint-disable-line react-hooks/exhaustive-deps
   const natUsd = nat?.priceUsd ?? null;

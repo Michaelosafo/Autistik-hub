@@ -11,12 +11,15 @@ export const metadata = {
   description: "Your own self-custody crypto wallet: buy, sell and swap any token on BNB Chain, Base, Ethereum, Arbitrum and Solana.",
 };
 
-export default async function WalletPage({ searchParams }: { searchParams: { chain?: string; buy?: string; quick?: string } }) {
+/** A dollar amount to start a Buy with (from the chess arena), when it is a sensible one. */
+const usdOf = (v?: string) => { const x = Number(v); return isFinite(x) && x > 0 && x <= 100_000 ? Math.round(x * 100) / 100 : undefined; };
+
+export default async function WalletPage({ searchParams }: { searchParams: { chain?: string; buy?: string; quick?: string; usd?: string } }) {
   // Privy's app ID is public (it only names the app). Read at request time so adding it in Vercel needs no code change.
   const appId = PRIVY_APP_ID;
   const member = appId ? await walletMember() : null;
   const { admin } = await adminState();
-  const start = { chain: searchParams.chain?.slice(0, 12), buy: searchParams.buy?.trim().slice(0, 64), quick: searchParams.quick === "1" };
+  const start = { chain: searchParams.chain?.slice(0, 12), buy: searchParams.buy?.trim().slice(0, 64), quick: searchParams.quick === "1", usd: usdOf(searchParams.usd) };
   return (
     <div className="stack" style={{ maxWidth: 1320 }}>
       <h1 className="sr-only">AUTISTIK Wallet</h1>

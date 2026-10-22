@@ -2081,3 +2081,59 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 @media (min-width:700px){ .sc-sheet .sc-sheet-in{border-radius:26px;border-bottom:1px solid #2a2537;max-height:80dvh} }
 @media (max-width:420px){ .sc-amt{font-size:2.3em} .sc-head h1,.sc-tab{font-size:1.3em} }
 @media (prefers-reduced-motion:reduce){ .sc-flip:hover{transform:none} }
+
+/* ===== Chess arena: the big game table ===== */
+.chess-wrap.ar-table{max-width:900px}
+.cb-piece.me .cb-lift{animation:none;transform:translateY(-6px) scale(1.08)}
+.cb-me-glow{animation:cb-check 1.6s ease-in-out infinite}
+.cb-you{fill:#3B2410;font:900 14px var(--f-body);letter-spacing:.06em}
+.cb-pop{animation:cb-pop .5s cubic-bezier(.2,.9,.3,1.4) both}
+.cb-pop.newest{animation:cb-pop .5s cubic-bezier(.2,.9,.3,1.4) both,cb-bob 1.4s ease-in-out .5s infinite}
+.cb-pop-t{fill:#fff;font:900 15px var(--f-body)}
+@keyframes cb-pop{from{opacity:0;transform:translateY(14px) scale(.6)}to{opacity:1;transform:none}}
+@keyframes cb-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.cb-enter{cursor:pointer;outline:none}
+.cb-enter rect{animation:cb-check 1.4s ease-in-out infinite}
+.cb-enter:hover rect,.cb-enter:focus-visible rect{fill:rgba(255,213,74,.5);animation:none}
+.cb-enter-plus{fill:#8A5A1E;font:900 54px var(--f-body)}
+.cb-enter-t{fill:#8A5A1E;font:900 13px var(--f-body);letter-spacing:.12em}
+[data-calm="on"] .cb-me-glow,[data-calm="on"] .cb-pop,[data-calm="on"] .cb-enter rect,[data-calm="on"] .ar-ticker{animation:none!important}
+.ar-ticker{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:12px;background:var(--surface-2);font-size:.9em;border-left:5px solid var(--line);animation:cb-pop .4s ease-out both}
+.ar-ticker.buy{border-left-color:#2BC48F}.ar-ticker.sell{border-left-color:#F0563A}
+.ar-ticker:disabled{cursor:default}
+.ar-ticker:focus-visible{outline:2px solid var(--violet)}
+.ar-ticker .live-dot{flex:none}
+.ar-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:10px}
+.ar-me,.ar-log{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:14px;background:var(--surface-2)}
+.ar-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.92em}
+.ar-h .muted{font-size:.84em}
+.ar-me p{margin:0;font-size:.9em}
+.ar-me-card{all:unset;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px;border-radius:12px;background:var(--surface);border:2px solid #FFB300}
+.ar-me-card:focus-visible{outline:2px solid var(--violet)}
+.ar-me-card .grow{display:flex;flex-direction:column;gap:1px}
+.ar-me-card small{color:var(--muted);font-size:.8em}
+.ar-me-glyph{flex:none;width:56px;height:56px;display:grid;place-items:center;border-radius:12px;background:radial-gradient(circle,#FFE58F,#FFB300);font:400 42px "Segoe UI Symbol","Noto Sans Symbols 2","DejaVu Sans","Apple Symbols",serif;color:#1A0D09}
+.ar-enter{all:unset;box-sizing:border-box;cursor:pointer;text-align:center;padding:13px 16px;border-radius:12px;font:800 1em var(--f-display);color:#3B2410;background:linear-gradient(180deg,#FFE58F,#F5B82E);box-shadow:0 4px 0 #B8860B;transition:transform .1s}
+.ar-enter:active{transform:translateY(3px);box-shadow:0 1px 0 #B8860B}
+.ar-enter:focus-visible{outline:3px solid var(--violet);outline-offset:2px}
+.ar-enter.small{padding:9px 14px;font-size:.9em;align-self:flex-start}
+.ar-link{all:unset;cursor:pointer;font-size:.8em;color:var(--muted);text-decoration:underline}
+.ar-find{display:flex;gap:6px}
+.ar-find input{flex:1;min-width:0;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:500 .82em var(--f-mono)}
+.ar-log ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;max-height:300px;overflow:auto}
+.ar-log li button{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:10px;background:var(--surface);font-size:.86em}
+.ar-log li button:focus-visible{outline:2px solid var(--violet)}
+.ar-log li button i{font-style:normal;font-size:1.3em;width:26px;height:26px;display:grid;place-items:center;border-radius:8px}
+.ar-log li button.buy i{background:var(--teal-soft);color:var(--teal)}
+.ar-log li button.sell i{background:var(--alert-soft);color:var(--alert)}
+.ar-log li button small{white-space:nowrap}
+.ar-sheet .tx-cta{text-decoration:none}
+.ar-sheet .tx-cta.off{opacity:.45;pointer-events:none}
+@media (max-width:700px){
+  .ar-panels{grid-template-columns:1fr}
+  .card:has(> .chess) .chess-wrap.ar-table{margin-inline:-6px;width:calc(100% + 12px)}
+  .cb-pop-t{font-size:18px}
+  .cb-you{font-size:16px}
+}
+.cb-piece.me.buy .cb-glyph{stroke:#8A5A1E;stroke-width:4}
+.ar-sheet .tx-cta.buy{background:#0ECB81;color:#fff;padding:14px;border-radius:12px}

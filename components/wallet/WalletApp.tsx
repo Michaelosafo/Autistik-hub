@@ -18,7 +18,7 @@ type OType = "market" | "limit" | "stop";
 type BTab = "assets" | "orders" | "history" | "convert" | "send" | "receive" | "security";
 
 /** AUTISTIK Trade: an exchange-style screen on top of the member's own wallet. */
-export default function WalletApp({ signer, start, member }: { signer: Signer; start: { chain?: string; buy?: string; quick?: boolean }; member?: Member | null }) {
+export default function WalletApp({ signer, start, member }: { signer: Signer; start: { chain?: string; buy?: string; quick?: boolean; usd?: number }; member?: Member | null }) {
   const [chainKey, setChainKey] = useState<WChainKey>(start.chain && start.chain in WCHAINS ? (start.chain as WChainKey) : "bsc");
   const c = WCHAINS[chainKey];
   const owner = c.kind === "solana" ? signer.sol?.address : signer.evm?.address;
@@ -101,7 +101,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
     <div className="tx">
       {toggle}
       {missing && <div className="notice warn">{missing}</div>}
-      {owner && <SimpleMode c={c} onChain={switchChain} signer={signer} owner={owner} holdings={holdings} balanceOf={balanceOf} onAdd={addCustom} onDone={load} startBuy={start.quick && start.buy && start.chain === chainKey ? start.buy : undefined} />}
+      {owner && <SimpleMode c={c} onChain={switchChain} signer={signer} owner={owner} holdings={holdings} balanceOf={balanceOf} onAdd={addCustom} onDone={load} startBuy={start.quick && start.buy && start.chain === chainKey ? start.buy : undefined} startUsd={start.usd} />}
     </div>
   );
 
