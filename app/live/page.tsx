@@ -3,6 +3,7 @@ import Art from "@/components/Art";
 import ProHero from "@/components/ProHero";
 import SessionForms from "@/components/SessionForms";
 import JoinLive from "@/components/live/JoinLive";
+import SendTokens from "@/components/live/SendTokens";
 import LiveControls from "@/components/live/LiveControls";
 import MemberName from "@/components/members/MemberName";
 import { adminState } from "@/lib/admin";
@@ -87,6 +88,7 @@ export default async function LivePage() {
             </div>
             <JoinLive sessionId={s.id} link={s.join_link} uid={user?.id ?? null} wallet={wallet} joined={mine.has(s.id)} live />
             {who(s)}
+            {mine.has(s.id) && <SendTokens sessionId={s.id} />}
             {admin && <LiveControls id={s.id} live ended={!!s.ended} />}
           </div>
         ))}
