@@ -84,6 +84,16 @@ export default function WalletPicker() {
             {!shown.length && <div className="wp-empty">No wallet called &ldquo;{q}&rdquo;. Try WalletConnect below: it works with 300+ wallets.</div>}
           </div>
           {s.error && <div className="wp-err" role="alert">{s.error}</div>}
+          {mobile && (s.error || last) && (
+            <div className="wp-label" style={{ marginTop: 8 }}>Still not connecting? Open this site inside your wallet app</div>
+          )}
+          {mobile && (s.error || last) && TOP_WALLETS.filter((w) => w.dapp).slice(0, 5).map((w) => (
+            <a key={w.id} className="wp-row" href={w.dapp!(location.href)}>
+              <img src={`/wallets/${w.id}.svg`} alt="" width={40} height={40} loading="lazy" decoding="async" />
+              <span className="wp-row-t"><b>{w.name}</b><small>Opens autistik.io in the app&apos;s browser</small></span>
+              <i className="wp-chev" aria-hidden="true" />
+            </a>
+          ))}
         </div>
 
         <aside className="wp-side" aria-label="About wallets">
