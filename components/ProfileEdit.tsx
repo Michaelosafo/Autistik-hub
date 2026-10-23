@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { PROFILE_COLORS } from "@/lib/badges";
-import { HANDLE } from "@/lib/names";
+import { HANDLE, handleOf } from "@/lib/names";
 
 /** Change your Hub name and colour. The database only lets you change these two things, and only on your own profile. */
 export default function ProfileEdit({ alias: a0, color: c0, handle: h0 }: { alias: string; color: string; handle?: string | null }) {
@@ -28,7 +28,7 @@ export default function ProfileEdit({ alias: a0, color: c0, handle: h0 }: { alia
     if (!user) { setBusy(false); setMsg("Please sign in again."); return; }
     const { error } = await sb.from("profiles").update(h0 != null && h !== h0 ? { alias: name, color, handle: h } : { alias: name, color }).eq("id", user.id);
     setBusy(false);
-    if (error) { setMsg(/reserved|team|already has|taken|handle needs/i.test(error.message) ? error.message : "Couldn't save. Try a different name."); return; }
+    if (error) { setMsg(/permission denied/i.test(error.message) ? "Couldn't change your @handle just yet. Try again in a minute." : error.message.length < 140 ? error.message : "Couldn't save. Try a different name."); return; }
     setMsg("Saved.");
     router.refresh();
   }
@@ -58,6 +58,8 @@ export default function ProfileEdit({ alias: a0, color: c0, handle: h0 }: { alia
       {h0 != null && (
         <label className="field"><span>@handle</span>
           <div className="handle-in"><span aria-hidden="true">@</span><input type="text" value={handle} maxLength={20} autoCapitalize="none" autoCorrect="off" spellCheck={false} onChange={(e) => setHandle(e.target.value.replace(/[^A-Za-z0-9_]/g, "").toLowerCase())} /></div>
+          <button className="btn small" type="button" style={{ alignSelf: "flex-start" }} onClick={() => setHandle(handleOf(alias))}>Make my @handle match my name</button>
+          <span className="muted" style={{ fontSize: ".82em" }}>People send you tokens by this name. It always leads to your same wallet, even after you change it.</span>
         </label>
       )}
       <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}>

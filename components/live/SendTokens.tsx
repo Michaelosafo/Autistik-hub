@@ -15,7 +15,7 @@ type Person = { id: string | null; alias: string; handle: string | null; color?:
  * You sign the transfer in your own wallet; the site never holds funds. Members' wallet addresses stay hidden:
  * you pick the name, and only the transfer in your wallet shows the address.
  */
-export default function SendTokens({ sessionId, preset }: { sessionId: string; preset?: { id: string; alias: string; handle: string | null } }) {
+export default function SendTokens({ sessionId = "", preset }: { sessionId?: string; preset?: { id: string; alias: string; handle: string | null } }) {
   const [q, setQ] = useState(preset?.handle ? `@${preset.handle}` : "");
   const [found, setFound] = useState<Person[]>([]);
   const [to, setTo] = useState<Person | null>(null);
@@ -35,7 +35,7 @@ export default function SendTokens({ sessionId, preset }: { sessionId: string; p
     setTo(null); setDone("");
     if (q.trim().length < 2) { setFound([]); return; }
     const t = setTimeout(async () => {
-      const r = await fetch(`/api/tip/resolve?session=${sessionId}&q=${encodeURIComponent(q.trim())}`);
+      const r = await fetch(`/api/tip/resolve?${sessionId ? `session=${sessionId}` : "scope=all"}&q=${encodeURIComponent(q.trim())}`);
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { setMsg(d.error || "Couldn't search."); setFound([]); return; }
       setMsg(""); setFound(d.people || []);
@@ -60,7 +60,7 @@ export default function SendTokens({ sessionId, preset }: { sessionId: string; p
       if (bal < value) { setMsg(`You only have ${Number(formatUnits(bal, tok.decimals)).toLocaleString()} ${tok.symbol} in this wallet.`); return; }
       const hash = await wc.writeContract({ account, address: TOKEN_ADDRESS as `0x${string}`, abi: erc20Abi, functionName: "transfer", args: [getAddress(to.wallet), value] });
       setMsg("Sent. Confirming on-chain…");
-      fetch("/api/tip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hash, session: sessionId }) }).catch(() => {});
+      fetch("/api/tip", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hash, session: sessionId || null }) }).catch(() => {});
       setDone(hash); setMsg(""); setQ(""); setFound([]); setTo(null);
     } catch (e: any) {
       setMsg(e?.shortMessage?.includes("rejected") || /reject|denied/i.test(e?.message || "") ? "You cancelled in your wallet. Nothing was sent." : e?.shortMessage || "The transfer didn't go through.");
@@ -70,14 +70,14 @@ export default function SendTokens({ sessionId, preset }: { sessionId: string; p
   return (
     <div className="card stack" style={{ gap: 8 }}>
       <h3>Send {tok?.symbol ? `$${tok.symbol}` : "tokens"}</h3>
-      <p className="muted" style={{ fontSize: ".9em" }}>Type a name or @handle of someone in this session, or paste a wallet address. You approve the transfer in your own wallet.</p>
+      <p className="muted" style={{ fontSize: ".9em" }}>{sessionId ? "Type a name or @handle of someone in this session, or paste a wallet address." : "Type the name or @handle of any AUTISTIK member. Their name always leads to their own wallet, even if they rename themselves."} You approve the transfer in your own wallet.</p>
       <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, @handle or 0x… wallet" aria-label="Who to send to" />
       {!to && found.map((p, i) => (
         <button key={(p.id || p.wallet) + i} type="button" className="btn" onClick={() => setTo(p)} style={{ justifyContent: "flex-start", textAlign: "left" }}>
           <b>{p.alias}</b>{p.handle && <span className="muted"> @{p.handle}</span>}{!p.member && <span className="muted"> · wallet address</span>}
         </button>
       ))}
-      {!to && q.trim().length >= 2 && !found.length && !msg && <span className="muted" style={{ fontSize: ".88em" }}>No one in this session by that name. You can also paste a wallet address.</span>}
+      {!to && q.trim().length >= 2 && !found.length && !msg && <span className="muted" style={{ fontSize: ".88em" }}>{sessionId ? "No one in this session by that name." : "No AUTISTIK member with a wallet by that name."} You can also paste a wallet address.</span>}
       {to && (
         <div className="stack" style={{ gap: 8 }}>
           <div className="notice">To: <b>{to.alias}</b>{to.handle && <> @{to.handle}</>}</div>
