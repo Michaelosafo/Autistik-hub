@@ -1,0 +1,370 @@
+WEBVTT
+
+1
+00:00:00.964 --> 00:00:02.103
+Welcome to Autistik.
+
+2
+00:00:02.103 --> 00:00:06.487
+In this video you will launch your very own coin on BNB Chain, step by step.
+
+3
+00:00:06.487 --> 00:00:07.682
+No coding is needed.
+
+4
+00:00:07.682 --> 00:00:12.578
+Everything on screen uses demo data and a demo wallet, so nothing here is real money.
+
+5
+00:00:12.578 --> 00:00:16.450
+But the screens are the same ones you will use on autistik dot I O.
+
+6
+00:00:17.151 --> 00:00:18.580
+First, connect your wallet.
+
+7
+00:00:18.580 --> 00:00:22.073
+Tap Connect Wallet at the top right, then choose your wallet app.
+
+8
+00:00:22.073 --> 00:00:25.302
+Or use the Autistik wallet with your email, Google or Apple.
+
+9
+00:00:25.302 --> 00:00:29.272
+Your keys stay with you, and Autistik will never ask for your seed phrase.
+
+10
+00:00:29.903 --> 00:00:33.102
+Before you launch, you need two things in the same wallet.
+
+11
+00:00:33.102 --> 00:00:36.301
+About twenty dollars of the Autistik token, on BNB Chain.
+
+12
+00:00:36.301 --> 00:00:40.107
+And some BNB, which goes into your coin's trading pool as liquidity.
+
+13
+00:00:40.107 --> 00:00:41.541
+Launching itself is free.
+
+14
+00:00:41.541 --> 00:00:46.119
+A small launch contribution of about three dollars is taken out of your liquidity.
+
+15
+00:00:46.783 --> 00:00:48.290
+Now, how do you add funds?
+
+16
+00:00:48.290 --> 00:00:50.609
+Open the Wallet menu and tap My wallet.
+
+17
+00:00:50.609 --> 00:00:51.768
+Then press Receive.
+
+18
+00:00:51.768 --> 00:00:54.145
+You will see your address and a QR code.
+
+19
+00:00:54.145 --> 00:00:56.058
+The steps are shown right there.
+
+20
+00:00:56.058 --> 00:00:58.202
+Buy BNB on an exchange like Binance.
+
+21
+00:00:58.202 --> 00:01:03.304
+Withdraw it to your address, and pick the network called BNB Smart Chain, B E P twenty.
+
+22
+00:01:03.304 --> 00:01:05.158
+It shows up in a minute or two.
+
+23
+00:01:05.846 --> 00:01:08.327
+To get the Autistik token, use the Swap page.
+
+24
+00:01:08.327 --> 00:01:10.091
+Pay with BNB, and get Autistik.
+
+25
+00:01:10.091 --> 00:01:11.911
+We cover that in our Swap video.
+
+26
+00:01:11.911 --> 00:01:15.715
+Once your funds arrive, your balance shows at the top of the wallet.
+
+27
+00:01:16.339 --> 00:01:17.249
+Now let's launch.
+
+28
+00:01:17.249 --> 00:01:19.712
+Open the Launch menu, and tap Launch a token.
+
+29
+00:01:19.712 --> 00:01:25.870
+You have two ways to launch: a Quick launch form, or Launch with Autistik, where the assistant asks you questions.
+
+30
+00:01:25.870 --> 00:01:27.369
+We will use the quick form.
+
+31
+00:01:27.369 --> 00:01:28.761
+It is free and unlimited.
+
+32
+00:01:29.357 --> 00:01:32.541
+There is a second way to launch, with the Autistik assistant.
+
+33
+00:01:32.541 --> 00:01:33.898
+Tap Launch with Autistik.
+
+34
+00:01:33.898 --> 00:01:35.203
+You get two chats a day.
+
+35
+00:01:35.203 --> 00:01:39.378
+It asks one question at a time, by text or by voice with the microphone button.
+
+36
+00:01:39.378 --> 00:01:44.024
+Pick the chain, then answer with the name, the ticker, the liquidity and how to lock it.
+
+37
+00:01:44.024 --> 00:01:47.051
+It builds the same launch plan for you to check and sign.
+
+38
+00:01:47.051 --> 00:01:48.930
+It never asks for your seed phrase.
+
+39
+00:01:48.930 --> 00:01:51.018
+If you prefer a form, use Quick launch.
+
+40
+00:01:54.435 --> 00:01:55.637
+Type your token name.
+
+41
+00:01:55.637 --> 00:01:57.355
+We will call ours Calm Otter.
+
+42
+00:01:57.355 --> 00:02:00.790
+Then the ticker, which is the short symbol people will see.
+
+43
+00:02:00.790 --> 00:02:02.107
+We will use O T T E R.
+
+44
+00:02:02.756 --> 00:02:05.807
+Total supply is one billion by default, and it is fixed.
+
+45
+00:02:05.807 --> 00:02:07.005
+Nobody can mint more.
+
+46
+00:02:07.005 --> 00:02:09.838
+Your free share is the part of the supply you keep.
+
+47
+00:02:09.838 --> 00:02:12.399
+Five percent is fine, and the limit is twenty.
+
+48
+00:02:12.399 --> 00:02:14.415
+The rest goes into the trading pool.
+
+49
+00:02:15.035 --> 00:02:15.984
+Next, liquidity.
+
+50
+00:02:15.984 --> 00:02:20.193
+This is how much BNB goes into the pool so people can trade your coin.
+
+51
+00:02:20.193 --> 00:02:21.261
+Any amount works.
+
+52
+00:02:21.261 --> 00:02:23.455
+A bigger pool means steadier prices.
+
+53
+00:02:23.455 --> 00:02:25.411
+We will use zero point five BNB.
+
+54
+00:02:26.018 --> 00:02:28.117
+Now the most important choice for trust.
+
+55
+00:02:28.117 --> 00:02:31.894
+Tax is optional, ten percent at most, and it can only be lowered later.
+
+56
+00:02:31.894 --> 00:02:37.350
+Under Liquidity, you can burn it forever, or lock it in the Autistik Locker for six months or one year.
+
+57
+00:02:37.350 --> 00:02:40.603
+Either way, nobody, not even you, can pull the liquidity out.
+
+58
+00:02:40.603 --> 00:02:42.177
+Buyers look for exactly that.
+
+59
+00:02:42.177 --> 00:02:43.069
+We will burn it.
+
+60
+00:02:43.695 --> 00:02:44.984
+Press Review launch plan.
+
+61
+00:02:44.984 --> 00:02:48.749
+Autistik shows your whole plan in plain words, before you sign anything.
+
+62
+00:02:48.749 --> 00:02:57.464
+The supply, what you keep, what goes into the pool, how the liquidity is handled, that there is no tax, and a zero point three percent trade fee that supports Autistik.
+
+63
+00:02:58.087 --> 00:02:59.049
+Read the warning.
+
+64
+00:02:59.049 --> 00:03:03.068
+Token prices can go to zero, so only use money you can afford to lose.
+
+65
+00:03:03.068 --> 00:03:06.181
+Tick the box to say you understand, then press Launch.
+
+66
+00:03:06.181 --> 00:03:08.332
+Your wallet asks you to confirm once.
+
+67
+00:03:08.332 --> 00:03:09.916
+That is the only signature.
+
+68
+00:03:10.519 --> 00:03:11.532
+Your coin is live!
+
+69
+00:03:11.532 --> 00:03:16.990
+Autistik shows its contract address, a link to the chart on DexScreener, and a link to trade it.
+
+70
+00:03:16.990 --> 00:03:18.397
+Now press Start trading.
+
+71
+00:03:18.397 --> 00:03:21.323
+Until you do, only wallets you whitelisted can buy.
+
+72
+00:03:21.323 --> 00:03:24.080
+It also opens by itself after twenty four hours.
+
+73
+00:03:24.080 --> 00:03:29.651
+For the first five minutes, each buy is limited to one percent of the supply, to stop sniper bots.
+
+74
+00:03:30.254 --> 00:03:31.419
+Here is the good part.
+
+75
+00:03:31.419 --> 00:03:34.649
+Your coin is added to the Autistik Launch Pad automatically.
+
+76
+00:03:34.649 --> 00:03:39.837
+Open your token page to see its price, liquidity and chart, and a way to promote it so it trends.
+
+77
+00:03:39.837 --> 00:03:45.503
+It also appears on the Trending page, under New on the Launch Pad, where everyone on Autistik can find it.
+
+78
+00:03:46.157 --> 00:03:52.215
+It also shows up inside every member's wallet, in a list called New on Autistik, so they can buy it in a few taps.
+
+79
+00:03:52.772 --> 00:03:54.681
+Say a friend wants to buy your coin.
+
+80
+00:03:54.681 --> 00:03:56.538
+They open their wallet and tap it.
+
+81
+00:03:56.538 --> 00:04:00.834
+Autistik runs a safety check and shows a plain warning when a coin is brand new.
+
+82
+00:04:00.834 --> 00:04:03.751
+They pick an amount, tick the risk box, and press Buy.
+
+83
+00:04:03.751 --> 00:04:05.448
+Then it appears under My coins.
+
+84
+00:04:09.404 --> 00:04:10.808
+They can also use our Swap.
+
+85
+00:04:10.808 --> 00:04:16.893
+They paste your contract address into the token search, and Autistik finds your coin on the right network by itself.
+
+86
+00:04:16.893 --> 00:04:18.713
+Then they type an amount and swap.
+
+87
+00:04:18.713 --> 00:04:21.105
+The best price is found across the exchanges.
+
+88
+00:04:25.519 --> 00:04:26.084
+That is it.
+
+89
+00:04:26.084 --> 00:04:30.191
+You launched a coin, and anyone can find it, scan it, and trade it on Autistik.
+
+90
+00:04:30.191 --> 00:04:35.223
+Share your contract address, never promise profits, and never share your seed phrase with anyone.
+
+91
+00:04:35.223 --> 00:04:37.790
+And if you get stuck, tap Ask the bot at the top.
+
+92
+00:04:37.790 --> 00:04:40.871
+Thanks for watching, and welcome to the Autistik community.
+

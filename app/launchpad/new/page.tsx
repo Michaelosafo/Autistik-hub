@@ -11,6 +11,7 @@ import AddLiquidity from "@/components/AddLiquidity";
 import PadDeploy from "@/components/PadDeploy";
 import AdminListTokens from "@/components/AdminListTokens";
 import ProHero from "@/components/ProHero";
+import HowToVideo from "@/components/HowToVideo";
 import { liveChains } from "@/lib/launchpad";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,7 @@ export default async function NewLaunchPage() {
       <ProHero tone="coral" kicker="AUTISTIK · LAUNCH PAD" title="Launch your own token" live={!access.public ? "Coming soon" : liveChains(pads).length ? "Live" : false}
         text="Free to launch, live in one step: liquidity added and locked, anti-sniper protection and your own first buy. You need $20 of AUTISTIK in your wallet."
         stats={[["Free", "to launch"], ["≤10%", "tax you set"], ["30%", "max first buy"], ["6m · 1y", "lock or burn"]]} />
+      <HowToVideo title="Watch: launch your coin, step by step" src="/videos/launch-your-coin.mp4" poster="/videos/launch-your-coin.jpg" captions="/videos/launch-your-coin.vtt" minutes={5} />
       <Guide id="launch" title="Launch a coin, in 3 steps" steps={[
         <>Have about <b>$20 of $AUTISTIK</b> in your wallet, plus the {`BNB`} you want to put in the trading pool.</>,
         <>Tell Autistik the name and ticker (or use the quick form). Choose tax (optional, up to 10%), whitelist and lock time.</>,
