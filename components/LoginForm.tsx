@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { MIN_PASSWORD, authMessage } from "@/lib/auth";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 import type { Providers } from "@/lib/auth-providers";
+import NameSuggest from "@/components/NameSuggest";
 import { memeName, nicknameProblem } from "@/lib/names";
 import HumanCheck, { TURNSTILE_SITE_KEY, type HumanCheckHandle } from "@/components/HumanCheck";
 
@@ -208,6 +209,7 @@ export default function LoginForm({ next, initialError, initialMode, providers =
                 <button className="btn small" type="button" onClick={() => setNick(memeName())} aria-label="Suggest another meme name">🎲</button>
               </div>
             </label>
+            <NameSuggest onPick={(p) => setNick(p.alias)} />
             <span className="muted" style={{ fontSize: ".82em" }}>This is how members see and find you, with an @handle like on X. Your email is never shown to anyone. You can change it later.</span>
           </div>
         )}
