@@ -2608,3 +2608,10 @@ h1 .team-badge{font-size:.38em}
 .holdings li{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}
 .holdings li:first-child{border-top:0}
 @media (max-width:640px){.share-modes{grid-template-columns:1fr}}
+.lp-why-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.lp-steps{list-style:none;margin:14px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.lp-steps li{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:16px;background:rgba(240,185,11,.06);border:1px solid rgba(240,185,11,.22)}
+.lp-steps li>span{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--gold,#F0B90B);color:#17141f;font-weight:800;flex:none}
+.lp-steps b{display:block;color:#F4EEFF} .lp-steps small{display:block;color:#A9A4BC;font-size:.86em;margin-top:2px}
+@media (max-width:1000px){.lp-why-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-steps{grid-template-columns:1fr}}
+@media (max-width:640px){.lp-why-grid{grid-template-columns:1fr}}
