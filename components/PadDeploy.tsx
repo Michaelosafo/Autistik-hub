@@ -16,7 +16,7 @@ const CONFIG_TYPE = [{ type: "tuple", components: [
   { name: "minLiquidity", type: "uint256" }, { name: "maxWhitelistNative", type: "uint256" }, { name: "eligibilitySigner", type: "address" },
 ] }] as const;
 
-type Info = { coin: string; priceUsd: number | null; router: `0x${string}`; stablecoin: `0x${string}`; team: `0x${string}` | null; autistik: `0x${string}`; locker: `0x${string}` | null; signer: `0x${string}`; pad: string | null; burner: string | null };
+type Info = { coin: string; priceUsd: number | null; router: `0x${string}`; stablecoin: `0x${string}`; team: `0x${string}` | null; autistik: `0x${string}`; locker: `0x${string}` | null; signer: `0x${string}`; pad: string | null; padVersion: number | null; burner: string | null };
 const coinFor = (usd: number, price: number) => parseEther((usd / price).toFixed(9));
 
 /** Admin only: put the Launch Pad v2 on a chain (and the AUTISTIK burner on BNB Chain), and keep its $ amounts right. */
@@ -98,7 +98,7 @@ export default function PadDeploy() {
     const initcode = concat([PAD_BYTECODE, encodeAbiParameters(CONFIG_TYPE, [cfg])]);
     const at = await create2(c, keccak256(concat([PAD_SALT, toHex(c.chainId, { size: 32 })])), initcode, "AUTISTIK Launch Pad");
     await save("pad", at);
-    return `✅ Launch Pad live on ${c.name} at ${at}. Launches are open on this chain.`;
+    return `✅ Launch Pad v3 live on ${c.name} at ${at}. New launches here get addresses ending in "aaaaa"; tokens launched before keep working on the old Launch Pad.`;
   });
 
   const sync = () => run(async () => {
@@ -136,10 +136,11 @@ export default function PadDeploy() {
       </select>
       {!info ? <small className="muted">Loading…</small> : (
         <div className="stack" style={{ gap: 6, fontSize: ".9em" }}>
-          <span>{c.coin} price: <b>{info.priceUsd ? `$${info.priceUsd.toLocaleString("en-US")}` : "unknown"}</b> · Locker: {info.locker ? "✅" : "❌ deploy it on the Lockers page first"}{chain === "bsc" ? <> · Burner: {info.burner ? "✅" : "not yet"}</> : null} · Launch Pad: {info.pad ? "✅ live" : "not yet"}</span>
+          <span>{c.coin} price: <b>{info.priceUsd ? `$${info.priceUsd.toLocaleString("en-US")}` : "unknown"}</b> · Locker: {info.locker ? "✅" : "❌ deploy it on the Lockers page first"}{chain === "bsc" ? <> · Burner: {info.burner ? "✅" : "not yet"}</> : null} · Launch Pad: {info.pad ? `✅ live (v${info.padVersion ?? 2})` : "not yet"}</span>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {chain === "bsc" && !info.burner && <button className="btn primary" type="button" disabled={busy} onClick={deployBurner}>1. Deploy AUTISTIK burner</button>}
             {!info.pad && <button className="btn primary" type="button" disabled={busy || (chain === "bsc" && !info.burner) || !info.locker} onClick={deployPad}>{chain === "bsc" ? "2. " : ""}Deploy Launch Pad</button>}
+            {info.pad && (info.padVersion ?? 2) < 3 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v3: new token addresses end in &quot;aaaaa&quot;</button>}
             {info.pad && <button className="btn small" type="button" disabled={busy} onClick={sync}>Sync $ amounts (≈${USD.launchFee} launch, ≈${USD.maxWhitelist} whitelist)</button>}
           </div>
           {info.pad && (

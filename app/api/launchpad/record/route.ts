@@ -72,6 +72,8 @@ export async function POST(req: Request) {
     lp_lock: lockOption === 0 ? "burn" : lockOption === 2 ? "1y" : "6m",
     lp_unlock_at: lockOption !== 0 ? new Date(unlockAt * 1000).toISOString() : null,
     user_id: owner,
+    // The Launch Pad it came from, so it keeps working after this chain moves to a newer one.
+    pad,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);

@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@noble/hashes": "^1.8.0",
     "@privy-io/react-auth": "^3.50.0",
     "@raydium-io/raydium-sdk-v2": "0.2.74-alpha",
     "@solana-program/memo": "^0.16.0",
