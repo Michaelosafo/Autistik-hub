@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 /** How long the page takes to open after "Go to site". */
 const OPEN_MS = 800;
@@ -13,13 +13,19 @@ const ARENA_MS = 4000;
  * game arena. "Go to site" (or Escape) opens the page around it; "Play the arena" goes straight to the arena.
  * Shown every time the site is opened or reloaded (moving between pages inside the site doesn't bring it back).
  * With calm mode or reduced motion nothing moves and the page appears straight away.
+ * Not shown on policy and sign-in pages: people (and Google's reviewers) open those from a link to read them.
  */
+const SKIP = /^\/(privacy|safety|security|login|auth|reset-password)(\/|$)/;
+
 export default function Welcome() {
   const [phase, setPhase] = useState<"hello" | "open" | "gone">("hello");
   const [line, setLine] = useState(0);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const go = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+  // Decided on the first page only, so moving on from a policy page doesn't bring it up mid-visit.
+  const path = usePathname() || "";
+  const [skip] = useState(() => SKIP.test(path));
 
   const open = () => {
     const still = document.documentElement.dataset.calm === "on" || matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -29,14 +35,15 @@ export default function Welcome() {
   };
 
   useEffect(() => {
+    if (skip) return;
     go.current?.focus();
     const t = setTimeout(() => setLine(1), ARENA_MS);
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") open(); };
     document.addEventListener("keydown", key);
     return () => { clearTimeout(t); clearTimeout(timer.current); document.removeEventListener("keydown", key); };
-  }, []);
+  }, [skip]);
 
-  if (phase === "gone") return null;
+  if (skip || phase === "gone") return null;
   return (
     <div className={"welcome" + (phase === "open" ? " opening" : "")} role="dialog" aria-modal="true" aria-label="Welcome to AUTISTIK">
       <div className="welcome-in">
