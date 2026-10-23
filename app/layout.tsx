@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
 import Welcome from "@/components/Welcome";
+import WalletGate from "@/components/WalletGate";
 import { headers } from "next/headers";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
@@ -19,8 +20,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const nonce = headers().get("x-nonce") ?? undefined;
   const sb = supabaseServer();
   const user = await currentUser();
+  let needWallet = false;
   let me: { alias: string; color: string; is_admin: boolean; mfa: boolean } | null = null;
   if (user) {
+    const { data: w0 } = await sb.from("wallets").select("user_id").eq("user_id", user.id).maybeSingle();
+    needWallet = !w0;
     // The Admin menu item only shows for the owner (see supabase/admin-lock.sql).
     const [{ data }, { data: owner }] = await Promise.all([sb.from("profiles").select("alias, color").eq("id", user.id).single(), sb.rpc("is_owner")]);
     me = { alias: data?.alias ?? "Member", color: /^#[0-9a-f]{6}$/i.test(data?.color || "") ? data!.color : "#6141D4", is_admin: owner === true, mfa: !!user.factors?.some((f) => f.status === "verified") };
@@ -38,6 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Without JavaScript the welcome can't close, so it isn't shown at all. */}
         <noscript><style>{`.welcome{display:none}`}</style></noscript>
         <Welcome />
+        {user && needWallet && <WalletGate uid={user.id} />}
         <Shell me={me}>{children}</Shell>
       </body>
     </html>
