@@ -1455,6 +1455,9 @@ button.tx-tr,a.tx-tr{cursor:pointer} button.tx-tr:hover,a.tx-tr:hover{background
 html[data-calm=on] .ax-sheet-in{animation:none}
 /* Existing pages inside the App pick up the App's surfaces. */
 .ax .card,.ax .notice:not(.warn){background:#27262C;border-color:#383241;color:#F4EEFF;border-radius:24px}
+/* The App is always dark, so its warnings must be too (the light theme's pale yellow made white text unreadable). */
+.ax .notice.warn{background:#382B0E;color:#FCEFC7;border-radius:24px}
+.ax .notice.warn a{color:#F7C54F}
 .ax .muted{color:#B8ADD2}
 .ax .btn.primary,.ax .btn.gold{background:var(--gold,#F0B90B);color:#191326;border-color:transparent}
 @media (max-width:900px){
