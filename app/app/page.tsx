@@ -2,6 +2,7 @@ import Link from "next/link";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import { buyLink } from "@/lib/listings";
 import TokenLogo from "@/components/TokenLogo";
+import AppMe from "@/components/AppMe";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { getBoard, trending, type BoardToken } from "@/lib/board";
 import { CHAINS } from "@/lib/launchpad";
@@ -48,7 +49,7 @@ const ACTIONS: { href: string; icon: IconName; name: string }[] = [
 const pct = (v: number | null | undefined) => (v == null ? "–" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`);
 const tone = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "up" : "down");
 
-/** The App's home, laid out like an exchange: $AUTISTIK's market up top, quick actions, every tool, and live markets. */
+/** The App's home: your account up top (badge, who you follow, wallet funds), quick actions, every tool, and live markets. */
 export default async function AppHome() {
   const [markets, board] = await Promise.all([
     getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }]).catch(() => ({} as Record<string, never>)),
@@ -58,28 +59,8 @@ export default async function AppHome() {
   const top = trending(board).slice(0, 5);
   return (
     <div className="ah">
-      <section className="ah-hero" aria-label="$AUTISTIK market">
-        <div className="ah-mkt">
-          <div className="ah-mkt-id">
-            {m?.imageUrl ? <img src={m.imageUrl} alt="" width={40} height={40} /> : <span className="ah-coin-ph"><svg width="26" height="13" aria-hidden="true"><use href="#i-inf" /></svg></span>}
-            <div><b>AUTISTIK<span>/USD</span></b><small><i className="ah-live" aria-hidden="true" />BNB Chain · live</small></div>
-          </div>
-          <div className="ah-price">
-            <strong>{usd(m?.priceUsd)}</strong>
-            <span className={"ah-chg " + tone(m?.change24h)}>{pct(m?.change24h)} <em>24h</em></span>
-          </div>
-          <dl className="ah-stats">
-            <div><dt>Market cap</dt><dd>{usd(m?.marketCap)}</dd></div>
-            <div><dt>Liquidity</dt><dd>{usd(m?.liquidityUsd)}</dd></div>
-            <div><dt>24h volume</dt><dd>{m ? usd(m.volume24h) : "–"}</dd></div>
-            <div><dt>24h trades</dt><dd>{m ? m.txns24h.toLocaleString("en-US") : "–"}</dd></div>
-          </dl>
-          <div className="ah-coin-cta">
-            <Link className="ah-btn gold" href={buyLink({ chain: "bsc", token: TOKEN_ADDRESS })}>Buy $AUTISTIK</Link>
-            <Link className="ah-btn" href="/stake">Stake</Link>
-            <Link className="ah-btn ghost" href={`/analytics/bsc/${TOKEN_ADDRESS}`}>Chart</Link>
-          </div>
-        </div>
+      <section className="ah-hero" aria-label="Your account">
+        <AppMe />
         <nav className="ah-actions" aria-label="Quick actions">
           {ACTIONS.map((a) => (
             <Link key={a.name} href={a.href} className="ah-act"><span className="ah-icon"><ToolIcon name={a.icon} /></span><b>{a.name}</b></Link>
@@ -106,6 +87,29 @@ export default async function AppHome() {
         </div>
 
         <aside className="ah-side">
+          <section className="ah-panel" aria-label="$AUTISTIK market">
+        <div className="ah-mkt ah-mkt-side">
+          <div className="ah-mkt-id">
+            {m?.imageUrl ? <img src={m.imageUrl} alt="" width={40} height={40} /> : <span className="ah-coin-ph"><svg width="26" height="13" aria-hidden="true"><use href="#i-inf" /></svg></span>}
+            <div><b>AUTISTIK<span>/USD</span></b><small><i className="ah-live" aria-hidden="true" />BNB Chain · live</small></div>
+          </div>
+          <div className="ah-price">
+            <strong>{usd(m?.priceUsd)}</strong>
+            <span className={"ah-chg " + tone(m?.change24h)}>{pct(m?.change24h)} <em>24h</em></span>
+          </div>
+          <dl className="ah-stats">
+            <div><dt>Market cap</dt><dd>{usd(m?.marketCap)}</dd></div>
+            <div><dt>Liquidity</dt><dd>{usd(m?.liquidityUsd)}</dd></div>
+            <div><dt>24h volume</dt><dd>{m ? usd(m.volume24h) : "–"}</dd></div>
+            <div><dt>24h trades</dt><dd>{m ? m.txns24h.toLocaleString("en-US") : "–"}</dd></div>
+          </dl>
+          <div className="ah-coin-cta">
+            <Link className="ah-btn gold" href={buyLink({ chain: "bsc", token: TOKEN_ADDRESS })}>Buy $AUTISTIK</Link>
+            <Link className="ah-btn" href="/stake">Stake</Link>
+            <Link className="ah-btn ghost" href={`/analytics/bsc/${TOKEN_ADDRESS}`}>Chart</Link>
+          </div>
+        </div>
+          </section>
           <section className="ah-panel" aria-label="Trending markets">
             <header className="ah-panel-head"><h2>Trending</h2><Link href="/launchpad">See all</Link></header>
             {top.length ? (
