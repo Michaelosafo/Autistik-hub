@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-type Who = { id: string; alias: string; handle: string | null; color: string | null; is_team?: boolean; is_verified?: boolean };
+type Who = { id: string; alias: string; handle: string | null; color: string | null; is_team?: boolean; is_verified?: boolean; last?: { kind: string; label: string | null; at: string } | null };
+const ICON: Record<string, string> = { scan: "🔎", launch: "🚀", launchpad: "🚀", lock: "🔒", locker: "🔒", pin: "⭐", post: "💬", live: "🎙️", follow: "➕" };
 type S = {
   signedIn: boolean;
   profile?: { alias: string; handle: string | null; color: string | null; is_team: boolean; team_title: string | null; is_verified: boolean } | null;
@@ -60,7 +61,7 @@ export default function AppMe() {
           <strong>{s.following ?? 0}<em> · {s.followers ?? 0} followers</em></strong>
           <ul>
             {s.recent?.length ? s.recent.map((m) => (
-              <li key={m.id}><Link href={`/members/${m.id}`}>{m.alias}{m.is_team ? <span className="team-badge" style={{ marginLeft: 6 }}>✓ TEAM</span> : m.is_verified ? <span className="verified-badge" style={{ marginLeft: 6 }}>✓</span> : null}</Link><span>{m.handle ? `@${m.handle}` : ""}</span></li>
+              <li key={m.id}><Link href={`/members/${m.id}`}>{m.alias}{m.is_team ? <span className="team-badge" style={{ marginLeft: 6 }}>✓ TEAM</span> : m.is_verified ? <span className="verified-badge" style={{ marginLeft: 6 }}>✓</span> : null}</Link><span>{m.last ? `${ICON[m.last.kind] || "•"} ${(m.last.label || "").slice(0, 22)}` : m.handle ? `@${m.handle}` : ""}</span></li>
             )) : <li><span>You aren&apos;t following anyone yet</span></li>}
           </ul>
           <div className="ah-me-foot"><Link href="/members">{s.following ? "See who you follow →" : "Find people to follow →"}</Link></div>
