@@ -36,10 +36,11 @@ export async function GET() {
     const c = todo.filter((x) => x.have < POOL)[k % todo.filter((x) => x.have < POOL).length];
     const deployer = await deployerOf(c.chain, c.pad).catch(() => null);
     if (!deployer) { c.have = POOL; continue; } // chain unreachable right now: try again next run
-    const s = grindSalt(deployer, Math.min(15_000, end - Date.now()));
-    if (!s) continue;
+    // Only all-capitals "AAAAA" addresses go in the pool (about 30 seconds each).
+    const s = await grindSalt(deployer, Math.min(40_000, end - Date.now()));
+    if (!s?.caps) continue;
     const { error } = await sb.from("evm_vanity_salts").insert({ salt: s.salt, chain: c.chain, pad: c.pad, token: s.token });
     if (!error) { c.have++; found[c.chain] = (found[c.chain] ?? 0) + 1; }
   }
-  return json({ suffix: EVM_VANITY_SUFFIX, found, ready: todo.map((c) => ({ chain: c.chain, have: Math.min(c.have, POOL) })) });
+  return json({ suffix: EVM_VANITY_SUFFIX.toUpperCase(), found, ready: todo.map((c) => ({ chain: c.chain, have: Math.min(c.have, POOL) })) });
 }

@@ -98,7 +98,7 @@ export default function PadDeploy() {
     const initcode = concat([PAD_BYTECODE, encodeAbiParameters(CONFIG_TYPE, [cfg])]);
     const at = await create2(c, keccak256(concat([PAD_SALT, toHex(c.chainId, { size: 32 })])), initcode, "AUTISTIK Launch Pad");
     await save("pad", at);
-    return `✅ Launch Pad v3 live on ${c.name} at ${at}. New launches here get addresses ending in "aaaaa"; tokens launched before keep working on the old Launch Pad.`;
+    return `✅ Launch Pad v3 live on ${c.name} at ${at}. New launches here get addresses ending in "AAAAA"; tokens launched before keep working on the old Launch Pad.`;
   });
 
   const sync = () => run(async () => {
@@ -140,7 +140,7 @@ export default function PadDeploy() {
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {chain === "bsc" && !info.burner && <button className="btn primary" type="button" disabled={busy} onClick={deployBurner}>1. Deploy AUTISTIK burner</button>}
             {!info.pad && <button className="btn primary" type="button" disabled={busy || (chain === "bsc" && !info.burner) || !info.locker} onClick={deployPad}>{chain === "bsc" ? "2. " : ""}Deploy Launch Pad</button>}
-            {info.pad && (info.padVersion ?? 2) < 3 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v3: new token addresses end in &quot;aaaaa&quot;</button>}
+            {info.pad && (info.padVersion ?? 2) < 3 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v3: new token addresses end in &quot;AAAAA&quot;</button>}
             {info.pad && <button className="btn small" type="button" disabled={busy} onClick={sync}>Sync $ amounts (≈${USD.launchFee} launch, ≈${USD.maxWhitelist} whitelist)</button>}
           </div>
           {info.pad && (
