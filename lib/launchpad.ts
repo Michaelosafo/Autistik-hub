@@ -17,6 +17,8 @@ export const LAUNCHPAD_ABI = parseAbi([
   "function promote(address token, uint256 planId, uint256 maxPrice)",
   "function releaseLiquidity(address token)",
   "function syncPrices(uint256 launchFee, uint256 maxWhitelistNative)",
+  "function eligibilitySigner() view returns (address)",
+  "function setEligibilitySigner(address signer)",
   "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 creatorTokens, uint256 devBuyTokens, uint8 lockOption, uint256 lockId)",
   "event LiquidityAdded(address indexed token, uint256 tokens, uint256 native, uint256 lp)",
   "event Promoted(address indexed token, address indexed payer, uint256 indexed planId, uint256 price, uint256 duration)",

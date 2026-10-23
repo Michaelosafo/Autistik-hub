@@ -1,8 +1,8 @@
 "use client";
 import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
-import { concat, createPublicClient, createWalletClient, custom, encodeAbiParameters, formatEther, getContractAddress, keccak256, parseEther, toHex } from "viem";
-import { CHAINS, LAUNCHPAD_ABI, deployable, viemChain, type ChainKey, type LaunchChain } from "@/lib/launchpad";
+import { concat, createPublicClient, createWalletClient, custom, encodeAbiParameters, formatEther, getAddress, getContractAddress, http, keccak256, parseEther, toHex, zeroAddress } from "viem";
+import { CHAINS, LAUNCHPAD_ABI, MIN_HOLD_USD, deployable, viemChain, type ChainKey, type LaunchChain } from "@/lib/launchpad";
 
 const CREATE2 = "0x4e59b44847b379578588920cA78FbF26c0B4956C" as const;
 const PAD_SALT = keccak256(toHex("AUTISTIK Launchpad v2"));
@@ -26,10 +26,19 @@ export default function PadDeploy() {
   const [info, setInfo] = useState<Info | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  // The signer the deployed Launch Pad checks permits against (zero address: no $20 AUTISTIK check). null while reading.
+  const [padSigner, setPadSigner] = useState<string | null>(null);
   const c = CHAINS[chain];
 
   const load = () => { setInfo(null); fetch(`/api/launchpad/contracts?chain=${chain}`, { cache: "no-store" }).then((r) => r.json()).then((d) => setInfo(d.error ? null : d)).catch(() => {}); };
   useEffect(load, [chain]);
+  useEffect(() => {
+    setPadSigner(null);
+    if (!info?.pad) return;
+    createPublicClient({ chain: viemChain(c), transport: http(c.rpc) })
+      .readContract({ address: info.pad as `0x${string}`, abi: LAUNCHPAD_ABI, functionName: "eligibilitySigner" } as any)
+      .then((a) => setPadSigner(getAddress(a as string))).catch(() => {});
+  }, [info?.pad]);
 
   async function wallet(c: LaunchChain) {
     const eth = await pickWallet();
@@ -103,6 +112,21 @@ export default function PadDeploy() {
     return "✅ Dollar amounts updated.";
   });
 
+  // Turns the $20 AUTISTIK check on (the Hub's permit signer) or off (zero address) on this chain's Launch Pad.
+  const setCheck = (on: boolean) => run(async () => {
+    const i = info!;
+    const signer = on ? i.signer : zeroAddress;
+    const { w, account, vc, pub } = await wallet(c);
+    setMsg(`Confirm in your wallet: ${on ? "turn on" : "turn off"} the $${MIN_HOLD_USD} AUTISTIK check on ${c.name}.`);
+    const hash = await w.writeContract({ account, chain: vc, address: i.pad, abi: LAUNCHPAD_ABI, functionName: "setEligibilitySigner", args: [signer] });
+    await pub.waitForTransactionReceipt({ hash });
+    setPadSigner(getAddress(signer));
+    return on ? `✅ The $${MIN_HOLD_USD} AUTISTIK check is on for ${c.name}.` : `The $${MIN_HOLD_USD} AUTISTIK check is off for ${c.name}. Anyone can launch here.`;
+  });
+
+  const hubKey = info ? info.signer !== zeroAddress : false;
+  const checkOn = !!padSigner && padSigner !== zeroAddress;
+
   return (
     <div className="card stack" style={{ gap: 10, borderStyle: "dashed" }}>
       <h3 style={{ margin: 0 }}>🛠️ Admin: Launch Pad</h3>
@@ -118,6 +142,18 @@ export default function PadDeploy() {
             {!info.pad && <button className="btn primary" type="button" disabled={busy || (chain === "bsc" && !info.burner) || !info.locker} onClick={deployPad}>{chain === "bsc" ? "2. " : ""}Deploy Launch Pad</button>}
             {info.pad && <button className="btn small" type="button" disabled={busy} onClick={sync}>Sync $ amounts (≈${USD.launchFee} launch, ≈${USD.maxWhitelist} whitelist)</button>}
           </div>
+          {info.pad && (
+            <div className="stack" style={{ gap: 6 }}>
+              <span>${MIN_HOLD_USD} AUTISTIK check: <b>{padSigner === null ? "reading…" : checkOn ? (padSigner === info.signer ? "✅ on" : "⚠️ on, but with a different signer than the Hub's key") : "off: anyone can launch"}</b></span>
+              {!hubKey && <small className="muted">To turn it on, add <span className="mono">ELIGIBILITY_SIGNER_KEY</span> in Vercel (the private key of a new, empty wallet used only for this) and redeploy. The button shows here after that.</small>}
+              {padSigner !== null && (
+                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  {hubKey && padSigner !== info.signer && <button className="btn primary" type="button" disabled={busy} onClick={() => setCheck(true)}>Turn on the ${MIN_HOLD_USD} AUTISTIK check</button>}
+                  {checkOn && <button className="btn small" type="button" disabled={busy} onClick={() => setCheck(false)}>Turn it off</button>}
+                </div>
+              )}
+            </div>
+          )}
           {info.pad && <small className="muted">Launch Pad: <a href={`${c.explorer}/address/${info.pad}`} target="_blank" rel="noreferrer">{info.pad}</a>. Press &quot;Sync $ amounts&quot; when {c.coin}&apos;s price moves a lot.</small>}
         </div>
       )}
