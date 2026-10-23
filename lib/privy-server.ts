@@ -98,3 +98,25 @@ export async function recentMemberWallets(max = 300): Promise<{ total: number; m
   rows.sort((a, b) => b.at - a.at);
   return { total: rows.length, more, rows };
 }
+
+/**
+ * Every member with a confirmed email gets a wallet that can receive tokens: their free AUTISTIK wallet is linked to
+ * their Hub account, so other members can send to them by name or @handle and the team can airdrop to them. A wallet
+ * they connected themselves (and signed for) is never replaced. Never throws.
+ */
+export async function linkBuiltinWallet(userId: string, email: string | null | undefined): Promise<string | null> {
+  try {
+    const { supabaseService } = await import("@/lib/supabase/server");
+    const sb = supabaseService();
+    const { data: have } = await sb.from("wallets").select("address").eq("user_id", userId).maybeSingle();
+    const w = await ensureMemberWallet(email);
+    if (have?.address) return have.address;
+    if (!w?.evm || !/^0x[0-9a-fA-F]{40}$/.test(w.evm)) return null;
+    const { getAddress } = await import("viem");
+    const address = getAddress(w.evm);
+    const { error } = await sb.from("wallets").upsert({ user_id: userId, address, verified_at: new Date().toISOString() });
+    return error ? null : address;
+  } catch {
+    return null;
+  }
+}

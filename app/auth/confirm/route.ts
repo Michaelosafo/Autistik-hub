@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { safeNext, welcomeUrl } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
-import { ensureMemberWallet } from "@/lib/privy-server";
+import { linkBuiltinWallet } from "@/lib/privy-server";
 
 const TYPES: EmailOtpType[] = ["signup", "email", "magiclink", "recovery", "invite", "email_change"];
 
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabaseServer().auth.verifyOtp({ token_hash: tokenHash, type });
     if (!error) {
       // Email confirmed: their AUTISTIK wallet is made now, so it's waiting the first time they open it.
-      if (type !== "recovery" && data?.user?.email_confirmed_at) await ensureMemberWallet(data.user.email);
+      if (type !== "recovery" && data?.user?.email_confirmed_at) await linkBuiltinWallet(data.user.id, data.user.email);
       if (type === "recovery") return NextResponse.redirect(new URL("/reset-password", url.origin));
       const done = new URL(next, url.origin);
       if (type === "signup" || type === "email") done.searchParams.set("welcome", "1");

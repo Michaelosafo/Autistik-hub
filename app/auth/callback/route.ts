@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { safeNext, welcomeUrl } from "@/lib/auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
-import { ensureMemberWallet } from "@/lib/privy-server";
+import { linkBuiltinWallet } from "@/lib/privy-server";
 
 // Links that use Supabase's default email templates come here with a one-time code.
 // Our own templates use /auth/confirm instead, which also works across devices.
@@ -20,7 +20,7 @@ export async function GET(request: Request) {
       await supabaseService().from("profiles").update({ confirmed_adult: true }).eq("id", data.user.id).eq("confirmed_adult", false).then(() => {}, () => {});
     }
     // Their AUTISTIK wallet, made the moment the email is confirmed (Google and Apple confirm it for us).
-    if (!error && data?.user?.email_confirmed_at) await ensureMemberWallet(data.user.email);
+    if (!error && data?.user?.email_confirmed_at) await linkBuiltinWallet(data.user.id, data.user.email);
     if (error) {
       const why = url.searchParams.get("adult") === "1"
         ? "Signing in with Google or Apple didn't finish. Please try again in this same browser, or use your email."
