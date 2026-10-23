@@ -32,11 +32,11 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
     <div className="stack" style={{ maxWidth: 900 }}>
       <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
         text={<>Lock your pool&apos;s liquidity so it can&apos;t be pulled (no rug pull), or lock team tokens so they can&apos;t be dumped. Nobody, not even the AUTISTIK team, can touch a lock before its date.</>}
-        stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["No", "early unlock"]]} />
+        stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["Auto", "release when due"]]} />
       <Guide id="lockers" action={{ href: "#lock", label: "Lock my tokens now" }} title="How to lock, in 3 steps" steps={[
         <>Connect your wallet below and pick the network your coin is on.</>,
         <>Choose what to lock: your pool&apos;s <b>LP token</b> (proves the liquidity can&apos;t be pulled) or <b>team tokens</b>. Paste its address and the amount.</>,
-        <>Pick the unlock date and confirm in your wallet (approve, then lock). Nobody can unlock it early, not even you.</>,
+        <>Pick the unlock date and confirm in your wallet (approve, then lock). Nobody can unlock it early, not even you. When the date arrives it is sent to your wallet automatically.</>,
       ]} tip={<>Just checking a coin? Paste its address in <b>Check a token&apos;s locks</b> further down. Your LP token address is the &quot;Pair&quot; address on DexScreener.</>} />
 
       <div id="lock" style={{ scrollMarginTop: 80 }} />

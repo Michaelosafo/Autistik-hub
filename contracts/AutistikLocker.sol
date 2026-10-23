@@ -23,7 +23,8 @@ interface ILockerFactory {
  *
  * Built to be easy for people, sites and scanners to check:
  *  - No owner, no admin, no fees, no upgrades. Nobody (including the AUTISTIK team) can move a locked token early.
- *  - Only the lock's owner can take tokens back, and only after the unlock date.
+ *  - Tokens only ever go to the lock's owner, and only after the unlock date. Anyone can trigger a due release
+ *    (so it can happen automatically), but they can't redirect it.
  *  - The lock layout, function names and events follow the widely used PinkLock V2 locker, so tools that already
  *    read lockers can read this one the same way.
  *  - Liquidity locks are checked: a token marked as LP must be a real Uniswap V2 style pair (PancakeSwap, Uniswap…),
@@ -159,14 +160,39 @@ contract AutistikLocker is ReentrancyGuard {
 
     // ---------------------------------------------------------------- unlocking
 
-    /// @notice Sends the lock owner everything they're allowed to take back now.
+    /**
+     * @notice Sends the lock owner everything they're allowed to take back now.
+     * Once tokens are due, ANYONE may call this (a keeper does it automatically), but the tokens always go to the
+     * lock's owner, never to the caller. A lock owned by a contract (such as a launchpad) can only be released by that
+     * contract, so it can pass the tokens on. A lock whose ownership was renounced can never be released.
+     */
     function unlock(uint256 lockId) external nonReentrant {
-        Lock storage l = _own(lockId);
+        Lock storage l = _get(lockId);
+        if (l.owner == address(0) || (msg.sender != l.owner && l.owner.code.length > 0)) revert NotLockOwner();
         uint256 amount = withdrawableTokens(lockId);
         if (amount == 0) {
             if (block.timestamp < l.tgeDate) revert StillLocked();
             revert NothingToUnlock();
         }
+        _release(l, amount);
+    }
+
+    /// @notice Releases every due lock in the list to its owner. Locks that aren't due (or can't be released by the
+    /// caller) are skipped instead of stopping the rest. Returns how many were released.
+    function unlockMany(uint256[] calldata lockIds) external nonReentrant returns (uint256 released) {
+        for (uint256 i = 0; i < lockIds.length; i++) {
+            if (lockIds[i] >= _locks.length) continue;
+            Lock storage l = _locks[lockIds[i]];
+            if (l.owner == address(0) || (msg.sender != l.owner && l.owner.code.length > 0)) continue;
+            uint256 amount = withdrawableTokens(lockIds[i]);
+            if (amount == 0) continue;
+            _release(l, amount);
+            released++;
+        }
+    }
+
+    function _release(Lock storage l, uint256 amount) private {
+        uint256 lockId = l.id;
         l.unlockedAmount += amount;
         totalLockedForToken[l.token] -= amount;
         uint256 remaining = l.amount - l.unlockedAmount;

@@ -294,8 +294,8 @@ contract AutistikTokenDeployer {
  * @notice One transaction launches a token: creates it, gives the creator their share, adds liquidity on the chain's
  * V2 DEX, optionally buys the creator's first tokens (at most 30% of supply in total for the creator), and then
  * burns the LP tokens or locks them in the AUTISTIK Locker for 6 months or 1 year.
- * Locked liquidity: nobody can touch it before the unlock date. After it, the creator asks the AUTISTIK team, who
- * releases it to the creator (and only to the creator).
+ * Locked liquidity: nobody can touch it before the unlock date. After it, anyone can trigger the release (the AUTISTIK
+ * keeper does this automatically) and it goes straight to the creator's wallet (and only to the creator).
  * Launching is free: a small contribution (about $3) comes out of the coin sent with the launch and goes to
  * marketing. Platform fee from trades is split 30% marketing, 30% AUTISTIK buy-and-burn, 40% team.
  */
@@ -539,8 +539,9 @@ contract AutistikLaunchpadV2 is ReentrancyGuard {
 
     // ------------------------------------------------------------------ liquidity release (team approves)
 
-    /// @notice After the lock ends, the team releases the LP tokens to the token's creator (only ever to them).
-    function releaseLiquidity(address token) external onlyOwner nonReentrant {
+    /// @notice After the lock ends, anyone (the AUTISTIK keeper does it automatically) can release the LP tokens.
+    /// They always go to the token's creator, never to the caller, so no approval is needed.
+    function releaseLiquidity(address token) external nonReentrant {
         Launch storage l = launchOf[token];
         if (l.creator == address(0)) revert NotLaunchedHere();
         if (l.lockOption == LOCK_BURN) revert NotLocked();
