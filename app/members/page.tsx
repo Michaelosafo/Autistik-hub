@@ -56,6 +56,16 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
     people = await loadProfiles(sb, (f || []).map((x: any) => x.follower_id || x.followee_id));
     if (who !== user.id) whoName = (await loadProfiles(sb, [who]))[0]?.alias || "";
   }
+
+  // "People to follow": the team first, then the members others follow most, then the newest. Not you, not people you already follow.
+  let suggested: Awaited<ReturnType<typeof loadProfiles>> = [];
+  if (tab === "feed") {
+    const pool = (await loadProfiles(sb, undefined, (x) => x.order("created_at", { ascending: false }).limit(60))).filter((p) => p.id !== user.id && !following.has(p.id));
+    const { data: fl } = pool.length ? await sb.from("follows").select("followee_id").in("followee_id", pool.map((p) => p.id)).limit(5000) : { data: [] as any[] };
+    const n = new Map<string, number>();
+    for (const f of fl || []) n.set(f.followee_id, (n.get(f.followee_id) || 0) + 1);
+    suggested = pool.sort((a, b) => Number(!!b.is_team) - Number(!!a.is_team) || (n.get(b.id) || 0) - (n.get(a.id) || 0)).slice(0, 8);
+  }
   const byId = new Map(people.map((p) => [p.id, p]));
 
   type Item = { at: string; who: string; el: React.ReactNode; key: string };
@@ -83,6 +93,14 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
         {tabs.map(([t, name]) => <Link key={t} className="chip" aria-current={tab === t ? "page" : undefined} href={`/members?tab=${t}`}>{name}{t === "following" && following.size ? ` (${following.size})` : ""}</Link>)}
         <Link className="chip" href="/live">🎙️ Live hub</Link>
       </nav>
+
+      {tab === "feed" && !!suggested.length && (
+        <div className="card stack">
+          <h2>People to follow</h2>
+          <div className="member-list">{suggested.map(card)}</div>
+          <Link className="muted" href="/members?tab=find">See everyone →</Link>
+        </div>
+      )}
 
       {tab === "feed" && (
         <div className="card stack">
