@@ -1,6 +1,6 @@
 import { defineChain, parseAbi, parseEther, type PublicClient } from "viem";
 
-/** Matches AutistikLaunchpadV2 in contracts/AutistikLaunchpadV2.sol. */
+/** Matches AutistikLaunchpadV2 in contracts/AutistikLaunchpadV2.sol (most calls are the same on v3). */
 export const LAUNCHPAD_ABI = parseAbi([
   "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint256 devBuyNative; uint256 buyTax; uint256 sellTax; address taxWallet; address[] whitelist; uint256 whitelistNative; uint8 lockOption; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; }",
   "function launch(LaunchParams p, bytes permitSig) payable returns (address token)",
@@ -27,6 +27,24 @@ export const LAUNCHPAD_ABI = parseAbi([
   "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error NotLaunchedHere()", "error NotLocked()", "error AlreadyReleased()",
   "error UnknownPlan()", "error PriceTooHigh()", "error TransferFailed()", "error TaxTooHigh()",
 ]);
+
+/**
+ * Launch Pad v3 (contracts/AutistikLaunchpadV3.sol): the same as v2, except launch() takes a salt that picks the token's
+ * address (every address ends in "aaaaa") and the permit covers that salt. Everything else uses LAUNCHPAD_ABI.
+ */
+export const LAUNCHPAD_V3_ABI = parseAbi([
+  "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint256 devBuyNative; uint256 buyTax; uint256 sellTax; address taxWallet; address[] whitelist; uint256 whitelistNative; uint8 lockOption; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; bytes32 salt; }",
+  "function launch(LaunchParams p, bytes permitSig) payable returns (address token)",
+  "function tokenFor(bytes32 salt) view returns (address)",
+  "function deployer() view returns (address)",
+  "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 creatorTokens, uint256 devBuyTokens, uint8 lockOption, uint256 lockId)",
+  "error NotOwner()", "error ZeroAddress()", "error InvalidName()", "error InvalidSymbol()", "error InvalidSupply()", "error InvalidLock()",
+  "error CreatorShareTooHigh()", "error NotEnoughLiquidity()", "error FeeTooHigh()", "error TooLate()", "error NotEligible()", "error PermitExpired()",
+  "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error TransferFailed()", "error TaxTooHigh()",
+]);
+
+/** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…). */
+export const EVM_VANITY_SUFFIX = "aaaaa";
 
 /** Every token launched on the Launch Pad (AutistikToken in contracts/AutistikLaunchpadV2.sol). */
 export const LAUNCH_TOKEN_ABI = parseAbi([

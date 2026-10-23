@@ -29,8 +29,11 @@ export async function POST(req: Request) {
     return json({ error: "Couldn't find that payment yet. Try again in a minute." }, 404);
   }
   if (receipt.status !== "success") return json({ error: "That payment failed on-chain." }, 400);
+  // Payments go to the Launch Pad the token came from: this chain's current one, or an older one it was launched on.
+  const { data: older } = await supabaseService().from("launches").select("pad").eq("chain", chain.key).not("pad", "is", null);
+  const ours = new Set([pad, ...(older || []).map((r: any) => String(r.pad))].map((a) => a.toLowerCase()));
   const event = parseEventLogs({ abi: LAUNCHPAD_ABI, logs: receipt.logs, eventName: "Promoted" }).find(
-    (l) => getAddress(l.address) === pad
+    (l) => ours.has(l.address.toLowerCase())
   );
   if (!event) return json({ error: "That transaction isn't a trending payment." }, 400);
   const { token, payer, planId, price, duration } = event.args;

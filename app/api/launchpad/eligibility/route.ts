@@ -3,7 +3,8 @@ import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http,
 import { privateKeyToAccount } from "viem/accounts";
 import { json } from "@/lib/ai";
 import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
-import { padOn } from "@/lib/launchpad-server";
+import { padOn, padVersion } from "@/lib/launchpad-server";
+import { vanitySalt } from "@/lib/evm-vanity";
 import { getMarkets } from "@/lib/market";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { adminState, launchAccess } from "@/lib/admin";
@@ -41,9 +42,14 @@ export async function POST(req: Request) {
   const creator = getAddress(wallet);
 
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
+  // Launch Pad v3: the salt that gives this launch a token address ending in "aaaaa" (taken only when it's needed).
+  const salt = async () => ((await padVersion(chain.key)) >= 3 ? await vanitySalt(chain.key, pad) : null);
   // Not set up yet: the contract's eligibilitySigner should also be the zero address, so no check happens.
-  if (!key) return json({ checked: false, deadline: "0", signature: "0x" });
-  if (admin) return json({ checked: true, admin: true, ...(await permit(key, pad, chain.chainId, creator)) });
+  if (!key) {
+    const s = await salt();
+    return json({ checked: false, deadline: "0", signature: "0x", ...(s && { salt: s.salt, token: s.token }) });
+  }
+  if (admin) return json({ checked: true, admin: true, ...(await permit(key, pad, chain.chainId, creator, await salt())) });
 
   const bsc = createPublicClient({ transport: http(CHAINS.bsc.rpc) });
   let balance: bigint, decimals: number;
@@ -69,17 +75,26 @@ export async function POST(req: Request) {
     }, 403);
   }
 
-  return json({ checked: true, ...(await permit(key, pad, chain.chainId, creator)), holdUsd, needTokens });
+  return json({ checked: true, ...(await permit(key, pad, chain.chainId, creator, await salt())), holdUsd, needTokens });
 }
 
-/** A one-use permit for `creator` to launch on `pad`, valid for PERMIT_SECONDS. */
-async function permit(key: string, pad: `0x${string}`, chainId: number, creator: `0x${string}`) {
+/**
+ * A one-use permit for `creator` to launch on `pad`, valid for PERMIT_SECONDS. On a v3 Launch Pad it also covers the
+ * salt, so the address ending in "aaaaa" that the salt gives can only be used by this creator.
+ */
+async function permit(key: string, pad: `0x${string}`, chainId: number, creator: `0x${string}`, s: { salt: `0x${string}`; token: string | null } | null) {
   const deadline = BigInt(Math.floor(Date.now() / 1000) + PERMIT_SECONDS);
-  // Must match AutistikLaunchpad.permitHash: keccak256(abi.encode(launchpad, chainId, creator, deadline)).
-  const hash = keccak256(encodeAbiParameters(
-    [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "uint256" }],
-    [pad, BigInt(chainId), creator, deadline],
-  ));
+  // Must match permitHash: v2 keccak256(abi.encode(launchpad, chainId, creator, deadline)),
+  // v3 keccak256(abi.encode(launchpad, chainId, creator, salt, deadline)).
+  const hash = s
+    ? keccak256(encodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "bytes32" }, { type: "uint256" }],
+      [pad, BigInt(chainId), creator, s.salt, deadline],
+    ))
+    : keccak256(encodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "uint256" }],
+      [pad, BigInt(chainId), creator, deadline],
+    ));
   const signature = await privateKeyToAccount(key as `0x${string}`).signMessage({ message: { raw: hash } });
-  return { deadline: deadline.toString(), signature };
+  return { deadline: deadline.toString(), signature, ...(s && { salt: s.salt, token: s.token }) };
 }

@@ -1,14 +1,16 @@
 /**
  * Publishes a Launch Pad token's source code on its chain's explorer (BscScan, Etherscan, BaseScan…), so wallets and
- * scanners show it as open source. Every token is the same AutistikToken code (contracts/AutistikLaunchpadV2.sol);
- * only its constructor settings differ, and those are rebuilt from the launch transaction and the token itself.
+ * scanners show it as open source. Every token is the same AutistikToken code. Launch Pad v2 tokens
+ * (contracts/AutistikLaunchpadV2.sol) differ only in their constructor settings, rebuilt from the launch transaction
+ * and the token itself; Launch Pad v3 tokens (contracts/AutistikLaunchpadV3.sol) have no constructor settings at all.
  * Etherscan-family explorers need ETHERSCAN_API_KEY in Vercel (one key from etherscan.io covers them all); Blockscout
  * explorers (Robinhood Chain) take the same calls on their own /api with no key. Server only.
  */
 import { createPublicClient, decodeFunctionData, encodeAbiParameters, getAddress, http, parseAbi, parseEventLogs } from "viem";
-import { CHAINS, LAUNCHPAD_ABI, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, type ChainKey } from "@/lib/launchpad";
 import { PAD_COMPILER } from "@/lib/launchpad-build";
 import input from "@/contracts/AutistikLaunchpadV2.input.json";
+import inputV3 from "@/contracts/AutistikLaunchpadV3.input.json";
 
 const API = "https://api.etherscan.io/v2/api";
 const TOKEN_READS = parseAbi([
@@ -49,6 +51,13 @@ async function constructorArgs(chain: ChainKey, token: `0x${string}`, txHash: `0
   }]).slice(2);
 }
 
+/** A Launch Pad v3 token: its launchpad answers tokenFor(), which v2 doesn't have. */
+async function isV3Token(chain: ChainKey, token: `0x${string}`) {
+  const client = createPublicClient({ transport: http(CHAINS[chain].rpc) });
+  const pad = (await client.readContract({ address: token, abi: TOKEN_READS, functionName: "pad" } as any)) as `0x${string}`;
+  return client.readContract({ address: pad, abi: LAUNCHPAD_V3_ABI, functionName: "tokenFor", args: [`0x${"00".repeat(32)}`] }).then(() => true, () => false);
+}
+
 /** Already open source on the explorer? null when the explorer can't be asked. */
 export async function isVerified(chain: ChainKey, token: string): Promise<boolean | null> {
   const a = api(chain);
@@ -64,10 +73,12 @@ export async function submitVerify(chain: ChainKey, token: `0x${string}`, txHash
   if (!c.chainId || c.kind === "solana") return { message: `${c.name} tokens don't need this.` };
   const a = api(chain);
   if (!a) return { message: "Automatic verify needs an Etherscan API key in Vercel (ETHERSCAN_API_KEY)." };
+  const v3 = await isV3Token(chain, token);
   const body = new URLSearchParams({
     module: "contract", action: "verifysourcecode", ...(blockscout(chain) ? {} : { apikey: key(), chainid: String(c.chainId) }), contractaddress: token,
-    sourceCode: JSON.stringify(input), codeformat: "solidity-standard-json-input", contractname: "AutistikLaunchpadV2.sol:AutistikToken",
-    compilerversion: PAD_COMPILER, constructorArguements: await constructorArgs(chain, token, txHash),
+    sourceCode: JSON.stringify(v3 ? inputV3 : input), codeformat: "solidity-standard-json-input",
+    contractname: v3 ? "AutistikLaunchpadV3.sol:AutistikToken" : "AutistikLaunchpadV2.sol:AutistikToken",
+    compilerversion: PAD_COMPILER, constructorArguements: v3 ? "" : await constructorArgs(chain, token, txHash),
   });
   const sub = await fetch(`${a.url}?${a.q}module=contract&action=verifysourcecode`, { method: "POST", body, signal: AbortSignal.timeout(20_000) }).then((r) => r.json());
   if (sub?.status === "1") return { guid: String(sub.result) };
