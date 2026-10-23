@@ -2652,3 +2652,4 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
 .an-kicker{font-size:.78em}
 .notice{color:var(--ink)}
 .gcard ul{color:var(--muted)}
+.verified-badge{display:inline-flex;align-items:center;flex:none;font-family:var(--f-display);font-size:.62em;font-weight:700;letter-spacing:.08em;padding:3px 8px;border-radius:999px;background:linear-gradient(135deg,#8E6BFF,#6141D4);color:#fff;vertical-align:middle;line-height:1.2}

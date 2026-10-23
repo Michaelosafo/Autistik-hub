@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
 import FollowButton from "@/components/members/FollowButton";
 import ActivityList from "@/components/members/ActivityList";
@@ -105,7 +106,10 @@ export default async function MemberPage({ params, searchParams }: { params: { i
 
       {mine && (
         <div className="grid2" style={{ alignItems: "start" }}>
-          <ProfileEdit alias={prof.alias} color={prof.color || "#6141D4"} handle={prof.handle ?? null} />
+          <div className="stack">
+            <ProfileEdit alias={prof.alias} color={prof.color || "#6141D4"} handle={prof.handle ?? null} />
+            <BadgeApply verified={!!(prof as any).is_verified} team={!!prof.is_team} />
+          </div>
           <div className="card stack">
             <h2>Private to you</h2>
             <table><tbody>
