@@ -2,6 +2,7 @@ import dynamicImport from "next/dynamic";
 import Link from "next/link";
 import Player, { PlayerDefs } from "@/components/arena/Player";
 import { TOKEN_ADDRESS } from "@/lib/groups";
+import SendTokens from "@/components/live/SendTokens";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 import { adminState } from "@/lib/admin";
@@ -38,6 +39,10 @@ export default async function WalletPage({ searchParams }: { searchParams: { cha
           <Link href="/analytics" className="wg-btn">🔎 Scanner</Link>
         </span>
       </nav>
+      <details className="card" style={{ padding: "10px 14px" }}>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>💸 Send $AUTISTIK to a member by name</summary>
+        <div style={{ marginTop: 10 }}><SendTokens /></div>
+      </details>
       <WalletLoader appId={appId} member={member} start={start} />
       {admin && <OrdersAdmin />}
       <p className="muted" style={{ fontSize: ".82em" }}>
