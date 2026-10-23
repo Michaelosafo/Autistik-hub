@@ -1,4 +1,5 @@
 "use client";
+import NameSuggest from "@/components/NameSuggest";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -52,6 +53,7 @@ export default function ProfileEdit({ alias: a0, color: c0, handle: h0 }: { alia
         <button className="btn small" type="button" disabled={busy} onClick={reroll}>🎲 New meme name</button>
         <span className="muted" style={{ fontSize: ".82em" }}>Or type your own. Every name is one of a kind.</span>
       </div>
+      <NameSuggest onPick={(p) => { setAlias(p.alias); if (h0 != null) setHandle(p.handle); }} />
       <span className="muted" style={{ fontSize: ".82em" }}>Don&apos;t use your real name if you&apos;d rather stay private.</span>
       {h0 != null && (
         <label className="field"><span>@handle</span>
