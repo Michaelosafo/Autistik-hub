@@ -398,7 +398,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
         <label className="field"><span>Your free share (0–20%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
         <label className="field"><span>Liquidity ({coin}{sol ? "" : ", incl. ≈$3 launch contribution"})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" placeholder={`Any amount, e.g. ${CHAINS[f.chain]?.suggestedLiquidity ?? "0.1"}`} required /></label>
       </div>
-      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens burned forever. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool.</div> : <>
+      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens burned forever. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool. Its address ends in <b className="mono">tik</b>, the AUTISTIK mark.</div> : <>
       <fieldset className="stack" style={{ gap: 8, border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px" }}>
         <legend style={{ padding: "0 6px" }}><b>Tax</b> <span className="muted" style={{ fontSize: ".85em" }}>optional, max {MAX_TAX_PERCENT}%, can only be lowered later</span></legend>
         <div className="form-grid">

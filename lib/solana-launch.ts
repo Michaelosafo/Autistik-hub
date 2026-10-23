@@ -18,6 +18,7 @@ import {
 } from "@solana/spl-token";
 import { CREATE_CPMM_POOL_FEE_ACC, CREATE_CPMM_POOL_PROGRAM, Percent, Raydium, TxVersion } from "@raydium-io/raydium-sdk-v2";
 import { SOL_DECIMALS } from "@/lib/launchpad";
+import { vanityMint } from "@/lib/solana-vanity";
 
 const RPC = process.env.LAUNCH_SOLANA_RPC || process.env.WALLET_SOLANA_RPC || process.env.ANALYTICS_SOLANA_RPC || "https://api.mainnet-beta.solana.com";
 const METADATA_PROGRAM = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
@@ -84,7 +85,8 @@ export async function readMetadata(mint: PublicKey) {
 /** A new token: fixed supply to the creator, minting switched off, no freeze authority. Returns the half-signed transaction. */
 export async function buildMint(creatorAddr: string, plan: { name: string; symbol: string; supply: string }) {
   const creator = pk(creatorAddr);
-  const mint = Keypair.generate();
+  // Its address ends in "tik" (lib/solana-vanity.ts), like pump.fun addresses end in "pump".
+  const mint = await vanityMint();
   const conn = connection();
   const rent = await conn.getMinimumBalanceForRentExemption(MINT_SIZE);
   const ata = getAssociatedTokenAddressSync(mint.publicKey, creator);
