@@ -36,13 +36,13 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   const router = useRouter();
   const [calm, setCalm] = useState(false);
   const [big, setBig] = useState(false);
-  const [theme, setTheme] = useState<"auto" | "light" | "dark">("auto");
+  const [theme, setTheme] = useState<"auto" | "light" | "dark">("dark");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     try {
       setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1");
-      const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") setTheme(t);
+      const t = localStorage.getItem("theme2"); if (t === "light" || t === "dark" || t === "auto") setTheme(t);
     } catch {}
     // The app helper (public/sw.js): faster opening on phones and an offline page. Only on the live site.
     if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -50,7 +50,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   useEffect(() => {
     const d = document.documentElement;
     if (theme === "auto") delete d.dataset.theme; else d.dataset.theme = theme;
-    try { localStorage.setItem("theme", theme); } catch {}
+    try { localStorage.setItem("theme2", theme); } catch {}
   }, [theme]);
   useEffect(() => {
     document.documentElement.dataset.calm = calm ? "on" : "off";
