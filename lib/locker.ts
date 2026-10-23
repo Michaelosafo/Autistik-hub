@@ -11,6 +11,7 @@ export const LOCKER_ABI = parseAbi([
   "function vestingLock(address owner, address token, bool isLpToken, uint256 amount, uint256 tgeDate, uint256 tgeBps, uint256 cycle, uint256 cycleBps, string description) returns (uint256 id)",
   "function editLock(uint256 lockId, uint256 newAmount, uint256 newUnlockDate)",
   "function unlock(uint256 lockId)",
+  "function unlockMany(uint256[] lockIds) returns (uint256 released)",
   "function transferLockOwnership(uint256 lockId, address newOwner)",
   "function renounceLockOwnership(uint256 lockId)",
   "function withdrawableTokens(uint256 lockId) view returns (uint256)",

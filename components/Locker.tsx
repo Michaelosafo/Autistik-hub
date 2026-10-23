@@ -225,7 +225,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
                 </div>
               </details>
               <div className="notice warn" style={{ fontSize: ".9em" }}>
-                🔐 Once locked, <b>nobody can move it before the unlock date</b>: not you, not the AUTISTIK team. Only the owner can take it back after. Tokens with a tax lock what actually arrives.
+                🔐 Once locked, <b>nobody can move it before the unlock date</b>: not you, not the AUTISTIK team. When the date arrives it is sent to the owner's wallet automatically: nothing to claim. Tokens with a tax lock what actually arrives.
               </div>
               <button type="button" className="btn primary" disabled={busy || !!problem} onClick={doLock}>{busy ? "Working…" : account ? `🔒 Lock ${info.name}` : "🔒 Connect wallet & lock"}</button>
               {problem && amount && <small className="muted">{problem}</small>}
