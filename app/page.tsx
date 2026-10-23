@@ -15,12 +15,21 @@ import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
-// "Why autism?", answered on the first screen. [question, answer, icon]
+// The vision in plain words, for someone new to autism, crypto or both. [question, answer, icon]
 const WHY: { q: string; a: string; icon: IconName }[] = [
-  { q: "Why autism?", a: "Around 1 in 100 people are autistic, yet autistic people are still misunderstood, left out of work and online spaces, and rarely asked what they need. We chose one cause that matters and built a whole ecosystem around it.", icon: "heart" },
-  { q: "Why should anyone care?", a: "Every swap, stake and launch here helps fund real support for autistic people and families: therapy, equipment, education and everyday essentials. And the tools are calmer and safer for everyone, in plain words.", icon: "groups" },
-  { q: "Who builds it?", a: "AUTISTIK is built by and for the autistic community and the people who love them. Autistic people lead here; supporters, families and practitioners join in. Nothing about us without us.", icon: "chat" },
-  { q: "Where did the idea come from?", a: "From one belief: autism is not a disease, it's a community. Crypto is great at bringing people together around a token, so we gave that token a purpose: a welcoming home for autistic people that gives back.", icon: "launch" },
+  { q: "What is AUTISTIK?", a: "A website and app where autistic people, their families and supporters can meet, learn and find support. It also has simple, safe tools for using crypto (digital money), explained in plain words.", icon: "groups" },
+  { q: "Why autism?", a: "Around 1 in 100 people are autistic. Many still face stigma, are left out of work and online spaces, and can't get the support they need. We chose to build everything around this one cause.", icon: "heart" },
+  { q: "How does it help?", a: "A portion of the trading activity on AUTISTIK goes into the AUTISTIK Fund. The Fund will pay for therapy, equipment, education and everyday essentials for autistic people and families. It opens soon.", icon: "rewards" },
+  { q: "Who is it for?", a: "Autistic adults, families, carers, supporters, practitioners and organisations, including people who have never used crypto. Joining the community is free.", icon: "chat" },
+  { q: "Who builds it?", a: "AUTISTIK is built by and for the autistic community and the people who love them. Autistic people lead; families, supporters and practitioners join in. Nothing about us without us.", icon: "live" },
+  { q: "Is it safe?", a: "We never ask for your password or recovery phrase, health information is never put on the blockchain, and any coin can be checked with our scanner before you buy. Calm mode and larger text make the site easier to use.", icon: "scan" },
+];
+
+// How using AUTISTIK turns into support, in three steps. [title, text]
+const STEPS: [string, string][] = [
+  ["People join and use the tools", "Members chat in the groups, and anyone can buy, swap or stake coins on AUTISTIK."],
+  ["Activity feeds the Fund", "A portion of that trading activity is set aside in the AUTISTIK Fund."],
+  ["The Fund supports autistic people", "Therapy, equipment, education and everyday essentials, for individuals and families."],
 ];
 
 // The App's main tools, each opening its own screen.
@@ -87,10 +96,10 @@ export default async function Home() {
 
       <section className="lp-hero">
         <div className="lp-hero-copy">
-          <div className="lp-eyebrow">Autism awareness × Web3</div>
+          <div className="lp-eyebrow">A community for autistic people, powered by crypto</div>
           <h1>Autism is not a disease. <span>It&apos;s a community.</span></h1>
-          <p>AUTISTIK is a home for autistic people and supporters, with its own token and simple, safe tools to swap, stake, lock and launch coins.</p>
-          <p className="lp-why"><b>Why autism?</b> Around 1 in 100 people are autistic, yet most apps and crypto tools are loud, confusing and built without them. AUTISTIK is built around their needs, and part of the trading activity goes back to autistic people through the AUTISTIK Fund.</p>
+          <p>AUTISTIK is an online community for autistic people, their families and supporters. We also offer simple, safe tools for using crypto (digital money), and a portion of the activity on them goes to a fund that supports autistic people.</p>
+          <p className="lp-why"><b>In short:</b> people use our tools, and that activity helps pay for real support for autistic people: therapy, equipment, education and everyday essentials. No jargon, no pressure.</p>
           <div className="lp-ctas">
             <Link href="/app" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
@@ -110,8 +119,8 @@ export default async function Home() {
 
       <section id="why" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow">Why AUTISTIK</div><h2>An ecosystem with a reason to exist</h2><p>Most crypto projects are built around a meme. AUTISTIK is built around people.</p></div>
-          <Link href="/autism" className="lp-more">About autism <Arrow /></Link>
+          <div><div className="lp-eyebrow">Why AUTISTIK</div><h2>Our vision, in plain words</h2><p>What AUTISTIK is, who it is for, and how it helps autistic people. No crypto knowledge needed.</p></div>
+          <Link href="/start" className="lp-more">New here? Start here <Arrow /></Link>
         </div>
         <div className="lp-why-grid">
           {WHY.map((w) => (
@@ -122,6 +131,9 @@ export default async function Home() {
             </div>
           ))}
         </div>
+        <ol className="lp-steps" aria-label="How it works">
+          {STEPS.map(([t, x], i) => <li key={t}><span>{i + 1}</span><div><b>{t}</b><small>{x}</small></div></li>)}
+        </ol>
       </section>
 
       <section id="products" className="lp-sec">

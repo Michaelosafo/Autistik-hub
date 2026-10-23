@@ -43,7 +43,7 @@ export default function Welcome() {
         {line === 0 ? (
           <div className="welcome-bubble" key="hi">
             <b>Hi, welcome to AUTISTIK!</b>
-            <span>I&apos;m Autistik, the mascot. This is a crypto home built around autism awareness: simple, safe tools, and part of the activity helps autistic people.</span>
+            <span>I&apos;m Autistik, the mascot. This is a community for autistic people and the people who care about them. Using our tools helps fund real support for autistic people.</span>
           </div>
         ) : (
           <div className="welcome-bubble arena" key="arena" aria-live="polite">
