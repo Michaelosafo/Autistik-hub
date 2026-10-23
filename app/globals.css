@@ -2615,3 +2615,37 @@ h1 .team-badge{font-size:.38em}
 .lp-steps b{display:block;color:#F4EEFF} .lp-steps small{display:block;color:#A9A4BC;font-size:.86em;margin-top:2px}
 @media (max-width:1000px){.lp-why-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lp-steps{grid-template-columns:1fr}}
 @media (max-width:640px){.lp-why-grid{grid-template-columns:1fr}}
+
+/* ───────── Readability pass: stronger text colours + minimum sizes ─────────
+   Every rule here only raises contrast or size; layout is untouched. */
+:root{--muted:#434A66}
+:root[data-theme="dark"]{--muted:#BAC0DB}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--muted:#BAC0DB}}
+
+/* form text and placeholders */
+input,textarea,select{color:var(--ink)}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
+.lux-composer textarea::placeholder{color:rgba(255,255,255,.78)}
+.scan-form.pro input::placeholder{color:rgba(233,236,248,.75)}
+.sw .tx-field input::placeholder{color:#A99FC4}
+.sx-ca input::placeholder,.sc-search input::placeholder{color:#B3A9CC}
+.sc-amt::placeholder{color:#A99FC4}
+
+/* disabled controls: still look off, but the words stay readable */
+.btn:disabled,.icon-btn:disabled,.linkish:disabled{opacity:.72}
+.tx-cta:disabled,.tx-cta[disabled],.ar-sheet .tx-cta.off{opacity:.7}
+.tx-choice:disabled,.sc-chip:disabled,.sc-row-main:disabled,.sx-grid-item:disabled{opacity:.65}
+.scan-form.pro .scan-row .btn.primary:disabled{opacity:.7}
+
+/* translucent hero / dark-panel copy */
+.an-hero p{color:rgba(255,255,255,.9)}
+.an-metrics span{color:rgba(255,255,255,.86);font-size:.8em}
+.pro-hero .muted{color:rgba(255,255,255,.88)}
+.tx{--tx-dim:#A9B1C6}
+
+/* tiny labels */
+.label{font-size:.78em}
+.badge{font-size:.74em}
+.an-kicker{font-size:.78em}
+.notice{color:var(--ink)}
+.gcard ul{color:var(--muted)}
