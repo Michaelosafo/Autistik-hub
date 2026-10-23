@@ -1,4 +1,4 @@
--- Launch Pad v3 (BNB Chain, Ethereum, Robinhood Chain…): every new token's address ends in "aaaaa".
+-- Launch Pad v3 (BNB Chain, Ethereum, Robinhood Chain…): every new token's address ends in "AAAAA".
 -- The address depends only on a salt (CREATE2), so the server finds salts ahead of time
 -- (app/api/launchpad/grind-evm, every 5 minutes, keeps 10 ready per Launch Pad) and each launch takes one; the Hub
 -- signs the salt into the creator's permit so only that creator can use it.

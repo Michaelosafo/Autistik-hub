@@ -43,7 +43,7 @@ export const LAUNCHPAD_V3_ABI = parseAbi([
   "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error TransferFailed()", "error TaxTooHigh()",
 ]);
 
-/** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…). */
+/** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…), shown in capitals ("AAAAA"). */
 export const EVM_VANITY_SUFFIX = "aaaaa";
 
 /** Every token launched on the Launch Pad (AutistikToken in contracts/AutistikLaunchpadV2.sol). */
