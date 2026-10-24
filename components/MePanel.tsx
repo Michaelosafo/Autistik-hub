@@ -50,6 +50,7 @@ export default function MePanel({ me, settings }: {
   const [scan, setScan] = useState("");
   const file = useRef<HTMLInputElement>(null);
   const [crop, setCrop] = useState<File | null>(null);
+  const [view, setView] = useState(false);
 
   useEffect(() => {
     fetch("/api/me/summary").then((r) => r.json()).then(setSum).catch(() => setSum({ signedIn: true }));
@@ -107,10 +108,12 @@ export default function MePanel({ me, settings }: {
       <div className="mp-hero">
         <div className="mp-hero-bg" aria-hidden="true" />
         <div className="mp-head">
-          <button type="button" className="mp-photo" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo">
-            <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
-            <span className="mp-cam" aria-hidden="true">📷</span>
-          </button>
+          <span className="mp-photo-wrap">
+            <button type="button" className="mp-photo" onClick={() => (photo ? setView(true) : file.current?.click())} disabled={busy} aria-label={photo ? "View your photo" : "Add a profile photo"}>
+              <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
+            </button>
+            <button type="button" className="mp-cam" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo">📷</button>
+          </span>
           <div className="mp-name">
             <b>{sum?.profile?.alias || me.alias}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
             {sum?.profile?.handle && <small>@{sum.profile.handle}</small>}
@@ -123,6 +126,18 @@ export default function MePanel({ me, settings }: {
         </div>
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
         {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
+        {view && photo && (
+          <div className="pv-bg" role="dialog" aria-modal="true" aria-label="Your photo" onClick={(e) => e.target === e.currentTarget && setView(false)}>
+            <div className="pv">
+              <img src={photo} alt={`${me.alias}'s photo`} />
+              <b>{me.alias}</b>
+              <div className="mp-row" style={{ justifyContent: "center" }}>
+                <button type="button" className="btn small" onClick={() => { setView(false); file.current?.click(); }}>Change photo</button>
+                <button type="button" className="btn small" onClick={() => setView(false)}>Close</button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="mp-stats">
           <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b><small>Following</small></Link>
           <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b><small>Followers</small></Link>
