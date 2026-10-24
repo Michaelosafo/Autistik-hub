@@ -2914,3 +2914,8 @@ button.lp-signin{font:inherit;font-weight:800;cursor:pointer}
 .me-pic:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}
 .me-pic-add{position:absolute;right:-3px;bottom:-3px;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;
   background:var(--sun-bright,#FFD84D);color:#191326;font-weight:900;font-size:13px;line-height:1;box-shadow:0 0 0 2px #191326}
+
+/* The AUTISTIK mark at the top (components/LogoMark.tsx), in place of the name */
+.logo-mark{display:block;flex:none;filter:drop-shadow(0 4px 12px rgba(181,124,255,.28));transition:transform .15s ease}
+.ax-logo:hover .logo-mark,.lp-logo:hover .logo-mark{transform:scale(1.06)}
+html[data-calm="on"] .logo-mark{transition:none}
