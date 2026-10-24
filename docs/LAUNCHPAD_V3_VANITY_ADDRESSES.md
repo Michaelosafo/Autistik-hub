@@ -33,4 +33,10 @@ A contract's address depends on the chain, deployer/factory, salt and init code.
 - Production launch must remain disabled until the Solana mint flow and per-chain EVM CREATE2 factory are implemented, audited, and tested.
 
 ## Current status
-This file records the V3 acceptance criteria and implementation design. It does not claim that address grinding, mint creation, CREATE2 factories, or production deployment have been implemented.
+## Implementation status on branch `v3-vanity-addresses`
+- Solana vanity mint search uses the existing `tik` grinder and now fails closed instead of generating a normal mint when no matching key is found.
+- Pooled Solana seeds are checked against both the stored public key and the `tik` suffix.
+- EVM vanity search targets the case-insensitive `aaa` hex suffix and fails closed instead of issuing a random salt when no match is found.
+- The EVM V3 launch contract now checks the deployed token address suffix on-chain and reverts if it does not end in `aaa`.
+- Solana launch records reject mint addresses without the required suffix.
+- This branch has not been built, tested, audited, or deployed. Existing deployed EVM contracts do not gain the new on-chain guard until the updated V3 contract is deployed and the launchpad registry is updated.
