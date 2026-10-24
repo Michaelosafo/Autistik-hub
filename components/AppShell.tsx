@@ -8,7 +8,7 @@ import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import Avatar from "@/components/Avatar";
 import LogoMark from "@/components/LogoMark";
-import { NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
+import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
 export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
@@ -90,6 +90,7 @@ export default function AppShell({ admin, me, onMe, children }: {
   const net = netOf(cs.network);
   const solMode = cs.network === "solana";
   const [netMenu, setNetMenu] = useState(false);
+  const [netQ, setNetQ] = useState("");
 
   useEffect(() => { setOpen(null); setMore(false); setAcctMenu(false); setNetMenu(false); }, [path]);
   useEffect(() => {
@@ -147,11 +148,13 @@ export default function AppShell({ admin, me, onMe, children }: {
             </button>
             {netMenu && (
               <div className="ax-menu right" role="menu" aria-label="Choose a network">
-                {NETWORKS.map((n) => (
+                <input className="ax-net-q" value={netQ} onChange={(e) => setNetQ(e.target.value)} placeholder={`Search ${NETWORKS.length} networks`} aria-label="Search networks" autoComplete="off" spellCheck={false} />
+                {[...NETWORKS].sort((a, b) => (TOP_NETWORKS.indexOf(a.key) + 1 || 99) - (TOP_NETWORKS.indexOf(b.key) + 1 || 99))
+                  .filter((n) => !netQ || n.name.toLowerCase().includes(netQ.toLowerCase())).map((n) => (
                   <button key={n.key} type="button" role="menuitemradio" aria-checked={n.key === cs.network}
                     onClick={() => { setNetMenu(false); setNetwork(n.key).then(() => { if (n.key === "solana" ? !getState().sol : !getState().current) pickWallet({ fresh: true }); }); }}>
                     <b><i style={{ background: n.color }} aria-hidden="true" />{n.name}{n.key === cs.network ? " ✓" : ""}</b>
-                    <small>{n.key === "solana" ? "Phantom, Solflare, Backpack…" : "MetaMask, Trust, OKX, Binance…"}</small>
+                    {n.key === "solana" && <small>Phantom, Solflare, Backpack…</small>}
                   </button>
                 ))}
               </div>
