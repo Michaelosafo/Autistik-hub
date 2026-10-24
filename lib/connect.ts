@@ -9,6 +9,7 @@
  * Browser only. Nothing here ever sees a private key: wallets sign inside their own apps.
  */
 import { getWallets } from "@wallet-standard/app";
+import { XCHAIN_LIST } from "@/lib/bridge-chains";
 import type { Wallet, WalletAccount } from "@wallet-standard/base";
 
 export type WalletInfo = { uuid: string; name: string; icon: string; rdns: string };
@@ -20,14 +21,14 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // Logos live in /public/wallets/<id>.svg.
   { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "trust", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
-  { id: "binance", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet" },
+  { id: "binance", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
   { id: "okx", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
   { id: "coinbase", name: "Coinbase Wallet", rdns: ["com.coinbase.wallet"], color: "#0052FF", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
   { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
-  { id: "safepal", name: "SafePal", rdns: ["com.safepal"], color: "#4A21EF", install: "https://www.safepal.com/download" },
-  { id: "tokenpocket", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app" },
+  { id: "safepal", name: "SafePal", rdns: ["com.safepal"], color: "#4A21EF", install: "https://www.safepal.com/download", wc: "https://link.safepal.io" },
+  { id: "tokenpocket", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app", dapp: (u) => `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: u }))}` },
   { id: "rabby", name: "Rabby", rdns: ["io.rabby"], color: "#7084FF", install: "https://rabby.io/" },
-  { id: "phantom", name: "Phantom", rdns: ["app.phantom"], color: "#AB9FF2", install: "https://phantom.com/download" },
+  { id: "phantom", name: "Phantom", rdns: ["app.phantom"], color: "#AB9FF2", install: "https://phantom.com/download", dapp: (u) => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
 ];
 
 /** WalletConnect explorer ids, so these show first in the WalletConnect list. */
@@ -44,18 +45,22 @@ export const WALLETCONNECT_ID = (process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_I
 
 // ---------------------------------------------------------------- networks
 
-/** The networks people can pick before (or after) connecting. EVM ones switch the wallet; Solana uses Solana wallets. */
-export type NetKey = "bsc" | "ethereum" | "base" | "arbitrum" | "solana";
-export const NETWORKS: { key: NetKey; name: string; short: string; chainId?: number; color: string; add?: object }[] = [
-  { key: "bsc", name: "BNB Chain", short: "BNB", chainId: 56, color: "#F0B90B",
-    add: { chainName: "BNB Smart Chain", nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 }, rpcUrls: ["https://bsc-dataseed.binance.org"], blockExplorerUrls: ["https://bscscan.com"] } },
-  { key: "ethereum", name: "Ethereum", short: "ETH", chainId: 1, color: "#8EA2FF" },
-  { key: "base", name: "Base", short: "Base", chainId: 8453, color: "#2F6BFF",
-    add: { chainName: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"] } },
-  { key: "arbitrum", name: "Arbitrum", short: "ARB", chainId: 42161, color: "#28A0F0",
-    add: { chainName: "Arbitrum One", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://arb1.arbitrum.io/rpc"], blockExplorerUrls: ["https://arbiscan.io"] } },
-  { key: "solana", name: "Solana", short: "SOL", color: "#14F195" },
-];
+/**
+ * Every network people can pick before (or after) connecting: all the networks the Hub's swap supports
+ * (lib/bridge-chains.ts). EVM ones switch the wallet (adding the network if the wallet doesn't know it);
+ * Solana uses Solana wallets.
+ */
+export type NetKey = string;
+export type Net = { key: string; name: string; short: string; chainId?: number; color: string; add?: object };
+export const NETWORKS: Net[] = XCHAIN_LIST.map((c) => ({
+  key: c.key, name: c.name, short: c.name.split(" ")[0].slice(0, 8), color: c.color,
+  ...(c.kind === "evm" ? {
+    chainId: c.id,
+    add: { chainName: c.name, nativeCurrency: { name: c.native.symbol, symbol: c.native.symbol, decimals: c.native.decimals }, rpcUrls: [c.rpc], blockExplorerUrls: c.explorer ? [c.explorer] : [] },
+  } : {}),
+}));
+/** The ones shown first. */
+export const TOP_NETWORKS = ["bsc", "ethereum", "solana", "base", "arbitrum"];
 export const netOf = (k: NetKey) => NETWORKS.find((n) => n.key === k) ?? NETWORKS[0];
 const savedNet = (): NetKey => {
   try { const v = localStorage.getItem("aw-network"); if (NETWORKS.some((n) => n.key === v)) return v as NetKey; } catch { /* private mode */ }
@@ -71,8 +76,10 @@ type State = {
   network: NetKey;
   /** Solana wallets on this device (Phantom, Solflare, Backpack…), and the one connected. */
   solFound: Wallet[]; sol: SolConn | null;
+  /** A WalletConnect code for one wallet, shown in our own window: scan it with that wallet's app. */
+  qr: { uri: string; name: string; logo: string } | null;
 };
-let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null };
+let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null, qr: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<State>) => { state = { ...state, ...p }; subs.forEach((f) => f()); };
 export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
@@ -125,6 +132,7 @@ export function pickWallet(opts: { fresh?: boolean } = {}): Promise<any | null> 
 }
 
 export function closePicker() {
+  if (state.qr) cancelQr();
   set({ open: false, busy: "" });
   resolver?.(null); resolver = null;
 }
@@ -167,7 +175,7 @@ export async function setNetwork(k: NetKey) {
 function choose(name: string, provider: any) {
   if (name === "WalletConnect") flagWc(true);
   watchChain(provider);
-  set({ current: { name, provider }, open: false, busy: "", error: "" });
+  set({ current: { name, provider }, open: false, busy: "", error: "", qr: null });
   try { sessionStorage.setItem("aw-wallet", name); localStorage.setItem("aw-last-wallet", name); } catch { /* private mode */ }
   resolver?.(provider); resolver = null;
   try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: name })); } catch { /* old browsers */ }
@@ -206,8 +214,8 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
     // The network picked is the one required network: Trust Wallet and several others refuse a connection that
     // names no required network at all. Every other network stays optional, so nothing else needs approving up front.
     chains: [chainId],
-    rpcMap: { 56: "https://bsc-dataseed.binance.org", 1: "https://ethereum-rpc.publicnode.com", 8453: "https://mainnet.base.org", 42161: "https://arb1.arbitrum.io/rpc" },
-    optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130, 146, 999, 324, 534352, 81457, 5000, 100, 80094, 143, 42220, 1329, 480, 57073, 34443],
+    rpcMap: Object.fromEntries(NETWORKS.filter((n) => n.chainId).map((n) => [n.chainId!, (n.add as any).rpcUrls[0]])),
+    optionalChains: NETWORKS.filter((n) => n.chainId).map((n) => n.chainId!) as [number, ...number[]],
     showQrModal: true,
     qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
     metadata: {
@@ -228,8 +236,13 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
  */
 export async function chooseWalletConnect(walletId?: string) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
-  set({ busy: walletId ? TOP_WALLETS.find((w) => w.id === walletId)?.name || "WalletConnect" : "WalletConnect", error: "" });
-  const direct = isMobile() ? TOP_WALLETS.find((w) => w.id === walletId && w.wc) : undefined;
+  const top = TOP_WALLETS.find((w) => w.id === walletId);
+  set({ busy: top?.name || "WalletConnect", error: "", qr: null });
+  const mobile = isMobile();
+  // On a phone: that wallet's own app opens with the request. On a computer: our window shows a code to scan
+  // with that wallet's app. With no wallet named: WalletConnect's own list of 300+ wallets.
+  const direct = mobile ? (top?.wc ? top : undefined) : undefined;
+  const ownQr = !mobile && !!top;
   try {
     await initWc();
     if (wc.session) {
@@ -238,24 +251,37 @@ export async function chooseWalletConnect(walletId?: string) {
       choose("WalletConnect", wc); return;
     }
     flagWc(true);
-    if (direct) {
-      // Skip the WalletConnect list: open this wallet's app with the request. Later signing requests open it too.
+    if (direct || ownQr) {
       wc.rpc.showQrModal = false;
       wc.once("display_uri", (uri: string) => {
-        try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: direct.wc, name: direct.name })); } catch { /* private mode */ }
-        location.href = `${direct.wc}/wc?uri=${encodeURIComponent(uri)}`;
+        if (direct) {
+          try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: direct.wc, name: direct.name })); } catch { /* private mode */ }
+          location.href = `${direct.wc}/wc?uri=${encodeURIComponent(uri)}`;
+        } else set({ qr: { uri, name: top!.name, logo: `/wallets/${top!.id}.svg` }, busy: "" });
       });
     } else {
       // Hide our sheet while WalletConnect shows its own QR / wallet list.
       set({ open: false });
     }
     try { await wc.connect(); } finally { wc.rpc.showQrModal = true; }
+    const id = netOf(state.network).chainId;
+    if (id) await switchEvm(wc, id).catch(() => {});
     choose("WalletConnect", wc);
   } catch (e: any) {
     if (!wc?.session) flagWc(false);
     if (state.current) return; // picked up by the "connect" event meanwhile
-    set({ open: true, busy: "", error: /reset|reject|closed|cancel/i.test(String(e?.message)) ? "WalletConnect was closed. Try again, or pick another wallet." : String(e?.message || e).slice(0, 160) });
+    if (cancelled) { cancelled = false; return; }
+    set({ open: true, busy: "", qr: null, error: /reset|reject|closed|cancel/i.test(String(e?.message)) ? "WalletConnect was closed. Try again, or pick another wallet." : String(e?.message || e).slice(0, 160) });
   }
+}
+
+let cancelled = false;
+/** Back from the code to the wallet list: drop the half-made connection so the next try starts clean. */
+export function cancelQr() {
+  cancelled = true;
+  set({ qr: null, busy: "" });
+  const old = wc; wc = null;
+  old?.disconnect?.().catch(() => {});
 }
 
 /** Forget the chosen wallet (and end a WalletConnect session). */
