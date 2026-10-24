@@ -41,7 +41,7 @@ export async function vanityMint(): Promise<Keypair> {
       if (kp.publicKey.toBase58() === row.pubkey && kp.publicKey.toBase58().endsWith(VANITY_SUFFIX)) return kp;
     }
   }
-  const found = grind(Number(process.env.LAUNCH_SOLANA_VANITY_GRIND_MS || 120_000));
+  const found = grind(Number(process.env.LAUNCH_SOLANA_VANITY_GRIND_MS || 45_000));
   if (!found || !found.publicKey.toBase58().endsWith(VANITY_SUFFIX)) {
     throw new Error('Could not generate a Solana mint ending in "tik". Please retry; no token was created.');
   }
