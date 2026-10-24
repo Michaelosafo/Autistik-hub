@@ -3077,3 +3077,19 @@ html[data-calm="on"] .mp-act{transition:none}
 .ql-checks .ok i{background:rgba(91,227,143,.2);color:#5BE38F}
 .ql-checks .warn i{background:rgba(255,184,77,.2);color:#FFB84D}
 .ql-card .muted{color:#A99FC2}
+
+/* Your picture in the menus gently grows and settles now and then, so people notice they can tap it */
+@keyframes mePulse{0%,78%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(240,185,11,0)}86%{transform:scale(1.14);box-shadow:0 0 0 6px rgba(240,185,11,.28)}93%{transform:scale(.97)}}
+.me-pic .me-av,.ax-me .me-av,.me-btn .me-av,.rail-me .me-av{animation:mePulse 4.5s ease-in-out infinite;border-radius:50%}
+.me-pic:hover .me-av,.ax-me:hover .me-av,.me-btn:hover .me-av,.rail-me:hover .me-av{animation-play-state:paused;transform:scale(1.08)}
+@media (prefers-reduced-motion:reduce){.me-pic .me-av,.ax-me .me-av,.me-btn .me-av,.rail-me .me-av{animation:none}}
+html[data-calm="on"] .me-pic .me-av,html[data-calm="on"] .ax-me .me-av,html[data-calm="on"] .me-btn .me-av,html[data-calm="on"] .rail-me .me-av{animation:none}
+/* View your photo large */
+.mp-photo-wrap{position:relative;flex:none}
+.mp-photo-wrap .mp-cam{all:unset;cursor:pointer;position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--sun-bright);font-size:.72em}
+.mp-photo-wrap .mp-cam:focus-visible{outline:2px solid #fff}
+.pv-bg{position:fixed;inset:0;z-index:400;background:rgba(10,6,20,.8);display:grid;place-items:center;padding:16px;animation:mpFade .15s ease-out}
+.pv{display:flex;flex-direction:column;align-items:center;gap:12px;color:#F4EEFF}
+.pv img{width:min(320px,80vw);aspect-ratio:1;object-fit:cover;border-radius:50%;box-shadow:0 0 0 4px rgba(255,255,255,.12),0 20px 60px rgba(0,0,0,.5);animation:pvPop .2s ease-out}
+@keyframes pvPop{from{transform:scale(.85);opacity:.4}to{transform:none;opacity:1}}
+html[data-calm="on"] .pv img,html[data-calm="on"] .pv-bg{animation:none}
