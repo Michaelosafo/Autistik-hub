@@ -3093,3 +3093,11 @@ html[data-calm="on"] .me-pic .me-av,html[data-calm="on"] .ax-me .me-av,html[data
 .pv img{width:min(320px,80vw);aspect-ratio:1;object-fit:cover;border-radius:50%;box-shadow:0 0 0 4px rgba(255,255,255,.12),0 20px 60px rgba(0,0,0,.5);animation:pvPop .2s ease-out}
 @keyframes pvPop{from{transform:scale(.85);opacity:.4}to{transform:none;opacity:1}}
 html[data-calm="on"] .pv img,html[data-calm="on"] .pv-bg{animation:none}
+.mp-links{display:flex;flex-direction:column;padding:4px;border-radius:14px;background:var(--rail-2)}
+.mp-link{display:flex;align-items:center;gap:10px;padding:9px 8px;border-radius:10px;text-decoration:none}
+.mp-link:hover{background:var(--rail)}
+.mp-link:focus-visible{outline:2px solid var(--sun-bright)}
+.mp-link > span{width:22px;text-align:center}
+.mp-link b{color:var(--rail-hi);font-size:.9em}
+.mp-link small{flex:1;font-size:.74em;color:var(--rail-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mp-link i{font-style:normal;color:var(--rail-ink)}
