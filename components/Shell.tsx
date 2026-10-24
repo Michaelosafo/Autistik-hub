@@ -119,13 +119,19 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
   }
 
   // The account, alerts and display rows: in the pop-up menu (top right on phones) and in your panel on the left.
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const menuRows = (
     <>
                   {me && <Link className="me-row" href="/members" onClick={() => setMenu(false)}><Icon id="i-com" /><span>Members<small>Follow people and see your feed</small></span></Link>}
                   {me && (
-                    <div className="me-sec">
-                      <div className="me-sec-h"><b>🔔 Alerts</b>{alerts.unread > 0 && <span className="badge gold">{alerts.unread} new</span>}<Link href="/analytics" onClick={() => setMenu(false)}>Stats →</Link></div>
-                      <AlertsList alerts={alerts} onPick={() => setMenu(false)} />
+                    <div className={"me-alerts" + (alertsOpen ? " open" : "")}>
+                      <button type="button" className="me-alerts-btn" aria-expanded={alertsOpen} onClick={() => { setAlertsOpen(!alertsOpen); if (!alertsOpen) setTimeout(alerts.markAll, 1500); }}
+                        aria-label={`Alerts${alerts.unread ? `: ${alerts.unread} new` : ""}`}>
+                        <span className="me-bell" aria-hidden="true">🔔{alerts.unread > 0 && <i>{alerts.unread > 9 ? "9+" : alerts.unread}</i>}</span>
+                        <span>Alerts<small>{alerts.unread ? `${alerts.unread} new` : "Nothing new"}</small></span>
+                        <em aria-hidden="true">{alertsOpen ? "▴" : "▾"}</em>
+                      </button>
+                      {alertsOpen && <AlertsList alerts={alerts} onPick={() => setMenu(false)} />}
                     </div>
                   )}
                   <div className="me-sec">

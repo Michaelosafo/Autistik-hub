@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Avatar from "@/components/Avatar";
+import PhotoCrop from "@/components/PhotoCrop";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
@@ -25,16 +26,6 @@ const ago = (iso: string) => {
   return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
 };
 
-/** Shrinks a photo to a 384px square WebP in the browser, so uploads are small and quick. */
-async function squareWebp(file: File): Promise<Blob> {
-  const img = await createImageBitmap(file);
-  const side = Math.min(img.width, img.height), size = Math.min(384, side);
-  const c = document.createElement("canvas");
-  c.width = c.height = size;
-  c.getContext("2d")!.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
-  return new Promise((ok, no) => c.toBlob((b) => (b ? ok(b) : no(new Error("Couldn't read that picture."))), "image/webp", 0.88));
-}
-
 export default function MePanel({ me, settings }: {
   me: { id: string; alias: string; color: string; avatar_url: string | null; is_admin: boolean };
   /** The display and account rows (shared with the menu on phones). */
@@ -48,17 +39,23 @@ export default function MePanel({ me, settings }: {
   const [msg, setMsg] = useState("");
   const [scan, setScan] = useState("");
   const file = useRef<HTMLInputElement>(null);
+  const [crop, setCrop] = useState<File | null>(null);
 
   useEffect(() => {
     fetch("/api/me/summary").then((r) => r.json()).then(setSum).catch(() => setSum({ signedIn: true }));
     fetch("/api/feed?tab=following").then((r) => r.json()).then((d) => setUpdates((d.items || []).slice(0, 4))).catch(() => setUpdates([]));
   }, []);
 
-  async function upload(f: File) {
+  /** A picture was picked: first let them choose how it fits in the circle. */
+  function pick(f: File) {
     if (!/^image\//.test(f.type)) { setMsg("Pick a picture (PNG, JPG, WebP or GIF)."); return; }
+    if (f.size > 20 * 1024 * 1024) { setMsg("That picture is very big. Try one under 20 MB."); return; }
+    setMsg(""); setCrop(f);
+  }
+  async function upload(blob: Blob) {
+    setCrop(null);
     setBusy(true); setMsg("Uploading…");
     try {
-      const blob = await squareWebp(f);
       const sb = supabaseBrowser();
       const path = `${me.id}/avatar-${Date.now()}.webp`;
       const { error: up } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/webp", upsert: true });
@@ -97,7 +94,8 @@ export default function MePanel({ me, settings }: {
           <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
           <span className="mp-cam" aria-hidden="true">📷</span>
         </button>
-        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
+        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
+      {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
         <div className="mp-name">
           <b>{sum?.profile?.alias || me.alias}</b>
           {sum?.profile?.handle && <small>@{sum.profile.handle}</small>}
