@@ -7,32 +7,38 @@
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import Art from "@/components/Art";
 import { LINKS } from "@/lib/site";
 import { getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
-type Item = { href: string; name: string; icon: string; match?: string[]; members?: boolean };
-// One list like X's: the pages people use most. Everything else is behind More.
-const MAIN: Item[] = [
-  { href: "/", name: "Home", icon: "i-home" },
-  { href: "/launchpad", name: "Trending", icon: "i-fire", match: ["/launchpad", "/momentum"] },
-  { href: "/companions", name: "Chat", icon: "i-kai" },
-  { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
-  { href: "/live", name: "Live", icon: "i-ses" },
-  { href: "/swap", name: "Swap", icon: "i-swap", match: ["/swap", "/perps", "/trade"] },
-  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena"] },
-  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
-  { href: "/lockers", name: "Lock", icon: "i-lock" },
-  { href: "/members", name: "Members", icon: "i-user", members: true },
-];
-const MORE: Item[] = [
-  { href: "/app", name: "All App tools", icon: "i-grid" },
-  { href: "/analytics", name: "Token scanner", icon: "i-search", match: ["/analytics", "/pro"] },
-  { href: "/buy", name: "$AUTISTIK", icon: "i-buy", match: ["/buy", "/fund"] },
-  { href: "/about", name: "What is AUTISTIK?", icon: "i-inf" },
-  { href: "/autism", name: "About autism", icon: "i-learn" },
-  { href: "/safety", name: "Safety", icon: "i-safe" },
+type Item = { href: string; name: string; icon: string; match?: string[]; members?: boolean; admin?: boolean };
+// Every page in the menu, in three groups (no More). On a short screen the list scrolls on its own while Launch a token
+// and the account stay at the bottom.
+const GROUPS: Item[][] = [
+  [
+    { href: "/", name: "Home", icon: "i-home" },
+    { href: "/companions", name: "Chat", icon: "i-kai" },
+    { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
+    { href: "/live", name: "Live", icon: "i-ses" },
+    { href: "/members", name: "Members", icon: "i-user", members: true },
+  ],
+  [
+    { href: "/launchpad", name: "Trending", icon: "i-fire", match: ["/launchpad", "/momentum"] },
+    { href: "/swap", name: "Swap", icon: "i-swap", match: ["/swap", "/perps", "/trade"] },
+    { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena"] },
+    { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
+    { href: "/lockers", name: "Lock", icon: "i-lock" },
+    { href: "/analytics", name: "Token scanner", icon: "i-search", match: ["/analytics", "/pro"] },
+    { href: "/app", name: "All tools", icon: "i-grid" },
+  ],
+  [
+    { href: "/buy", name: "$AUTISTIK", icon: "i-buy", match: ["/buy", "/fund"] },
+    { href: "/about", name: "What is AUTISTIK?", icon: "i-star" },
+    { href: "/autism", name: "About autism", icon: "i-learn" },
+    { href: "/safety", name: "Safety", icon: "i-safe" },
+    { href: "/admin", name: "Admin", icon: "i-adm", admin: true },
+  ],
 ];
 
 const Icon = ({ id }: { id: string }) => <svg aria-hidden="true"><use href={"#" + id} /></svg>;
@@ -55,18 +61,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
   menuPop: ReactNode;
   children: ReactNode;
 }) {
-  const section = [...MAIN, ...MORE].find((i) => isOn(path, i));
-  const [more, setMore] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { setMore(false); }, [path]);
-  useEffect(() => {
-    if (!more) return;
-    const close = (e: MouseEvent) => { if (!moreRef.current?.contains(e.target as Node)) setMore(false); };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMore(false); };
-    document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
-  }, [more]);
-  const moreItems = me?.is_admin ? [...MORE, { href: "/admin", name: "Admin", icon: "i-adm" }] : MORE;
+  const section = GROUPS.flat().find((i) => isOn(path, i));
   const link = (i: Item) => (
     <Link key={i.href} href={i.href} className="nx-link" aria-current={isOn(path, i) ? "page" : undefined}>
       <Icon id={i.icon} /><span>{i.name}</span>
@@ -80,19 +75,11 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
           <b>AUTISTIK</b>
         </Link>
         <nav className="nx-nav">
-          {MAIN.filter((i) => !i.members || me).map(link)}
-          <div className="nx-more" ref={moreRef}>
-            <button type="button" className="nx-link" aria-expanded={more} aria-haspopup="menu" aria-current={moreItems.some((i) => isOn(path, i)) ? "page" : undefined} onClick={() => setMore(!more)}>
-              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M8 12h.01M12 12h.01M16 12h.01" strokeWidth="3" /></svg><span>More</span>
-            </button>
-            {more && (
-              <div className="nx-more-pop" role="menu">
-                {moreItems.map((i) => (
-                  <Link key={i.href} role="menuitem" href={i.href} aria-current={isOn(path, i) ? "page" : undefined}><Icon id={i.icon} /><span>{i.name}</span></Link>
-                ))}
-              </div>
-            )}
-          </div>
+          {GROUPS.map((g, gi) => (
+            <div key={gi} className="nx-group">
+              {g.filter((i) => (!i.members || me) && (!i.admin || me?.is_admin)).map(link)}
+            </div>
+          ))}
         </nav>
         <Link href="/launchpad/new" className="nx-cta"><Icon id="i-rocket" /><span>Launch a token</span></Link>
         <div className="nx-acct me-menu" ref={menuRef}>
@@ -124,11 +111,13 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
   );
 }
 
-type Side = {
-  trending: { chain: string; chainName: string; token: string; name: string; symbol: string; priceUsd: number | null; change24h: number | null; imageUrl: string | null; promoted: boolean }[];
-  live: { id: string; title: string; host: string | null; starts_at: string; now: boolean }[];
-  news: { id: string; body: string; channel: string; created_at: string }[] | null;
-};
+type Tok = { chain: string; chainName: string; token: string; name: string; symbol: string; priceUsd: number | null; change24h: number | null; imageUrl: string | null; promoted: boolean; created_at: string };
+type Side = { trending: Tok[]; gainers: Tok[]; newest: Tok[] };
+const TABS = [
+  { id: "trending", label: "Trending" },
+  { id: "gainers", label: "Top gainers" },
+  { id: "newest", label: "New launches" },
+] as const;
 
 const price = (n: number | null) => n == null ? "–" : n >= 1 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : `$${n.toPrecision(3)}`;
 const when = (iso: string) => {
@@ -138,30 +127,37 @@ const when = (iso: string) => {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 };
 
-function SideColumn({ app, signedIn }: { app: boolean; signedIn: boolean }) {
+function SideColumn({ app }: { app: boolean; signedIn: boolean }) {
   const [side, setSide] = useState<Side | null>(null);
+  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("trending");
   useEffect(() => {
     let alive = true;
     const load = () => fetch("/api/side").then((r) => r.json()).then((d) => alive && setSide(d)).catch(() => {});
     load();
     const t = setInterval(load, 120_000);
     return () => { alive = false; clearInterval(t); };
-  }, [signedIn]);
+  }, []);
+  const list = side ? side[tab] || [] : null;
 
   return (
-    <aside className="nx-side" aria-label="Trending, live and news">
+    <aside className="nx-side" aria-label="Trending tokens">
       <SearchBox />
       {app && <WalletCard />}
-      <section className="nx-card">
-        <div className="nx-card-h"><b>🔥 Trending tokens</b><Link href="/launchpad">See all</Link></div>
-        {!side ? <p className="muted nx-empty">Loading…</p> : side.trending.length === 0 ? <p className="muted nx-empty">No tokens yet. <Link href="/launchpad/new">Launch the first one</Link>.</p> : (
+      <section className="nx-card nx-trend">
+        <div className="nx-card-h"><b>🔥 Trending</b><Link href="/launchpad">See all</Link></div>
+        <div className="nx-tabs" role="tablist" aria-label="Token lists">
+          {TABS.map((t) => <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</button>)}
+        </div>
+        {!list ? <p className="muted nx-empty">Loading…</p> : list.length === 0 ? (
+          <p className="muted nx-empty">{tab === "gainers" ? "No price moves yet. Tokens show here once they trade." : <>No tokens yet. <Link href="/launchpad/new">Launch the first one</Link>.</>}</p>
+        ) : (
           <ol className="nx-tokens">
-            {side.trending.map((t, i) => (
+            {list.map((t, i) => (
               <li key={t.chain + t.token}>
                 <Link href={`/launchpad/${t.chain}/${t.token}`}>
                   <span className="nx-rank">{i + 1}</span>
-                  {t.imageUrl ? <img src={t.imageUrl} alt="" width={28} height={28} /> : <span className="nx-tok-ph" aria-hidden="true">{t.symbol.slice(0, 1)}</span>}
-                  <span className="nx-tok"><b>${t.symbol}</b><small>{t.chainName}{t.promoted ? " · Promoted" : ""}</small></span>
+                  {t.imageUrl ? <img src={t.imageUrl} alt="" width={30} height={30} /> : <span className="nx-tok-ph" aria-hidden="true">{t.symbol.slice(0, 1)}</span>}
+                  <span className="nx-tok"><b>${t.symbol}</b><small>{t.chainName}{tab === "newest" ? ` · ${when(t.created_at)}` : t.promoted ? " · Promoted" : ""}</small></span>
                   <span className="nx-px"><b>{price(t.priceUsd)}</b>{t.change24h != null && <small className={t.change24h >= 0 ? "up" : "down"}>{t.change24h >= 0 ? "+" : ""}{t.change24h.toFixed(1)}%</small>}</span>
                 </Link>
               </li>
@@ -169,33 +165,8 @@ function SideColumn({ app, signedIn }: { app: boolean; signedIn: boolean }) {
           </ol>
         )}
       </section>
-      <section className="nx-card">
-        <div className="nx-card-h"><b>📡 Live</b><Link href="/live">Schedule</Link></div>
-        {!side ? <p className="muted nx-empty">Loading…</p> : side.live.length === 0 ? <p className="muted nx-empty">Nothing live right now. Sessions show here when they start.</p> : (
-          <ul className="nx-list">
-            {side.live.map((s) => (
-              <li key={s.id}><Link href="/live">
-                <span className={"nx-dot" + (s.now ? " on" : "")} aria-hidden="true" />
-                <span><b>{s.title}</b><small>{s.now ? "Live now" : new Date(s.starts_at).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" })}{s.host ? ` · ${s.host}` : ""}</small></span>
-              </Link></li>
-            ))}
-          </ul>
-        )}
-      </section>
-      <section className="nx-card">
-        <div className="nx-card-h"><b>📰 AUTISTIK news</b><Link href="/community">Community</Link></div>
-        {!side ? <p className="muted nx-empty">Loading…</p> : side.news === null ? <p className="muted nx-empty"><Link href="/login?next=/community">Sign in</Link> to see the team&apos;s latest posts.</p> : side.news.length === 0 ? <p className="muted nx-empty">No news posts yet.</p> : (
-          <ul className="nx-list">
-            {side.news.map((n) => (
-              <li key={n.id}><Link href={`/community?c=${encodeURIComponent(n.channel)}`}>
-                <span><b className="nx-clamp">{n.body}</b><small>{when(n.created_at)}</small></span>
-              </Link></li>
-            ))}
-          </ul>
-        )}
-      </section>
       <nav className="nx-foot" aria-label="More">
-        <Link href="/autism">About autism</Link><Link href="/safety">Safety</Link><Link href="/privacy">Privacy</Link><a href={`mailto:${LINKS.email}`}>Contact</a>
+        <Link href="/about">About</Link><Link href="/autism">About autism</Link><Link href="/safety">Safety</Link><Link href="/privacy">Privacy</Link><a href={`mailto:${LINKS.email}`}>Contact</a>
       </nav>
     </aside>
   );
