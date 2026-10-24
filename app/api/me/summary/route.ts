@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { rateLimit } from "@/lib/ratelimit";
-import { currentUser, supabaseService } from "@/lib/supabase/server";
+import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { balances } from "@/lib/wallet-server";
 import { WCHAINS } from "@/lib/wallet-chains";
 
@@ -27,6 +27,14 @@ export async function GET(req: Request) {
   const order = new Map(ids.map((id, i) => [id, i]));
   const recent = (fp || []).sort((a: any, b: any) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
+  // What each of them did last (their public activity only).
+  const last = new Map<string, { kind: string; label: string | null; at: string }>();
+  if (ids.length) {
+    const { data: ar } = await supabaseServer().rpc("member_activity_many", { p_ids: ids, p_per: 1, p_total: 10 });
+    for (const a of (ar || []) as any[]) if (!last.has(a.user_id)) last.set(a.user_id, { kind: a.kind, label: a.label, at: a.at });
+  }
+  const recentWithLast = recent.map((m: any) => ({ ...m, last: last.get(m.id) || null }));
+
   let funds: { symbol: string; amount: number; valueUsd: number | null }[] = [];
   let totalUsd: number | null = null;
   const address: string | null = w?.address ?? null;
@@ -40,7 +48,7 @@ export async function GET(req: Request) {
   }
   return json({
     signedIn: true,
-    profile: prof, following: following ?? 0, followers: followers ?? 0, recent, launches: launches || [],
+    profile: prof, following: following ?? 0, followers: followers ?? 0, recent: recentWithLast, launches: launches || [],
     wallet: address ? { short: `${address.slice(0, 6)}…${address.slice(-4)}`, funds, totalUsd } : null,
   });
 }

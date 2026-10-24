@@ -2,7 +2,7 @@ import Link from "next/link";
 import FollowButton from "@/components/members/FollowButton";
 import MemberName from "@/components/members/MemberName";
 import { CHANNELS } from "@/lib/groups";
-import { ago, loadProfiles } from "@/lib/members";
+import { ACTIVITY, ago, loadProfiles } from "@/lib/members";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +34,9 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
   let feed: { id: string; author_id: string; channel: string; body: string; created_at: string }[] = [];
   let joins: { session_id: string; user_id: string; joined_at: string; session: { title: string } | null }[] = [];
   let whoName = "";
+  type ActRow = { user_id: string; at: string; kind: string; label: string | null; link: string | null };
+  let extra: ActRow[] = [];
+  let latest = new Map<string, ActRow[]>();
 
   if (tab === "feed" && following.size) {
     const ids = [...following];
@@ -42,7 +45,9 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
       sb.from("session_joins").select("session_id,user_id,joined_at,session:sessions(title)").in("user_id", ids).order("joined_at", { ascending: false }).limit(20),
     ]);
     feed = (p || []) as any; joins = (j || []) as any;
-    people = await loadProfiles(sb, [...new Set([...feed.map((x) => x.author_id), ...joins.map((x) => x.user_id)])]);
+    const { data: ar } = await sb.rpc("member_activity_many", { p_ids: ids.slice(0, 200), p_per: 5, p_total: 60 });
+    extra = ((ar || []) as ActRow[]).filter((a) => a.kind !== "post" && a.kind !== "live");
+    people = await loadProfiles(sb, [...new Set([...feed.map((x) => x.author_id), ...joins.map((x) => x.user_id), ...extra.map((x) => x.user_id)])]);
   } else if (tab === "find") {
     // Search by nickname or @handle (handles arrive with members-live.sql; before that, nicknames only).
     const find = (byHandle: boolean) => loadProfiles(sb, undefined, (x) => (q ? (byHandle ? x.or(`alias.ilike.%${q}%,handle.ilike.%${q}%`) : x.ilike("alias", `%${q}%`)) : x).order("created_at", { ascending: false }).limit(60));
@@ -55,6 +60,11 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
       : await sb.from("follows").select("followee_id").eq("follower_id", who).limit(500);
     people = await loadProfiles(sb, (f || []).map((x: any) => x.follower_id || x.followee_id));
     if (who !== user.id) whoName = (await loadProfiles(sb, [who]))[0]?.alias || "";
+  }
+
+  if (tab !== "feed" && people.length) {
+    const { data: ar } = await sb.rpc("member_activity_many", { p_ids: people.map((p) => p.id).slice(0, 200), p_per: 2, p_total: 200 });
+    for (const a of (ar || []) as ActRow[]) latest.set(a.user_id, [...(latest.get(a.user_id) || []), a]);
   }
 
   // "People to follow": the team first, then the members others follow most, then the newest. Not you, not people you already follow.
@@ -74,14 +84,22 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
       <span className="where" style={{ fontSize: ".82em" }}>{CHANNELS[x.channel] ? `${CHANNELS[x.channel].group.name} › #${CHANNELS[x.channel].name}` : "Community"}</span>
       <p style={{ overflowWrap: "anywhere" }}>{x.body.length > 280 ? x.body.slice(0, 280) + "…" : x.body}</p>
     </> })),
+    ...extra.map((x) => ({ at: x.at, who: x.user_id, key: "a" + x.user_id + x.at + x.kind, el: <p>{(ACTIVITY[x.kind]?.icon || "•")} <span className="muted">{ACTIVITY[x.kind]?.verb}</span> {x.link ? <Link href={x.link}>{x.label}</Link> : x.label}</p> })),
     ...joins.map((x) => ({ at: x.joined_at, who: x.user_id, key: "j" + x.session_id + x.user_id, el: <p>🎙️ Joined the live session <Link href="/live"><b>{x.session?.title || "Live session"}</b></Link></p> })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   const tabs: [Tab, string][] = [["feed", "Following feed"], ["find", "Find members"], ["followers", "Followers"], ["following", "Following"]];
   const card = (p: (typeof people)[number]) => (
-    <div key={p.id} className="member-row">
-      <MemberName m={p} avatar />
-      {p.id === user.id ? <span className="muted" style={{ fontSize: ".85em" }}>You</span> : <FollowButton id={p.id} initial={following.has(p.id)} small />}
+    <div key={p.id} className="stack" style={{ gap: 4 }}>
+      <div className="member-row">
+        <MemberName m={p} avatar />
+        {p.id === user.id ? <span className="muted" style={{ fontSize: ".85em" }}>You</span> : <FollowButton id={p.id} initial={following.has(p.id)} small />}
+      </div>
+      {(latest.get(p.id) || []).slice(0, 2).map((a, i) => (
+        <div key={i} className="muted" style={{ fontSize: ".85em", paddingLeft: 42, overflowWrap: "anywhere" }}>
+          {ACTIVITY[a.kind]?.icon || "•"} {ACTIVITY[a.kind]?.verb} {a.link ? <Link href={a.link}>{a.label}</Link> : a.label} · {ago(a.at)}
+        </div>
+      ))}
     </div>
   );
 
