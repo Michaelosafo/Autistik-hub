@@ -22,12 +22,10 @@ type Update = { kind: string; id: string; at: string; body?: string; author?: { 
 
 /** Shortcuts at the top of your panel. */
 const ACTIONS = [
-  { href: "/launchpad/new", name: "Launch", note: "New token", icon: "🚀", color: "#FF6B9A" },
-  { href: "/liquidity", name: "Liquidity", note: "Add or create a pool", icon: "💧", color: "#4FD1FF" },
-  { href: "/lockers", name: "Lock", note: "LP or team tokens", icon: "🔒", color: "#B57CFF" },
-  { href: "/stake", name: "Earn", note: "Stake & rewards", icon: "💰", color: "#5BE38F" },
-  { href: "/swap", name: "Swap", note: "Any token", icon: "🔁", color: "#FFD84D" },
-  { href: "/analytics", name: "Scanner", note: "Check a token", icon: "🔎", color: "#FF9F5A" },
+  { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "🚀" },
+  { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "💧" },
+  { href: "/lockers", name: "Lock", note: "Lock LP or team tokens", icon: "🔒" },
+  { href: "/stake", name: "Earn", note: "Stake and rewards", icon: "💰" },
 ];
 const BAR = ["#F0B90B", "#B57CFF", "#4FD1FF", "#5BE38F"];
 const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
@@ -146,15 +144,6 @@ export default function MePanel({ me, settings }: {
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
 
-      <nav className="mp-actions" aria-label="Quick actions">
-        {ACTIONS.map((a) => (
-          <Link key={a.href} href={a.href} className="mp-act" style={{ ["--act" as any]: a.color }}>
-            <span className="mp-act-ic" aria-hidden="true">{a.icon}</span>
-            <b>{a.name}</b><small>{a.note}</small>
-          </Link>
-        ))}
-      </nav>
-
       <section className="mp-sec mp-wallet">
         <div className="mp-sec-h"><b>👛 Wallet</b><Link href="/wallet">Open</Link></div>
         {!sum ? <small className="mp-dim">Loading…</small> : sum.wallet ? (
@@ -171,13 +160,11 @@ export default function MePanel({ me, settings }: {
         ) : <small className="mp-dim">No wallet yet. <Link href="/wallet">Set one up</Link>.</small>}
       </section>
 
-      <section className="mp-sec mp-earn">
-        <div className="mp-sec-h"><b>💰 Earn</b><Link href="/stake">Open</Link></div>
-        <div className="mp-earn-grid">
-          <Link href="/stake"><b>Stake</b><small>Earn BNB from platform fees, up to 3x</small></Link>
-          <Link href="/rewards"><b>Rewards</b><small>Points and $AUTISTIK airdrops</small></Link>
-        </div>
-      </section>
+      <nav className="mp-links" aria-label="Launch and earn">
+        {ACTIONS.map((a) => (
+          <Link key={a.href} href={a.href} className="mp-link"><span aria-hidden="true">{a.icon}</span><b>{a.name}</b><small>{a.note}</small><i aria-hidden="true">›</i></Link>
+        ))}
+      </nav>
 
       <section className="mp-sec">
         <div className="mp-sec-h"><b>🔔 Updates from people you follow</b><Link href="/members">All</Link></div>
