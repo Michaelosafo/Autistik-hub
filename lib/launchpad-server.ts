@@ -34,22 +34,6 @@ export async function padOn(chain: ChainKey) {
   return (await padSites())[chain] ?? null;
 }
 
-/**
- * Where new tokens can be launched: only v3 Launch Pads (token addresses ending in "AAAAA"). A chain still on an older
- * Launch Pad takes no new launches until the team upgrades it on the admin page; its older tokens keep working there
- * (promotions, liquidity release), which is why padSites/padOn still list it.
- */
-export async function launchSites(): Promise<Pads> {
-  const { pads, versions } = await padInfo();
-  const out: Pads = {};
-  for (const chain of Object.keys(pads) as ChainKey[]) if ((versions[chain] ?? 2) >= 3) out[chain] = pads[chain];
-  return out;
-}
-
-export async function launchPadOn(chain: ChainKey) {
-  return (await launchSites())[chain] ?? null;
-}
-
 /** The version of a chain's Launch Pad: 3 gives token addresses ending in "aaaaa", 2 is the one before. */
 export async function padVersion(chain: ChainKey) {
   return (await padInfo()).versions[chain] ?? 2;

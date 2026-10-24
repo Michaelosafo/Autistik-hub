@@ -118,7 +118,7 @@ Every token is the same fixed code, so creators can't change it: fixed supply, n
 
 **Solana** launches create an SPL token at an address ending in **"tik"**, with minting switched off, no freeze and locked name and ticker, then a Raydium pool the creator seeds and whose LP tokens are burned.
 
-New launches only go through v3. A chain still on an older Launch Pad takes no new launches until the team presses **Upgrade to v3** on `/launchpad/new` (admin). Tokens launched on the older one keep working there.
+A chain still on a v2 Launch Pad keeps launching on v2 (ordinary token addresses, no "AAAAA") until the team presses **Upgrade to v3** on `/launchpad/new` (admin). From then on its new launches use v3, and tokens launched on v2 keep working there.
 
 **Who can launch:** the wallet must hold at least **$20 of AUTISTIK on BNB Chain** (change it with `NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD`). When a member presses Launch, the Hub reads their AUTISTIK balance and the live price from DexScreener, and if it's enough it signs a permit that lasts 15 minutes. The contract refuses the launch without a valid permit for that exact wallet, so the AUTISTIK has to still be in the wallet at launch time. It is never spent or taken. This works for launches on Ethereum and Robinhood Chain too, because the same wallet address is used on every chain.
 

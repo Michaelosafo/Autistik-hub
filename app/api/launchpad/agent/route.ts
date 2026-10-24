@@ -3,7 +3,7 @@ import { anthropic, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErr
 import { supabaseService } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, type Pads } from "@/lib/launchpad";
-import { launchSites } from "@/lib/launchpad-server";
+import { padSites } from "@/lib/launchpad-server";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
 export const runtime = "nodejs";
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
   const turns = cleanTurns(body?.messages);
   if (!turns) return json({ error: "Send a message to start." }, 400);
   const session = String(body?.session || "");
-  const pads = await launchSites();
+  const pads = await padSites();
   if (!/^[a-zA-Z0-9-]{8,64}$/.test(session)) return json({ error: "Please refresh the page and try again." }, 400);
 
   // 2 AI launch sessions a day (30 messages each). The quick launch form is unlimited and uses no AI.
