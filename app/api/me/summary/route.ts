@@ -20,6 +20,7 @@ export async function GET(req: Request) {
     sb.from("follows").select("*", { count: "exact", head: true }).eq("followee_id", user.id),
     sb.from("wallets").select("address").eq("user_id", user.id).maybeSingle(),
   ]);
+  const { data: launches } = await sb.from("launches").select("chain,token,symbol,lp_lock,lp_unlock_at,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10);
   const { data: fl } = await sb.from("follows").select("followee_id").eq("follower_id", user.id).order("created_at", { ascending: false }).limit(5);
   const ids = (fl || []).map((f: any) => f.followee_id as string);
   const { data: fp } = ids.length ? await sb.from("profiles").select("id,alias,handle,color,is_team,is_verified").in("id", ids) : { data: [] as any[] };
@@ -47,7 +48,7 @@ export async function GET(req: Request) {
   }
   return json({
     signedIn: true,
-    profile: prof, following: following ?? 0, followers: followers ?? 0, recent: recentWithLast,
+    profile: prof, following: following ?? 0, followers: followers ?? 0, recent: recentWithLast, launches: launches || [],
     wallet: address ? { short: `${address.slice(0, 6)}…${address.slice(-4)}`, funds, totalUsd } : null,
   });
 }

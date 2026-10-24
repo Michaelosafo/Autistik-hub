@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Avatar from "@/components/Avatar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Art from "@/components/Art";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -62,7 +63,8 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
     } else setHearts({});
     if (authors.length) {
       // Team columns come with supabase/members-live.sql; without it, names load plain.
-      let { data: pr, error } = await sb.from("profiles").select("id,alias,color,is_team,team_title").in("id", authors);
+      let { data: pr, error } = await sb.from("profiles").select("id,alias,color,is_team,team_title,avatar_url").in("id", authors);
+      if (error) ({ data: pr, error } = await sb.from("profiles").select("id,alias,color,is_team,team_title").in("id", authors));
       if (error) ({ data: pr } = await sb.from("profiles").select("id,alias,color").in("id", authors));
       setProfiles((old) => ({ ...old, ...Object.fromEntries((pr || []).map((p: Profile) => [p.id, p])) }));
     }
@@ -174,7 +176,7 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
           const hiddenBody = p.content_note && !revealed[p.id];
           return (
             <article key={p.id} className="card post fade">
-              <div className="avatar" aria-hidden="true" style={{ background: author?.color || "#6141D4" }}>{(author?.alias || "M").charAt(0)}</div>
+              <Avatar alias={author?.alias || "M"} color={author?.color} url={(author as any)?.avatar_url} />
               <div className="post-body">
                 <div className="post-head">
                   <Link className="author-link" href={`/members/${p.author_id}`}><b>{author?.alias || "Member"}</b></Link>

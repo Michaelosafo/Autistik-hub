@@ -2,8 +2,10 @@ import { rateLimit } from "@/lib/ratelimit";
 import { logActivity } from "@/lib/activity";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
-import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, isSolana, type ChainKey } from "@/lib/launchpad";
-import { SOL_ADDR, verifyLaunch } from "@/lib/solana-launch";
+import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, LOCK_SECONDS, isSolana, type ChainKey } from "@/lib/launchpad";
+import { SOL_ADDR, connection, verifyLaunch } from "@/lib/solana-launch";
+import { lockPda, lockerId, readLock } from "@/lib/solana-locker";
+import { PublicKey } from "@solana/web3.js";
 import { padOn } from "@/lib/launchpad-server";
 import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
@@ -72,6 +74,8 @@ export async function POST(req: Request) {
     lp_lock: lockOption === 0 ? "burn" : lockOption === 2 ? "1y" : "6m",
     lp_unlock_at: lockOption !== 0 ? new Date(unlockAt * 1000).toISOString() : null,
     user_id: owner,
+    // The Launch Pad it came from, so it keeps working after this chain moves to a newer one.
+    pad,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
@@ -99,10 +103,25 @@ async function recordSolana(body: any) {
   let v;
   try { v = await verifyLaunch(mint, pool); } catch { return json({ error: "Couldn't reach Solana. Try again in a minute." }, 502); }
   if ("error" in v) return json({ error: v.error }, 400);
+  // Locked instead of burned: read the lock from the AUTISTIK Solana Locker and check it's the creator's, for this
+  // pool's LP token, and as long as the option says.
+  let lpLock = "burn", lpUnlockAt: string | null = null;
+  if (body?.lock === "6m" || body?.lock === "1y") {
+    const program = lockerId();
+    const lpMint = String(body?.lpMint || "");
+    if (!program || !SOL_ADDR.test(lpMint)) return json({ error: "Missing the lock's details." }, 400);
+    const poolAcc = await connection().getAccountInfo(new PublicKey(pool)).catch(() => null);
+    if (!poolAcc?.data.includes(new PublicKey(lpMint).toBuffer())) return json({ error: "That LP token isn't this pool's." }, 400);
+    const l = await readLock(lockPda(program, new PublicKey(lpMint), new PublicKey(v.creator))).catch(() => null);
+    if (!l || l.amount === 0n) return json({ error: "Couldn't find the lock on Solana yet. Wait a few seconds and try again." }, 400);
+    if (l.unlockAt - l.lockedAt < LOCK_SECONDS[body.lock as "6m" | "1y"] - 3600) return json({ error: "That lock is shorter than the option chosen." }, 400);
+    lpLock = body.lock;
+    lpUnlockAt = new Date(l.unlockAt * 1000).toISOString();
+  }
   const owner = await ownerOf(v.creator, true);
   const row = {
     chain: "solana", token: mint, pair: pool, creator: v.creator, name: v.name.slice(0, 64), symbol: v.symbol.slice(0, 24),
-    supply: v.supply, tx_hash: sig, lp_lock: "burn", lp_unlock_at: null, user_id: owner,
+    supply: v.supply, tx_hash: sig, lp_lock: lpLock, lp_unlock_at: lpUnlockAt, user_id: owner,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);

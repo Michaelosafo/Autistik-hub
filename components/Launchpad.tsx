@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
 import { SolanaLaunch } from "@/components/SolanaLaunch";
-import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, CHAINS, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, lockExplain, solLockerProgram, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
@@ -160,14 +160,16 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
       if (liquidity < f + m) { setStatus(`The pool needs at least ${formatEther(f + m)} ${c.coin} (including the ${formatEther(f)} ${c.coin} launch contribution).`); return; }
 
       // The Hub checks this wallet holds $20+ of AUTISTIK on BNB Chain and gives a 5-minute, one-use permit the contract checks.
-      setStatus(admin ? "Getting your admin launch permit…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
+      setStatus(admin ? "Getting your admin launch permit and your token address…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
       const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, wallet: account }) });
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); say(permit.error || ""); return; }
 
-      setStatus("Confirm the launch in your wallet…");
+      // Launch Pad v3: the Hub picked a salt that gives the token an address ending in "aaaaa", signed into the permit.
+      const salt = /^0x[0-9a-fA-F]{64}$/.test(String(permit.salt || "")) ? (permit.salt as `0x${string}`) : null;
+      setStatus(salt && permit.token ? `Your token's address will be ${String(permit.token).slice(0, 8)}…${String(permit.token).slice(-8)}. Confirm the launch in your wallet…` : "Confirm the launch in your wallet…");
       const call = {
-        account, address: pad, abi: LAUNCHPAD_ABI, functionName: "launch",
+        account, address: pad, abi: salt ? LAUNCHPAD_V3_ABI : LAUNCHPAD_ABI, functionName: "launch",
         args: [{
           name: plan.name, symbol: plan.symbol, supply: BigInt(plan.supply) * 10n ** 18n,
           creatorBps: BigInt(Math.round(plan.creatorPercent * 100)), devBuyNative: devBuy,
@@ -178,6 +180,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
           permitDeadline: BigInt(permit.deadline || 0),
           // The contribution shown now is the most this launch will pay, and it must happen within 20 minutes.
           maxFeeAccepted: f, deadline: BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
+          ...(salt && { salt }),
         }, (permit.signature || "0x") as `0x${string}`],
         value: liquidity + devBuy,
       } as const;
@@ -306,13 +309,13 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>Supply</th><td className="num">{fmt(plan.supply)} · fixed: minting and freezing switched off</td></tr>
                 <tr><th>You keep</th><td className="num">{plan.creatorPercent}% · {creatorTokens.toLocaleString("en-US")}</td></tr>
                 <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {plan.liquidity} SOL</td></tr>
-                <tr><th>Liquidity</th><td>LP tokens burned forever</td></tr>
+                <tr><th>Liquidity</th><td>{plan.lock === "burn" ? "LP tokens burned forever" : `LP tokens ${LOCKS[plan.lock].short.toLowerCase()} in the AUTISTIK Solana Locker`}</td></tr>
                 <tr><th>Tax</th><td>No tax</td></tr>
                 <tr><th>Trading</th><td>Opens as soon as the pool exists</td></tr>
                 <tr><th>Fees</th><td>About {SOL_POOL_COST} SOL: Raydium&apos;s pool fee (≈0.15 SOL) plus network fees</td></tr>
               </tbody></table>
-              <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS.burn.explain} You sign three times: the token, the pool, then the burn. Token prices can go to zero.</div>
-              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand the liquidity is burned forever and I can&apos;t take it back.</span></label>
+              <div className="notice warn" style={{ fontSize: ".86em" }}>{lockExplain(plan.lock, true)} You sign three times: the token, the pool, then the {plan.lock === "burn" ? "burn" : "lock"}. Token prices can go to zero.</div>
+              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>{plan.lock === "burn" ? <>I understand the liquidity is burned forever and I can&apos;t take it back.</> : <>I understand the liquidity is {LOCKS[plan.lock].short.toLowerCase()} and nobody, including me, can take it out before then.</>}</span></label>
               <SolanaLaunch plan={plan} agree={agree} onDone={(d) => { setDone(d); say(`${plan.symbol} is live. Congratulations!`); }} />
             </div>
           ) : plan && c ? (
@@ -334,7 +337,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>Trade fee</th><td>0.3% on buys and sells, supports AUTISTIK</td></tr>
               </tbody></table>
               {minLiq !== null && fee !== null && parseEther(plan.liquidity) < minLiq + fee && <div className="notice alert">The pool needs at least {formatEther(minLiq + fee)} {c.coin}. Change the liquidity amount.</div>}
-              <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS[plan.lock].explain} Token prices can go to zero.</div>
+              <div className="notice warn" style={{ fontSize: ".86em" }}>{lockExplain(plan.lock, isSolana(c))} Token prices can go to zero.</div>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand {plan.lock === "burn" ? "the liquidity is burned forever" : `the liquidity is ${LOCKS[plan.lock].short.toLowerCase()}`}{admin ? "" : `, my wallet must hold $${MIN_HOLD_USD}+ of AUTISTIK`}, and this is not financial advice.</span></label>
               <button className="btn primary" type="button" disabled={!agree || launching || fee === null} onClick={launch}>
                 {launching ? "Launching…" : `Launch for ${formatEther(parseEther(plan.liquidity) + parseEther(plan.devBuy || "0"))} ${c.coin} + gas`}
@@ -398,7 +401,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
         <label className="field"><span>Your free share (0–20%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
         <label className="field"><span>Liquidity ({coin}{sol ? "" : ", incl. ≈$3 launch contribution"})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" placeholder={`Any amount, e.g. ${CHAINS[f.chain]?.suggestedLiquidity ?? "0.1"}`} required /></label>
       </div>
-      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens burned forever. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool.</div> : <>
+      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens {solLockerProgram() ? "burned forever or locked in the AUTISTIK Solana Locker" : "burned forever"}. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool. Its address ends in <b className="mono">tik</b>, the AUTISTIK mark.</div> : <>
       <fieldset className="stack" style={{ gap: 8, border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px" }}>
         <legend style={{ padding: "0 6px" }}><b>Tax</b> <span className="muted" style={{ fontSize: ".85em" }}>optional, max {MAX_TAX_PERCENT}%, can only be lowered later</span></legend>
         <div className="form-grid">
@@ -419,13 +422,15 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
           </div>
         </div>
       </details>
-      <fieldset className="lock-pick">
-        <legend>Liquidity</legend>
-        {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
-          <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
-        ))}
-      </fieldset>
       </>}
+      {(!sol || solLockerProgram()) && (
+        <fieldset className="lock-pick">
+          <legend>Liquidity</legend>
+          {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
+            <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
+          ))}
+        </fieldset>
+      )}
       <details>
         <summary className="muted">Optional: description and links</summary>
         <div className="form-grid" style={{ marginTop: 8 }}>
@@ -442,30 +447,62 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
 }
 
 /** After launch: the creator opens trading (it also opens by itself after 24 hours). */
+/**
+ * The two steps after an EVM launch: start trading, then renounce ownership. Renounce comes second because once
+ * ownership is gone nobody can start trading early (it would only open by itself after 24 hours). The token's code
+ * can't be changed either way: every Launch Pad token is the same fixed contract, with no proxy and no upgrade.
+ */
 function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
-  async function start() {
+  const [renounced, setRenounced] = useState(false);
+  const [later, setLater] = useState(false);
+  async function send(fn: "openTrading" | "renounceOwnership") {
     const eth = await pickWallet();
-    if (!eth) return;
+    if (!eth) return false;
     setBusy(true); setMsg("Confirm in your wallet…");
     try {
       const chain = viemChain(c);
       const wallet = createWalletClient({ chain, transport: custom(eth) });
       const pub = createPublicClient({ chain, transport: custom(eth) });
       const [account] = await wallet.requestAddresses();
-      const hash = await wallet.writeContract({ account, chain, address: token as `0x${string}`, abi: LAUNCH_TOKEN_ABI, functionName: "openTrading" } as any);
-      await pub.waitForTransactionReceipt({ hash });
-      setOpen(true); setMsg("✅ Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots.");
+      const hash = await wallet.writeContract({ account, chain, address: token as `0x${string}`, abi: LAUNCH_TOKEN_ABI, functionName: fn } as any);
+      const r = await pub.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") { setMsg("That transaction failed on-chain. Try again."); return false; }
+      return true;
     } catch (e: any) {
-      setMsg(/AlreadyOpen/.test(String(e?.message)) ? "Trading is already open." : /NotOwner/.test(String(e?.message)) ? "Only the wallet that launched the token can start trading." : e?.shortMessage || "You cancelled in your wallet.");
+      const m = String(e?.message || "");
+      if (fn === "openTrading" && /AlreadyOpen/.test(m)) return true;
+      setMsg(/NotOwner/.test(m) ? "Only the wallet that launched the token can do this." : e?.shortMessage || "You cancelled in your wallet.");
+      return false;
     } finally { setBusy(false); }
   }
+  async function start() {
+    if (await send("openTrading")) { setOpen(true); setMsg("✅ Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots."); }
+  }
+  async function renounce() {
+    if (await send("renounceOwnership")) { setRenounced(true); setMsg("✅ Renounced. Nobody, not even you, can change this token's settings now. Scanners will show it as renounced."); }
+  }
+  if (renounced) return <div className="notice"><span>{msg}</span></div>;
   return (
     <div className="notice" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <span><b>Next: start trading.</b> Until you do, only your whitelisted wallets can buy. It opens by itself after 24 hours.</span>
-      {!open && <button className="btn primary" type="button" disabled={busy} onClick={start}>{busy ? "Starting…" : "▶ Start trading"}</button>}
+      {!open ? (
+        <>
+          <span><b>Next: start trading.</b> Until you do, only your whitelisted wallets can buy. It opens by itself after 24 hours.</span>
+          <button className="btn primary" type="button" disabled={busy} onClick={start}>{busy ? "Starting…" : "▶ Start trading"}</button>
+        </>
+      ) : later ? (
+        <span>You can renounce any time from the token page (Token safety → I&apos;m the creator: manage).</span>
+      ) : (
+        <>
+          <span><b>Last step: renounce ownership.</b> Buyers trust tokens nobody controls. After this you can&apos;t lower the tax or change the tax wallet any more, and your tax keeps going to the same wallet. The token&apos;s code can never be changed either way.</span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <button className="btn primary" type="button" disabled={busy} onClick={renounce}>{busy ? "Renouncing…" : "🔒 Renounce ownership"}</button>
+            <button className="btn small" type="button" disabled={busy} onClick={() => { setLater(true); setMsg(""); }}>Later</button>
+          </div>
+        </>
+      )}
       {msg && <small className="muted">{msg}</small>}
     </div>
   );

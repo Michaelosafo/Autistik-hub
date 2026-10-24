@@ -52,20 +52,24 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] moralis.com → sign up free → copy your **API key**. Vercel: `MORALIS_API_KEY` = the key (**Secret**) → Redeploy. Without it, Analytics still works but shows the top 10 wallets only.
 - [ ] Optional: `MORALIS_DAILY_LIMIT` (default `600`) caps the paid calls per day.
 
-## 5. Launch Pad contract on BNB Chain (remix.ethereum.org)
-- [ ] Paste `contracts/AutistikLaunchpad.sol`. It imports OpenZeppelin **5.0.2**: Remix fetches it; if it asks for a version, use `@openzeppelin/contracts@5.0.2`.
-- [ ] Compile with **0.8.24**, optimizer **200**, EVM version **paris** (Advanced configurations). This is exactly what the tests used.
-- [ ] Deploy with MetaMask on BNB Smart Chain (owner wallet):
-  - `router_` `0x10ED43C718714eb63d5aA57B78B54704E256024E`
-  - `treasury_` treasury address
-  - `launchFee_` `10000000000000000` (0.01 BNB) · `maxFee_` `100000000000000000` (0.1 BNB)
-  - `minLiquidity_` `100000000000000000` (0.1 BNB)
-  - `stablecoin_` `0x55d398326f99059fF775485246999027B3197955`
-  - `eligibilitySigner_` signer wallet's **address**
-- [ ] Check before going on: the contract's `factory()` reads `0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73` and `weth()` reads `0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c` (WBNB).
-- [ ] Verify the source on BscScan (Contract → Verify & Publish, same compiler settings), so buyers can read it.
-- [ ] Move ownership to the Safe in two steps: owner calls `transferOwnership(Safe address)`, then the Safe calls `acceptOwnership()`.
-- [ ] Vercel: `NEXT_PUBLIC_LAUNCHPAD_BSC` = the new contract address → Redeploy.
+## 5. Launch Pad v3 on BNB Chain
+- [ ] Supabase SQL Editor: run `supabase/launchpad.sql` and `supabase/evm-vanity.sql`.
+- [ ] Deploy the AUTISTIK Locker on BNB Chain (Lockers page), then the burner on `/launchpad/new` (admin: **1. Deploy AUTISTIK burner**).
+- [ ] On `/launchpad/new` (admin), press **Deploy Launch Pad** (or **Upgrade to v3**). New token addresses end in "AAAAA".
+- [ ] Press **Turn on the $20 AUTISTIK check** (`ELIGIBILITY_SIGNER_KEY` must be set in Vercel first).
+- [ ] Press **Sync $ amounts** so the launch fee matches the BNB price.
+- [ ] Launch a test token and check its page shows the code as verified on BscScan.
+
+## 5b. Solana Locker (6 months / 1 year locks on Solana)
+Until this is done, Solana launches can only burn their LP tokens. The locker has no admin: nobody, including the team, can release a lock early.
+- [ ] Open **beta.solpg.io** → **Create a new project** → name `autistik-locker`, framework **Anchor**.
+- [ ] Replace `src/lib.rs` with `programs/autistik-locker/src/lib.rs` from GitHub.
+- [ ] Settings (bottom left) → endpoint **mainnet-beta**. Fund the Playground wallet with enough SOL for the deploy (Playground shows the cost before deploying; plan on a few SOL).
+- [ ] **Build**, then **Deploy**. Copy the **Program ID**.
+- [ ] Make it final, so its code can never change: in the Playground terminal run `solana program set-upgrade-authority <PROGRAM_ID> --final`. If Playground doesn't accept it, export the Playground wallet and run the same command with the Solana CLI. The Hub won't lock anything until the program is final.
+- [ ] Vercel: `NEXT_PUBLIC_SOLANA_LOCKER_PROGRAM` = the Program ID (**Config**) → Redeploy.
+- [ ] Test: launch a small Solana token with **Lock 6 months**. Its page shows "Locked liquidity" and the date.
+- [ ] Before real money: get `programs/autistik-locker/src/lib.rs` reviewed by a Solana auditor.
 
 ## 6. Test with small amounts
 - [ ] Launch a test token from a wallet holding $20+ of AUTISTIK, 0.1 BNB liquidity, **Lock 6 months**. Its page shows the unlock date.
@@ -85,7 +89,7 @@ Tick these off in order. Every step happens in a website (Vercel, Supabase, GitH
 - [ ] **After** the redeploy: Supabase → Authentication → **Attack Protection** → turn on **Captcha protection**, provider **Turnstile**, paste the **Secret Key** → Save. (Doing this before the redeploy would block sign-ins.)
 
 ## 8. Before opening to the public
-- [ ] Audit of `contracts/AutistikLaunchpad.sol` by a smart-contract auditor.
+- [ ] Audit of `contracts/AutistikLaunchpadV3.sol` and `programs/autistik-locker` by smart-contract auditors.
 - [ ] Owner and treasury are a Safe multisig.
 - [ ] Legal check in Ghana on charging launch and listing fees.
 

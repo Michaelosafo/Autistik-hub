@@ -3,6 +3,10 @@ import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
+import RailShell from "@/components/RailShell";
+import HomeFeed from "@/components/HomeFeed";
+import MePanel from "@/components/MePanel";
+import Avatar from "@/components/Avatar";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -31,18 +35,23 @@ function Icon({ id }: { id: string }) {
   return <svg aria-hidden="true"><use href={"#" + id} /></svg>;
 }
 
-export default function Shell({ me, children }: { me: { alias: string; color: string; is_admin: boolean; mfa?: boolean } | null; children: React.ReactNode }) {
+export default function Shell({ me, children }: { me: { id: string; alias: string; color: string; avatar_url?: string | null; is_admin: boolean; mfa?: boolean } | null; children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [calm, setCalm] = useState(false);
   const [big, setBig] = useState(false);
   const [theme, setTheme] = useState<"auto" | "light" | "dark">("dark");
   const [copied, setCopied] = useState(false);
+  // Layout: "classic" (the default: the original site and front page) or "new" (the X-style three-column layout,
+  // components/RailShell.tsx), chosen under Display → Layout and saved in this browser. Phones always get classic.
+  const [layout, setLayout] = useState<"new" | "classic">("classic");
+  const [wide, setWide] = useState(true);
 
   useEffect(() => {
     try {
       setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1");
       const t = localStorage.getItem("theme2"); if (t === "light" || t === "dark" || t === "auto") setTheme(t);
+      if (localStorage.getItem("layout-choice") === "new") setLayout("new");
     } catch {}
     // The app helper (public/sw.js): faster opening on phones and an offline page. Only on the live site.
     if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -52,6 +61,12 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     if (theme === "auto") delete d.dataset.theme; else d.dataset.theme = theme;
     try { localStorage.setItem("theme2", theme); } catch {}
   }, [theme]);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 900px)");
+    const on = () => setWide(mq.matches);
+    on(); mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   useEffect(() => {
     document.documentElement.dataset.calm = calm ? "on" : "off";
     document.documentElement.dataset.size = big ? "large" : "";
@@ -102,67 +117,9 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     try { await navigator.clipboard.writeText(TOKEN_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
 
-  // The front page is the website (its own header, no menus); trading tools open inside the App frame.
-  if (path === "/") return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
-  if (isAppPath(path)) return <><Sprites /><AppShell admin={!!me?.is_admin}>{children}</AppShell></>;
-
-  return (
+  // The account, alerts and display rows: in the pop-up menu (top right on phones) and in your panel on the left.
+  const menuRows = (
     <>
-      <Sprites />
-      <div className="app">
-        <aside className="rail">
-          <Link href="/" className="brand" style={{ textDecoration: "none" }}>
-            <svg width="44" height="22"><use href="#i-inf" /></svg>
-            <div><b>AUTISTIK HUB</b><small>Different wavelength. Same channel.</small></div>
-          </Link>
-          <nav className="nav">
-            {nav.map((n) => {
-              if (!n.children) return <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>;
-              const open = openGroup === n.href || (openGroup === null && isOn(n));
-              return (
-                <div key={n.href} className={"nav-group" + (open ? " open" : "")}>
-                  <button type="button" aria-expanded={open} aria-current={isOn(n) ? "page" : undefined} onClick={() => setOpenGroup(open ? "" : n.href)}>
-                    <Icon id={n.icon} /><span>{n.name}</span><i className="nav-caret" aria-hidden="true" />
-                  </button>
-                  {open && <div className="nav-sub">{n.children.map((c) => <Link key={c.href} href={c.href} aria-current={path === c.href ? "page" : undefined}>{c.name}</Link>)}</div>}
-                </div>
-              );
-            })}
-          </nav>
-          <div className="rail-pick" aria-label="Talk to a companion">
-            <Link href="/companions?c=believer" title="Talk to Believer" data-c="believer"><Art kind="believer" className="" />Believer</Link>
-            <Link href="/companions?c=purity" title="Talk to Purity" data-c="purity"><Art kind="purity" className="" />Purity</Link>
-          </div>
-          <div className="rail-foot">
-            <div className="spec" />
-            <div className="label" style={{ color: "var(--rail-ink)" }}>$AUTISTIK · BNB Chain</div>
-            <button className="btn small" onClick={copyCA} title="Copy contract address">
-              <span className="mono">{TOKEN_ADDRESS.slice(0, 6)}…{TOKEN_ADDRESS.slice(-5)}</span> · {copied ? "Copied" : "Copy"}
-            </button>
-            <span style={{ fontSize: ".88em" }}>Use the official contract only. Nothing here is financial advice.</span>
-          </div>
-        </aside>
-
-        <main>
-          <div className="topbar mini">
-            {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
-            {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
-            <div className="me-menu" ref={menuRef}>
-              <button className="me-btn" type="button" aria-expanded={menu} aria-haspopup="dialog" onClick={openMenu}
-                aria-label={me ? `Menu for ${me.alias}${alerts.unread ? `, ${alerts.unread} new alerts` : ""}` : "Display settings"}>
-                {me
-                  ? <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
-                  : <span className="me-av guest" aria-hidden="true"><Icon id="i-auto" /></span>}
-                {alerts.unread > 0 && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
-              </button>
-              {menu && (
-                <div className="me-pop" role="dialog" aria-label="Menu">
-                  {me && (
-                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
-                      <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
-                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
-                    </Link>
-                  )}
                   {me && <Link className="me-row" href="/members" onClick={() => setMenu(false)}><Icon id="i-com" /><span>Members<small>Follow people and see your feed</small></span></Link>}
                   {me && (
                     <div className="me-sec">
@@ -181,6 +138,9 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                     <button className="me-row" type="button" onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}>
                       <Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
                     </button>
+                    <button className="me-row" type="button" onClick={() => { const l = layout === "new" ? "classic" : "new"; setLayout(l); try { localStorage.setItem("layout-choice", l); } catch {} tell(l === "new" ? "New layout" : "Classic layout"); }}>
+                      <Icon id="i-grid" /><span>Layout<small>{layout === "new" ? "New: menu left, trending right" : "Classic"} · tap to switch</small></span>
+                    </button>
                     <InstallApp />
                   </div>
                   {me?.is_admin && <Link className="me-row adm" href="/admin" onClick={() => setMenu(false)}><Icon id="i-adm" /><span>Admin<small>Everything happening on the site</small></span></Link>}
@@ -188,8 +148,99 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                   {me
                     ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
                     : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}
+    </>
+  );
+  const menuPop = menu && (
+                <div className="me-pop" role="dialog" aria-label="Menu">
+                  {me && (
+                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
+                      <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
+                    </Link>
+                  )}
+                  {menuRows}
                 </div>
-              )}
+  );
+  // Your panel in the left menu: tap your picture to open it, tap again to go back to the menu.
+  const [panel, setPanel] = useState(false);
+  useEffect(() => { setPanel(false); }, [path]);
+
+  // The front page is the website (its own header, no menus); trading tools open inside the App frame.
+  const railOn = layout === "new" && wide;
+  // /about is always the full front page; "/" is too, except in the new layout, where Home is the timeline.
+  if (path === "/about" || (path === "/" && !railOn)) return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
+  if (railOn) return (
+    <>
+      <Sprites />
+      <RailShell me={me} path={path} app={isAppPath(path)} menuRef={menuRef} menuOpen={menu} onMenu={openMenu} menuPop={menuPop}>
+        <Tracker /><WalletPicker /><Toaster />
+        {path === "/" ? <HomeFeed me={me} /> : children}
+      </RailShell>
+    </>
+  );
+  if (isAppPath(path)) return <><Sprites /><AppShell admin={!!me?.is_admin}>{children}</AppShell></>;
+
+  return (
+    <>
+      <Sprites />
+      <div className="app">
+        <aside className="rail">
+          <Link href="/" className="brand" style={{ textDecoration: "none" }}>
+            <svg width="44" height="22"><use href="#i-inf" /></svg>
+            <div><b>AUTISTIK HUB</b><small>Different wavelength. Same channel.</small></div>
+          </Link>
+          {me && (
+            <button type="button" className={"rail-me" + (panel ? " on" : "")} aria-expanded={panel} onClick={() => setPanel(!panel)}
+              aria-label={panel ? "Close your panel and show the menu" : "Open your panel: wallet, updates, scanner, settings"}>
+              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+              <span><b>{me.alias}</b><small>{panel ? "Back to menu" : "Wallet · updates · settings"}</small></span>
+              {alerts.unread > 0 && !panel && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
+              <i aria-hidden="true">{panel ? "✕" : "›"}</i>
+            </button>
+          )}
+          {me && panel ? <MePanel me={{ id: me.id, alias: me.alias, color: me.color, avatar_url: me.avatar_url ?? null, is_admin: me.is_admin }} settings={menuRows} /> : <>
+          <nav className="nav">
+            {nav.map((n) => {
+              if (!n.children) return <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>;
+              const open = openGroup === n.href || (openGroup === null && isOn(n));
+              return (
+                <div key={n.href} className={"nav-group" + (open ? " open" : "")}>
+                  <button type="button" aria-expanded={open} aria-current={isOn(n) ? "page" : undefined} onClick={() => setOpenGroup(open ? "" : n.href)}>
+                    <Icon id={n.icon} /><span>{n.name}</span><i className="nav-caret" aria-hidden="true" />
+                  </button>
+                  {open && <div className="nav-sub">{n.children.map((c) => <Link key={c.href} href={c.href} aria-current={path === c.href ? "page" : undefined}>{c.name}</Link>)}</div>}
+                </div>
+              );
+            })}
+          </nav>
+          <div className="rail-pick" aria-label="Talk to a companion">
+            <Link href="/companions?c=believer" title="Talk to Believer" data-c="believer"><Art kind="believer" className="" />Believer</Link>
+            <Link href="/companions?c=purity" title="Talk to Purity" data-c="purity"><Art kind="purity" className="" />Purity</Link>
+          </div>
+          </>}
+          <div className="rail-foot">
+            <div className="spec" />
+            <div className="label" style={{ color: "var(--rail-ink)" }}>$AUTISTIK · BNB Chain</div>
+            <button className="btn small" onClick={copyCA} title="Copy contract address">
+              <span className="mono">{TOKEN_ADDRESS.slice(0, 6)}…{TOKEN_ADDRESS.slice(-5)}</span> · {copied ? "Copied" : "Copy"}
+            </button>
+            <span style={{ fontSize: ".88em" }}>Use the official contract only. Nothing here is financial advice.</span>
+          </div>
+        </aside>
+
+        <main>
+          <div className="topbar mini">
+            {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
+            {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
+            <div className={me ? "me-menu rail-dup" : "me-menu"} ref={menuRef}>
+              <button className="me-btn" type="button" aria-expanded={menu} aria-haspopup="dialog" onClick={openMenu}
+                aria-label={me ? `Menu for ${me.alias}${alerts.unread ? `, ${alerts.unread} new alerts` : ""}` : "Display settings"}>
+                {me
+                  ? <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+                  : <span className="me-av guest" aria-hidden="true"><Icon id="i-auto" /></span>}
+                {alerts.unread > 0 && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
+              </button>
+              {menuPop}
             </div>
             <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>

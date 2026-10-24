@@ -1,6 +1,6 @@
 import { defineChain, parseAbi, parseEther, type PublicClient } from "viem";
 
-/** Matches AutistikLaunchpadV2 in contracts/AutistikLaunchpadV2.sol. */
+/** Matches AutistikLaunchpadV2 in contracts/AutistikLaunchpadV2.sol (most calls are the same on v3). */
 export const LAUNCHPAD_ABI = parseAbi([
   "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint256 devBuyNative; uint256 buyTax; uint256 sellTax; address taxWallet; address[] whitelist; uint256 whitelistNative; uint8 lockOption; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; }",
   "function launch(LaunchParams p, bytes permitSig) payable returns (address token)",
@@ -27,6 +27,24 @@ export const LAUNCHPAD_ABI = parseAbi([
   "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error NotLaunchedHere()", "error NotLocked()", "error AlreadyReleased()",
   "error UnknownPlan()", "error PriceTooHigh()", "error TransferFailed()", "error TaxTooHigh()",
 ]);
+
+/**
+ * Launch Pad v3 (contracts/AutistikLaunchpadV3.sol): the same as v2, except launch() takes a salt that picks the token's
+ * address (every address ends in "aaaaa") and the permit covers that salt. Everything else uses LAUNCHPAD_ABI.
+ */
+export const LAUNCHPAD_V3_ABI = parseAbi([
+  "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint256 devBuyNative; uint256 buyTax; uint256 sellTax; address taxWallet; address[] whitelist; uint256 whitelistNative; uint8 lockOption; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; bytes32 salt; }",
+  "function launch(LaunchParams p, bytes permitSig) payable returns (address token)",
+  "function tokenFor(bytes32 salt) view returns (address)",
+  "function deployer() view returns (address)",
+  "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 creatorTokens, uint256 devBuyTokens, uint8 lockOption, uint256 lockId)",
+  "error NotOwner()", "error ZeroAddress()", "error InvalidName()", "error InvalidSymbol()", "error InvalidSupply()", "error InvalidLock()",
+  "error CreatorShareTooHigh()", "error NotEnoughLiquidity()", "error FeeTooHigh()", "error TooLate()", "error NotEligible()", "error PermitExpired()",
+  "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error TransferFailed()", "error TaxTooHigh()",
+]);
+
+/** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…), shown in capitals ("AAAAA"). */
+export const EVM_VANITY_SUFFIX = "aaaaa";
 
 /** Every token launched on the Launch Pad (AutistikToken in contracts/AutistikLaunchpadV2.sol). */
 export const LAUNCH_TOKEN_ABI = parseAbi([
@@ -227,6 +245,17 @@ export const SOL_MAX_SUPPLY = 10n ** 13n;
 /** What Raydium charges to create a pool (about 0.15 SOL), plus room for rent and network fees. Shown before signing. */
 export const SOL_POOL_COST = 0.2;
 
+/**
+ * The AUTISTIK Solana Locker's program address (programs/autistik-locker), once deployed. Without it Solana launches
+ * can only burn their LP tokens; with it they can also lock them for 6 months or 1 year, like on the EVM chains.
+ */
+export const solLockerProgram = () => {
+  const v = (process.env.NEXT_PUBLIC_SOLANA_LOCKER_PROGRAM || "").trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : null;
+};
+/** Lock lengths, the same as the EVM Launch Pad's (182 and 365 days). */
+export const LOCK_SECONDS: Record<"6m" | "1y", number> = { "6m": 182 * 86_400, "1y": 365 * 86_400 };
+
 /** Where the launchpad is deployed on each chain (saved by the team's deploy, read from the database). */
 export type Pads = Partial<Record<ChainKey, `0x${string}`>>;
 
@@ -296,6 +325,12 @@ export const LOCKS: Record<LiquidityLock, { option: number; label: string; short
   "6m": { option: 1, label: "Lock 6 months", short: "Locked 6 months", explain: "The LP tokens are locked in the AUTISTIK Locker for 6 months. Nobody can touch them before then, including you and the AUTISTIK team. After that, write to the AUTISTIK team and they release them to you (only ever to you)." },
   "1y": { option: 2, label: "Lock 1 year", short: "Locked 1 year", explain: "The LP tokens are locked in the AUTISTIK Locker for 1 year. Nobody can touch them before then, including you and the AUTISTIK team. After that, write to the AUTISTIK team and they release them to you (only ever to you)." },
 };
+/** On Solana the creator claims the LP tokens back themselves after the date (AUTISTIK Solana Locker). */
+export const SOL_LOCK_EXPLAIN: Record<"6m" | "1y", string> = {
+  "6m": "The LP tokens are locked in the AUTISTIK Solana Locker for 6 months. Nobody can touch them before then, including you and the AUTISTIK team. After that, only your wallet can claim them back, from the token page.",
+  "1y": "The LP tokens are locked in the AUTISTIK Solana Locker for 1 year. Nobody can touch them before then, including you and the AUTISTIK team. After that, only your wallet can claim them back, from the token page.",
+};
+export const lockExplain = (lock: LiquidityLock, solana: boolean) => (solana && lock !== "burn" ? SOL_LOCK_EXPLAIN[lock] : LOCKS[lock].explain);
 export const isLock = (v: unknown): v is LiquidityLock => typeof v === "string" && v in LOCKS;
 
 /** AI launch sessions (with Autistik) per member per day. The quick launch form has no limit and uses no AI. */
@@ -316,8 +351,9 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined, pads: Pads)
   if (!/^[A-Z0-9]{1,12}$/.test(symbol)) return { error: "The ticker must be 1–12 letters or numbers." };
   const supply = String(p.supply || "").replace(/[,_\s]/g, "");
   const sol = isSolana(chain);
-  // Solana launches have no tax, whitelist or first buy (a plain SPL token), and the pool's LP tokens are always burned.
-  if (sol) p = { ...p, lock: "burn", buyTax: 0, sellTax: 0, taxWallet: "", whitelist: [], devBuy: "0" };
+  // Solana launches have no tax, whitelist or first buy (a plain SPL token). The LP tokens are burned, or locked in the
+  // AUTISTIK Solana Locker once it's set up (solLockerProgram).
+  if (sol) p = { ...p, lock: solLockerProgram() ? p.lock : "burn", buyTax: 0, sellTax: 0, taxWallet: "", whitelist: [], devBuy: "0" };
   const maxSupply = sol ? SOL_MAX_SUPPLY : 10n ** 15n;
   if (!/^\d+$/.test(supply) || BigInt(supply) < 1000n || BigInt(supply) > maxSupply) return { error: `Total supply must be a whole number from 1,000 to ${maxSupply.toLocaleString("en-US")}.` };
   const creatorPercent = Number(p.creatorPercent ?? 0);

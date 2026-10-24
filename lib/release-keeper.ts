@@ -7,7 +7,7 @@
  * token's creator. So the keeper can only ever deliver funds to their owners. It never receives or holds them; it only
  * pays the network fee. Locks made on an older locker or launch pad (before this update) still need a manual unlock.
  */
-import { createPublicClient, createWalletClient, defineChain, getAddress, http, toFunctionSelector } from "viem";
+import { createPublicClient, createWalletClient, defineChain, getAddress, http, isAddress, toFunctionSelector } from "viem";
 import { supabaseService } from "@/lib/supabase/server";
 import { keeperAccount } from "@/lib/orders-server";
 import { LOCKER_ABI, LOCKER_CHAINS, lockerTransport, type LockerChain } from "@/lib/locker";
@@ -66,11 +66,12 @@ async function releaseLocks(account: any, deadline: number, stats: Stats) {
 /** Releases locked launch-pad liquidity to the creator once its lock has ended. */
 async function releaseLiquidity(account: any, deadline: number, stats: Stats) {
   const pads = await padSites();
-  const { data } = await supabaseService().from("launches").select("chain,token,lp_unlock_at").neq("lp_lock", "burn").eq("source", "launchpad").lte("lp_unlock_at", new Date().toISOString()).order("lp_unlock_at").limit(200);
+  const { data } = await supabaseService().from("launches").select("chain,token,lp_unlock_at,pad").neq("lp_lock", "burn").eq("source", "launchpad").lte("lp_unlock_at", new Date().toISOString()).order("lp_unlock_at").limit(200);
   for (const r of data || []) {
     if (Date.now() > deadline) return;
     const chain = r.chain as ChainKey;
-    const pad = pads[chain];
+    // The Launch Pad the token came from (older tokens stay on the older one after a chain moves to a newer one).
+    const pad = r.pad && isAddress(r.pad) ? getAddress(r.pad) : pads[chain];
     const info = CHAINS[chain];
     if (!pad || !info || info.kind === "solana") continue;
     const viemChain = defineChain({ id: info.chainId, name: info.name, nativeCurrency: { name: info.coin, symbol: info.coin, decimals: 18 }, rpcUrls: { default: { http: [info.rpc] } } });

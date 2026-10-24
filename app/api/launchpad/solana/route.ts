@@ -5,13 +5,16 @@ import { launchAccess } from "@/lib/admin";
 import { currentUser } from "@/lib/supabase/server";
 import { CHAINS, SOL_DECIMALS, checkPlan } from "@/lib/launchpad";
 import { SOL_ADDR, buildAddLiquidity, buildBurnLp, buildMint, buildPool, findPool } from "@/lib/solana-launch";
+import { buildClaimLp, buildLockLp } from "@/lib/solana-locker";
+import { LOCK_SECONDS, isLock } from "@/lib/launchpad";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
  * Solana Launch Pad: builds each transaction for the member's own wallet to sign (see lib/solana-launch.ts).
- *   mint → pool → burn: a new token, its Raydium pool, and the LP tokens burned.
+ *   mint → pool → burn | lock: a new token, its Raydium pool, and the LP tokens burned or locked (6 months / 1 year).
+ *   claim: after a lock ends, the creator takes their LP tokens back.
  *   find → add (→ burn): add liquidity to any Raydium CPMM pool paired with SOL.
  */
 export async function POST(req: Request) {
@@ -44,6 +47,16 @@ export async function POST(req: Request) {
         if (!SOL_ADDR.test(String(b.lpMint || ""))) return json({ error: "Missing the pool's LP token." }, 400);
         return json(await buildBurnLp(owner, b.lpMint));
       }
+      case "lock": {
+        if (!SOL_ADDR.test(String(b.lpMint || ""))) return json({ error: "Missing the pool's LP token." }, 400);
+        if (!isLock(b.lock) || b.lock === "burn") return json({ error: "Choose 6 months or 1 year." }, 400);
+        const unlockAt = Math.floor(Date.now() / 1000) + LOCK_SECONDS[b.lock as "6m" | "1y"];
+        return json(await buildLockLp(owner, b.lpMint, unlockAt));
+      }
+      case "claim": {
+        if (!SOL_ADDR.test(String(b.lpMint || ""))) return json({ error: "Missing the pool's LP token." }, 400);
+        return json(await buildClaimLp(owner, b.lpMint));
+      }
       case "find": {
         if (!SOL_ADDR.test(String(b.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
         const p = await findPool(b.mint, SOL_ADDR.test(String(b.pool || "")) ? b.pool : undefined);
@@ -61,6 +74,7 @@ export async function POST(req: Request) {
     return json({ error: "Not found." }, 404);
   } catch (e: any) {
     console.error(`launch-solana ${action}:`, String(e?.message || e).slice(0, 300));
+    if ((action === "lock" || action === "claim") && /AUTISTIK Solana Locker|LP tokens|no lock|Still locked/.test(String(e?.message))) return json({ error: String(e.message) }, 400);
     return json({ error: `Couldn't prepare the ${CHAINS.solana.name} transaction. Try again in a moment.` }, 502);
   }
 }

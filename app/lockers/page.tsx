@@ -4,6 +4,7 @@ import { getAddress, isAddress } from "viem";
 import Locker from "@/components/Locker";
 import LockerDeploy from "@/components/LockerDeploy";
 import LockCard from "@/components/LockCard";
+import SolanaLocker from "@/components/SolanaLocker";
 import ProHero from "@/components/ProHero";
 import { adminState } from "@/lib/admin";
 import { supabaseService } from "@/lib/supabase/server";
@@ -44,6 +45,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
         <div className="notice warn">🔒 The AUTISTIK Locker opens very soon. You can already check any token&apos;s locks below.</div>
       )}
       {admin && <LockerDeploy sites={sites} />}
+      <SolanaLocker />
 
       <div className="card stack" style={{ gap: 10 }}>
         <h2 style={{ margin: 0 }}>Check a token&apos;s locks</h2>
