@@ -8,15 +8,17 @@ import { address as solAddress, appendTransactionMessageInstructions, compileTra
   getBase64EncodedWireTransaction, pipe, setTransactionMessageFeePayer, setTransactionMessageLifetimeUsingBlockhash } from "@solana/kit";
 import { ASSOCIATED_TOKEN_PROGRAM_ADDRESS, findAssociatedTokenPda, getCreateAssociatedTokenIdempotentInstruction, getTransferCheckedInstruction } from "@solana-program/token";
 import { getTransferSolInstruction } from "@solana-program/system";
+import { AddressLookupTableAccount, Connection, PublicKey, SystemProgram, TransactionInstruction, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import { FEE_BPS, KYBER_ROUTER, NATIVE, SOL_USDC, WSOL, isNative, type WChain, type WToken } from "@/lib/wallet-chains";
+import { solFeeWallet } from "@/lib/launchpad";
 
 const TREASURY = (() => {
   const a = process.env.NEXT_PUBLIC_TREASURY_WALLET || "0x531A5ccB712B2bB997Ce0dF018707948c49Da5ba";
   return isAddress(a) ? getAddress(a) : null;
 })();
 const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-/** The treasury's Solana wallet. Without it, Solana swaps are free (no fee). */
-const SOL_TREASURY = SOL_RE.test(process.env.SOLANA_FEE_WALLET || "") ? process.env.SOLANA_FEE_WALLET! : null;
+/** The AUTISTIK marketing wallet on Solana (NEXT_PUBLIC_SOLANA_FEE_WALLET). Without it, Solana swaps are free (no fee). */
+const SOL_TREASURY = solFeeWallet();
 const KYBER = "https://aggregator-api.kyberswap.com";
 const KYBER_HEADERS = { "x-client-id": "autistik-hub", "content-type": "application/json" };
 const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
@@ -281,15 +283,69 @@ async function solFeeAccount(tokenIn: string, tokenOut: string): Promise<string 
   } catch { return null; }
 }
 
+/** The 0.5% fee in SOL: taken from the SOL paid in (buys) or the SOL received (sells). */
+const solFeeOf = (lamports: bigint) => (lamports * BigInt(FEE_BPS)) / 10_000n;
+
+/**
+ * Jupiter quote. Whenever SOL is on one side, the 0.5% fee is a plain SOL transfer to the marketing wallet in the same
+ * transaction (no token accounts needed): on a buy it comes off the SOL paid in, on a sell off the SOL received.
+ * Other pairs (USDC and a token) pay Jupiter's platform fee into the marketing wallet's USDC account, if it has one.
+ */
 async function jupQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true): Promise<Quote> {
-  const feeAccount = withFee ? await solFeeAccount(tokenIn, tokenOut) : null;
-  const q = new URLSearchParams({ inputMint: tokenIn, outputMint: tokenOut, amount: amountIn.toString(), slippageBps: "100", restrictIntermediateTokens: "true" });
+  const solSide = withFee && SOL_TREASURY ? (tokenIn === WSOL ? "in" : tokenOut === WSOL ? "out" : null) : null;
+  const feeAccount = withFee && !solSide ? await solFeeAccount(tokenIn, tokenOut) : null;
+  const feeIn = solSide === "in" ? solFeeOf(amountIn) : 0n;
+  // Room in the transaction for the fee transfer.
+  const q = new URLSearchParams({ inputMint: tokenIn, outputMint: tokenOut, amount: (amountIn - feeIn).toString(), slippageBps: "100", restrictIntermediateTokens: "true", maxAccounts: "54" });
   if (feeAccount) q.set("platformFeeBps", String(FEE_BPS));
   const j = await getJson(`${JUP}/swap/v1/quote?${q}`);
   if (!j?.outAmount) throw new Error(j?.error || "No route found for this pair.");
+  const feeOut = solSide === "out" ? solFeeOf(BigInt(j.outAmount)) : 0n;
   const inUsd = num(j.swapUsdValue) || null;
-  return { kind: "jupiter", chain: c.key, tokenIn, tokenOut, amountIn: String(j.inAmount), amountOut: String(j.outAmount), inUsd, outUsd: null,
-    impact: num(j.priceImpactPct) * 100, feeBps: feeAccount ? FEE_BPS : 0, gasUsd: null, route: { quote: j, feeAccount } };
+  return { kind: "jupiter", chain: c.key, tokenIn, tokenOut, amountIn: (BigInt(j.inAmount) + feeIn).toString(), amountOut: (BigInt(j.outAmount) - feeOut).toString(), inUsd, outUsd: null,
+    impact: num(j.priceImpactPct) * 100, feeBps: solSide || feeAccount ? FEE_BPS : 0, gasUsd: null, route: { quote: j, feeAccount, solSide } };
+}
+
+const ix = (i: any) => new TransactionInstruction({
+  programId: new PublicKey(i.programId),
+  keys: (i.accounts || []).map((a: any) => ({ pubkey: new PublicKey(a.pubkey), isSigner: !!a.isSigner, isWritable: !!a.isWritable })),
+  data: Buffer.from(i.data || "", "base64"),
+});
+
+/** A Jupiter swap with the SOL fee transfer added (before the swap on a buy, after it on a sell). */
+async function jupSwapWithSolFee(q: Quote, from: string, slippageBps: number): Promise<SolTx> {
+  const quote = q.route.quote, side = q.route.solSide as "in" | "out";
+  // Everything is worked out again from Jupiter's quote: the browser can't change the fee or where it goes.
+  if (quote.inputMint !== q.tokenIn || quote.outputMint !== q.tokenOut || (side === "in" ? q.tokenIn : q.tokenOut) !== WSOL) throw new Error("Prices changed. Please get a new quote.");
+  const inAmt = BigInt(quote.inAmount), outAmt = BigInt(quote.outAmount);
+  const fee = side === "in" ? solFeeOf(BigInt(q.amountIn)) : solFeeOf(outAmt);
+  if (side === "in" && inAmt + fee !== BigInt(q.amountIn)) throw new Error("Prices changed. Please get a new quote.");
+  if (fee <= 0n) throw new Error("That amount is too small to swap.");
+  const j = await getJson(`${JUP}/swap/v1/swap-instructions`, { method: "POST", headers: { "content-type": "application/json" }, timeout: 15_000, body: JSON.stringify({
+    quoteResponse: { ...quote, slippageBps }, userPublicKey: from, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true, dynamicSlippage: false,
+    prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" } },
+  }) });
+  if (!j?.swapInstruction) throw new Error(j?.error || "Couldn't build the swap. Try again.");
+  const user = new PublicKey(from);
+  const feeIx = SystemProgram.transfer({ fromPubkey: user, toPubkey: new PublicKey(SOL_TREASURY!), lamports: fee });
+  const ixs = [
+    ...(j.computeBudgetInstructions || []).map(ix),
+    ...(side === "in" ? [feeIx] : []),
+    ...(j.setupInstructions || []).map(ix),
+    ...(j.tokenLedgerInstruction ? [ix(j.tokenLedgerInstruction)] : []),
+    ix(j.swapInstruction),
+    ...(j.cleanupInstruction ? [ix(j.cleanupInstruction)] : []),
+    ...(j.otherInstructions || []).map(ix),
+    ...(side === "out" ? [feeIx] : []),
+  ];
+  const conn = new Connection(SOL_RPC, "confirmed");
+  const luts = (await Promise.all((j.addressLookupTableAddresses || []).map((a: string) => conn.getAddressLookupTable(new PublicKey(a)).then((r) => r.value))))
+    .filter(Boolean) as AddressLookupTableAccount[];
+  const { blockhash } = await conn.getLatestBlockhash("confirmed");
+  const tx = new VersionedTransaction(new TransactionMessage({ payerKey: user, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message(luts));
+  let wire: Uint8Array;
+  try { wire = tx.serialize(); } catch { throw new Error("This route is too big for one transaction. Try a smaller amount."); }
+  return { kind: "solana", tx: Buffer.from(wire).toString("base64") };
 }
 
 // ---------------------------------------------------------------- Building the transaction
@@ -301,7 +357,13 @@ export type SolTx = { kind: "solana"; tx: string };
 export async function build(c: WChain, q: Quote, from: string, slippageBps: number): Promise<EvmTx | SolTx> {
   if (q.kind === "jupiter") {
     if (!SOL_RE.test(from)) throw new Error("That isn't a Solana wallet address.");
+    if (q.route?.solSide) {
+      if (!SOL_TREASURY || !q.feeBps) throw new Error("Prices changed. Please get a new quote.");
+      return jupSwapWithSolFee(q, from, slippageBps);
+    }
     // The fee account is worked out again here, never taken from the browser.
+    // A quote that should carry the fee must carry it (a quote from the browser can't drop it).
+    if (SOL_TREASURY && (q.tokenIn === WSOL || q.tokenOut === WSOL)) throw new Error("Prices changed. Please get a new quote.");
     const feeAccount = q.feeBps ? await solFeeAccount(q.tokenIn, q.tokenOut) : null;
     if (q.feeBps && !feeAccount) throw new Error("Prices changed. Please get a new quote.");
     const quoteResponse = { ...q.route.quote, slippageBps };

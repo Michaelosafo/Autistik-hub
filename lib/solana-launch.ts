@@ -1,11 +1,12 @@
 /**
  * Solana launches and liquidity, server side. Builds unsigned transactions for the creator's wallet to sign:
  *  1. mint: a new SPL token with a fixed supply (minting switched off for good, no freeze), on-chain name and ticker,
- *     the whole supply sent to the creator. The new mint's own key signs here and is then thrown away.
+ *     the whole supply sent to the creator, plus the small launch fee (SOL_LAUNCH_FEE) to the AUTISTIK marketing wallet. The new mint's own key signs here and is then thrown away.
  *  2. pool: a Raydium CPMM pool (token / SOL) seeded from the creator's wallet.
  *  3. burn: the creator's LP tokens burned, so the liquidity stays in the pool forever.
  * Plus adding liquidity to any Raydium CPMM pool with SOL on one side. Nothing here can move anyone's money: every
- * transaction pays from, and pays out to, the creator's own wallet, and only their wallet can sign it.
+ * transaction pays from, and pays out to, the creator's own wallet (apart from the launch fee, shown before signing),
+ * and only their wallet can sign it.
  */
 import BN from "bn.js";
 import {
@@ -17,7 +18,7 @@ import {
   createInitializeMint2Instruction, createMintToInstruction, createSetAuthorityInstruction, getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { CREATE_CPMM_POOL_FEE_ACC, CREATE_CPMM_POOL_PROGRAM, Percent, Raydium, TxVersion } from "@raydium-io/raydium-sdk-v2";
-import { SOL_DECIMALS } from "@/lib/launchpad";
+import { SOL_DECIMALS, solFeeWallet, solLaunchFee } from "@/lib/launchpad";
 import { vanityMint } from "@/lib/solana-vanity";
 
 const RPC = process.env.LAUNCH_SOLANA_RPC || process.env.WALLET_SOLANA_RPC || process.env.ANALYTICS_SOLANA_RPC || "https://api.mainnet-beta.solana.com";
@@ -101,6 +102,8 @@ export async function buildMint(creatorAddr: string, plan: { name: string; symbo
     createMintToInstruction(mint.publicKey, ata, creator, amount),
     createSetAuthorityInstruction(mint.publicKey, creator, AuthorityType.MintTokens, null),
   ];
+  const feeTo = solFeeWallet(), fee = BigInt(Math.round(solLaunchFee() * 1e9));
+  if (feeTo && fee > 0n) ixs.push(SystemProgram.transfer({ fromPubkey: creator, toPubkey: pk(feeTo), lamports: fee }));
   const tx = await v0(creator, ixs, [mint]);
   return { tx: b64(tx), mint: mint.publicKey.toBase58() };
 }
