@@ -446,30 +446,62 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
 }
 
 /** After launch: the creator opens trading (it also opens by itself after 24 hours). */
+/**
+ * The two steps after an EVM launch: start trading, then renounce ownership. Renounce comes second because once
+ * ownership is gone nobody can start trading early (it would only open by itself after 24 hours). The token's code
+ * can't be changed either way: every Launch Pad token is the same fixed contract, with no proxy and no upgrade.
+ */
 function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
-  async function start() {
+  const [renounced, setRenounced] = useState(false);
+  const [later, setLater] = useState(false);
+  async function send(fn: "openTrading" | "renounceOwnership") {
     const eth = await pickWallet();
-    if (!eth) return;
+    if (!eth) return false;
     setBusy(true); setMsg("Confirm in your wallet…");
     try {
       const chain = viemChain(c);
       const wallet = createWalletClient({ chain, transport: custom(eth) });
       const pub = createPublicClient({ chain, transport: custom(eth) });
       const [account] = await wallet.requestAddresses();
-      const hash = await wallet.writeContract({ account, chain, address: token as `0x${string}`, abi: LAUNCH_TOKEN_ABI, functionName: "openTrading" } as any);
-      await pub.waitForTransactionReceipt({ hash });
-      setOpen(true); setMsg("✅ Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots.");
+      const hash = await wallet.writeContract({ account, chain, address: token as `0x${string}`, abi: LAUNCH_TOKEN_ABI, functionName: fn } as any);
+      const r = await pub.waitForTransactionReceipt({ hash });
+      if (r.status !== "success") { setMsg("That transaction failed on-chain. Try again."); return false; }
+      return true;
     } catch (e: any) {
-      setMsg(/AlreadyOpen/.test(String(e?.message)) ? "Trading is already open." : /NotOwner/.test(String(e?.message)) ? "Only the wallet that launched the token can start trading." : e?.shortMessage || "You cancelled in your wallet.");
+      const m = String(e?.message || "");
+      if (fn === "openTrading" && /AlreadyOpen/.test(m)) return true;
+      setMsg(/NotOwner/.test(m) ? "Only the wallet that launched the token can do this." : e?.shortMessage || "You cancelled in your wallet.");
+      return false;
     } finally { setBusy(false); }
   }
+  async function start() {
+    if (await send("openTrading")) { setOpen(true); setMsg("✅ Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots."); }
+  }
+  async function renounce() {
+    if (await send("renounceOwnership")) { setRenounced(true); setMsg("✅ Renounced. Nobody, not even you, can change this token's settings now. Scanners will show it as renounced."); }
+  }
+  if (renounced) return <div className="notice"><span>{msg}</span></div>;
   return (
     <div className="notice" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <span><b>Next: start trading.</b> Until you do, only your whitelisted wallets can buy. It opens by itself after 24 hours.</span>
-      {!open && <button className="btn primary" type="button" disabled={busy} onClick={start}>{busy ? "Starting…" : "▶ Start trading"}</button>}
+      {!open ? (
+        <>
+          <span><b>Next: start trading.</b> Until you do, only your whitelisted wallets can buy. It opens by itself after 24 hours.</span>
+          <button className="btn primary" type="button" disabled={busy} onClick={start}>{busy ? "Starting…" : "▶ Start trading"}</button>
+        </>
+      ) : later ? (
+        <span>You can renounce any time from the token page (Token safety → I&apos;m the creator: manage).</span>
+      ) : (
+        <>
+          <span><b>Last step: renounce ownership.</b> Buyers trust tokens nobody controls. After this you can&apos;t lower the tax or change the tax wallet any more, and your tax keeps going to the same wallet. The token&apos;s code can never be changed either way.</span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <button className="btn primary" type="button" disabled={busy} onClick={renounce}>{busy ? "Renouncing…" : "🔒 Renounce ownership"}</button>
+            <button className="btn small" type="button" disabled={busy} onClick={() => { setLater(true); setMsg(""); }}>Later</button>
+          </div>
+        </>
+      )}
       {msg && <small className="muted">{msg}</small>}
     </div>
   );
