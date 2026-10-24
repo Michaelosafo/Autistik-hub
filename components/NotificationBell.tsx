@@ -78,12 +78,15 @@ export function AlertsList({ alerts, onPick }: { alerts: ReturnType<typeof useAl
     <div className="alerts-box">
       {!notes.length && <p className="muted" style={{ fontSize: ".86em" }}>No alerts yet. Watch a token on Stats to get told when its dev or top wallets sell.</p>}
       <div className="bell-list">
-        {notes.slice(0, 6).map((n) => (
-          <Link key={n.id} href={n.link || "/analytics"} className={"bell-item" + (n.read_at ? "" : " new")} onClick={onPick}>
-            <b>{n.title}</b>{n.body && <span>{n.body}</span>}<small>{ago(n.created_at)}</small>
+        {notes.slice(0, 5).map((n) => (
+          <Link key={n.id} href={n.link || "/analytics"} className={"bell-item sm" + (n.read_at ? "" : " new")} onClick={onPick} title={n.body || n.title}>
+            <span className="bi-dot" aria-hidden="true" />
+            <span className="bi-t"><b>{n.title}</b>{n.body && <span>{n.body}</span>}</span>
+            <small>{ago(n.created_at)}</small>
           </Link>
         ))}
       </div>
+      {notes.length > 5 && <Link className="bell-all" href="/analytics" onClick={onPick}>See all on Stats →</Link>}
       {canPopup && !popups && <button className="btn small" type="button" onClick={enablePopups}>📲 Get alerts on this device</button>}
     </div>
   );
