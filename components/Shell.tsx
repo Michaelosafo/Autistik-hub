@@ -4,6 +4,7 @@ import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
 import RailShell from "@/components/RailShell";
+import HomeFeed from "@/components/HomeFeed";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -155,13 +156,15 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   );
 
   // The front page is the website (its own header, no menus); trading tools open inside the App frame.
-  if (path === "/") return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
-  if (layout === "new" && wide) return (
+  const railOn = layout === "new" && wide;
+  // /about is always the full front page; "/" is too, except in the new layout, where Home is the timeline.
+  if (path === "/about" || (path === "/" && !railOn)) return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
+  if (railOn) return (
     <>
       <Sprites />
       <RailShell me={me} path={path} app={isAppPath(path)} menuRef={menuRef} menuOpen={menu} onMenu={openMenu} menuPop={menuPop}>
         <Tracker /><WalletPicker /><Toaster />
-        {children}
+        {path === "/" ? <HomeFeed me={me} /> : children}
       </RailShell>
     </>
   );
