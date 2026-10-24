@@ -33,8 +33,9 @@ export default function PrivyWallet({ appId, member, start, app }: { appId: stri
         theme: "dark", accentColor: "#F0B90B", logo: "/icon.svg", landingHeader: "AUTISTIK Wallet", walletChainType: "ethereum-and-solana",
         // "Connect my wallet": wallets on this device first, then Bitget, WalletConnect (Trust and 600+ more) and the top wallets.
         // Trust Wallet, SafePal, TokenPocket and 600+ more are under WalletConnect (Privy has no separate button for them).
+        // Only one WalletConnect entry: Privy refuses to start with both the EVM and the Solana one.
         walletList: ["detected_ethereum_wallets", "detected_solana_wallets", "bitget_wallet", "wallet_connect", "metamask", "binance", "okx_wallet", "phantom",
-          "solflare", "backpack", "coinbase_wallet", "bybit_wallet", "rainbow", "zerion", "uniswap", "cryptocom", "safe", "wallet_connect_qr_solana"],
+          "solflare", "backpack", "coinbase_wallet", "bybit_wallet", "rainbow", "zerion", "uniswap", "cryptocom", "safe"],
       },
       ...(WALLETCONNECT_ID ? { walletConnectCloudProjectId: WALLETCONNECT_ID } : {}),
       embeddedWallets: { ethereum: { createOnLogin: "users-without-wallets" }, solana: { createOnLogin: "users-without-wallets" }, showWalletUIs: true },

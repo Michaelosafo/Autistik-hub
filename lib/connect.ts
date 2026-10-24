@@ -290,6 +290,9 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
   wc = await EthereumProvider.init({
     projectId: WALLETCONNECT_ID,
+    // Our own storage space, so this connection never mixes with the built-in wallet's WalletConnect (Privy) or the
+    // Solana one below: sharing it made pairing fail ("No matching key").
+    customStoragePrefix: "autistik-evm",
     // The network picked is the one required network: Trust Wallet and several others refuse a connection that
     // names no required network at all. Every other network stays optional, so nothing else needs approving up front.
     chains: [chainId],
@@ -302,7 +305,7 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
       // Where the wallet app sends the member back after they approve: this page, in their browser.
       redirect: { universal: location.origin + location.pathname },
     } as any,
-  });
+  } as any);
   wc.on("disconnect", () => { flagWc(false); if (state.current?.provider === wc) set({ current: null }); });
   // The wallet approved while this page was in the background (or reloaded): pick the session up.
   wc.on("connect", () => { if (!state.current && wc.session) choose("WalletConnect", wc); });
@@ -521,11 +524,12 @@ async function initSolWc() {
   const { UniversalProvider } = await import("@walletconnect/universal-provider");
   solWc = await UniversalProvider.init({
     projectId: WALLETCONNECT_ID,
+    customStoragePrefix: "autistik-sol",
     metadata: {
       name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
       redirect: { universal: location.origin + location.pathname },
     } as any,
-  });
+  } as any);
   solWc.on("session_delete", () => { if (state.sol?.name.endsWith("(WalletConnect)")) set({ sol: null }); });
   return solWc;
 }
