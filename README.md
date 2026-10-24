@@ -116,7 +116,7 @@ That transaction calls the chain's **Launch Pad v3** (`contracts/AutistikLaunchp
 
 Every token is the same fixed code, so creators can't change it: fixed supply, no mint, no blacklist, no pause, no proxy. Creator tax is capped at 10% and can only be lowered. The creator can renounce ownership from the token page. The Hub publishes each token's source code on the explorer automatically right after launch.
 
-**Solana** launches create an SPL token at an address ending in **"tik"**, with minting switched off, no freeze and locked name and ticker, then a Raydium pool the creator seeds and whose LP tokens are burned.
+**Solana** launches create an SPL token at an address ending in **"tik"**, with minting switched off, no freeze and locked name and ticker, then a Raydium pool the creator seeds. The LP tokens are burned, or locked for 6 months or 1 year in the **AUTISTIK Solana Locker** (`programs/autistik-locker`, set `NEXT_PUBLIC_SOLANA_LOCKER_PROGRAM`). After a Solana lock ends, the creator claims the LP tokens back on the token page. The locker has no admin and must be made final (no upgrades) before the Hub offers locks; see GO-LIVE.md, "Solana Locker".
 
 A chain still on a v2 Launch Pad keeps launching on v2 (ordinary token addresses, no "AAAAA") until the team presses **Upgrade to v3** on `/launchpad/new` (admin). From then on its new launches use v3, and tokens launched on v2 keep working there.
 

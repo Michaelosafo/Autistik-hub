@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { supabaseService } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
-import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, type Pads } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, solLockerProgram, type Pads } from "@/lib/launchpad";
 import { padSites } from "@/lib/launchpad-server";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
@@ -60,7 +60,7 @@ How a launch works (explain when useful, don't lecture):
 Chains:
 ${chainLines}
 
-Solana is different: the token is a standard Solana token with a fixed supply (minting and freezing switched off), the pool is on Raydium, and the LP tokens are always burned (no lock option). There is no tax, whitelist, first buy, Start trading step or $3 contribution on Solana: trading opens as soon as the pool exists. Raydium charges about 0.15 SOL to create the pool, so the creator needs their SOL for the pool plus about ${SOL_POOL_COST} SOL. They sign three times (token, pool, burn) with a Solana wallet like Phantom or Solflare. Supply on Solana can be at most 10,000,000,000,000. For Solana, use lock "burn".
+Solana is different: the token is a standard Solana token with a fixed supply (minting and freezing switched off), the pool is on Raydium, and the LP tokens are ${solLockerProgram() ? "burned or locked for 6 months or 1 year in the AUTISTIK Solana Locker (after the lock the creator claims them back from the token page)" : "always burned (no lock option)"}. There is no tax, whitelist, first buy, Start trading step or $3 contribution on Solana: trading opens as soon as the pool exists. Raydium charges about 0.15 SOL to create the pool, so the creator needs their SOL for the pool plus about ${SOL_POOL_COST} SOL. They sign three times (token, pool, then burn or lock) with a Solana wallet like Phantom or Solflare. Supply on Solana can be at most 10,000,000,000,000.${solLockerProgram() ? "" : ' For Solana, use lock "burn".'}
 
 Collect, in this order:
 1. Chain
@@ -69,7 +69,7 @@ Collect, in this order:
 4. Total supply (whole tokens; suggest 1,000,000,000 if they don't mind)
 5. How much of the supply they want to keep (0-20%; less looks fairer to buyers)
 6. How much BNB, ETH or SOL to put in the pool. Any amount is fine: don't push a number, just mention that more liquidity means steadier prices and that EVM chains have a small minimum of about $28 including the launch contribution
-7. What to do with the liquidity: lock 6 months, lock 1 year, or burn (Solana: always burned)
+7. What to do with the liquidity: lock 6 months, lock 1 year, or burn${solLockerProgram() ? "" : " (Solana: always burned)"}
 8. Optional: a one-line description, website, X and Telegram links (https links only)
 
 Then show a short summary and ask them to confirm. Only when they confirm, call prepare_launch. After that, tell them to check the plan card, tick the box and press Launch. If they want to change something, ask, then call prepare_launch again with the new plan.

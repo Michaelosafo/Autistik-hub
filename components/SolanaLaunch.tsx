@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { parseUnits } from "viem";
 import type { Wallet } from "@wallet-standard/base";
-import { CHAINS, SOL_POOL_COST, type LaunchPlan } from "@/lib/launchpad";
+import { CHAINS, LOCKS, SOL_POOL_COST, type LaunchPlan } from "@/lib/launchpad";
 import { reportActivity } from "@/lib/activity-client";
 import { connectSol, signAndSend, solErr, solLaunchApi, solWallets, type SolWallet } from "@/lib/sol-wallet";
 
@@ -10,7 +10,7 @@ const c = CHAINS.solana;
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 
 /** Connect a Solana wallet: one button per wallet found on this device. */
-function useSolWallet() {
+export function useSolWallet() {
   const [sw, setSw] = useState<SolWallet | null>(null);
   const [found, setFound] = useState<Wallet[]>([]);
   useEffect(() => { setFound(solWallets()); const t = setTimeout(() => setFound(solWallets()), 800); return () => clearTimeout(t); }, []);
@@ -32,8 +32,9 @@ function useSolWallet() {
 
 type Step = "token" | "pool" | "burn" | "list";
 const STEPS: Record<Step, string> = { token: "Create the token", pool: "Create the Raydium pool", burn: "Burn the LP tokens", list: "Add it to the Hub" };
+const stepName = (k: Step, plan: LaunchPlan) => (k === "burn" && plan.lock !== "burn" ? `Lock the LP tokens (${LOCKS[plan.lock].label.replace("Lock ", "")})` : STEPS[k]);
 
-/** The Solana launch: three signatures (token, pool, burn), each step resumable if one fails. */
+/** The Solana launch: three signatures (token, pool, then burn or lock the LP tokens), each step resumable if one fails. */
 export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree: boolean; onDone: (d: { token: string; pair: string; hash: string; listed: boolean }) => void }) {
   const { sw, picker } = useSolWallet();
   const [msg, setMsg] = useState("");
@@ -59,16 +60,19 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
         const r = await solLaunchApi<{ tx: string; pool: string; lpMint: string }>("pool", { owner, plan, mint: mint!.mint });
         await signAndSend(sw, r.tx);
         setPool({ pool: r.pool, lpMint: r.lpMint });
-        setMsg("✅ Pool created. Last step: burn the LP tokens.");
+        setMsg(`✅ Pool created. Last step: ${stepName("burn", plan).toLowerCase()}.`);
       } else if (step === "burn") {
-        setMsg("Step 3 of 3: confirm the burn in your wallet…");
-        const r = await solLaunchApi<{ tx: string }>("burn", { owner, lpMint: pool!.lpMint });
+        const locking = plan.lock !== "burn";
+        setMsg(`Step 3 of 3: confirm the ${locking ? "lock" : "burn"} in your wallet…`);
+        const r = locking
+          ? await solLaunchApi<{ tx: string }>("lock", { owner, lpMint: pool!.lpMint, lock: plan.lock })
+          : await solLaunchApi<{ tx: string }>("burn", { owner, lpMint: pool!.lpMint });
         await signAndSend(sw, r.tx);
         setBurned(true);
       }
       if (step === "burn" || step === "list") {
         setMsg("Adding it to the Hub…");
-        const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "solana", token: mint!.mint, pair: pool!.pool, txHash: mint!.sig }) });
+        const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "solana", token: mint!.mint, pair: pool!.pool, txHash: mint!.sig, lock: plan.lock, lpMint: pool!.lpMint }) });
         onDone({ token: mint!.mint, pair: pool!.pool, hash: mint!.sig, listed: res.ok });
         setMsg("");
       }
@@ -79,11 +83,11 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
     <div className="stack" style={{ gap: 8 }}>
       {picker(busy, setMsg)}
       <ol className="muted" style={{ margin: 0, paddingLeft: 18, fontSize: ".88em" }}>
-        {(Object.keys(STEPS) as Step[]).map((k) => <li key={k} style={{ fontWeight: k === step ? 700 : 400 }}>{STEPS[k]}{k === "token" && mint ? " ✓" : k === "pool" && pool ? " ✓" : k === "burn" && burned ? " ✓" : ""}</li>)}
+        {(Object.keys(STEPS) as Step[]).map((k) => <li key={k} style={{ fontWeight: k === step ? 700 : 400 }}>{stepName(k, plan)}{k === "token" && mint ? " ✓" : k === "pool" && pool ? " ✓" : k === "burn" && burned ? " ✓" : ""}</li>)}
       </ol>
       {mint && <small className="muted">Token: <a href={`${c.explorer}/token/${mint.mint}`} target="_blank" rel="noopener noreferrer" className="mono">{short(mint.mint)}</a></small>}
       <button className="btn primary" type="button" disabled={!sw || !agree || busy} onClick={next}>
-        {busy ? "Working…" : step === "token" ? `Launch for ${plan.liquidity} SOL + about ${SOL_POOL_COST} SOL in fees` : `Continue: ${STEPS[step].toLowerCase()}`}
+        {busy ? "Working…" : step === "token" ? `Launch for ${plan.liquidity} SOL + about ${SOL_POOL_COST} SOL in fees` : `Continue: ${stepName(step, plan).toLowerCase()}`}
       </button>
       {msg && <span className="muted" style={{ fontSize: ".88em" }}>{msg}</span>}
     </div>
@@ -178,4 +182,39 @@ function fmtUnits(v: bigint, d: number) {
   const s = v.toString().padStart(d + 1, "0");
   const out = `${s.slice(0, -d) || "0"}.${s.slice(-d)}`.replace(/\.?0+$/, "");
   return out || "0";
+}
+
+/** Token page, Solana, LP tokens locked in the AUTISTIK Solana Locker: once the date passes, the creator claims them back. */
+export function SolanaClaim({ token, pair, creator, unlockAt }: { token: string; pair: string; creator: string; unlockAt: string | null }) {
+  const { sw, picker } = useSolWallet();
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [claimed, setClaimed] = useState(false);
+  const ended = !!unlockAt && Date.parse(unlockAt) <= Date.now();
+  const mine = !!sw && sw.account.address === creator;
+  async function claim() {
+    if (!sw) return;
+    setBusy(true); setMsg("Finding the pool's LP token…");
+    try {
+      const p = await solLaunchApi<{ lpMint: string }>("find", { mint: token, pool: pair });
+      setMsg("Confirm the claim in your wallet…");
+      const r = await solLaunchApi<{ tx: string }>("claim", { owner: sw.account.address, lpMint: p.lpMint });
+      await signAndSend(sw, r.tx);
+      setClaimed(true); setMsg("✅ Your LP tokens are back in your wallet.");
+    } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
+  }
+  return (
+    <div className="card stack" style={{ gap: 8, fontSize: ".92em" }}>
+      <b>🔒 Locked liquidity</b>
+      <small className="muted">The LP tokens are in the AUTISTIK Solana Locker{unlockAt ? ` until ${new Date(unlockAt).toLocaleDateString()}` : ""}. Nobody can take them out before then. After that, only the creator&apos;s wallet can claim them.</small>
+      {ended && !claimed && (
+        <>
+          {picker(busy, setMsg)}
+          {sw && !mine && <small className="muted">This wallet isn&apos;t the token&apos;s creator.</small>}
+          {mine && <button className="btn primary" type="button" disabled={busy} onClick={claim}>{busy ? "Claiming…" : "Claim my LP tokens"}</button>}
+        </>
+      )}
+      {msg && <small className="muted">{msg}</small>}
+    </div>
+  );
 }
