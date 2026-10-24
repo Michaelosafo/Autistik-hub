@@ -135,7 +135,7 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         {local && to && <Link href={`/analytics/${chainKey}/${to.address}`}>Scan {to.symbol} →</Link>}
         <Link href="/stake">Stake AUTISTIK, earn BNB →</Link>
       </div>
-      <p className="sw-note">{local ? "Best price across every DEX (KyberSwap, Jupiter). 0.5% fee per swap supports AUTISTIK." : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
+      <p className="sw-note">{local ? "Best price across every DEX (KyberSwap, Jupiter). A 0.5% fee per swap, on every chain, goes to AUTISTIK marketing." : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
     </div>
   );
 }
