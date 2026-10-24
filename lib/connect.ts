@@ -397,10 +397,20 @@ export async function signSol(txBase64: string): Promise<string> {
   return toB64(out.signedTransaction);
 }
 
-/** Solana wallet apps, for phones without one in the browser: opens this page inside the app. */
-export const SOL_APPS: { id: string; name: string; install: string; dapp: (url: string) => string }[] = [
-  { id: "phantom", name: "Phantom", install: "https://phantom.com/download", dapp: (u) => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
-  { id: "solflare", name: "Solflare", install: "https://solflare.com/download", dapp: (u) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
+const wcLogo = (id: string) => `https://explorer-api.walletconnect.com/v3/logo/sm/${id}?projectId=${WALLETCONNECT_ID}`;
+const browse = (base: string) => (u: string) => `${base}/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}`;
+/**
+ * Common wallets that work on Solana. Installed ones connect straight away (they show under "On this device");
+ * the others open this page inside their app on a phone, or their download page on a computer.
+ */
+export const SOL_APPS: { id: string; name: string; logo: string; install: string; dapp: (url: string) => string }[] = [
+  { id: "bitget", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  { id: "trust", name: "Trust Wallet", logo: "/wallets/trust.svg", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=501&url=${encodeURIComponent(u)}` },
+  { id: "phantom", name: "Phantom", logo: "/wallets/phantom.svg", install: "https://phantom.com/download", dapp: browse("https://phantom.app/ul/browse") },
+  { id: "solflare", name: "Solflare", logo: wcLogo("34c0e38d-66c4-470e-1aed-a6fabe2d1e00"), install: "https://solflare.com/download", dapp: browse("https://solflare.com/ul/v1/browse") },
+  { id: "okx", name: "OKX Wallet", logo: "/wallets/okx.svg", install: "https://www.okx.com/web3", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
+  { id: "backpack", name: "Backpack", logo: wcLogo("71ca9daf-a31e-4d2a-fd01-f5dc2dc66900"), install: "https://backpack.app/downloads", dapp: browse("https://backpack.app/ul/v1/browse") },
+  { id: "coinbase", name: "Coinbase Wallet", logo: "/wallets/coinbase.svg", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
 ];
 
 // ---------------------------------------------------------------- every WalletConnect wallet (600+)

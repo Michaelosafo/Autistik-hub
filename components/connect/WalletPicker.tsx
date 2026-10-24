@@ -78,9 +78,10 @@ export default function WalletPicker() {
       key: "sol-" + w.name, name: w.name, logo: w.icon || null, badge: w.name === last ? "Last used" : "Installed", sub: "Ready on this device", here: true,
       go: () => { chooseSol(w); },
     }));
+    const first = (n: string) => n.toLowerCase().split(" ")[0];
     for (const a of SOL_APPS) {
-      if (s.solFound.some((w) => w.name.toLowerCase().startsWith(a.name.toLowerCase()))) continue;
-      out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.id === "phantom" ? "/wallets/phantom.svg" : null, sub: mobile ? "Opens this site in the app" : "Get the app",
+      if (s.solFound.some((w) => first(w.name) === first(a.name))) continue;
+      out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, sub: mobile ? `Opens this site in ${a.name}` : "Not on this browser: get the app",
         go: () => { if (mobile) location.href = a.dapp(location.href); else window.open(a.install, "_blank", "noopener,noreferrer"); } });
     }
     return out;
@@ -158,7 +159,7 @@ export default function WalletPicker() {
             <i className="wp-chev" aria-hidden="true" />
           </button>
             </>}
-            {others.length > 0 && <div className="wp-label">{solMode ? "Get a Solana wallet" : "Popular"}</div>}
+            {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : "Popular"}</div>}
             {others.map((r) => <RowBtn key={r.key} r={r} />)}
             {!solMode && WALLETCONNECT_ID && (() => {
               const known = new Set(rows.map((r) => r.name.toLowerCase()));
