@@ -68,7 +68,12 @@ export default function MePanel({ me, settings }: {
         if (old && old.startsWith(me.id + "/")) sb.storage.from("avatars").remove([old]).catch(() => {});
       }
       setPhoto(url); setMsg("✅ Photo updated."); router.refresh();
-    } catch (e: any) { setMsg(e?.message?.includes("size") ? "That picture is too big. Try one under 2 MB." : "Couldn't upload that picture. Try another one."); }
+    } catch (e: any) {
+      const m = String(e?.message || "");
+      setMsg(/size|large/i.test(m) ? "That picture is too big. Try one under 2 MB."
+        : /Change photo button|permission|denied|policy/i.test(m) ? "Couldn't save your photo. Sign out and in again, then try once more."
+        : `Couldn't upload that picture${m ? ` (${m.slice(0, 80)})` : ""}. Try again.`);
+    }
     finally { setBusy(false); }
   }
   async function removePhoto() {

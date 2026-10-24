@@ -33,3 +33,7 @@ begin
 end; $$;
 drop trigger if exists avatar_guard on public.profiles;
 create trigger avatar_guard before update of avatar_url on public.profiles for each row execute function public.avatar_guard();
+
+-- Members can change their own avatar_url (profiles only grants UPDATE on chosen columns; avatar_guard and the
+-- "edit own profile" policy still apply).
+grant update (avatar_url) on public.profiles to authenticated;
