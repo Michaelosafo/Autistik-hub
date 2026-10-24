@@ -1,7 +1,7 @@
 /**
  * Solana token addresses that end in "tik" (like pump.fun's "pump"). Server only.
- * A launch takes a ready address from the pool (supabase/sol-vanity.sql). If the pool is empty it searches for a few
- * seconds itself, and if that runs out it uses an ordinary address, so a launch never waits or fails because of this.
+ * A launch takes a ready address from the pool (supabase/sol-vanity.sql). If the pool is empty it searches for a
+ * bounded period. It fails closed if no matching mint is found: never create a non-vanity mint for a V3 launch.
  */
 import { generateKeyPairSync } from "crypto";
 import { Keypair } from "@solana/web3.js";
@@ -31,7 +31,7 @@ export function grind(ms: number): Keypair | null {
   return null;
 }
 
-/** A keypair for a new token's mint: one ending in "tik" whenever possible. */
+/** A keypair for a new token's mint. Never falls back to an address without the required suffix. */
 export async function vanityMint(): Promise<Keypair> {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { data } = await supabaseService().rpc("take_vanity_mint").then((r) => r, () => ({ data: null }));
@@ -41,5 +41,9 @@ export async function vanityMint(): Promise<Keypair> {
       if (kp.publicKey.toBase58() === row.pubkey) return kp;
     }
   }
-  return grind(12_000) ?? Keypair.generate();
+  const found = grind(Number(process.env.LAUNCH_SOLANA_VANITY_GRIND_MS || 120_000));
+  if (!found || !found.publicKey.toBase58().endsWith(VANITY_SUFFIX)) {
+    throw new Error('Could not generate a Solana mint ending in "tik". Please retry; no token was created.');
+  }
+  return found;
 }
