@@ -51,14 +51,18 @@ export const WALLETCONNECT_ID = (process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_I
  * Solana uses Solana wallets.
  */
 export type NetKey = string;
-export type Net = { key: string; name: string; short: string; chainId?: number; color: string; add?: object };
+export type Net = { key: string; id: number; name: string; short: string; chainId?: number; color: string; add?: object };
 export const NETWORKS: Net[] = XCHAIN_LIST.map((c) => ({
-  key: c.key, name: c.name, short: c.name.split(" ")[0].slice(0, 8), color: c.color,
+  key: c.key, id: c.id, name: c.name, short: c.name.split(" ")[0].slice(0, 8), color: c.color,
   ...(c.kind === "evm" ? {
     chainId: c.id,
     add: { chainName: c.name, nativeCurrency: { name: c.native.symbol, symbol: c.native.symbol, decimals: c.native.decimals }, rpcUrls: [c.rpc], blockExplorerUrls: c.explorer ? [c.explorer] : [] },
   } : {}),
 }));
+/** Network logos (from LI.FI, through the Hub), loaded once per visit. Missing ones show a coloured dot. */
+let logoReq: Promise<Record<number, string>> | null = null;
+export const netLogos = () => (logoReq ??= fetch("/api/wallet/x-chains", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
+  .then((r) => r.json()).then((d) => (d?.logos && typeof d.logos === "object" ? d.logos : {})).catch(() => ({})));
 /** The ones shown first. */
 export const TOP_NETWORKS = ["bsc", "ethereum", "solana", "base", "arbitrum"];
 export const netOf = (k: NetKey) => NETWORKS.find((n) => n.key === k) ?? NETWORKS[0];
