@@ -2,6 +2,7 @@ import Link from "next/link";
 import Art from "@/components/Art";
 import CopyAddress from "@/components/CopyAddress";
 import MeButton from "@/components/MeButton";
+import LogoMark from "@/components/LogoMark";
 import FeaturedToken from "@/components/FeaturedToken";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
@@ -85,11 +86,11 @@ export default async function Home() {
   return (
     <div className="lp">
       <header className="lp-bar">
-        <Link href="/" className="lp-logo" aria-label="AUTISTIK home"><svg width="44" height="22" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b></Link>
+        {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} />}
+        <Link href="/" className="lp-logo" aria-label="AUTISTIK home"><LogoMark size={40} /></Link>
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
-        {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} />}
         <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
         {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>

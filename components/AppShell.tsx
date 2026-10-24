@@ -7,6 +7,7 @@ import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import Avatar from "@/components/Avatar";
+import LogoMark from "@/components/LogoMark";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
@@ -109,9 +110,14 @@ export default function AppShell({ admin, me, onMe, children }: {
   return (
     <div className="ax">
       <header className="ax-bar" ref={bar}>
-        <Link href="/app" className="ax-logo" aria-label="AUTISTIK App: all tools">
-          <svg width="40" height="20" aria-hidden="true"><use href="#i-inf" /></svg><b>AUTISTIK</b><small>APP</small>
-        </Link>
+        {me ? (
+          <button type="button" className="ax-me" onClick={onMe} aria-haspopup="dialog" aria-label={`Your panel: ${me.alias}${me.unread ? `, ${me.unread} new alerts` : ""}`}>
+            <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} logo />
+            {!me.avatar_url && <span className="me-pic-add" aria-hidden="true">+</span>}
+            {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
+          </button>
+        ) : null}
+        <Link href="/app" className="ax-logo" aria-label="AUTISTIK App: all tools"><LogoMark size={38} /></Link>
         {/* Home switches sides: from the App it goes to the website's main page, whose Home button comes back here. */}
         <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
@@ -127,13 +133,6 @@ export default function AppShell({ admin, me, onMe, children }: {
           ))}
         </nav>
         <div className="ax-right">
-          {me ? (
-            <button type="button" className="ax-me" onClick={onMe} aria-haspopup="dialog" aria-label={`Your panel: ${me.alias}${me.unread ? `, ${me.unread} new alerts` : ""}`}>
-              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} logo />
-              {!me.avatar_url && <span className="me-pic-add" aria-hidden="true">+</span>}
-              {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
-            </button>
-          ) : null}
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
