@@ -7,9 +7,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { GROUPS } from "@/lib/groups";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import AvatarImg from "@/components/Avatar";
 
 type Item =
-  | { kind: "post"; id: string; at: string; body: string; channel: string; note: string | null; author: { id: string; alias: string; color: string } | null }
+  | { kind: "post"; id: string; at: string; body: string; channel: string; note: string | null; author: { id: string; alias: string; color: string; avatar_url?: string | null } | null }
   | { kind: "launch"; id: string; at: string; chain: string; chainName: string; token: string; name: string; symbol: string };
 
 const LOUNGE = GROUPS.find((g) => g.id === "lounge")!;
@@ -22,7 +23,7 @@ const ago = (iso: string) => {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 };
 
-export default function HomeFeed({ me }: { me: { alias: string; color: string } | null }) {
+export default function HomeFeed({ me }: { me: { alias: string; color: string; avatar_url?: string | null } | null }) {
   const [tab, setTab] = useState<"foryou" | "following">("foryou");
   const [items, setItems] = useState<Item[] | null>(null);
   const [followsNobody, setFollowsNobody] = useState(false);
@@ -63,8 +64,8 @@ export default function HomeFeed({ me }: { me: { alias: string; color: string } 
   );
 }
 
-function Avatar({ alias, color }: { alias: string; color: string }) {
-  return <span className="me-av hf-av" style={{ background: color }} aria-hidden="true">{(alias.trim()[0] || "M").toUpperCase()}</span>;
+function Avatar({ alias, color, url }: { alias: string; color: string; url?: string | null }) {
+  return <AvatarImg className="me-av hf-av" alias={alias} color={color} url={url} />;
 }
 
 function Post({ p }: { p: Extract<Item, { kind: "post" }> }) {
@@ -72,7 +73,7 @@ function Post({ p }: { p: Extract<Item, { kind: "post" }> }) {
   const a = p.author;
   return (
     <article className="hf-item">
-      {a ? <Link href={`/members/${a.id}`} aria-label={a.alias}><Avatar alias={a.alias} color={a.color} /></Link> : <Avatar alias="?" color="#7B55E0" />}
+      {a ? <Link href={`/members/${a.id}`} aria-label={a.alias}><Avatar alias={a.alias} color={a.color} url={a.avatar_url} /></Link> : <Avatar alias="?" color="#7B55E0" />}
       <div className="hf-body">
         <div className="hf-meta">
           {a ? <Link href={`/members/${a.id}`}><b>{a.alias}</b></Link> : <b>Member</b>}
@@ -103,7 +104,7 @@ function Launch({ l }: { l: Extract<Item, { kind: "launch" }> }) {
 }
 
 /** "What's happening?": posts straight to a Spectrum Lounge channel (joining the Lounge first if needed). */
-function Composer({ me, onPosted }: { me: { alias: string; color: string }; onPosted: () => void }) {
+function Composer({ me, onPosted }: { me: { alias: string; color: string; avatar_url?: string | null }; onPosted: () => void }) {
   const [text, setText] = useState("");
   const [channel, setChannel] = useState(LOUNGE.channels[1]?.id ?? LOUNGE.channels[0].id);
   const [busy, setBusy] = useState(false);
@@ -124,7 +125,7 @@ function Composer({ me, onPosted }: { me: { alias: string; color: string }; onPo
   }
   return (
     <form className="hf-compose" onSubmit={post}>
-      <Avatar alias={me.alias} color={me.color} />
+      <Avatar alias={me.alias} color={me.color} url={me.avatar_url} />
       <div className="hf-compose-r">
         <textarea id="hf-text" value={text} onChange={(e) => setText(e.target.value)} placeholder="What's happening?" maxLength={1500} rows={2} aria-label="Write a post" />
         <div className="hf-compose-bar">

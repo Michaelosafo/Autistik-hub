@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Avatar from "@/components/Avatar";
 import { notFound } from "next/navigation";
 import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
@@ -58,7 +59,7 @@ export default async function MemberPage({ params, searchParams }: { params: { i
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
       <div className={prof.is_team ? "card profile-head team" : "card profile-head"}>
-        <div className="avatar big" aria-hidden="true" style={{ background: prof.color || "#6141D4" }}>{prof.alias.charAt(0)}</div>
+        <Avatar className="avatar big" alias={prof.alias} color={prof.color} url={prof.avatar_url} />
         <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
           <div className="label">{mine ? "Your profile" : prof.is_team ? `AUTISTIK team${prof.team_title ? ` · ${prof.team_title}` : ""}` : "Member profile"}</div>
           <h1 style={{ overflowWrap: "anywhere" }}><MemberName m={prof} link={false} handle={false} /></h1>

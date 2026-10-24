@@ -5,6 +5,8 @@ import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
 import RailShell from "@/components/RailShell";
 import HomeFeed from "@/components/HomeFeed";
+import MePanel from "@/components/MePanel";
+import Avatar from "@/components/Avatar";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -33,7 +35,7 @@ function Icon({ id }: { id: string }) {
   return <svg aria-hidden="true"><use href={"#" + id} /></svg>;
 }
 
-export default function Shell({ me, children }: { me: { alias: string; color: string; is_admin: boolean; mfa?: boolean } | null; children: React.ReactNode }) {
+export default function Shell({ me, children }: { me: { id: string; alias: string; color: string; avatar_url?: string | null; is_admin: boolean; mfa?: boolean } | null; children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [calm, setCalm] = useState(false);
@@ -115,14 +117,9 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     try { await navigator.clipboard.writeText(TOKEN_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
 
-  const menuPop = menu && (
-                <div className="me-pop" role="dialog" aria-label="Menu">
-                  {me && (
-                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
-                      <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
-                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
-                    </Link>
-                  )}
+  // The account, alerts and display rows: in the pop-up menu (top right on phones) and in your panel on the left.
+  const menuRows = (
+    <>
                   {me && <Link className="me-row" href="/members" onClick={() => setMenu(false)}><Icon id="i-com" /><span>Members<small>Follow people and see your feed</small></span></Link>}
                   {me && (
                     <div className="me-sec">
@@ -151,8 +148,22 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                   {me
                     ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
                     : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}
+    </>
+  );
+  const menuPop = menu && (
+                <div className="me-pop" role="dialog" aria-label="Menu">
+                  {me && (
+                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
+                      <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
+                    </Link>
+                  )}
+                  {menuRows}
                 </div>
   );
+  // Your panel in the left menu: tap your picture to open it, tap again to go back to the menu.
+  const [panel, setPanel] = useState(false);
+  useEffect(() => { setPanel(false); }, [path]);
 
   // The front page is the website (its own header, no menus); trading tools open inside the App frame.
   const railOn = layout === "new" && wide;
@@ -178,6 +189,16 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             <svg width="44" height="22"><use href="#i-inf" /></svg>
             <div><b>AUTISTIK HUB</b><small>Different wavelength. Same channel.</small></div>
           </Link>
+          {me && (
+            <button type="button" className={"rail-me" + (panel ? " on" : "")} aria-expanded={panel} onClick={() => setPanel(!panel)}
+              aria-label={panel ? "Close your panel and show the menu" : "Open your panel: wallet, updates, scanner, settings"}>
+              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+              <span><b>{me.alias}</b><small>{panel ? "Back to menu" : "Wallet · updates · settings"}</small></span>
+              {alerts.unread > 0 && !panel && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
+              <i aria-hidden="true">{panel ? "✕" : "›"}</i>
+            </button>
+          )}
+          {me && panel ? <MePanel me={{ id: me.id, alias: me.alias, color: me.color, avatar_url: me.avatar_url ?? null, is_admin: me.is_admin }} settings={menuRows} /> : <>
           <nav className="nav">
             {nav.map((n) => {
               if (!n.children) return <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.name}</span></Link>;
@@ -196,6 +217,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
             <Link href="/companions?c=believer" title="Talk to Believer" data-c="believer"><Art kind="believer" className="" />Believer</Link>
             <Link href="/companions?c=purity" title="Talk to Purity" data-c="purity"><Art kind="purity" className="" />Purity</Link>
           </div>
+          </>}
           <div className="rail-foot">
             <div className="spec" />
             <div className="label" style={{ color: "var(--rail-ink)" }}>$AUTISTIK · BNB Chain</div>
@@ -210,11 +232,11 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
           <div className="topbar mini">
             {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
-            <div className="me-menu" ref={menuRef}>
+            <div className={me ? "me-menu rail-dup" : "me-menu"} ref={menuRef}>
               <button className="me-btn" type="button" aria-expanded={menu} aria-haspopup="dialog" onClick={openMenu}
                 aria-label={me ? `Menu for ${me.alias}${alerts.unread ? `, ${alerts.unread} new alerts` : ""}` : "Display settings"}>
                 {me
-                  ? <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
+                  ? <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
                   : <span className="me-av guest" aria-hidden="true"><Icon id="i-auto" /></span>}
                 {alerts.unread > 0 && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
               </button>

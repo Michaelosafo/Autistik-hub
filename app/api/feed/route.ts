@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * Support & Questions posts (calm.*) never appear here: they stay inside Community, where people expect them.
  */
 type Item =
-  | { kind: "post"; id: string; at: string; body: string; channel: string; note: string | null; author: { id: string; alias: string; color: string } | null }
+  | { kind: "post"; id: string; at: string; body: string; channel: string; note: string | null; author: { id: string; alias: string; color: string; avatar_url?: string | null } | null }
   | { kind: "launch"; id: string; at: string; chain: string; chainName: string; token: string; name: string; symbol: string };
 
 export async function GET(req: Request) {
@@ -33,9 +33,10 @@ export async function GET(req: Request) {
     if (authors) q = q.in("author_id", authors);
     const { data: posts } = await q;
     const ids = [...new Set((posts || []).map((p: any) => p.author_id))];
-    const { data: profiles } = ids.length ? await sb.from("profiles").select("id,alias,color").in("id", ids) : { data: [] as any[] };
-    const who = new Map<string, { id: string; alias: string; color: string }>(
-      (profiles || []).map((p: any) => [String(p.id), { id: String(p.id), alias: String(p.alias), color: String(p.color) }]),
+    let { data: profiles, error: pe } = ids.length ? await sb.from("profiles").select("id,alias,color,avatar_url").in("id", ids) : { data: [] as any[], error: null };
+    if (pe) ({ data: profiles } = await sb.from("profiles").select("id,alias,color").in("id", ids));
+    const who = new Map<string, { id: string; alias: string; color: string; avatar_url: string | null }>(
+      (profiles || []).map((p: any) => [String(p.id), { id: String(p.id), alias: String(p.alias), color: String(p.color), avatar_url: p.avatar_url ?? null }]),
     );
     for (const p of posts || []) {
       items.push({ kind: "post", id: p.id, at: p.created_at, body: p.body, channel: p.channel, note: p.content_note, author: who.get(p.author_id) ?? null });
