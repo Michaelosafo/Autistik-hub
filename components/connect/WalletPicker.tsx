@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
-import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor } from "@/lib/connect";
+import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -32,9 +32,11 @@ export default function WalletPicker() {
     if (s.qr) import("qrcode").then((m) => m.toDataURL(s.qr!.uri, { margin: 1, width: 260, color: { dark: "#191326", light: "#FFFFFF" } })).then(setQrImg).catch(() => {});
   }, [s.qr]);
   useEffect(() => { startDiscovery(); }, []);
+  useEffect(() => { if (s.open) warmUp(); }, [s.network, s.open]);
   useEffect(() => {
     if (!s.open) return;
     setQ(""); setLast(lastWalletName()); setShowAll(false);
+    warmUp();
     const k = (e: KeyboardEvent) => e.key === "Escape" && closePicker();
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
@@ -157,10 +159,15 @@ export default function WalletPicker() {
           {s.qr && (
             <div className="wp-qr">
               <div className="wp-qr-h"><img src={s.qr.logo} alt="" width={28} height={28} /><b>Scan with {s.qr.name}</b></div>
+              {s.qr.href ? <>
+                <a className="btn primary wp-open" href={s.qr.href}>Open {s.qr.name}</a>
+                <small>Approve the connection in {s.qr.name}, then come back here. Network: {netOf(s.network).name}. If nothing opened, tap the button.</small>
+              </> : <>
               {qrImg ? <img className="wp-qr-img" src={qrImg} alt={`WalletConnect code for ${s.qr.name}`} width={260} height={260} /> : <div className="wp-qr-img wp-qr-wait">Making the code…</div>}
               <small>Open {s.qr.name} on your phone, tap its scan button, and point it here. Network: {netOf(s.network).name}.</small>
+              </>}
               <div className="wp-qr-r">
-                <button type="button" className="btn small" onClick={() => navigator.clipboard?.writeText(s.qr!.uri).catch(() => {})}>Copy link</button>
+                {!s.qr.href && <button type="button" className="btn small" onClick={() => navigator.clipboard?.writeText(s.qr!.uri).catch(() => {})}>Copy link</button>}
                 <button type="button" className="btn small" onClick={cancelQr}>← Other wallets</button>
                 {s.qr.install && <a className="btn small" href={s.qr.install} target="_blank" rel="noopener noreferrer">Get {s.qr.name}</a>}
               </div>
