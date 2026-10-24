@@ -2,6 +2,8 @@
 import { pickWallet } from "@/lib/connect";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import NetIcon from "@/components/connect/NetIcon";
+import { NETWORKS, type Net } from "@/lib/connect";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
 import { SolanaLaunch } from "@/components/SolanaLaunch";
@@ -386,62 +388,134 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
   }
 
   if (!live.length) return <div className="card"><p className="muted">Launches open soon. No chain is live yet.</p></div>;
+  const ch = CHAINS[f.chain];
+  const net = (k: string, name: string): Net => NETWORKS.find((n) => n.key === k) ?? { key: k, id: 0, name, short: name, color: "#8E7CC3" };
+  // Live numbers for the preview (approximate: the EVM launch contribution of ≈$3 comes out of the liquidity).
+  const supplyN = Number(f.supply) || 0, share = Math.min(20, Math.max(0, Number(f.creatorPercent) || 0)), liqN = Number(f.liquidity) || 0;
+  const poolTokens = supplyN * (1 - share / 100);
+  const price = poolTokens > 0 && liqN > 0 ? liqN / poolTokens : 0;
+  const mcap = price * supplyN;
+  const num = (n: number) => n >= 1e9 ? `${+(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${+(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${+(n / 1e3).toFixed(2)}K` : `${+n.toFixed(4)}`;
+  const tiny = (n: number) => (n === 0 ? "–" : n < 1e-6 ? n.toExponential(2) : n.toPrecision(3));
+  const lp = LOCKS[f.lock];
+  const LIQ = sol ? ["0.5", "1", "2", "5"] : f.chain === "bsc" ? ["0.1", "0.25", "0.5", "1"] : ["0.02", "0.05", "0.1", "0.25"];
+  const checks: [boolean, string][] = [
+    [true, "Fixed supply: nobody can mint more"],
+    [true, f.lock === "burn" ? "Liquidity burned forever" : `Liquidity ${lp.short.toLowerCase()}`],
+    [true, sol ? "Mint and freeze switched off" : "Contract can't be changed, source verified"],
+    ...(sol ? [[true, "Address ends in tik"] as [boolean, string]] : []),
+    ...(!sol ? [[true, "Anti-sniper: max 1% per buy for 5 minutes"] as [boolean, string], [Number(f.buyTax) <= 5 && Number(f.sellTax) <= 5, `Tax ${f.buyTax || 0}% buy · ${f.sellTax || 0}% sell`] as [boolean, string]] : []),
+    [share <= 10, `Your share ${share}%`],
+  ];
   return (
-    <form className="card stack quick-launch" onSubmit={review}>
-      <div><b>⚡ Quick launch</b><p className="muted" style={{ fontSize: ".88em" }}>Fill in the details, review your plan, then sign once in your wallet.</p></div>
-      <div className="form-grid">
-        <label className="field"><span>Chain</span>
-          <select value={f.chain} onChange={(e) => { const c = CHAINS[e.target.value as LaunchPlan["chain"]]; setF({ ...f, chain: c.key }); }}>
-            {live.map((c) => <option key={c.key} value={c.key}>{c.name} · {c.dex}</option>)}
-          </select>
-        </label>
-        <label className="field"><span>Token name</span><input value={f.name} onChange={set("name")} maxLength={32} placeholder="e.g. Calm Otter" required /></label>
-        <label className="field"><span>Ticker</span><input value={f.symbol} onChange={set("symbol")} maxLength={13} placeholder="e.g. OTTER" required /></label>
-        <label className="field"><span>Total supply</span><input value={f.supply} onChange={set("supply")} inputMode="numeric" required /></label>
-        <label className="field"><span>Your free share (0–20%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
-        <label className="field"><span>Liquidity ({coin}{sol ? "" : ", incl. ≈$3 launch contribution"})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" placeholder={`Any amount, e.g. ${CHAINS[f.chain]?.suggestedLiquidity ?? "0.1"}`} required /></label>
-      </div>
-      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens {solLockerProgram() ? "burned forever or locked in the AUTISTIK Solana Locker" : "burned forever"}. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool. Its address ends in <b className="mono">tik</b>, the AUTISTIK mark.</div> : <>
-      <fieldset className="stack" style={{ gap: 8, border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px" }}>
-        <legend style={{ padding: "0 6px" }}><b>Tax</b> <span className="muted" style={{ fontSize: ".85em" }}>optional, max {MAX_TAX_PERCENT}%, can only be lowered later</span></legend>
-        <div className="form-grid">
-          <label className="field"><span>Buy tax %</span><input value={f.buyTax} onChange={set("buyTax")} inputMode="decimal" /></label>
-          <label className="field"><span>Sell tax %</span><input value={f.sellTax} onChange={set("sellTax")} inputMode="decimal" /></label>
-          <label className="field" style={{ gridColumn: "1 / -1" }}><span>Tax wallet (receives the tax)</span><input value={f.taxWallet} onChange={set("taxWallet")} placeholder="0x…" spellCheck={false} /></label>
-        </div>
-      </fieldset>
-      <details>
-        <summary><b>Whitelist & first buy</b> <span className="muted" style={{ fontSize: ".85em" }}>optional</span></summary>
-        <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-          <p className="muted" style={{ margin: 0, fontSize: ".86em" }}>Up to 3 wallets may buy (about $40 each) before trading opens. Your first buy happens at launch, before anyone else. Your share + first buy can be at most {MAX_CREATOR_PERCENT}% of the supply.</p>
-          <div className="form-grid">
-            <label className="field"><span>Whitelist wallet 1</span><input value={f.wl1} onChange={set("wl1")} placeholder="0x…" spellCheck={false} /></label>
-            <label className="field"><span>Whitelist wallet 2</span><input value={f.wl2} onChange={set("wl2")} placeholder="0x…" spellCheck={false} /></label>
-            <label className="field"><span>Whitelist wallet 3</span><input value={f.wl3} onChange={set("wl3")} placeholder="0x…" spellCheck={false} /></label>
-            <label className="field"><span>Your first buy ({coin})</span><input value={f.devBuy} onChange={set("devBuy")} inputMode="decimal" /></label>
+    <form className="ql" onSubmit={review}>
+      <div className="ql-main card">
+        <div className="ql-top"><b>⚡ Launch a token</b><small className="muted">Five quick steps, a live preview, then you sign once.</small></div>
+
+        <section className="ql-sec">
+          <h4><i>1</i>Network</h4>
+          <div className="ql-chains" role="radiogroup" aria-label="Network">
+            {live.map((c) => (
+              <button key={c.key} type="button" role="radio" aria-checked={f.chain === c.key} className={"ql-chain" + (f.chain === c.key ? " on" : "")} onClick={() => setF({ ...f, chain: c.key })}>
+                <NetIcon n={net(c.key, c.name)} size={26} /><span><b>{c.name}</b><small>{c.dex}</small></span>
+              </button>
+            ))}
           </div>
+        </section>
+
+        <section className="ql-sec">
+          <h4><i>2</i>Token</h4>
+          <div className="form-grid">
+            <label className="field"><span>Token name</span><input value={f.name} onChange={set("name")} maxLength={32} placeholder="e.g. Calm Otter" required /></label>
+            <label className="field"><span>Ticker</span><input value={f.symbol} onChange={(e) => setF({ ...f, symbol: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} maxLength={13} placeholder="e.g. OTTER" required /></label>
+            <label className="field" style={{ gridColumn: "1 / -1" }}><span>One-line description <small className="muted">optional</small></span><input value={f.description} onChange={set("description")} maxLength={500} placeholder="What makes it special?" /></label>
+          </div>
+        </section>
+
+        <section className="ql-sec">
+          <h4><i>3</i>Tokenomics</h4>
+          <label className="field"><span>Total supply</span><input value={f.supply} onChange={(e) => setF({ ...f, supply: e.target.value.replace(/[^0-9]/g, "") })} inputMode="numeric" required /></label>
+          <div className="ql-chips">{["1000000", "100000000", "1000000000", "10000000000"].map((v) => <button key={v} type="button" className={f.supply === v ? "on" : ""} onClick={() => setF({ ...f, supply: v })}>{num(Number(v))}</button>)}</div>
+          <label className="field"><span>Your free share: <b>{share}%</b> <small className="muted">(0–20%, the rest goes into the pool)</small></span>
+            <input type="range" min={0} max={20} step={0.5} value={share} onChange={(e) => setF({ ...f, creatorPercent: e.target.value })} aria-label="Your free share in percent" />
+          </label>
+          <div className="ql-split" aria-hidden="true"><i style={{ width: `${share}%` }} /><span>{share}% you · {100 - share}% pool</span></div>
+        </section>
+
+        <section className="ql-sec">
+          <h4><i>4</i>Liquidity</h4>
+          <label className="field"><span>Liquidity ({coin}{sol ? "" : ", incl. ≈$3 launch contribution"})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" placeholder={`Any amount, e.g. ${ch?.suggestedLiquidity ?? "0.1"}`} required /></label>
+          <div className="ql-chips">{LIQ.map((v) => <button key={v} type="button" className={f.liquidity === v ? "on" : ""} onClick={() => setF({ ...f, liquidity: v })}>{v} {coin}</button>)}</div>
+          {(!sol || solLockerProgram()) && (
+            <div className="ql-locks" role="radiogroup" aria-label="Liquidity lock">
+              {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
+                <button key={k} type="button" role="radio" aria-checked={f.lock === k} className={"ql-lock" + (f.lock === k ? " on" : "")} onClick={() => setF({ ...f, lock: k })}>
+                  <span aria-hidden="true">{k === "burn" ? "🔥" : "🔒"}</span><b>{LOCKS[k].label}</b>
+                </button>
+              ))}
+            </div>
+          )}
+          {sol && <div className="notice" style={{ fontSize: ".86em" }}>Solana: standard token with a fixed supply and a Raydium pool; the LP tokens are {solLockerProgram() ? "burned or locked" : "burned forever"}. No tax, whitelist or first buy. Raydium charges about 0.15 SOL for the pool.</div>}
+        </section>
+
+        {!sol && (
+          <section className="ql-sec">
+            <h4><i>5</i>Tax &amp; extras <small className="muted">optional</small></h4>
+            <div className="form-grid">
+              <label className="field"><span>Buy tax % <small className="muted">max {MAX_TAX_PERCENT}</small></span><input value={f.buyTax} onChange={set("buyTax")} inputMode="decimal" /></label>
+              <label className="field"><span>Sell tax % <small className="muted">max {MAX_TAX_PERCENT}</small></span><input value={f.sellTax} onChange={set("sellTax")} inputMode="decimal" /></label>
+              {(Number(f.buyTax) > 0 || Number(f.sellTax) > 0) && <label className="field" style={{ gridColumn: "1 / -1" }}><span>Tax wallet (receives the tax)</span><input value={f.taxWallet} onChange={set("taxWallet")} placeholder="0x…" spellCheck={false} /></label>}
+            </div>
+            <details>
+              <summary><b>Whitelist &amp; first buy</b></summary>
+              <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+                <p className="muted" style={{ margin: 0, fontSize: ".86em" }}>Up to 3 wallets may buy (about $40 each) before trading opens. Your first buy happens at launch, before anyone else. Your share + first buy can be at most {MAX_CREATOR_PERCENT}% of the supply.</p>
+                <div className="form-grid">
+                  <label className="field"><span>Whitelist wallet 1</span><input value={f.wl1} onChange={set("wl1")} placeholder="0x…" spellCheck={false} /></label>
+                  <label className="field"><span>Whitelist wallet 2</span><input value={f.wl2} onChange={set("wl2")} placeholder="0x…" spellCheck={false} /></label>
+                  <label className="field"><span>Whitelist wallet 3</span><input value={f.wl3} onChange={set("wl3")} placeholder="0x…" spellCheck={false} /></label>
+                  <label className="field"><span>Your first buy ({coin})</span><input value={f.devBuy} onChange={set("devBuy")} inputMode="decimal" /></label>
+                </div>
+              </div>
+            </details>
+          </section>
+        )}
+
+        <details className="ql-sec">
+          <summary><b>Links</b> <small className="muted">optional: website, X, Telegram</small></summary>
+          <div className="form-grid" style={{ marginTop: 8 }}>
+            <label className="field"><span>Website (https://…)</span><input value={f.website} onChange={set("website")} /></label>
+            <label className="field"><span>X (https://…)</span><input value={f.x} onChange={set("x")} /></label>
+            <label className="field"><span>Telegram (https://…)</span><input value={f.telegram} onChange={set("telegram")} /></label>
+          </div>
+        </details>
+
+        {err && <div className="notice warn">{err}</div>}
+        <button className="btn primary ql-go" type="submit" disabled={disabled}>Review launch plan →</button>
+      </div>
+
+      <aside className="ql-preview" aria-label="Live preview">
+        <div className="ql-card">
+          <div className="ql-card-top">
+            <span className="ql-logo" aria-hidden="true">{(f.symbol || "?").slice(0, 3)}</span>
+            <div><b>{f.name || "Your token"}</b><small>${f.symbol || "TICKER"} · {ch?.name}</small></div>
+            <span className="ql-live">Preview</span>
+          </div>
+          {f.description && <p className="ql-desc">{f.description}</p>}
+          <div className="ql-stats">
+            <div><small>Supply</small><b>{supplyN ? num(supplyN) : "–"}</b></div>
+            <div><small>Into the pool</small><b>{poolTokens ? num(poolTokens) : "–"}</b></div>
+            <div><small>Liquidity</small><b>{liqN ? `${liqN} ${coin}` : "–"}</b></div>
+            <div><small>Start price</small><b>{tiny(price)} {price ? coin : ""}</b></div>
+            <div><small>Start market cap</small><b>{mcap ? `${+mcap.toFixed(4)} ${coin}` : "–"}</b></div>
+            <div><small>Liquidity</small><b>{f.lock === "burn" ? "🔥 Burned" : `🔒 ${lp.short}`}</b></div>
+          </div>
+          <ul className="ql-checks">
+            {checks.map(([ok, t]) => <li key={t} className={ok ? "ok" : "warn"}><i aria-hidden="true">{ok ? "✓" : "!"}</i>{t}</li>)}
+          </ul>
+          <small className="muted">Prices are estimates from your liquidity. Token prices can go to zero.</small>
         </div>
-      </details>
-      </>}
-      {(!sol || solLockerProgram()) && (
-        <fieldset className="lock-pick">
-          <legend>Liquidity</legend>
-          {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
-            <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
-          ))}
-        </fieldset>
-      )}
-      <details>
-        <summary className="muted">Optional: description and links</summary>
-        <div className="form-grid" style={{ marginTop: 8 }}>
-          <label className="field"><span>One-line description</span><input value={f.description} onChange={set("description")} maxLength={500} /></label>
-          <label className="field"><span>Website (https://…)</span><input value={f.website} onChange={set("website")} /></label>
-          <label className="field"><span>X (https://…)</span><input value={f.x} onChange={set("x")} /></label>
-          <label className="field"><span>Telegram (https://…)</span><input value={f.telegram} onChange={set("telegram")} /></label>
-        </div>
-      </details>
-      {err && <div className="notice warn">{err}</div>}
-      <button className="btn primary" type="submit" disabled={disabled}>Review launch plan</button>
+      </aside>
     </form>
   );
 }

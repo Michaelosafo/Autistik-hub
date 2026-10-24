@@ -20,6 +20,16 @@ type Summary = {
 };
 type Update = { kind: string; id: string; at: string; body?: string; author?: { id: string; alias: string; color: string; avatar_url?: string | null } | null };
 
+/** Shortcuts at the top of your panel. */
+const ACTIONS = [
+  { href: "/launchpad/new", name: "Launch", note: "New token", icon: "🚀", color: "#FF6B9A" },
+  { href: "/liquidity", name: "Liquidity", note: "Add or create a pool", icon: "💧", color: "#4FD1FF" },
+  { href: "/lockers", name: "Lock", note: "LP or team tokens", icon: "🔒", color: "#B57CFF" },
+  { href: "/stake", name: "Earn", note: "Stake & rewards", icon: "💰", color: "#5BE38F" },
+  { href: "/swap", name: "Swap", note: "Any token", icon: "🔁", color: "#FFD84D" },
+  { href: "/analytics", name: "Scanner", note: "Check a token", icon: "🔎", color: "#FF9F5A" },
+];
+const BAR = ["#F0B90B", "#B57CFF", "#4FD1FF", "#5BE38F"];
 const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
 const ago = (iso: string) => {
   const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000));
@@ -94,35 +104,64 @@ export default function MePanel({ me, settings }: {
 
   return (
     <div className="mp">
-      <div className="mp-head">
-        <button type="button" className="mp-photo" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo">
-          <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
-          <span className="mp-cam" aria-hidden="true">📷</span>
-        </button>
-        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
-      {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
-        <div className="mp-name">
-          <b>{sum?.profile?.alias || me.alias}</b>
-          {sum?.profile?.handle && <small>@{sum.profile.handle}</small>}
-          <small><Link href="/members?tab=following">{sum?.following ?? "–"} following</Link> · <Link href="/members?tab=followers">{sum?.followers ?? "–"} followers</Link></small>
+      <div className="mp-hero">
+        <div className="mp-hero-bg" aria-hidden="true" />
+        <div className="mp-head">
+          <button type="button" className="mp-photo" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo">
+            <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
+            <span className="mp-cam" aria-hidden="true">📷</span>
+          </button>
+          <div className="mp-name">
+            <b>{sum?.profile?.alias || me.alias}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
+            {sum?.profile?.handle && <small>@{sum.profile.handle}</small>}
+            <div className="mp-row" style={{ marginTop: 6 }}>
+              <button type="button" className="mp-chip" onClick={() => file.current?.click()} disabled={busy}>{photo ? "Change photo" : "Add a photo"}</button>
+              {photo && <button type="button" className="mp-chip" onClick={removePhoto} disabled={busy}>Remove</button>}
+              <Link className="mp-chip" href="/me">Profile</Link>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="mp-row">
-        <button type="button" className="btn small" onClick={() => file.current?.click()} disabled={busy}>{photo ? "Change photo" : "Add a photo"}</button>
-        {photo && <button type="button" className="btn small" onClick={removePhoto} disabled={busy}>Remove</button>}
-        <Link className="btn small" href="/me">My profile</Link>
+        <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
+        {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
+        <div className="mp-stats">
+          <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b><small>Following</small></Link>
+          <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b><small>Followers</small></Link>
+          <Link href="/launchpad"><b>{sum?.launches?.length ?? "–"}</b><small>Launches</small></Link>
+        </div>
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
 
-      <section className="mp-sec">
+      <nav className="mp-actions" aria-label="Quick actions">
+        {ACTIONS.map((a) => (
+          <Link key={a.href} href={a.href} className="mp-act" style={{ ["--act" as any]: a.color }}>
+            <span className="mp-act-ic" aria-hidden="true">{a.icon}</span>
+            <b>{a.name}</b><small>{a.note}</small>
+          </Link>
+        ))}
+      </nav>
+
+      <section className="mp-sec mp-wallet">
         <div className="mp-sec-h"><b>👛 Wallet</b><Link href="/wallet">Open</Link></div>
         {!sum ? <small className="mp-dim">Loading…</small> : sum.wallet ? (
           <>
             <div className="mp-total"><b>{usd(sum.wallet.totalUsd)}</b><small className="mono">{sum.wallet.short}</small></div>
-            {sum.wallet.funds.slice(0, 3).map((f) => <div key={f.symbol} className="mp-line"><span>{f.symbol}</span><span>{usd(f.valueUsd)}</span></div>)}
-            <div className="mp-row"><Link className="btn small" href="/wallet">Send</Link><Link className="btn small" href="/wallet">Receive</Link><Link className="btn small" href="/swap">Swap</Link></div>
+            {(() => {
+              const funds = sum.wallet!.funds.filter((f) => (f.valueUsd ?? 0) > 0).slice(0, 4);
+              const total = funds.reduce((t, f) => t + (f.valueUsd ?? 0), 0);
+              return total > 0 ? <div className="mp-bar" aria-hidden="true">{funds.map((f, i) => <i key={f.symbol} style={{ width: `${((f.valueUsd ?? 0) / total) * 100}%`, background: BAR[i % BAR.length] }} />)}</div> : null;
+            })()}
+            {sum.wallet.funds.slice(0, 4).map((f, i) => <div key={f.symbol} className="mp-line"><span><i className="mp-dot" style={{ background: BAR[i % BAR.length] }} />{f.symbol}</span><span>{usd(f.valueUsd)}</span></div>)}
+            <div className="mp-row"><Link className="mp-chip" href="/wallet">Send</Link><Link className="mp-chip" href="/wallet">Receive</Link><Link className="mp-chip" href="/swap">Swap</Link></div>
           </>
         ) : <small className="mp-dim">No wallet yet. <Link href="/wallet">Set one up</Link>.</small>}
+      </section>
+
+      <section className="mp-sec mp-earn">
+        <div className="mp-sec-h"><b>💰 Earn</b><Link href="/stake">Open</Link></div>
+        <div className="mp-earn-grid">
+          <Link href="/stake"><b>Stake</b><small>Earn BNB from platform fees, up to 3x</small></Link>
+          <Link href="/rewards"><b>Rewards</b><small>Points and $AUTISTIK airdrops</small></Link>
+        </div>
       </section>
 
       <section className="mp-sec">
