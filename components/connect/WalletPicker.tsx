@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -100,7 +101,7 @@ export default function WalletPicker() {
             {[...TOP_NETWORKS, ...(TOP_NETWORKS.includes(s.network) ? [] : [s.network])].map((k) => netOf(k)).map((n) => (
               <button key={n.key} type="button" role="radio" aria-checked={s.network === n.key} className={"wp-net" + (s.network === n.key ? " on" : "")}
                 onClick={() => { setNetwork(n.key); setAllNets(false); }} disabled={!!s.busy}>
-                <i style={{ background: n.color }} aria-hidden="true" />{n.name}
+                <NetIcon n={n} size={16} />{n.name}
               </button>
             ))}
             <button type="button" className={"wp-net" + (allNets ? " on" : "")} aria-expanded={allNets} onClick={() => setAllNets(!allNets)}>
@@ -113,7 +114,7 @@ export default function WalletPicker() {
               <div className="wp-netgrid">
                 {NETWORKS.filter((n) => !netQ || n.name.toLowerCase().includes(netQ.toLowerCase())).map((n) => (
                   <button key={n.key} type="button" className={"wp-net" + (s.network === n.key ? " on" : "")} onClick={() => { setNetwork(n.key); setAllNets(false); setNetQ(""); }}>
-                    <i style={{ background: n.color }} aria-hidden="true" />{n.name}
+                    <NetIcon n={n} size={16} />{n.name}
                   </button>
                 ))}
               </div>

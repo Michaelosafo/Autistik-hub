@@ -8,6 +8,7 @@ import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import Avatar from "@/components/Avatar";
 import LogoMark from "@/components/LogoMark";
+import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
@@ -143,7 +144,7 @@ export default function AppShell({ admin, me, onMe, children }: {
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
           <div className="ax-net">
             <button type="button" aria-haspopup="menu" aria-expanded={netMenu} aria-label={`Network: ${net.name}. Change network`} onClick={() => { setNetMenu(!netMenu); setAcctMenu(false); }}>
-              <i style={{ background: net.color }} aria-hidden="true" /><span className="ax-net-name">{net.name}</span><span className="ax-net-short">{net.short}</span>
+              <NetIcon n={net} size={18} /><span className="ax-net-name">{net.name}</span><span className="ax-net-short">{net.short}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             </button>
             {netMenu && (
@@ -153,7 +154,7 @@ export default function AppShell({ admin, me, onMe, children }: {
                   .filter((n) => !netQ || n.name.toLowerCase().includes(netQ.toLowerCase())).map((n) => (
                   <button key={n.key} type="button" role="menuitemradio" aria-checked={n.key === cs.network}
                     onClick={() => { setNetMenu(false); setNetwork(n.key).then(() => { if (n.key === "solana" ? !getState().sol : !getState().current) pickWallet({ fresh: true }); }); }}>
-                    <b><i style={{ background: n.color }} aria-hidden="true" />{n.name}{n.key === cs.network ? " ✓" : ""}</b>
+                    <b className="ax-net-row"><NetIcon n={n} size={20} />{n.name}{n.key === cs.network ? " ✓" : ""}</b>
                     {n.key === "solana" && <small>Phantom, Solflare, Backpack…</small>}
                   </button>
                 ))}
@@ -187,6 +188,18 @@ export default function AppShell({ admin, me, onMe, children }: {
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
                   <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{wallet?.name}</small></Link>
+                  <div className="ax-switch" role="group" aria-label="Switch network">
+                    <small>Switch network</small>
+                    <div className="ax-switch-grid">
+                      {TOP_NETWORKS.filter((k) => k !== "solana").map((k) => NETWORKS.find((n) => n.key === k)!).filter(Boolean).map((n) => (
+                        <button key={n.key} type="button" role="menuitemradio" aria-checked={n.key === cs.network} className={n.key === cs.network ? "on" : ""}
+                          onClick={() => { setNetwork(n.key); setAcctMenu(false); }} title={n.name}>
+                          <NetIcon n={n} size={22} /><span>{n.short}</span>
+                        </button>
+                      ))}
+                      <button type="button" className="more" onClick={() => { setAcctMenu(false); setNetMenu(true); }}><span>All {NETWORKS.length}</span></button>
+                    </div>
+                  </div>
                   <button type="button" role="menuitem" onClick={() => { navigator.clipboard?.writeText(acct).catch(() => {}); setAcctMenu(false); }}><b>Copy address</b></button>
                   <button type="button" role="menuitem" onClick={() => { pickWallet({ fresh: true }); setAcctMenu(false); }}><b>Switch wallet</b></button>
                   <button type="button" role="menuitem" onClick={() => { disconnectWallet(); setAcctMenu(false); }}><b>Disconnect</b></button>
