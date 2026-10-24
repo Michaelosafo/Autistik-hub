@@ -19,7 +19,7 @@ const CONFIG_TYPE = [{ type: "tuple", components: [
 type Info = { coin: string; priceUsd: number | null; router: `0x${string}`; stablecoin: `0x${string}`; team: `0x${string}` | null; autistik: `0x${string}`; locker: `0x${string}` | null; signer: `0x${string}`; pad: string | null; padVersion: number | null; burner: string | null };
 const coinFor = (usd: number, price: number) => parseEther((usd / price).toFixed(9));
 
-/** Admin only: put the Launch Pad v3 on a chain (and the AUTISTIK burner on BNB Chain), and keep its $ amounts right. */
+/** Admin only: put the Launch Pad v2 on a chain (and the AUTISTIK burner on BNB Chain), and keep its $ amounts right. */
 export default function PadDeploy() {
   const chains = Object.values(CHAINS).filter(deployable);
   const [chain, setChain] = useState<ChainKey>(chains[0]?.key ?? "bsc");
@@ -136,7 +136,7 @@ export default function PadDeploy() {
       </select>
       {!info ? <small className="muted">Loading…</small> : (
         <div className="stack" style={{ gap: 6, fontSize: ".9em" }}>
-          <span>{c.coin} price: <b>{info.priceUsd ? `$${info.priceUsd.toLocaleString("en-US")}` : "unknown"}</b> · Locker: {info.locker ? "✅" : "❌ deploy it on the Lockers page first"}{chain === "bsc" ? <> · Burner: {info.burner ? "✅" : "not yet"}</> : null} · Launch Pad: {!info.pad ? "not yet" : (info.padVersion ?? 2) >= 3 ? "✅ live (v3)" : `⚠️ old v${info.padVersion ?? 2}: launches are off until you upgrade`}</span>
+          <span>{c.coin} price: <b>{info.priceUsd ? `$${info.priceUsd.toLocaleString("en-US")}` : "unknown"}</b> · Locker: {info.locker ? "✅" : "❌ deploy it on the Lockers page first"}{chain === "bsc" ? <> · Burner: {info.burner ? "✅" : "not yet"}</> : null} · Launch Pad: {info.pad ? `✅ live (v${info.padVersion ?? 2})` : "not yet"}</span>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {chain === "bsc" && !info.burner && <button className="btn primary" type="button" disabled={busy} onClick={deployBurner}>1. Deploy AUTISTIK burner</button>}
             {!info.pad && <button className="btn primary" type="button" disabled={busy || (chain === "bsc" && !info.burner) || !info.locker} onClick={deployPad}>{chain === "bsc" ? "2. " : ""}Deploy Launch Pad</button>}

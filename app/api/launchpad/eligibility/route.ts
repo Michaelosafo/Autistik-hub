@@ -3,7 +3,7 @@ import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http,
 import { privateKeyToAccount } from "viem/accounts";
 import { json } from "@/lib/ai";
 import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
-import { launchPadOn } from "@/lib/launchpad-server";
+import { padOn, padVersion } from "@/lib/launchpad-server";
 import { vanitySalt } from "@/lib/evm-vanity";
 import { getMarkets } from "@/lib/market";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
@@ -36,18 +36,18 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const wallet = String(body?.wallet || "");
-  const pad = chain ? await launchPadOn(chain.key) : null;
+  const pad = chain ? await padOn(chain.key) : null;
   if (!chain || !pad) return json({ error: "That chain isn't open for launches." }, 400);
   if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return json({ error: "That isn't a wallet address." }, 400);
   const creator = getAddress(wallet);
 
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
-  // The salt that gives this launch a token address ending in "AAAAA" (taken only when it's needed).
-  const salt = () => vanitySalt(chain.key, pad);
+  // Launch Pad v3: the salt that gives this launch a token address ending in "aaaaa" (taken only when it's needed).
+  const salt = async () => ((await padVersion(chain.key)) >= 3 ? await vanitySalt(chain.key, pad) : null);
   // Not set up yet: the contract's eligibilitySigner should also be the zero address, so no check happens.
   if (!key) {
     const s = await salt();
-    return json({ checked: false, deadline: "0", signature: "0x", salt: s.salt, token: s.token });
+    return json({ checked: false, deadline: "0", signature: "0x", ...(s && { salt: s.salt, token: s.token }) });
   }
   if (admin) return json({ checked: true, admin: true, ...(await permit(key, pad, chain.chainId, creator, await salt())) });
 
@@ -79,16 +79,22 @@ export async function POST(req: Request) {
 }
 
 /**
- * A one-use permit for `creator` to launch on `pad` (Launch Pad v3), valid for PERMIT_SECONDS. It also covers the salt,
- * so the address ending in "AAAAA" that the salt gives can only be used by this creator.
+ * A one-use permit for `creator` to launch on `pad`, valid for PERMIT_SECONDS. On a v3 Launch Pad it also covers the
+ * salt, so the address ending in "aaaaa" that the salt gives can only be used by this creator.
  */
-async function permit(key: string, pad: `0x${string}`, chainId: number, creator: `0x${string}`, s: { salt: `0x${string}`; token: string | null }) {
+async function permit(key: string, pad: `0x${string}`, chainId: number, creator: `0x${string}`, s: { salt: `0x${string}`; token: string | null } | null) {
   const deadline = BigInt(Math.floor(Date.now() / 1000) + PERMIT_SECONDS);
-  // Must match permitHash: keccak256(abi.encode(launchpad, chainId, creator, salt, deadline)).
-  const hash = keccak256(encodeAbiParameters(
-    [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "bytes32" }, { type: "uint256" }],
-    [pad, BigInt(chainId), creator, s.salt, deadline],
-  ));
+  // Must match permitHash: v2 keccak256(abi.encode(launchpad, chainId, creator, deadline)),
+  // v3 keccak256(abi.encode(launchpad, chainId, creator, salt, deadline)).
+  const hash = s
+    ? keccak256(encodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "bytes32" }, { type: "uint256" }],
+      [pad, BigInt(chainId), creator, s.salt, deadline],
+    ))
+    : keccak256(encodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }, { type: "address" }, { type: "uint256" }],
+      [pad, BigInt(chainId), creator, deadline],
+    ));
   const signature = await privateKeyToAccount(key as `0x${string}`).signMessage({ message: { raw: hash } });
-  return { deadline: deadline.toString(), signature, salt: s.salt, token: s.token };
+  return { deadline: deadline.toString(), signature, ...(s && { salt: s.salt, token: s.token }) };
 }
