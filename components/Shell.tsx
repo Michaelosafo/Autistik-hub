@@ -3,6 +3,7 @@ import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
+import RailShell from "@/components/RailShell";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -38,11 +39,16 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   const [big, setBig] = useState(false);
   const [theme, setTheme] = useState<"auto" | "light" | "dark">("dark");
   const [copied, setCopied] = useState(false);
+  // Layout: "new" = the three-column layout (components/RailShell.tsx), "classic" = the menus from before. Phones and
+  // narrow windows always get the classic layout.
+  const [layout, setLayout] = useState<"new" | "classic">("new");
+  const [wide, setWide] = useState(true);
 
   useEffect(() => {
     try {
       setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1");
       const t = localStorage.getItem("theme2"); if (t === "light" || t === "dark" || t === "auto") setTheme(t);
+      if (localStorage.getItem("layout") === "classic") setLayout("classic");
     } catch {}
     // The app helper (public/sw.js): faster opening on phones and an offline page. Only on the live site.
     if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -52,6 +58,13 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     if (theme === "auto") delete d.dataset.theme; else d.dataset.theme = theme;
     try { localStorage.setItem("theme2", theme); } catch {}
   }, [theme]);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 900px)");
+    const on = () => setWide(mq.matches);
+    on(); mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  useEffect(() => { try { localStorage.setItem("layout", layout); } catch {} }, [layout]);
   useEffect(() => {
     document.documentElement.dataset.calm = calm ? "on" : "off";
     document.documentElement.dataset.size = big ? "large" : "";
@@ -102,8 +115,56 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     try { await navigator.clipboard.writeText(TOKEN_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   }
 
+  const menuPop = menu && (
+                <div className="me-pop" role="dialog" aria-label="Menu">
+                  {me && (
+                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
+                      <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
+                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
+                    </Link>
+                  )}
+                  {me && <Link className="me-row" href="/members" onClick={() => setMenu(false)}><Icon id="i-com" /><span>Members<small>Follow people and see your feed</small></span></Link>}
+                  {me && (
+                    <div className="me-sec">
+                      <div className="me-sec-h"><b>🔔 Alerts</b>{alerts.unread > 0 && <span className="badge gold">{alerts.unread} new</span>}<Link href="/analytics" onClick={() => setMenu(false)}>Stats →</Link></div>
+                      <AlertsList alerts={alerts} onPick={() => setMenu(false)} />
+                    </div>
+                  )}
+                  <div className="me-sec">
+                    <div className="me-sec-h"><b>Display</b></div>
+                    <button className="me-row" type="button" role="switch" aria-checked={calm} onClick={() => { setCalm(!calm); tell(calm ? "Calm mode off" : "Calm mode on"); }}>
+                      <Icon id="i-calm" /><span>Calm mode<small>No movement, softer colours, no adverts</small></span><i className="sw" />
+                    </button>
+                    <button className="me-row" type="button" role="switch" aria-checked={big} onClick={() => { setBig(!big); tell(big ? "Normal text" : "Larger text"); }}>
+                      <Icon id="i-text" /><span>Larger text</span><i className="sw" />
+                    </button>
+                    <button className="me-row" type="button" onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}>
+                      <Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
+                    </button>
+                    <button className="me-row" type="button" onClick={() => { const l = layout === "new" ? "classic" : "new"; setLayout(l); tell(l === "new" ? "New layout" : "Classic layout"); }}>
+                      <Icon id="i-grid" /><span>Layout<small>{layout === "new" ? "New: menu left, news right" : "Classic"} · tap to switch</small></span>
+                    </button>
+                    <InstallApp />
+                  </div>
+                  {me?.is_admin && <Link className="me-row adm" href="/admin" onClick={() => setMenu(false)}><Icon id="i-adm" /><span>Admin<small>Everything happening on the site</small></span></Link>}
+                  {me && <Link className="me-row" href="/security" onClick={() => setMenu(false)}><Icon id="i-safe" /><span>Account security<small>{me.mfa ? "2-step verification is on ✓" : "Recommended: turn on 2-step verification"}</small></span></Link>}
+                  {me
+                    ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
+                    : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}
+                </div>
+  );
+
   // The front page is the website (its own header, no menus); trading tools open inside the App frame.
   if (path === "/") return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
+  if (layout === "new" && wide) return (
+    <>
+      <Sprites />
+      <RailShell me={me} path={path} app={isAppPath(path)} menuRef={menuRef} menuOpen={menu} onMenu={openMenu} menuPop={menuPop}>
+        <Tracker /><WalletPicker /><Toaster />
+        {children}
+      </RailShell>
+    </>
+  );
   if (isAppPath(path)) return <><Sprites /><AppShell admin={!!me?.is_admin}>{children}</AppShell></>;
 
   return (
@@ -155,41 +216,7 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                   : <span className="me-av guest" aria-hidden="true"><Icon id="i-auto" /></span>}
                 {alerts.unread > 0 && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
               </button>
-              {menu && (
-                <div className="me-pop" role="dialog" aria-label="Menu">
-                  {me && (
-                    <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
-                      <span className="me-av" style={{ background: me.color }} aria-hidden="true">{(me.alias.trim()[0] || "M").toUpperCase()}</span>
-                      <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
-                    </Link>
-                  )}
-                  {me && <Link className="me-row" href="/members" onClick={() => setMenu(false)}><Icon id="i-com" /><span>Members<small>Follow people and see your feed</small></span></Link>}
-                  {me && (
-                    <div className="me-sec">
-                      <div className="me-sec-h"><b>🔔 Alerts</b>{alerts.unread > 0 && <span className="badge gold">{alerts.unread} new</span>}<Link href="/analytics" onClick={() => setMenu(false)}>Stats →</Link></div>
-                      <AlertsList alerts={alerts} onPick={() => setMenu(false)} />
-                    </div>
-                  )}
-                  <div className="me-sec">
-                    <div className="me-sec-h"><b>Display</b></div>
-                    <button className="me-row" type="button" role="switch" aria-checked={calm} onClick={() => { setCalm(!calm); tell(calm ? "Calm mode off" : "Calm mode on"); }}>
-                      <Icon id="i-calm" /><span>Calm mode<small>No movement, softer colours, no adverts</small></span><i className="sw" />
-                    </button>
-                    <button className="me-row" type="button" role="switch" aria-checked={big} onClick={() => { setBig(!big); tell(big ? "Normal text" : "Larger text"); }}>
-                      <Icon id="i-text" /><span>Larger text</span><i className="sw" />
-                    </button>
-                    <button className="me-row" type="button" onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}>
-                      <Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
-                    </button>
-                    <InstallApp />
-                  </div>
-                  {me?.is_admin && <Link className="me-row adm" href="/admin" onClick={() => setMenu(false)}><Icon id="i-adm" /><span>Admin<small>Everything happening on the site</small></span></Link>}
-                  {me && <Link className="me-row" href="/security" onClick={() => setMenu(false)}><Icon id="i-safe" /><span>Account security<small>{me.mfa ? "2-step verification is on ✓" : "Recommended: turn on 2-step verification"}</small></span></Link>}
-                  {me
-                    ? <button className="me-row out" type="button" onClick={signOut}><Icon id="i-out" /><span>Sign out</span></button>
-                    : <Link className="me-row" href={`/login?next=${encodeURIComponent(path)}`} onClick={() => setMenu(false)}><Icon id="i-out" /><span>Sign in or join</span></Link>}
-                </div>
-              )}
+              {menuPop}
             </div>
             <div className="tool-note" role="status" aria-live="polite" data-show={note ? "1" : undefined}>{note}</div>
           </div>
