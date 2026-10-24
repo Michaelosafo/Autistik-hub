@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPublicClient, createWalletClient, custom, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
 import { CHAINS, LAUNCH_TOKEN_ABI, isSolana, liveChains, viemChain, type ChainKey, type Pads } from "@/lib/launchpad";
 import { SolAddLiquidity } from "@/components/SolanaLaunch";
-import { reportActivity } from "@/lib/activity-client";
+import { autoList, reportActivity } from "@/lib/activity-client";
 
 const ROUTER_ABI = parseAbi([
   "function factory() view returns (address)",
@@ -184,6 +184,7 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
       const after = (await pub.readContract({ address: pair, abi: ERC20_ABI, functionName: "balanceOf", args: [acc] })) as bigint;
       setLp({ pair, amount: after - before, hash });
       reportActivity("liquidity", c.key, hash, `Added ${amtToken} ${pool.symbol} + ${amtCoin} ${c.coin} on ${c.name}`);
+      if (token) autoList(c.key, token, hash);
       setMsg("✅ Liquidity added. The LP tokens are in your wallet.");
       setAmtToken(""); setAmtCoin("");
       setPool((p) => (p ? { ...p, pair } : p));

@@ -3,7 +3,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { parseUnits } from "viem";
 import { getState, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
 import { CHAINS, LOCKS, SOL_POOL_COST, solLaunchFee, type LaunchPlan } from "@/lib/launchpad";
-import { reportActivity } from "@/lib/activity-client";
+import { autoList, reportActivity } from "@/lib/activity-client";
 import { signAndSend, solErr, solLaunchApi, type SolWallet } from "@/lib/sol-wallet";
 
 const c = CHAINS.solana;
@@ -129,6 +129,7 @@ function SolCreatePool({ mint, sw, picker, busy, setBusy, setMsg, onCreated }: {
       const sig = await signAndSend(sw, r.tx);
       reportActivity("liquidity", "solana", sig, `Created a Raydium pool with ${sol} SOL`);
       setMsg("✅ Pool created and trading is open. Now burn the LP tokens so buyers can trust it.");
+      autoList("solana", mint, sig, r.pool).then((ok) => ok && setMsg("✅ Pool created, trading is open and your token is listed on the Hub. Now burn the LP tokens so buyers can trust it."));
       onCreated(r.pool, r.lpMint);
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
   }
@@ -212,6 +213,7 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
       const r = await solLaunchApi<{ tx: string; lpMint: string }>("add", { owner: sw.account.address, pool: pool.pool, side: last, amount: last === "sol" ? amtSol : amtTok, decimals: pool.decimals });
       const sig = await signAndSend(sw, r.tx);
       reportActivity("liquidity", "solana", sig, `Added ${amtSol} SOL + ${amtTok} ${pool.symbol} on Solana`);
+      autoList("solana", mint, sig, pool.pool);
       setLp(r.lpMint); setAmtSol(""); setAmtTok("");
       setMsg("✅ Liquidity added. The LP tokens are in your wallet.");
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }

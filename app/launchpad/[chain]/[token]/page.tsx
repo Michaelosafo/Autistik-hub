@@ -85,7 +85,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
             </div>
             {!listed && !sol && <VerifySource chain={c.key} token={token} />}
             {listed ? (
-              <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock. Check the contract on the explorer before buying.</p>
+              <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. {String(launch.tx_hash || "").startsWith("liquidity:") ? <>Its liquidity was added through AUTISTIK, but the token wasn&apos;t made with the full Launch Pad flow, so we don&apos;t vouch for its tax, owner or liquidity lock.</> : <>This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock.</>} Check the contract on the explorer before buying.</p>
             ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
           </div>
         </div>
