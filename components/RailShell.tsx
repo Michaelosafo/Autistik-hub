@@ -7,28 +7,32 @@
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import Art from "@/components/Art";
 import { LINKS } from "@/lib/site";
 import { getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 type Item = { href: string; name: string; icon: string; match?: string[]; members?: boolean };
-const HUB: Item[] = [
+// One list like X's: the pages people use most. Everything else is behind More.
+const MAIN: Item[] = [
   { href: "/", name: "Home", icon: "i-home" },
+  { href: "/launchpad", name: "Trending", icon: "i-fire", match: ["/launchpad", "/momentum"] },
   { href: "/companions", name: "Chat", icon: "i-kai" },
   { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
   { href: "/live", name: "Live", icon: "i-ses" },
-  { href: "/members", name: "Members", icon: "i-user", members: true },
-  { href: "/buy", name: "$AUTISTIK", icon: "i-buy", match: ["/buy", "/fund"] },
-];
-const APP: Item[] = [
-  { href: "/app", name: "App", icon: "i-grid" },
   { href: "/swap", name: "Swap", icon: "i-swap", match: ["/swap", "/perps", "/trade"] },
-  { href: "/launchpad", name: "Launch Pad", icon: "i-rocket", match: ["/launchpad", "/momentum"] },
-  { href: "/lockers", name: "Lock", icon: "i-lock" },
-  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena"] },
+  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
+  { href: "/lockers", name: "Lock", icon: "i-lock" },
+  { href: "/members", name: "Members", icon: "i-user", members: true },
+];
+const MORE: Item[] = [
+  { href: "/app", name: "All App tools", icon: "i-grid" },
   { href: "/analytics", name: "Token scanner", icon: "i-search", match: ["/analytics", "/pro"] },
+  { href: "/buy", name: "$AUTISTIK", icon: "i-buy", match: ["/buy", "/fund"] },
+  { href: "/about", name: "What is AUTISTIK?", icon: "i-inf" },
+  { href: "/autism", name: "About autism", icon: "i-learn" },
+  { href: "/safety", name: "Safety", icon: "i-safe" },
 ];
 
 const Icon = ({ id }: { id: string }) => <svg aria-hidden="true"><use href={"#" + id} /></svg>;
@@ -51,7 +55,18 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
   menuPop: ReactNode;
   children: ReactNode;
 }) {
-  const section = [...HUB, ...APP].find((i) => isOn(path, i));
+  const section = [...MAIN, ...MORE].find((i) => isOn(path, i));
+  const [more, setMore] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setMore(false); }, [path]);
+  useEffect(() => {
+    if (!more) return;
+    const close = (e: MouseEvent) => { if (!moreRef.current?.contains(e.target as Node)) setMore(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMore(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [more]);
+  const moreItems = me?.is_admin ? [...MORE, { href: "/admin", name: "Admin", icon: "i-adm" }] : MORE;
   const link = (i: Item) => (
     <Link key={i.href} href={i.href} className="nx-link" aria-current={isOn(path, i) ? "page" : undefined}>
       <Icon id={i.icon} /><span>{i.name}</span>
@@ -62,14 +77,22 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
       <aside className="nx-rail" aria-label="Menu">
         <Link href="/" className="nx-brand" aria-label="AUTISTIK Hub: home">
           <svg width="44" height="22" aria-hidden="true"><use href="#i-inf" /></svg>
-          <span><b>AUTISTIK</b><small>Different wavelength. Same channel.</small></span>
+          <b>AUTISTIK</b>
         </Link>
         <nav className="nx-nav">
-          <small className="nx-sec">Hub</small>
-          {HUB.filter((i) => !i.members || me).map(link)}
-          <small className="nx-sec">App</small>
-          {APP.map(link)}
-          {me?.is_admin && <>{<small className="nx-sec">Owner</small>}{link({ href: "/admin", name: "Admin", icon: "i-adm" })}</>}
+          {MAIN.filter((i) => !i.members || me).map(link)}
+          <div className="nx-more" ref={moreRef}>
+            <button type="button" className="nx-link" aria-expanded={more} aria-haspopup="menu" aria-current={moreItems.some((i) => isOn(path, i)) ? "page" : undefined} onClick={() => setMore(!more)}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M8 12h.01M12 12h.01M16 12h.01" strokeWidth="3" /></svg><span>More</span>
+            </button>
+            {more && (
+              <div className="nx-more-pop" role="menu">
+                {moreItems.map((i) => (
+                  <Link key={i.href} role="menuitem" href={i.href} aria-current={isOn(path, i) ? "page" : undefined}><Icon id={i.icon} /><span>{i.name}</span></Link>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
         <Link href="/launchpad/new" className="nx-cta"><Icon id="i-rocket" /><span>Launch a token</span></Link>
         <div className="nx-acct me-menu" ref={menuRef}>
@@ -85,14 +108,14 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
       </aside>
 
       <main className="nx-main">
-        <header className="nx-top">
+        {path !== "/" && <header className="nx-top">
           <b>{section?.name ?? "AUTISTIK Hub"}</b>
           <div className="nx-top-r">
             {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
           </div>
-        </header>
-        <div className="nx-page">{children}</div>
+        </header>}
+        <div className={path === "/" ? "nx-page home" : "nx-page"}>{children}</div>
         <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.</footer>
       </main>
 
