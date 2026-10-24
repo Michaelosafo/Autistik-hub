@@ -3101,3 +3101,9 @@ html[data-calm="on"] .pv img,html[data-calm="on"] .pv-bg{animation:none}
 .mp-link b{color:var(--rail-hi);font-size:.9em}
 .mp-link small{flex:1;font-size:.74em;color:var(--rail-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mp-link i{font-style:normal;color:var(--rail-ink)}
+
+/* Your panel scrolls instead of squeezing: no section shrinks under another (the wallet used to cover your profile) */
+.mp > *{flex-shrink:0}
+.mp-hero{min-height:max-content}
+.mp-head{align-items:flex-start}
+.mp-name{flex:1}
