@@ -165,7 +165,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); say(permit.error || ""); return; }
 
-      // Launch Pad v3: the Hub picked a salt that gives the token an address ending in "aaaaa", signed into the permit.
+      // Launch Pad v3: the Hub picked a salt that gives the token an address ending in "aaa", signed into the permit.
       const salt = /^0x[0-9a-fA-F]{64}$/.test(String(permit.salt || "")) ? (permit.salt as `0x${string}`) : null;
       setStatus(salt && permit.token ? `Your token's address will be ${String(permit.token).slice(0, 8)}…${String(permit.token).slice(-8)}. Confirm the launch in your wallet…` : "Confirm the launch in your wallet…");
       const call = {

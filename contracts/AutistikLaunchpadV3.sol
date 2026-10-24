@@ -134,7 +134,7 @@ contract AutistikToken is ERC20 {
     string private _tokenSymbol;
 
     /// @dev No constructor arguments: the settings come from the deployer, so every token has the same creation code
-    ///      and its address depends only on the salt (CREATE2). That's how launch addresses can all end in "aaaaa".
+    ///      and its address depends only on the salt (CREATE2). That's how launch addresses can all end in "aaa".
     constructor() ERC20("", "") {
         Init memory i = abi.decode(ITokenSettings(msg.sender).pendingInit(), (Init));
         _tokenName = i.name;
@@ -335,7 +335,7 @@ contract AutistikTokenDeployer {
  * Launching is free: a small contribution (about $3) comes out of the coin sent with the launch and goes to
  * marketing. Platform fee from trades is split 30% marketing, 30% AUTISTIK buy-and-burn, 40% team.
  * v3: tokens are created with CREATE2 and a salt the Hub picks (signed into the creator's permit), so every token
- * address ends in "aaaaa".
+ * address ends in "aaa".
  */
 contract AutistikLaunchpadV3 is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -417,6 +417,7 @@ contract AutistikLaunchpadV3 is ReentrancyGuard {
     error UnknownPlan();
     error PriceTooHigh();
     error TransferFailed();
+    error InvalidVanityAddress();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -523,7 +524,7 @@ contract AutistikLaunchpadV3 is ReentrancyGuard {
 
     function _deploy(LaunchParams calldata p, uint256 liquidityNative) private returns (address) {
         uint256 liquidityTokens = p.supply - (p.supply * p.creatorBps) / 10_000;
-        return deployer.deploy(
+        address token = deployer.deploy(
             AutistikToken.Init({
                 pad: address(this),
                 name: p.name,
@@ -541,6 +542,9 @@ contract AutistikLaunchpadV3 is ReentrancyGuard {
             }),
             p.salt
         );
+        // Enforce the V3 address suffix on-chain; callers cannot bypass vanity generation.
+        if ((uint160(token) & 0xfff) != 0xaaa) revert InvalidVanityAddress();
+        return token;
     }
 
     /// @dev The whole supply was minted to this launchpad: the creator's share to them, the rest into the pool.

@@ -98,6 +98,7 @@ async function ownerOf(creator: string, sameCase: boolean) {
 async function recordSolana(body: any) {
   const mint = String(body?.token || ""), pool = String(body?.pair || ""), sig = String(body?.txHash || "");
   if (!SOL_ADDR.test(mint) || !SOL_ADDR.test(pool) || !/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(sig)) return json({ error: "Missing the token, pool or transaction." }, 400);
+  if (!mint.endsWith("tik")) return json({ error: 'V3 Solana launches must use a mint address ending in "tik".' }, 400);
   let v;
   try { v = await verifyLaunch(mint, pool); } catch { return json({ error: "Couldn't reach Solana. Try again in a minute." }, 502); }
   if ("error" in v) return json({ error: v.error }, 400);
