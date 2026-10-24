@@ -2995,3 +2995,6 @@ html[data-calm="on"] .logo-mark{transition:none}
 .pc-sizes,.pc-r{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .pc-r{width:100%}
 .pc-r .btn{flex:1}
+.wp-more{all:unset;box-sizing:border-box;cursor:pointer;display:block;text-align:center;width:100%;padding:11px;margin:4px 0;border-radius:14px;border:1px dashed #4a4160;color:var(--gold,#F0B90B);font-weight:800;font-size:.9em}
+.wp-more:hover{background:rgba(240,185,11,.08)}
+.wp-more:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}

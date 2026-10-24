@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
+import { listWallets, type ListedWallet } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -13,6 +14,18 @@ export default function WalletPicker() {
   const [allNets, setAllNets] = useState(false);
   const [netQ, setNetQ] = useState("");
   const [qrImg, setQrImg] = useState("");
+  // Every WalletConnect wallet (600+), loaded when asked for or searched.
+  const [showAll, setShowAll] = useState(false);
+  const [all, setAll] = useState<{ list: ListedWallet[]; total: number; page: number; loading: boolean }>({ list: [], total: 0, page: 0, loading: false });
+  const loadAll = (page: number, search: string, add: boolean) => {
+    setAll((a) => ({ ...a, loading: true }));
+    listWallets(page, search).then(({ wallets, total }) => setAll((a) => ({ list: add ? [...a.list, ...wallets] : wallets, total, page, loading: false })));
+  };
+  useEffect(() => {
+    if (!s.open || (!showAll && !q)) return;
+    const t = setTimeout(() => loadAll(1, q, false), q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [q, showAll, s.open]);
   useEffect(() => {
     setQrImg("");
     if (s.qr) import("qrcode").then((m) => m.toDataURL(s.qr!.uri, { margin: 1, width: 260, color: { dark: "#191326", light: "#FFFFFF" } })).then(setQrImg).catch(() => {});
@@ -20,7 +33,7 @@ export default function WalletPicker() {
   useEffect(() => { startDiscovery(); }, []);
   useEffect(() => {
     if (!s.open) return;
-    setQ(""); setLast(lastWalletName());
+    setQ(""); setLast(lastWalletName()); setShowAll(false);
     const k = (e: KeyboardEvent) => e.key === "Escape" && closePicker();
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
@@ -128,7 +141,7 @@ export default function WalletPicker() {
               <div className="wp-qr-r">
                 <button type="button" className="btn small" onClick={() => navigator.clipboard?.writeText(s.qr!.uri).catch(() => {})}>Copy link</button>
                 <button type="button" className="btn small" onClick={cancelQr}>← Other wallets</button>
-                {(() => { const w = TOP_WALLETS.find((x) => x.name === s.qr!.name); return w ? <a className="btn small" href={w.install} target="_blank" rel="noopener noreferrer">Get {w.name}</a> : null; })()}
+                {s.qr.install && <a className="btn small" href={s.qr.install} target="_blank" rel="noopener noreferrer">Get {s.qr.name}</a>}
               </div>
             </div>
           )}
@@ -147,7 +160,32 @@ export default function WalletPicker() {
             </>}
             {others.length > 0 && <div className="wp-label">{solMode ? "Get a Solana wallet" : "Popular"}</div>}
             {others.map((r) => <RowBtn key={r.key} r={r} />)}
-            {!shown.length && <div className="wp-empty">{solMode ? <>No Solana wallet called &ldquo;{q}&rdquo;.</> : <>No wallet called &ldquo;{q}&rdquo;. Try WalletConnect: it works with 300+ wallets.</>}</div>}
+            {!solMode && WALLETCONNECT_ID && (() => {
+              const known = new Set(rows.map((r) => r.name.toLowerCase()));
+              const extra = all.list.filter((w) => !known.has(w.name.toLowerCase()));
+              if (!showAll && !q) return <button type="button" className="wp-more" onClick={() => setShowAll(true)}>Show all wallets (600+) ▾</button>;
+              return <>
+                <div className="wp-label">{q ? "More wallets" : `All wallets${all.total ? ` (${all.total})` : ""}`}</div>
+                {extra.map((w) => {
+                  const here = w.rdns ? s.detected.find((d) => d.info.rdns === w.rdns) : undefined;
+                  const r: Row = {
+                    key: "all-" + w.id, name: w.name, logo: w.logo || null, here: false,
+                    badge: here ? "Installed" : undefined,
+                    sub: here ? "Ready on this device" : mobile ? (w.wc ? `Opens ${w.name}` : "Pick it in the WalletConnect list") : `Scan with ${w.name} on your phone`,
+                    go: () => {
+                      if (here) { chooseInjected(here.info.name, here.provider); return; }
+                      chooseWalletConnect(mobile && !w.wc ? undefined : { name: w.name, logo: w.logo, wc: w.wc, install: w.install });
+                    },
+                  };
+                  return <RowBtn key={r.key} r={r} />;
+                })}
+                {all.loading && <div className="wp-empty">Loading wallets…</div>}
+                {!all.loading && all.list.length < all.total && (
+                  <button type="button" className="wp-more" onClick={() => loadAll(all.page + 1, q, true)}>Load more wallets</button>
+                )}
+              </>;
+            })()}
+            {!shown.length && (solMode || !WALLETCONNECT_ID) && <div className="wp-empty">{solMode ? <>No Solana wallet called &ldquo;{q}&rdquo;.</> : <>No wallet called &ldquo;{q}&rdquo;. Try WalletConnect: it works with 300+ wallets.</>}</div>}
           </div>
           </>}
           {s.error && <div className="wp-err" role="alert">{s.error}</div>}
