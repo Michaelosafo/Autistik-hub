@@ -37,7 +37,7 @@ const client = (c: WChain): any => createPublicClient({ chain: c.viem, transport
 
 async function solRpc(method: string, params: unknown[]) {
   const j = await getJson(SOL_RPC, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
-  if (j?.error) throw new Error(j.error.message || "Solana node error");
+  if (j?.error) throw Object.assign(new Error(j.error.message || "Solana node error"), { rpc: j.error });
   return j.result;
 }
 
@@ -434,7 +434,26 @@ export async function solTransfer(from: string, to: string, mint: string, raw: b
 
 /** Sends a transaction the member already signed in their own wallet. */
 export async function solBroadcast(signedBase64: string): Promise<string> {
-  return solRpc("sendTransaction", [signedBase64, { encoding: "base64", skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 }]);
+  try {
+    return await solRpc("sendTransaction", [signedBase64, { encoding: "base64", skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 }]);
+  } catch (e: any) {
+    throw new Error(solReason(e));
+  }
+}
+
+/** Turns Solana's "simulation failed" into the actual reason, in plain words (the full logs go to the server log). */
+function solReason(e: any): string {
+  const data = e?.rpc?.data || {};
+  const logs: string[] = Array.isArray(data.logs) ? data.logs.map(String) : [];
+  const all = [String(e?.message || ""), JSON.stringify(data.err ?? ""), ...logs].join("\n");
+  console.error("solana send failed:", String(e?.message || "").slice(0, 200), JSON.stringify(data.err ?? null), "\n" + logs.slice(-14).join("\n").slice(0, 2500));
+  if (/Blockhash not found|BlockhashNotFound|block height exceeded/i.test(all)) return "That took too long to approve, so Solana expired it. Tap the button again and approve within a minute.";
+  if (/insufficient lamports|InsufficientFundsForRent|insufficient funds for (rent|fee)|AccountNotFound/i.test(all)) return "Not enough SOL in this wallet. Add a little more SOL (the pool needs your liquidity plus about 0.2 SOL in fees) and try again.";
+  if (/insufficient funds|custom program error: 0x1\b/i.test(all)) return "Not enough tokens or SOL in this wallet for that amount. Check the balances and try again.";
+  if (/already in use|AccountAlreadyInitialized|already initialized/i.test(all)) return "That pool already exists. Open the token's page to add liquidity to it instead.";
+  if (/signature verification|SignatureFailure|missing signature/i.test(all)) return "The wallet changed the transaction while signing. Try again, or use another wallet app.";
+  const last = [...logs].reverse().find((l) => /Error|failed|error/i.test(l));
+  return `Solana rejected it: ${(last || String(e?.message || "simulation failed")).replace(/^Program log: /, "").slice(0, 140)}`;
 }
 export async function solStatus(sig: string): Promise<"pending" | "done" | "failed"> {
   const r = await solRpc("getSignatureStatuses", [[sig], { searchTransactionHistory: false }]);

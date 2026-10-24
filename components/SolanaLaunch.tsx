@@ -42,6 +42,17 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
   const [pool, setPool] = useState<{ pool: string; lpMint: string } | null>(null);
   const [burned, setBurned] = useState(false);
   const step: Step = !mint ? "token" : !pool ? "pool" : !burned ? "burn" : "list";
+  // Progress is kept on this device, so a failed step or a reload continues with the same token (never a second one).
+  const key = `sol-launch:${plan.symbol}:${plan.name}`;
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(key) || "null");
+      if (v?.mint?.mint) { setMint(v.mint); if (v.pool?.pool) setPool(v.pool); if (v.burned) setBurned(true); setMsg(`Continuing your launch of $${plan.symbol}: the token already exists.`); }
+    } catch { /* private mode */ }
+  }, [key]);
+  useEffect(() => {
+    try { if (mint) localStorage.setItem(key, JSON.stringify({ mint, pool, burned })); } catch { /* private mode */ }
+  }, [key, mint, pool, burned]);
 
   async function next() {
     if (!sw) return;
@@ -73,6 +84,7 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
         setMsg("Adding it to the Hub…");
         const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "solana", token: mint!.mint, pair: pool!.pool, txHash: mint!.sig, lock: plan.lock, lpMint: pool!.lpMint }) });
         onDone({ token: mint!.mint, pair: pool!.pool, hash: mint!.sig, listed: res.ok });
+        try { localStorage.removeItem(key); } catch { /* private mode */ }
         setMsg("");
       }
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
@@ -84,11 +96,29 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
       <ol className="muted" style={{ margin: 0, paddingLeft: 18, fontSize: ".88em" }}>
         {(Object.keys(STEPS) as Step[]).map((k) => <li key={k} style={{ fontWeight: k === step ? 700 : 400 }}>{stepName(k, plan)}{k === "token" && mint ? " ✓" : k === "pool" && pool ? " ✓" : k === "burn" && burned ? " ✓" : ""}</li>)}
       </ol>
+      {!mint && sw && <ResumeToken owner={sw.account.address} busy={busy} onFound={(m) => { setMint(m); setMsg("✅ Found your token. Next: the pool."); }} onErr={setMsg} />}
       {mint && <small className="muted">Token: <a href={`${c.explorer}/token/${mint.mint}`} target="_blank" rel="noopener noreferrer" className="mono">{short(mint.mint)}</a></small>}
       <button className="btn primary" type="button" disabled={!sw || !agree || busy} onClick={next}>
         {busy ? "Working…" : step === "token" ? `Launch for ${plan.liquidity} SOL + about ${+(SOL_POOL_COST + solLaunchFee()).toFixed(3)} SOL in fees` : `Continue: ${stepName(step, plan).toLowerCase()}`}
       </button>
       {msg && <span className="muted" style={{ fontSize: ".88em" }}>{msg}</span>}
+    </div>
+  );
+}
+
+/** "Already made the token?": continue a launch that stopped after step 1, with that token. */
+function ResumeToken({ owner, busy, onFound, onErr }: { owner: string; busy: boolean; onFound: (m: { mint: string; sig: string }) => void; onErr: (m: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [addr, setAddr] = useState("");
+  const [checking, setChecking] = useState(false);
+  if (!open) return <button type="button" className="linkish" style={{ fontSize: ".86em" }} onClick={() => setOpen(true)}>Already created the token here? Continue with it</button>;
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+      <input value={addr} onChange={(e) => setAddr(e.target.value.trim())} placeholder="Your token address (ends in tik)" spellCheck={false} style={{ flex: 1, minWidth: 200 }} aria-label="Your token address" />
+      <button type="button" className="btn small" disabled={busy || checking || addr.length < 32} onClick={async () => {
+        setChecking(true);
+        try { onFound(await solLaunchApi<{ mint: string; sig: string }>("resume", { owner, mint: addr })); } catch (e) { onErr(solErr(e)); } finally { setChecking(false); }
+      }}>{checking ? "Checking…" : "Continue"}</button>
     </div>
   );
 }

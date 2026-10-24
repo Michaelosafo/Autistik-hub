@@ -53,5 +53,6 @@ export async function solLaunchApi<T>(action: string, body: object): Promise<T> 
 
 export const solErr = (e: any) => {
   const m = String(e?.message || e || "");
+  if (/^(Not enough|That took too long|That pool already|The wallet changed|Solana rejected)/.test(m)) return m;
   return /reject|denied|cancel|declined/i.test(m) ? "You cancelled in your wallet." : /insufficient|0x1\b/i.test(m) ? "Not enough SOL in this wallet." : m.slice(0, 220) || "Something went wrong.";
 };
