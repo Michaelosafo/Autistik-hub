@@ -124,6 +124,78 @@ export function legacyInjected(): any | null {
   return eth && typeof eth.request === "function" ? eth : null;
 }
 
+const isEip1193 = (p: any) => !!p && typeof p.request === "function";
+/**
+ * A popular wallet already in this browser (its extension, or its own app's browser on a phone), found by the
+ * names wallets put on the page. Used so tapping "Bitget Wallet" connects right here instead of opening the app.
+ */
+export function injectedFor(id: string): any | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any, eth = w.ethereum;
+  const list: any[] = [eth, ...(Array.isArray(eth?.providers) ? eth.providers : [])].filter(isEip1193);
+  const flag = (f: (p: any) => boolean) => list.find(f) ?? null;
+  switch (id) {
+    case "bitget": return [w.bitkeep?.ethereum, w.bitget?.ethereum].find(isEip1193) ?? flag((p) => p.isBitKeep || p.isBitgetWallet);
+    case "trust": return [w.trustwallet?.ethereum, w.trustwallet].find(isEip1193) ?? flag((p) => p.isTrust || p.isTrustWallet);
+    case "okx": return [w.okxwallet].find(isEip1193) ?? flag((p) => p.isOkxWallet || p.isOKExWallet);
+    case "binance": return [w.binancew3w?.ethereum, w.BinanceChain].find(isEip1193) ?? flag((p) => p.isBinance);
+    case "coinbase": return [w.coinbaseWalletExtension].find(isEip1193) ?? flag((p) => p.isCoinbaseWallet);
+    case "safepal": return [w.safepalProvider].find(isEip1193) ?? flag((p) => p.isSafePal);
+    case "tokenpocket": return flag((p) => p.isTokenPocket);
+    case "rabby": return flag((p) => p.isRabby);
+    case "phantom": return [w.phantom?.ethereum].find(isEip1193);
+    case "metamask": return flag((p) => p.isMetaMask && !p.isBitKeep && !p.isTrust && !p.isTrustWallet && !p.isOkxWallet && !p.isRabby && !p.isTokenPocket && !p.isSafePal && !p.isCoinbaseWallet && !p.isPhantom);
+    default: return null;
+  }
+}
+
+/** The same for Solana: the wallet's own Solana object on the page (older wallets that don't use Wallet Standard). */
+export function injectedSolFor(id: string): any | null {
+  if (typeof window === "undefined") return null;
+  const w = window as any;
+  const ok = (p: any) => !!p && typeof p.connect === "function" && typeof p.signTransaction === "function";
+  const pick: Record<string, any[]> = {
+    bitget: [w.bitkeep?.solana, w.bitget?.solana], trust: [w.trustwallet?.solana], phantom: [w.phantom?.solana, w.solana?.isPhantom ? w.solana : null],
+    solflare: [w.solflare], okx: [w.okxwallet?.solana], backpack: [w.backpack?.solana, w.backpack], coinbase: [w.coinbaseSolana],
+  };
+  return (pick[id] || []).find(ok) ?? null;
+}
+
+/** Wraps an older Solana wallet object so it works like a Wallet Standard wallet. */
+function legacySolWallet(name: string, icon: string, p: any): Wallet {
+  return {
+    version: "1.0.0", name, icon: icon as any, chains: ["solana:mainnet"], accounts: [],
+    features: {
+      "standard:connect": {
+        version: "1.0.0",
+        connect: async (opts?: { silent?: boolean }) => {
+          const r = await p.connect(opts?.silent ? { onlyIfTrusted: true } : undefined);
+          const pk = (r?.publicKey || p.publicKey)?.toString();
+          if (!pk) throw new Error("The wallet didn't share an account.");
+          return { accounts: [{ address: pk, publicKey: new Uint8Array(), chains: ["solana:mainnet"], features: ["solana:signTransaction"] }] };
+        },
+      },
+      "standard:disconnect": { version: "1.0.0", disconnect: async () => { await p.disconnect?.(); } },
+      "solana:signTransaction": {
+        version: "1.0.0", supportedTransactionVersions: ["legacy", 0],
+        signTransaction: async ({ transaction }: { transaction: Uint8Array }) => {
+          const { VersionedTransaction } = await import("@solana/web3.js");
+          const signed = await p.signTransaction(VersionedTransaction.deserialize(transaction));
+          return [{ signedTransaction: signed.serialize() }];
+        },
+      },
+    } as any,
+  } as Wallet;
+}
+
+/** Connects a popular wallet's Solana side that's already in this browser. */
+export function chooseSolInjected(id: string, name: string, icon: string): boolean {
+  const p = injectedSolFor(id);
+  if (!p) return false;
+  chooseSol(legacySolWallet(name, icon, p));
+  return true;
+}
+
 /** The wallet chosen in this tab (if any), without asking. */
 export const currentWallet = () => state.current;
 
@@ -376,7 +448,10 @@ export async function restoreSol(): Promise<SolConn | null> {
   if (!name) return null;
   await new Promise((r) => setTimeout(r, 200));
   const w = state.solFound.find((x) => x.name === name);
-  return w ? chooseSol(w, true) : null;
+  if (w) return chooseSol(w, true);
+  const app = SOL_APPS.find((a) => a.name === name);
+  const p = app ? injectedSolFor(app.id) : null;
+  return p && app ? chooseSol(legacySolWallet(app.name, app.logo, p), true) : null;
 }
 
 export async function disconnectSol() {

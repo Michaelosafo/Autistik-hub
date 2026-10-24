@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
+import { chooseSolInjected, injectedFor, injectedSolFor } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -49,10 +50,17 @@ export default function WalletPicker() {
         badge: d.info.name === last ? "Last used" : "Installed", sub: "Ready on this device", here: true, go: () => chooseInjected(d.info.name, d.provider),
       });
     }
-    const legacy = !s.detected.length ? legacyInjected() : null;
+    const legacy = !s.detected.length && !TOP_WALLETS.some((w) => injectedFor(w.id)) ? legacyInjected() : null;
     if (legacy) out.push({ key: "legacy", name: "This app's wallet", logo: null, badge: "Detected", sub: "The wallet built into this browser", here: true, go: () => chooseInjected("Browser wallet", legacy) });
     for (const w of TOP_WALLETS) {
       if (s.detected.some((d) => w.rdns.includes(d.info.rdns))) continue;
+      // Already in this browser (extension, or the wallet app's own browser): connect right here, approve in it.
+      const inj = injectedFor(w.id);
+      if (inj) {
+        out.push({ key: "inj-" + w.id, name: w.name, logo: `/wallets/${w.id}.svg`, badge: w.name === last ? "Last used" : "Installed", sub: "Ready on this device: approve in the wallet", here: true,
+          go: () => chooseInjected(w.name, inj) });
+        continue;
+      }
       const viaWc = !!WALLETCONNECT_ID;
       // Each wallet opens that wallet: its app on a phone, or a code to scan with its app on a computer.
       const phoneWc = mobile && viaWc && !!w.wc, phoneDapp = mobile && !phoneWc && !!w.dapp;
@@ -81,6 +89,11 @@ export default function WalletPicker() {
     const first = (n: string) => n.toLowerCase().split(" ")[0];
     for (const a of SOL_APPS) {
       if (s.solFound.some((w) => first(w.name) === first(a.name))) continue;
+      if (injectedSolFor(a.id)) {
+        out.unshift({ key: "sol-inj-" + a.id, name: a.name, logo: a.logo, badge: a.name === last ? "Last used" : "Installed", sub: "Ready on this device: approve in the wallet", here: true,
+          go: () => { chooseSolInjected(a.id, a.name, a.logo); } });
+        continue;
+      }
       out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, sub: mobile ? `Opens this site in ${a.name}` : "Not on this browser: get the app",
         go: () => { if (mobile) location.href = a.dapp(location.href); else window.open(a.install, "_blank", "noopener,noreferrer"); } });
     }
