@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Art from "@/components/Art";
 import CopyAddress from "@/components/CopyAddress";
+import MeButton from "@/components/MeButton";
 import FeaturedToken from "@/components/FeaturedToken";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
@@ -90,7 +91,7 @@ export default async function Home() {
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         {user && owner && <Link href="/admin" className="lp-signin lp-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
         {user
-          ? <Link href="/me" className="lp-signin" aria-label="My profile"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></Link>
+          ? <MeButton className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></MeButton>
           : <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
         <Link href="/app" className="lp-openapp" aria-label="Open the AUTISTIK App"><i aria-hidden="true"><svg><use href="#i-grid" /></svg></i><span>Open App</span><svg className="lp-oa-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
       </header>

@@ -164,11 +164,33 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
   // Your panel in the left menu: tap your picture to open it, tap again to go back to the menu.
   const [panel, setPanel] = useState(false);
   useEffect(() => { setPanel(false); }, [path]);
+  // The same panel as a drawer from the left, everywhere else: phones, the App's pages and the front page.
+  // Any button can open it with window.dispatchEvent(new Event("me-panel")) (components/MeButton.tsx).
+  const [drawer, setDrawer] = useState(false);
+  useEffect(() => { setDrawer(false); }, [path]);
+  useEffect(() => {
+    const toggle = () => setDrawer((d) => !d);
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawer(false); };
+    window.addEventListener("me-panel", toggle); document.addEventListener("keydown", esc);
+    return () => { window.removeEventListener("me-panel", toggle); document.removeEventListener("keydown", esc); };
+  }, []);
+  const openDrawer = () => { setMenu(false); setDrawer(true); setTimeout(alerts.markAll, 2000); };
+  const drawerEl = me && drawer && (
+    <div className="mp-drawer" onClick={(e) => e.target === e.currentTarget && setDrawer(false)}>
+      <div className="mp-drawer-in" role="dialog" aria-label="Your panel">
+        <div className="mp-drawer-h">
+          <b>Your panel</b>
+          <button type="button" className="mp-x" aria-label="Close your panel" onClick={() => setDrawer(false)}>✕</button>
+        </div>
+        <MePanel me={{ id: me.id, alias: me.alias, color: me.color, avatar_url: me.avatar_url ?? null, is_admin: me.is_admin }} settings={menuRows} />
+      </div>
+    </div>
+  );
 
   // The front page is the website (its own header, no menus); trading tools open inside the App frame.
   const railOn = layout === "new" && wide;
   // /about is always the full front page; "/" is too, except in the new layout, where Home is the timeline.
-  if (path === "/about" || (path === "/" && !railOn)) return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}</>;
+  if (path === "/about" || (path === "/" && !railOn)) return <><Sprites /><Tracker /><WalletPicker /><Toaster />{children}{drawerEl}</>;
   if (railOn) return (
     <>
       <Sprites />
@@ -176,9 +198,16 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
         <Tracker /><WalletPicker /><Toaster />
         {path === "/" ? <HomeFeed me={me} /> : children}
       </RailShell>
+      {drawerEl}
     </>
   );
-  if (isAppPath(path)) return <><Sprites /><AppShell admin={!!me?.is_admin}>{children}</AppShell></>;
+  if (isAppPath(path)) return (
+    <>
+      <Sprites />
+      <AppShell admin={!!me?.is_admin} me={me ? { alias: me.alias, color: me.color, avatar_url: me.avatar_url ?? null, unread: alerts.unread } : null} onMe={openDrawer}>{children}</AppShell>
+      {drawerEl}
+    </>
+  );
 
   return (
     <>
@@ -233,7 +262,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
             {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
             <div className={me ? "me-menu rail-dup" : "me-menu"} ref={menuRef}>
-              <button className="me-btn" type="button" aria-expanded={menu} aria-haspopup="dialog" onClick={openMenu}
+              <button className="me-btn" type="button" aria-expanded={me ? drawer : menu} aria-haspopup="dialog" onClick={me ? openDrawer : openMenu}
                 aria-label={me ? `Menu for ${me.alias}${alerts.unread ? `, ${alerts.unread} new alerts` : ""}` : "Display settings"}>
                 {me
                   ? <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
@@ -264,6 +293,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
           </div>
         </div>
       )}
+      {drawerEl}
     </>
   );
 }

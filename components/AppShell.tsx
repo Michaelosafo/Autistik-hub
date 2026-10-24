@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
+import Avatar from "@/components/Avatar";
 import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
@@ -70,7 +71,13 @@ const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 /** The App's frame: a top bar with menus and Connect Wallet (like an exchange), and a bottom bar on phones. */
-export default function AppShell({ admin, children }: { admin?: boolean; children: React.ReactNode }) {
+export default function AppShell({ admin, me, onMe, children }: {
+  admin?: boolean;
+  /** The signed-in member: their picture opens their panel (wallet, updates, scanner, settings). */
+  me?: { alias: string; color: string; avatar_url: string | null; unread?: number } | null;
+  onMe?: () => void;
+  children: React.ReactNode;
+}) {
   const path = usePathname();
   const [open, setOpen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
@@ -125,6 +132,12 @@ export default function AppShell({ admin, children }: { admin?: boolean; childre
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
           <span className="ax-chain" title="Network"><i />BNB Chain</span>
           {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
+          {me ? (
+            <button type="button" className="ax-me" onClick={onMe} aria-haspopup="dialog" aria-label={`Your panel: ${me.alias}${me.unread ? `, ${me.unread} new alerts` : ""}`}>
+              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+              {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
+            </button>
+          ) : null}
           {acct ? (
             <div className="ax-acct">
               <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>
