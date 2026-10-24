@@ -1,31 +1,30 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { parseUnits } from "viem";
-import type { Wallet } from "@wallet-standard/base";
+import { getState, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
 import { CHAINS, LOCKS, SOL_POOL_COST, solLaunchFee, type LaunchPlan } from "@/lib/launchpad";
 import { reportActivity } from "@/lib/activity-client";
-import { connectSol, signAndSend, solErr, solLaunchApi, solWallets, type SolWallet } from "@/lib/sol-wallet";
+import { signAndSend, solErr, solLaunchApi, type SolWallet } from "@/lib/sol-wallet";
 
 const c = CHAINS.solana;
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 
-/** Connect a Solana wallet: one button per wallet found on this device. */
+/**
+ * The Solana wallet for launching and locking: the same one as the site's Connect window (Bitget, Trust, Phantom,
+ * Solflare, OKX, Backpack, Coinbase… on this device, or opened in the wallet's app on a phone).
+ */
 export function useSolWallet() {
-  const [sw, setSw] = useState<SolWallet | null>(null);
-  const [found, setFound] = useState<Wallet[]>([]);
-  useEffect(() => { setFound(solWallets()); const t = setTimeout(() => setFound(solWallets()), 800); return () => clearTimeout(t); }, []);
-  const picker = (busy: boolean, onErr: (m: string) => void) => sw ? (
-    <small className="muted">Wallet: <span className="mono">{short(sw.account.address)}</span> ({sw.wallet.name})</small>
-  ) : found.length ? (
-    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-      {found.map((w) => (
-        <button key={w.name} type="button" className="btn small" disabled={busy} onClick={() => connectSol(w).then(setSw).catch((e) => onErr(solErr(e)))}>
-          {w.icon && <img src={w.icon} alt="" width={16} height={16} style={{ verticalAlign: "middle", marginRight: 6 }} />}Connect {w.name}
-        </button>
-      ))}
-    </div>
+  const cs = useSyncExternalStore(subscribe, getState, getState);
+  useEffect(() => { restoreSol().catch(() => {}); }, []);
+  const sw: SolWallet | null = cs.sol ? { wallet: cs.sol.wallet, account: cs.sol.account } : null;
+  const open = () => { setNetwork("solana"); pickWallet({ fresh: true }); };
+  const picker = (busy: boolean, _onErr: (m: string) => void) => sw ? (
+    <small className="muted">Wallet: <span className="mono">{short(sw.account.address)}</span> ({cs.sol!.name}) · <button type="button" className="linkish" onClick={open} disabled={busy}>Switch</button></small>
   ) : (
-    <div className="notice warn" style={{ fontSize: ".88em" }}>No Solana wallet found on this device. Install <a href="https://phantom.com/download" target="_blank" rel="noopener noreferrer">Phantom</a> or Solflare, or open this page inside your wallet app&apos;s browser.</div>
+    <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <button type="button" className="btn small primary" disabled={busy} onClick={open}>Connect a Solana wallet</button>
+      <small className="muted">Bitget, Trust, Phantom, Solflare, OKX, Backpack…</small>
+    </div>
   );
   return { sw, picker };
 }
