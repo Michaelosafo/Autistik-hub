@@ -4,7 +4,7 @@ import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
 import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, isSolana, type ChainKey } from "@/lib/launchpad";
 import { SOL_ADDR, verifyLaunch } from "@/lib/solana-launch";
-import { padOn } from "@/lib/launchpad-server";
+import { launchPadOn } from "@/lib/launchpad-server";
 import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
   const txHash = String(body?.txHash || "");
   if (!chain) return json({ error: "Unknown chain." }, 400);
   if (isSolana(chain)) return recordSolana(body);
-  const pad = await padOn(chain.key);
+  const pad = await launchPadOn(chain.key);
   if (!pad) return json({ error: `${chain.name} launches aren't open yet.` }, 400);
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
 

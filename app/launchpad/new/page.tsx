@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { currentUser } from "@/lib/supabase/server";
-import { padSites } from "@/lib/launchpad-server";
+import { launchSites } from "@/lib/launchpad-server";
 import { adminState, launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import PadDeploy from "@/components/PadDeploy";
@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
 
 export default async function NewLaunchPage() {
-  const [user, board, pads, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padSites(), adminState(), launchAccess()]);
+  const [user, board, pads, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), launchSites(), adminState(), launchAccess()]);
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
