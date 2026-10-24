@@ -105,7 +105,6 @@ contract AutistikToken is ERC20 {
     error NotOwner();
     error TradingNotOpen();
     error TaxTooHigh();
-    error InvalidVanityAddress();
     error WhitelistLimit();
     error SnipeLimit();
     error AlreadyOpen();
@@ -418,6 +417,7 @@ contract AutistikLaunchpadV3 is ReentrancyGuard {
     error UnknownPlan();
     error PriceTooHigh();
     error TransferFailed();
+    error InvalidVanityAddress();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
