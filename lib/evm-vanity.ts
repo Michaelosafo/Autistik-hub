@@ -28,9 +28,7 @@ export async function deployerOf(chain: ChainKey, pad: string) {
 type Found = { salt: `0x${string}`; token: `0x${string}`; caps: boolean };
 
 /**
- * Searches for up to `ms` milliseconds for a salt whose token address ends in "AAAAA". Returns that, or else the
- * first mixed-case "aaaaa" it met on the way (found within a second or two), or null.
- * keccak runs in WebAssembly (hash-wasm), about 10x faster than in JavaScript: roughly 30 seconds per capitals address.
+ * Searches for up to `ms` milliseconds for a salt whose token address ends in "aaa" (case-insensitive). Returns null if none is found.
  */
 export async function grindSalt(deployer: string, ms: number): Promise<Found | null> {
   const keccak = await createKeccak(256);
@@ -56,7 +54,7 @@ export async function grindSalt(deployer: string, ms: number): Promise<Found | n
   return null;
 }
 
-/** A salt for a new launch on a v3 Launch Pad: one giving an address ending in "AAAAA" whenever possible. */
+/** A salt for a new launch on a v3 Launch Pad. Never returns a salt without the required "aaa" suffix. */
 export async function vanitySalt(chain: ChainKey, pad: string): Promise<{ salt: `0x${string}`; token: string | null; vanity: boolean }> {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { data } = await supabaseService().rpc("take_vanity_salt", { p_chain: chain, p_pad: getAddress(pad) }).then((r) => r, () => ({ data: null }));
