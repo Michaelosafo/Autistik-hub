@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       if (!pool || !keys.includes(pool.pool)) return json({ error: "Couldn't find this token's Raydium pool in that transaction." }, 400);
       const meta = await readMetadata(new PublicKey(mint)).catch(() => null);
       const supply = await connection().getTokenSupply(new PublicKey(mint)).catch(() => null);
-      row = { token: mint, pair: pool.pool, name: meta?.name || pool.symbol || "Unknown", symbol: meta?.symbol || pool.symbol || "?", supply: supply?.value.amount ?? "0", creator: keys[0] };
+      row = { token: mint, pair: pool.pool, name: meta?.name || pool.symbol || "Unknown", symbol: meta?.symbol || pool.symbol || "?", supply: supply ? (BigInt(supply.value.amount) / 10n ** BigInt(supply.value.decimals)).toString() : "0", creator: keys[0] };
     } else {
       const token = String(b?.token || "");
       if (!isAddress(token) || !/^0x[0-9a-fA-F]{64}$/.test(tx) || !c.router) return json({ error: "Missing the token or transaction." }, 400);
