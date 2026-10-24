@@ -106,13 +106,19 @@ Get the contract reviewed by someone experienced before putting large amounts in
 
 **AUTISTIK Launch Pad** has a token board (`/launchpad`: Trending, Most watched, New, with live prices from DexScreener), a page for every token (chart, Watch button, "Make it trend"), and the launch chat (`/launchpad/new`). Members launch their own token there. **Autistik**, the launch agent, asks the questions (chain, name, ticker, supply, their share, liquidity, and whether to lock the liquidity for 6 months, 1 year or burn it) and prepares a launch plan. Members can turn on **Voice** so Autistik reads each question out loud, and press **Speak** to answer with their microphone (works in Chrome, Edge and Safari). The member then signs **one transaction in their own wallet**. The site never holds anyone's keys or money.
 
-That transaction calls the `AutistikLaunchpad` contract (`contracts/AutistikLaunchpad.sol`), which:
-1. creates a plain token with a fixed supply (no tax, no minting, no owner, no blacklist),
+That transaction calls the chain's **Launch Pad v3** (`contracts/AutistikLaunchpadV3.sol`). It is a normal launch, not a bonding curve: the creator adds their own liquidity. The Launch Pad:
+1. creates the token (`AutistikToken`) at an address ending in **"AAAAA"** (CREATE2 with a salt the Hub picks and signs into the permit),
 2. sends the creator their share (0–20% of supply),
-3. adds the rest as liquidity on PancakeSwap (BNB Chain), Uniswap (Ethereum) or a Uniswap V2 style DEX on Robinhood Chain,
+3. adds the rest, with the creator's BNB/ETH, as liquidity on PancakeSwap (BNB Chain), Uniswap (Ethereum) or a Uniswap V2 style DEX,
 4. handles the LP tokens the way the creator chose:
    - **Burn:** sent to the dead address `0x…dEaD`, so the liquidity stays forever. Nobody can remove it.
-   - **Lock 6 months / Lock 1 year:** kept inside the Launch Pad contract until the date. After that, only the creator's wallet can take them back (the token page shows a button). The AUTISTIK team can never touch them.
+   - **Lock 6 months / Lock 1 year:** held in the AUTISTIK Locker until the date. After that, only the creator's wallet can take them back. The AUTISTIK team can never touch them.
+
+Every token is the same fixed code, so creators can't change it: fixed supply, no mint, no blacklist, no pause, no proxy. Creator tax is capped at 10% and can only be lowered. The creator can renounce ownership from the token page. The Hub publishes each token's source code on the explorer automatically right after launch.
+
+**Solana** launches create an SPL token at an address ending in **"tik"**, with minting switched off, no freeze and locked name and ticker, then a Raydium pool the creator seeds and whose LP tokens are burned.
+
+New launches only go through v3. A chain still on an older Launch Pad takes no new launches until the team presses **Upgrade to v3** on `/launchpad/new` (admin). Tokens launched on the older one keep working there.
 
 **Who can launch:** the wallet must hold at least **$20 of AUTISTIK on BNB Chain** (change it with `NEXT_PUBLIC_LAUNCH_MIN_HOLD_USD`). When a member presses Launch, the Hub reads their AUTISTIK balance and the live price from DexScreener, and if it's enough it signs a permit that lasts 15 minutes. The contract refuses the launch without a valid permit for that exact wallet, so the AUTISTIK has to still be in the wallet at launch time. It is never spent or taken. This works for launches on Ethereum and Robinhood Chain too, because the same wallet address is used on every chain.
 
@@ -127,24 +133,11 @@ DexScreener picks up the pair automatically once it trades. Creators can add a l
 - The contract's old USDT `promote` plans still work on-chain but the site no longer uses them.
 
 ### Turn it on for a chain
-1. Run `supabase/launchpad.sql` in Supabase **SQL Editor** (only needed if you set up the database before the Launch Pad existed).
-2. In **remix.ethereum.org**, create `AutistikLaunchpad.sol`, paste in `contracts/AutistikLaunchpad.sol`, and compile with Solidity **0.8.24** (optimizer on, 200 runs).
-3. In **Deploy**, choose **Injected Provider – MetaMask**, switch MetaMask to the chain, and enter:
-
-   | Field | BNB Chain | Ethereum |
-   |---|---|---|
-   | `router_` | `0x10ED43C718714eb63d5aA57B78B54704E256024E` (PancakeSwap V2) | `0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D` (Uniswap V2) |
-   | `treasury_` | **your wallet**: receives launch fees and trending payments | same |
-   | `launchFee_` | fee in wei, e.g. `10000000000000000` = 0.01 BNB (`0` = free) | e.g. `2000000000000000` = 0.002 ETH |
-   | `maxFee_` | highest fee you can ever set, e.g. `100000000000000000` = 0.1 | e.g. `20000000000000000` = 0.02 |
-   | `minLiquidity_` | smallest pool allowed, e.g. `100000000000000000` = 0.1 BNB | e.g. `50000000000000000` = 0.05 ETH |
-   | `stablecoin_` | `0x55d398326f99059fF775485246999027B3197955` (USDT) | `0xdAC17F958D2ee523a2206206994597C13D1ec7` (USDT) |
-   | `eligibilitySigner_` | address of your permit-signing key (see below), or `0x0000000000000000000000000000000000000000` to switch the $20 AUTISTIK check off | same |
-
-   For **Robinhood Chain**, use the Uniswap V2 compatible router and stablecoin addresses from Robinhood's official docs, and also set the `NEXT_PUBLIC_ROBINHOOD_*` values in Vercel.
-   **Make the permit-signing key** (for the $20 AUTISTIK rule): create a brand-new wallet in MetaMask used for nothing else, export its private key, and add it in Vercel as `ELIGIBILITY_SIGNER_KEY`. Its address goes in `eligibilitySigner_`. It never needs coins. Don't reuse your treasury or owner wallet for this. If the key ever leaks, call `setEligibilitySigner` with a new address.
-4. Copy the deployed address into Vercel as `NEXT_PUBLIC_LAUNCHPAD_BSC`, `NEXT_PUBLIC_LAUNCHPAD_ETHEREUM` or `NEXT_PUBLIC_LAUNCHPAD_ROBINHOOD`, then redeploy. Chains without an address show as "coming soon".
-5. Use a multisig (such as Safe) as the owner and treasury, and get the contract reviewed by an auditor before promoting it. The owner can only change the fee (up to `maxFee_`), the treasury and the eligibility signer, never anyone's tokens or liquidity.
+1. Run `supabase/launchpad.sql` and `supabase/evm-vanity.sql` in Supabase **SQL Editor**.
+2. Deploy the AUTISTIK Locker for the chain on the Lockers page first.
+3. Sign in as admin, open `/launchpad/new`, pick the chain and press **Deploy Launch Pad** (or **Upgrade to v3** if the chain has an older one). This deploys Launch Pad v3 from your wallet and saves it after checking it on-chain.
+4. **Make the permit-signing key** (for the $20 AUTISTIK rule): create a brand-new wallet used for nothing else and add its private key in Vercel as `ELIGIBILITY_SIGNER_KEY`, redeploy, then press **Turn on the $20 AUTISTIK check** on the same page. It never needs coins. If the key ever leaks, set a new one.
+5. Use a multisig (such as Safe) as the team wallet, and get `contracts/AutistikLaunchpadV3.sol` reviewed by an auditor before promoting it.
 6. Already set up the database before? Run `supabase/launchpad.sql` again: it adds the `lp_lock` and `lp_unlock_at` columns.
 
 ---
@@ -195,7 +188,7 @@ app/
 components/              UI pieces (Shell, Community, CompanionChat, …)
 lib/                     Groups, companion personalities, illustrations, Supabase & AI helpers
 supabase/schema.sql      Tables + Row Level Security (who can read/write what)
-contracts/               AutistikLaunchpad.sol (token launches with locked liquidity)
+contracts/               AutistikLaunchpadV3.sol (token launches with locked liquidity), Locker, Staking, Orders
 scripts/build-merkle.mjs Builds each airdrop round
 ```
 

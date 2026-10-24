@@ -165,11 +165,12 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); say(permit.error || ""); return; }
 
-      // Launch Pad v3: the Hub picked a salt that gives the token an address ending in "aaaaa", signed into the permit.
+      // Launch Pad v3: the Hub picked a salt that gives the token an address ending in "AAAAA", signed into the permit.
       const salt = /^0x[0-9a-fA-F]{64}$/.test(String(permit.salt || "")) ? (permit.salt as `0x${string}`) : null;
-      setStatus(salt && permit.token ? `Your token's address will be ${String(permit.token).slice(0, 8)}…${String(permit.token).slice(-8)}. Confirm the launch in your wallet…` : "Confirm the launch in your wallet…");
+      if (!salt) { setStatus("Couldn't get your token's address. Try again."); return; }
+      setStatus(permit.token ? `Your token's address will be ${String(permit.token).slice(0, 8)}…${String(permit.token).slice(-8)}. Confirm the launch in your wallet…` : "Confirm the launch in your wallet…");
       const call = {
-        account, address: pad, abi: salt ? LAUNCHPAD_V3_ABI : LAUNCHPAD_ABI, functionName: "launch",
+        account, address: pad, abi: LAUNCHPAD_V3_ABI, functionName: "launch",
         args: [{
           name: plan.name, symbol: plan.symbol, supply: BigInt(plan.supply) * 10n ** 18n,
           creatorBps: BigInt(Math.round(plan.creatorPercent * 100)), devBuyNative: devBuy,
@@ -180,7 +181,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
           permitDeadline: BigInt(permit.deadline || 0),
           // The contribution shown now is the most this launch will pay, and it must happen within 20 minutes.
           maxFeeAccepted: f, deadline: BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
-          ...(salt && { salt }),
+          salt,
         }, (permit.signature || "0x") as `0x${string}`],
         value: liquidity + devBuy,
       } as const;
