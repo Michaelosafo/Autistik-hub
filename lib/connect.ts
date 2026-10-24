@@ -16,19 +16,21 @@ export type WalletInfo = { uuid: string; name: string; icon: string; rdns: strin
 type Detected = { info: WalletInfo; provider: any };
 
 /** Top wallets, in the order shown. `rdns` matches what the wallet announces when installed. */
-export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string; wc?: string }[] = [
+export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string; wc?: string; native?: string }[] = [
+  // `native`: the app's own link scheme. Phones use it first, so only the wallet opens (an https link can make
+  // Android ask "Chrome or the wallet?").
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
   // Bitget and Trust first: both handle every network and switch between them easily.
-  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkapp.vip", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
-  { id: "trust", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
-  { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
-  { id: "binance", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
-  { id: "okx", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", wc: "okex://main", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
+  { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkapp.vip", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
+  { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
+  { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
+  { id: "okx", native: "okex://main", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", wc: "okex://main", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
   { id: "coinbase", name: "Coinbase Wallet", rdns: ["com.coinbase.wallet"], color: "#0052FF", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
-  { id: "safepal", name: "SafePal", rdns: ["com.safepal"], color: "#4A21EF", install: "https://www.safepal.com/download", wc: "https://link.safepal.io" },
-  { id: "tokenpocket", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app", wc: "tpoutside://", dapp: (u) => `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: u }))}` },
-  { id: "rabby", name: "Rabby", rdns: ["io.rabby"], color: "#7084FF", install: "https://rabby.io/", wc: "rabby://" },
+  { id: "safepal", native: "safepalwallet://", name: "SafePal", rdns: ["com.safepal"], color: "#4A21EF", install: "https://www.safepal.com/download", wc: "https://link.safepal.io" },
+  { id: "tokenpocket", native: "tpoutside://", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app", wc: "tpoutside://", dapp: (u) => `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: u }))}` },
+  { id: "rabby", native: "rabby://", name: "Rabby", rdns: ["io.rabby"], color: "#7084FF", install: "https://rabby.io/", wc: "rabby://" },
   { id: "phantom", name: "Phantom", rdns: ["app.phantom"], color: "#AB9FF2", install: "https://phantom.com/download", dapp: (u) => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
 ];
 
@@ -312,7 +314,7 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
  * With `walletId` (a top wallet with its own link) on a phone, that wallet's app opens directly.
  */
 /** A wallet to connect through WalletConnect: its app link on phones, and its logo for our own code window. */
-export type WcTarget = { name: string; logo: string; wc?: string; install?: string };
+export type WcTarget = { name: string; logo: string; wc?: string; native?: string; install?: string };
 
 /** The wallet app's WalletConnect link (same rules as WalletConnect's own list). */
 export function wcHref(base: string, uri: string) {
@@ -327,12 +329,12 @@ export function wcHref(base: string, uri: string) {
 export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
   const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
-  const top: WcTarget | undefined = !t ? undefined : "id" in t ? { name: t.name, logo: `/wallets/${(t as any).id}.svg`, wc: (t as any).wc, install: (t as any).install } : t;
+  const top: WcTarget | undefined = !t ? undefined : "id" in t ? { name: t.name, logo: `/wallets/${(t as any).id}.svg`, wc: (t as any).wc, native: (t as any).native, install: (t as any).install } : t;
   set({ busy: top?.name || "WalletConnect", error: "", qr: null });
   const mobile = isMobile();
   // On a phone: that wallet's own app opens with the request. On a computer: our window shows a code to scan
   // with that wallet's app. With no wallet named: WalletConnect's own list of 300+ wallets.
-  const direct = mobile ? (top?.wc ? top : undefined) : undefined;
+  const direct = mobile ? (top?.native || top?.wc ? top : undefined) : undefined;
   const ownQr = !mobile && !!top;
   try {
     await initWc();
@@ -346,8 +348,9 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
       wc.rpc.showQrModal = false;
       wc.once("display_uri", (uri: string) => {
         if (direct) {
-          try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: direct.wc, name: direct.name })); } catch { /* private mode */ }
-          location.href = wcHref(direct.wc!, uri);
+          const base = direct.native || direct.wc!;
+          try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: direct.name })); } catch { /* private mode */ }
+          location.href = wcHref(base, uri);
         } else set({ qr: { uri, name: top!.name, logo: top!.logo, install: top!.install }, busy: "" });
       });
     } else {
@@ -373,6 +376,7 @@ export function cancelQr() {
   set({ qr: null, busy: "" });
   const old = wc; wc = null;
   old?.disconnect?.().catch(() => {});
+  if (solWc && !solWc.session) { const o = solWc; solWc = null; o.disconnect?.().catch(() => {}); }
 }
 
 /** Forget the chosen wallet (and end a WalletConnect session). */
@@ -445,7 +449,7 @@ export async function restoreSol(): Promise<SolConn | null> {
   if (state.sol) return state.sol;
   let name = "";
   try { name = sessionStorage.getItem("aw-sol") || ""; } catch { /* private mode */ }
-  if (!name) return null;
+  if (!name || name.endsWith("(WalletConnect)")) return restoreSolWc();
   await new Promise((r) => setTimeout(r, 200));
   const w = state.solFound.find((x) => x.name === name);
   if (w) return chooseSol(w, true);
@@ -457,7 +461,7 @@ export async function restoreSol(): Promise<SolConn | null> {
 export async function disconnectSol() {
   const w = state.sol?.wallet;
   set({ sol: null });
-  try { sessionStorage.removeItem("aw-sol"); } catch { /* private mode */ }
+  try { sessionStorage.removeItem("aw-sol"); localStorage.removeItem("aw-sol-wc"); } catch { /* private mode */ }
   try { await (w?.features["standard:disconnect"] as any)?.disconnect(); } catch { /* fine */ }
   try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: null })); } catch { /* old browsers */ }
 }
@@ -478,19 +482,19 @@ const browse = (base: string) => (u: string) => `${base}/${encodeURIComponent(u)
  * Common wallets that work on Solana. Installed ones connect straight away (they show under "On this device");
  * the others open this page inside their app on a phone, or their download page on a computer.
  */
-export const SOL_APPS: { id: string; name: string; logo: string; install: string; dapp: (url: string) => string }[] = [
-  { id: "bitget", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
-  { id: "trust", name: "Trust Wallet", logo: "/wallets/trust.svg", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=501&url=${encodeURIComponent(u)}` },
+export const SOL_APPS: { id: string; name: string; logo: string; install: string; dapp: (url: string) => string; native?: string; wc?: string }[] = [
+  { id: "bitget", native: "bitkeep://", wc: "https://bkapp.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  { id: "trust", native: "trust://", wc: "https://link.trustwallet.com", name: "Trust Wallet", logo: "/wallets/trust.svg", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=501&url=${encodeURIComponent(u)}` },
   { id: "phantom", name: "Phantom", logo: "/wallets/phantom.svg", install: "https://phantom.com/download", dapp: browse("https://phantom.app/ul/browse") },
   { id: "solflare", name: "Solflare", logo: wcLogo("34c0e38d-66c4-470e-1aed-a6fabe2d1e00"), install: "https://solflare.com/download", dapp: browse("https://solflare.com/ul/v1/browse") },
-  { id: "okx", name: "OKX Wallet", logo: "/wallets/okx.svg", install: "https://www.okx.com/web3", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
+  { id: "okx", native: "okex://main", name: "OKX Wallet", logo: "/wallets/okx.svg", install: "https://www.okx.com/web3", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
   { id: "backpack", name: "Backpack", logo: wcLogo("71ca9daf-a31e-4d2a-fd01-f5dc2dc66900"), install: "https://backpack.app/downloads", dapp: browse("https://backpack.app/ul/v1/browse") },
   { id: "coinbase", name: "Coinbase Wallet", logo: "/wallets/coinbase.svg", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
 ];
 
 // ---------------------------------------------------------------- every WalletConnect wallet (600+)
 
-export type ListedWallet = { id: string; name: string; logo: string; wc?: string; install?: string; rdns?: string; chains: string[] };
+export type ListedWallet = { id: string; name: string; logo: string; wc?: string; native?: string; install?: string; rdns?: string; chains: string[] };
 /** One page of WalletConnect's wallet list (searchable), with each wallet's logo and app link. */
 export async function listWallets(page: number, search = ""): Promise<{ wallets: ListedWallet[]; total: number }> {
   if (!WALLETCONNECT_ID) return { wallets: [], total: 0 };
@@ -501,9 +505,108 @@ export async function listWallets(page: number, search = ""): Promise<{ wallets:
     const nat = typeof w.mobile?.native === "string" ? w.mobile.native : "";
     return {
       id: String(w.id), name: String(w.name || "Wallet").slice(0, 40), logo: String(w.image_url?.sm || ""),
-      wc: uni || nat || undefined, install: w.app?.ios || w.app?.android || w.homepage || undefined,
+      wc: uni || undefined, native: nat || undefined, install: w.app?.ios || w.app?.android || w.homepage || undefined,
       rdns: w.rdns || undefined, chains: Array.isArray(w.chains) ? w.chains : [],
     };
   });
   return { wallets, total: Number(r?.total || r?.count || wallets.length) };
+}
+
+// ---------------------------------------------------------------- Solana over WalletConnect (Bitget, Trust, OKX…)
+
+const SOL_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+let solWc: any = null;
+async function initSolWc() {
+  if (solWc) return solWc;
+  const { UniversalProvider } = await import("@walletconnect/universal-provider");
+  solWc = await UniversalProvider.init({
+    projectId: WALLETCONNECT_ID,
+    metadata: {
+      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
+      redirect: { universal: location.origin + location.pathname },
+    } as any,
+  });
+  solWc.on("session_delete", () => { if (state.sol?.name.endsWith("(WalletConnect)")) set({ sol: null }); });
+  return solWc;
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58decode(str: string): Uint8Array {
+  const bytes: number[] = [0];
+  for (const ch of str) {
+    let carry = B58.indexOf(ch);
+    if (carry < 0) throw new Error("Bad signature from the wallet.");
+    for (let i = 0; i < bytes.length; i++) { carry += bytes[i] * 58; bytes[i] = carry & 0xff; carry >>= 8; }
+    while (carry) { bytes.push(carry & 0xff); carry >>= 8; }
+  }
+  for (const ch of str) { if (ch === "1") bytes.push(0); else break; }
+  return Uint8Array.from(bytes.reverse());
+}
+
+/** A Solana WalletConnect session, shaped like a Wallet Standard wallet so the rest of the site can sign with it. */
+function wcSolWallet(name: string, icon: string, up: any, address: string): Wallet {
+  return {
+    version: "1.0.0", name: `${name} (WalletConnect)`, icon: icon as any, chains: ["solana:mainnet"], accounts: [],
+    features: {
+      "standard:connect": { version: "1.0.0", connect: async () => ({ accounts: [{ address, publicKey: new Uint8Array(), chains: ["solana:mainnet"], features: ["solana:signTransaction"] }] }) },
+      "standard:disconnect": { version: "1.0.0", disconnect: async () => { await up.disconnect?.().catch(() => {}); } },
+      "solana:signTransaction": {
+        version: "1.0.0", supportedTransactionVersions: ["legacy", 0],
+        signTransaction: async ({ transaction }: { transaction: Uint8Array }) => {
+          let bin = ""; for (const b of transaction) bin += String.fromCharCode(b);
+          const r: any = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, SOL_MAINNET);
+          if (typeof r?.transaction === "string") return [{ signedTransaction: Uint8Array.from(atob(r.transaction), (c) => c.charCodeAt(0)) }];
+          if (typeof r?.signature !== "string") throw new Error("The wallet didn't sign.");
+          const { PublicKey, VersionedTransaction } = await import("@solana/web3.js");
+          const tx = VersionedTransaction.deserialize(transaction);
+          tx.addSignature(new PublicKey(address), b58decode(r.signature));
+          return [{ signedTransaction: tx.serialize() }];
+        },
+      },
+    } as any,
+  } as Wallet;
+}
+
+/**
+ * Connect a wallet's Solana account through WalletConnect, like the other networks: on a phone the wallet app opens
+ * to approve and you come back here connected; on a computer our window shows that wallet's code to scan.
+ */
+export async function chooseSolWalletConnect(t: WcTarget) {
+  if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet." }); return; }
+  set({ busy: t.name, error: "", qr: null });
+  const mobile = isMobile();
+  try {
+    const up = await initSolWc();
+    if (up.session?.namespaces?.solana?.accounts?.[0]) { await finishSolWc(t, up); return; }
+    up.once?.("display_uri", (uri: string) => {
+      const base = t.native || t.wc;
+      if (mobile && base) location.href = wcHref(base, uri);
+      else set({ qr: { uri, name: t.name, logo: t.logo, install: t.install }, busy: "" });
+    });
+    await up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
+    await finishSolWc(t, up);
+  } catch (e: any) {
+    if (state.sol) return;
+    if (cancelled) { cancelled = false; return; }
+    set({ open: true, busy: "", qr: null, error: /reset|reject|closed|cancel/i.test(String(e?.message)) ? "Closed in the wallet. Try again, or pick another wallet." : String(e?.message || e).slice(0, 160) });
+  }
+}
+async function finishSolWc(t: WcTarget, up: any) {
+  const acct = String(up.session?.namespaces?.solana?.accounts?.[0] || "");
+  const address = acct.split(":")[2];
+  if (!address) throw new Error("The wallet didn't share a Solana account.");
+  await chooseSol(wcSolWallet(t.name, t.logo, up, address));
+  try { localStorage.setItem("aw-sol-wc", JSON.stringify(t)); } catch { /* private mode */ }
+}
+/** A Solana WalletConnect session from before a reload (or the trip to the wallet app). */
+async function restoreSolWc(): Promise<SolConn | null> {
+  let t: WcTarget | null = null;
+  try { t = JSON.parse(localStorage.getItem("aw-sol-wc") || "null"); } catch { /* private mode */ }
+  if (!t || !WALLETCONNECT_ID) return null;
+  try {
+    const up = await initSolWc();
+    if (!up.session?.namespaces?.solana?.accounts?.[0]) return null;
+    await finishSolWc(t, up);
+    return state.sol;
+  } catch { return null; }
 }

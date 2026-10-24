@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
-import { chooseSolInjected, injectedFor, injectedSolFor } from "@/lib/connect";
+import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -63,7 +63,7 @@ export default function WalletPicker() {
       }
       const viaWc = !!WALLETCONNECT_ID;
       // Each wallet opens that wallet: its app on a phone, or a code to scan with its app on a computer.
-      const phoneWc = mobile && viaWc && !!w.wc, phoneDapp = mobile && !phoneWc && !!w.dapp;
+      const phoneWc = mobile && viaWc && !!(w.wc || w.native), phoneDapp = mobile && !phoneWc && !!w.dapp;
       out.push({
         key: w.id, name: w.name, logo: `/wallets/${w.id}.svg`, color: w.color,
         badge: w.name === last ? "Last used" : undefined,
@@ -94,8 +94,15 @@ export default function WalletPicker() {
           go: () => { chooseSolInjected(a.id, a.name, a.logo); } });
         continue;
       }
-      out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, sub: mobile ? `Opens this site in ${a.name}` : "Not on this browser: get the app",
-        go: () => { if (mobile) location.href = a.dapp(location.href); else window.open(a.install, "_blank", "noopener,noreferrer"); } });
+      // Bitget, Trust, OKX: approve in the wallet app (or scan its code) and stay in this browser, like WalletConnect
+      // on the other networks. Phantom, Solflare, Backpack, Coinbase: open this site inside the app on a phone.
+      const viaWc = !!WALLETCONNECT_ID && !!(a.wc || a.native);
+      out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo,
+        sub: viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Opens this site in ${a.name}` : "Not on this browser: get the app",
+        go: () => {
+          if (viaWc) { chooseSolWalletConnect({ name: a.name, logo: a.logo, wc: a.wc, native: a.native, install: a.install }); return; }
+          if (mobile) location.href = a.dapp(location.href); else window.open(a.install, "_blank", "noopener,noreferrer");
+        } });
     }
     return out;
   }, [s.solFound, last, mobile]);
@@ -185,10 +192,10 @@ export default function WalletPicker() {
                   const r: Row = {
                     key: "all-" + w.id, name: w.name, logo: w.logo || null, here: false,
                     badge: here ? "Installed" : undefined,
-                    sub: here ? "Ready on this device" : mobile ? (w.wc ? `Opens ${w.name}` : "Pick it in the WalletConnect list") : `Scan with ${w.name} on your phone`,
+                    sub: here ? "Ready on this device" : mobile ? (w.wc || w.native ? `Opens ${w.name}` : "Pick it in the WalletConnect list") : `Scan with ${w.name} on your phone`,
                     go: () => {
                       if (here) { chooseInjected(here.info.name, here.provider); return; }
-                      chooseWalletConnect(mobile && !w.wc ? undefined : { name: w.name, logo: w.logo, wc: w.wc, install: w.install });
+                      chooseWalletConnect(mobile && !w.wc && !w.native ? undefined : { name: w.name, logo: w.logo, wc: w.wc, native: w.native, install: w.install });
                     },
                   };
                   return <RowBtn key={r.key} r={r} />;
