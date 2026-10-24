@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberLite } from "@/components/members/MemberName";
 
 // Team columns arrive with supabase/members-live.sql. Until it's run, profiles load without them.
+const PHOTO = "id,alias,color,is_admin,created_at,is_team,team_title,handle,holdings_share,is_verified,avatar_url";
 const FULL = "id,alias,color,is_admin,created_at,is_team,team_title,handle,holdings_share,is_verified";
 const MID = "id,alias,color,is_admin,created_at,is_team,team_title";
 const BASIC = "id,alias,color,is_admin,created_at";
@@ -12,7 +13,8 @@ export async function loadProfiles(sb: SupabaseClient, ids?: string[], extra?: (
     if (ids) q = q.in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
     return extra ? extra(q) : q;
   };
-  let { data, error } = await run(FULL);
+  let { data, error } = await run(PHOTO);
+  if (error && /column/i.test(error.message)) ({ data, error } = await run(FULL));
   if (error && /column/i.test(error.message)) ({ data, error } = await run(MID));
   if (error && /column/i.test(error.message)) ({ data } = await run(BASIC));
   return (data || []) as any;
