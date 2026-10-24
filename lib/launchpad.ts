@@ -30,7 +30,7 @@ export const LAUNCHPAD_ABI = parseAbi([
 
 /**
  * Launch Pad v3 (contracts/AutistikLaunchpadV3.sol): the same as v2, except launch() takes a salt that picks the token's
- * address (every address ends in "aaaaa") and the permit covers that salt. Everything else uses LAUNCHPAD_ABI.
+ * address (every address ends in "aaa") and the permit covers that salt. Everything else uses LAUNCHPAD_ABI.
  */
 export const LAUNCHPAD_V3_ABI = parseAbi([
   "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint256 devBuyNative; uint256 buyTax; uint256 sellTax; address taxWallet; address[] whitelist; uint256 whitelistNative; uint8 lockOption; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; bytes32 salt; }",
@@ -43,8 +43,8 @@ export const LAUNCHPAD_V3_ABI = parseAbi([
   "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error TransferFailed()", "error TaxTooHigh()",
 ]);
 
-/** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…), shown in capitals ("AAAAA"). */
-export const EVM_VANITY_SUFFIX = "aaaaa";
+/** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…), shown as "AAA" (case-insensitive hex suffix). */
+export const EVM_VANITY_SUFFIX = "aaa";
 
 /** Every token launched on the Launch Pad (AutistikToken in contracts/AutistikLaunchpadV2.sol). */
 export const LAUNCH_TOKEN_ABI = parseAbi([
