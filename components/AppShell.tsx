@@ -127,17 +127,18 @@ export default function AppShell({ admin, me, onMe, children }: {
           ))}
         </nav>
         <div className="ax-right">
+          {me ? (
+            <button type="button" className="ax-me" onClick={onMe} aria-haspopup="dialog" aria-label={`Your panel: ${me.alias}${me.unread ? `, ${me.unread} new alerts` : ""}`}>
+              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} logo />
+              {!me.avatar_url && <span className="me-pic-add" aria-hidden="true">+</span>}
+              {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
+            </button>
+          ) : null}
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
           <span className="ax-chain" title="Network"><i />BNB Chain</span>
           {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
-          {me ? (
-            <button type="button" className="ax-me" onClick={onMe} aria-haspopup="dialog" aria-label={`Your panel: ${me.alias}${me.unread ? `, ${me.unread} new alerts` : ""}`}>
-              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
-              {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
-            </button>
-          ) : null}
           {acct ? (
             <div className="ax-acct">
               <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>

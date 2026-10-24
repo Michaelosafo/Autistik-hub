@@ -12,7 +12,7 @@ import { CHAINS, type ChainKey } from "@/lib/launchpad";
 import { isWChain } from "@/lib/wallet-chains";
 import { LINKS, PHOTOS } from "@/lib/site";
 import { getBoard, trending, type BoardToken } from "@/lib/board";
-import { currentUser } from "@/lib/supabase/server";
+import { currentUser, supabaseServer } from "@/lib/supabase/server";
 import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -71,6 +71,9 @@ export default async function Home() {
     currentUser().catch(() => null),
     adminState(),
   ]);
+  // Your picture at the top (the AUTISTIK logo until you add a photo).
+  const mine = user ? await supabaseServer().from("profiles").select("alias, avatar_url").eq("id", user.id).single()
+    .then((r) => (r.error ? null : (r.data as { alias: string; avatar_url: string | null })), () => null) : null;
   const m = markets[TOKEN_ADDRESS.toLowerCase()];
   // Newest launches first, then the coins the team lists; each coin once.
   const listed: Row[] = [
@@ -86,13 +89,12 @@ export default async function Home() {
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
+        {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} />}
         <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
         {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         {user && owner && <Link href="/admin" className="lp-signin lp-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
-        {user
-          ? <MeButton className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>My profile</span></MeButton>
-          : <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
+        {!user && <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
         <Link href="/app" className="lp-openapp" aria-label="Open the AUTISTIK App"><i aria-hidden="true"><svg><use href="#i-grid" /></svg></i><span>Open App</span><svg className="lp-oa-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
       </header>
 

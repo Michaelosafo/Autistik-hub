@@ -2904,3 +2904,13 @@ html[data-calm="on"] .mp-drawer,html[data-calm="on"] .mp-drawer-in{animation:non
 .ax-me:focus-visible{outline:3px solid var(--sun-bright)}
 .ax-me .bell-n{position:absolute;right:-4px;top:-4px}
 button.lp-signin{font:inherit;font-weight:800;cursor:pointer}
+
+/* Your own picture: the AUTISTIK logo until you add a photo, with a small + to add one */
+.av-logo{background:#191326!important;border:2px solid #4a4160;display:grid;place-items:center;overflow:hidden}
+.av-logo svg{width:76%;height:auto}
+.me-pic,.ax-me{position:relative}
+.me-pic{all:unset;position:relative;cursor:pointer;display:grid;place-items:center;border-radius:50%;flex:none}
+.me-pic .me-av{width:42px;height:42px}
+.me-pic:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}
+.me-pic-add{position:absolute;right:-3px;bottom:-3px;width:17px;height:17px;border-radius:50%;display:grid;place-items:center;
+  background:var(--sun-bright,#FFD84D);color:#191326;font-weight:900;font-size:13px;line-height:1;box-shadow:0 0 0 2px #191326}

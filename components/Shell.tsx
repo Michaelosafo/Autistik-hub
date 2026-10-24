@@ -154,7 +154,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
                 <div className="me-pop" role="dialog" aria-label="Menu">
                   {me && (
                     <Link href="/me" className="me-head" onClick={() => setMenu(false)}>
-                      <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+                      <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} logo />
                       <span><b>{me.alias}</b><small>Your profile{me.is_admin ? " · Admin" : ""}</small></span>
                     </Link>
                   )}
@@ -221,7 +221,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
           {me && (
             <button type="button" className={"rail-me" + (panel ? " on" : "")} aria-expanded={panel} onClick={() => setPanel(!panel)}
               aria-label={panel ? "Close your panel and show the menu" : "Open your panel: wallet, updates, scanner, settings"}>
-              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+              <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} logo />
               <span><b>{me.alias}</b><small>{panel ? "Back to menu" : "Wallet · updates · settings"}</small></span>
               {alerts.unread > 0 && !panel && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
               <i aria-hidden="true">{panel ? "✕" : "›"}</i>
@@ -265,7 +265,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
               <button className="me-btn" type="button" aria-expanded={me ? drawer : menu} aria-haspopup="dialog" onClick={me ? openDrawer : openMenu}
                 aria-label={me ? `Menu for ${me.alias}${alerts.unread ? `, ${alerts.unread} new alerts` : ""}` : "Display settings"}>
                 {me
-                  ? <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} />
+                  ? <Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} logo />
                   : <span className="me-av guest" aria-hidden="true"><Icon id="i-auto" /></span>}
                 {alerts.unread > 0 && <span className="bell-n">{alerts.unread > 9 ? "9+" : alerts.unread}</span>}
               </button>

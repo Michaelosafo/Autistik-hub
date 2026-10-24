@@ -94,7 +94,7 @@ export default function MePanel({ me, settings }: {
     <div className="mp">
       <div className="mp-head">
         <button type="button" className="mp-photo" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo">
-          <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} />
+          <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
           <span className="mp-cam" aria-hidden="true">📷</span>
         </button>
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ""; }} />
