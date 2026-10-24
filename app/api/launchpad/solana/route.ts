@@ -4,7 +4,8 @@ import { json } from "@/lib/ai";
 import { launchAccess } from "@/lib/admin";
 import { currentUser } from "@/lib/supabase/server";
 import { CHAINS, SOL_DECIMALS, checkPlan } from "@/lib/launchpad";
-import { SOL_ADDR, buildAddLiquidity, buildBurnLp, buildMint, buildPool, findPool } from "@/lib/solana-launch";
+import { PublicKey } from "@solana/web3.js";
+import { SOL_ADDR, connection, buildAddLiquidity, buildBurnLp, buildMint, buildPool, findPool } from "@/lib/solana-launch";
 import { buildClaimLp, buildLockLp } from "@/lib/solana-locker";
 import { LOCK_SECONDS, isLock } from "@/lib/launchpad";
 
@@ -56,6 +57,19 @@ export async function POST(req: Request) {
       case "claim": {
         if (!SOL_ADDR.test(String(b.lpMint || ""))) return json({ error: "Missing the pool's LP token." }, 400);
         return json(await buildClaimLp(owner, b.lpMint));
+      }
+      case "resume": {
+        // A token made here earlier whose launch stopped after step 1: its creation transaction, so the launch can
+        // carry on with this token (the pool, then the burn or lock) instead of making a new one.
+        if (!SOL_ADDR.test(String(b.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
+        const conn = connection();
+        const sigs = await conn.getSignaturesForAddress(new PublicKey(b.mint), { limit: 1000 });
+        const first = sigs[sigs.length - 1];
+        if (!first) return json({ error: "No token found at that address on Solana." }, 404);
+        const tx = await conn.getParsedTransaction(first.signature, { maxSupportedTransactionVersion: 0 });
+        const payer = tx?.transaction.message.accountKeys[0]?.pubkey.toBase58();
+        if (payer !== owner) return json({ error: "That token was made by another wallet. Connect the wallet that made it." }, 400);
+        return json({ mint: b.mint, sig: first.signature });
       }
       case "find": {
         if (!SOL_ADDR.test(String(b.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
