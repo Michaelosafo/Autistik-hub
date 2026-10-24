@@ -14,6 +14,7 @@ import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import VerifySource from "@/components/VerifySource";
+import { SolanaClaim } from "@/components/SolanaLaunch";
 
 export const dynamic = "force-dynamic";
 
@@ -85,12 +86,13 @@ export default async function TokenPage({ params }: { params: { chain: string; t
             {!listed && !sol && <VerifySource chain={c.key} token={token} />}
             {listed ? (
               <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock. Check the contract on the explorer before buying.</p>
-            ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK Locker.`}</p>}
+            ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
           </div>
         </div>
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
           {!listed && !sol && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
+          {!listed && sol && lock !== "burn" && <SolanaClaim token={token} pair={launch.pair} creator={launch.creator} unlockAt={launch.lp_unlock_at} />}
           {access.allowed && (c.router || sol) && <AddLiquidity pads={{}} chain={c.key} token={token} pair={launch.pair} />}
           <div className="notice warn" style={{ fontSize: ".86em" }}>{listed ? "Listed by a paid promotion, not checked by the AUTISTIK team." : "Made by a community member, not the AUTISTIK team."} Token prices can go to zero. Nothing here is financial advice.</div>
         </div>

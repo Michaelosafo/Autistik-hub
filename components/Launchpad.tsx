@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
 import { SolanaLaunch } from "@/components/SolanaLaunch";
-import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, lockExplain, solLockerProgram, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
@@ -309,13 +309,13 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>Supply</th><td className="num">{fmt(plan.supply)} · fixed: minting and freezing switched off</td></tr>
                 <tr><th>You keep</th><td className="num">{plan.creatorPercent}% · {creatorTokens.toLocaleString("en-US")}</td></tr>
                 <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {plan.liquidity} SOL</td></tr>
-                <tr><th>Liquidity</th><td>LP tokens burned forever</td></tr>
+                <tr><th>Liquidity</th><td>{plan.lock === "burn" ? "LP tokens burned forever" : `LP tokens ${LOCKS[plan.lock].short.toLowerCase()} in the AUTISTIK Solana Locker`}</td></tr>
                 <tr><th>Tax</th><td>No tax</td></tr>
                 <tr><th>Trading</th><td>Opens as soon as the pool exists</td></tr>
                 <tr><th>Fees</th><td>About {SOL_POOL_COST} SOL: Raydium&apos;s pool fee (≈0.15 SOL) plus network fees</td></tr>
               </tbody></table>
-              <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS.burn.explain} You sign three times: the token, the pool, then the burn. Token prices can go to zero.</div>
-              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand the liquidity is burned forever and I can&apos;t take it back.</span></label>
+              <div className="notice warn" style={{ fontSize: ".86em" }}>{lockExplain(plan.lock, true)} You sign three times: the token, the pool, then the {plan.lock === "burn" ? "burn" : "lock"}. Token prices can go to zero.</div>
+              <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>{plan.lock === "burn" ? <>I understand the liquidity is burned forever and I can&apos;t take it back.</> : <>I understand the liquidity is {LOCKS[plan.lock].short.toLowerCase()} and nobody, including me, can take it out before then.</>}</span></label>
               <SolanaLaunch plan={plan} agree={agree} onDone={(d) => { setDone(d); say(`${plan.symbol} is live. Congratulations!`); }} />
             </div>
           ) : plan && c ? (
@@ -337,7 +337,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>Trade fee</th><td>0.3% on buys and sells, supports AUTISTIK</td></tr>
               </tbody></table>
               {minLiq !== null && fee !== null && parseEther(plan.liquidity) < minLiq + fee && <div className="notice alert">The pool needs at least {formatEther(minLiq + fee)} {c.coin}. Change the liquidity amount.</div>}
-              <div className="notice warn" style={{ fontSize: ".86em" }}>{LOCKS[plan.lock].explain} Token prices can go to zero.</div>
+              <div className="notice warn" style={{ fontSize: ".86em" }}>{lockExplain(plan.lock, isSolana(c))} Token prices can go to zero.</div>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>I understand {plan.lock === "burn" ? "the liquidity is burned forever" : `the liquidity is ${LOCKS[plan.lock].short.toLowerCase()}`}{admin ? "" : `, my wallet must hold $${MIN_HOLD_USD}+ of AUTISTIK`}, and this is not financial advice.</span></label>
               <button className="btn primary" type="button" disabled={!agree || launching || fee === null} onClick={launch}>
                 {launching ? "Launching…" : `Launch for ${formatEther(parseEther(plan.liquidity) + parseEther(plan.devBuy || "0"))} ${c.coin} + gas`}
@@ -401,7 +401,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
         <label className="field"><span>Your free share (0–20%)</span><input value={f.creatorPercent} onChange={set("creatorPercent")} inputMode="decimal" required /></label>
         <label className="field"><span>Liquidity ({coin}{sol ? "" : ", incl. ≈$3 launch contribution"})</span><input value={f.liquidity} onChange={set("liquidity")} inputMode="decimal" placeholder={`Any amount, e.g. ${CHAINS[f.chain]?.suggestedLiquidity ?? "0.1"}`} required /></label>
       </div>
-      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens burned forever. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool. Its address ends in <b className="mono">tik</b>, the AUTISTIK mark.</div> : <>
+      {sol ? <div className="notice" style={{ fontSize: ".88em" }}>Solana: a standard token with a fixed supply, a Raydium pool, and the LP tokens {solLockerProgram() ? "burned forever or locked in the AUTISTIK Solana Locker" : "burned forever"}. No tax, whitelist or first buy. Raydium charges about 0.15 SOL to create the pool. Its address ends in <b className="mono">tik</b>, the AUTISTIK mark.</div> : <>
       <fieldset className="stack" style={{ gap: 8, border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px" }}>
         <legend style={{ padding: "0 6px" }}><b>Tax</b> <span className="muted" style={{ fontSize: ".85em" }}>optional, max {MAX_TAX_PERCENT}%, can only be lowered later</span></legend>
         <div className="form-grid">
@@ -422,13 +422,15 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
           </div>
         </div>
       </details>
-      <fieldset className="lock-pick">
-        <legend>Liquidity</legend>
-        {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
-          <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
-        ))}
-      </fieldset>
       </>}
+      {(!sol || solLockerProgram()) && (
+        <fieldset className="lock-pick">
+          <legend>Liquidity</legend>
+          {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
+            <label key={k}><input type="radio" name="lock" value={k} checked={f.lock === k} onChange={() => setF({ ...f, lock: k })} /> {LOCKS[k].label}</label>
+          ))}
+        </fieldset>
+      )}
       <details>
         <summary className="muted">Optional: description and links</summary>
         <div className="form-grid" style={{ marginTop: 8 }}>
