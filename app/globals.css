@@ -2050,6 +2050,13 @@ a.ah-mrow:hover{background:var(--ah-card-2)}
 .sc-amt:focus{outline:none}
 .sc-amt::placeholder{color:#5f5677}
 .sc-usd{text-align:center;color:#8F84AA;font-size:.9em;font-weight:600;padding-bottom:4px}
+.sc-amt-row{display:flex;align-items:baseline;justify-content:center;gap:2px}
+.sc-amt-row .sc-amt{width:auto;min-width:0;flex:1}
+.sc-cur{font-family:var(--f-display);font-size:2.2em;font-weight:700;color:#8F84AA;padding-top:10px}
+.sc-switch{all:unset;box-sizing:border-box;display:block;width:100%;cursor:pointer;text-align:center;color:#8F84AA;font-size:.9em;font-weight:600;padding:2px 0 6px;border-radius:10px}
+.sc-switch:hover:not(:disabled){color:#C9BEE8}
+.sc-switch:disabled{cursor:default}
+.sc-switch:focus-visible{outline:3px solid var(--sun-bright)}
 .sc-flip{all:unset;cursor:pointer;align-self:center;position:relative;z-index:2;margin:-12px 0;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
   background:#211c2e;border:4px solid #17141f;color:#F5C935;transition:transform .25s}
 .sc-flip span{display:flex;flex-direction:column;align-items:center;line-height:0}
