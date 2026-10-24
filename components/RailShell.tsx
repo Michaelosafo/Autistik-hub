@@ -7,38 +7,32 @@
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import Art from "@/components/Art";
 import { LINKS } from "@/lib/site";
 import { getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
-type Item = { href: string; name: string; icon: string; match?: string[]; members?: boolean; admin?: boolean };
-// Every page in the menu, in three groups (no More). On a short screen the list scrolls on its own while Launch a token
-// and the account stay at the bottom.
-const GROUPS: Item[][] = [
-  [
-    { href: "/", name: "Home", icon: "i-home" },
-    { href: "/companions", name: "Chat", icon: "i-kai" },
-    { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
-    { href: "/live", name: "Live", icon: "i-ses" },
-    { href: "/members", name: "Members", icon: "i-user", members: true },
-  ],
-  [
-    { href: "/launchpad", name: "Trending", icon: "i-fire", match: ["/launchpad", "/momentum"] },
-    { href: "/swap", name: "Swap", icon: "i-swap", match: ["/swap", "/perps", "/trade"] },
-    { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena"] },
-    { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
-    { href: "/lockers", name: "Lock", icon: "i-lock" },
-    { href: "/analytics", name: "Token scanner", icon: "i-search", match: ["/analytics", "/pro"] },
-    { href: "/app", name: "All tools", icon: "i-grid" },
-  ],
-  [
-    { href: "/buy", name: "$AUTISTIK", icon: "i-buy", match: ["/buy", "/fund"] },
-    { href: "/about", name: "What is AUTISTIK?", icon: "i-star" },
-    { href: "/autism", name: "About autism", icon: "i-learn" },
-    { href: "/safety", name: "Safety", icon: "i-safe" },
-    { href: "/admin", name: "Admin", icon: "i-adm", admin: true },
-  ],
+type Item = { href: string; name: string; icon: string; match?: string[]; members?: boolean };
+// One list like X's: the pages people use most. Everything else is behind More.
+const MAIN: Item[] = [
+  { href: "/", name: "Home", icon: "i-home" },
+  { href: "/launchpad", name: "Trending", icon: "i-fire", match: ["/launchpad", "/momentum"] },
+  { href: "/companions", name: "Chat", icon: "i-kai" },
+  { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
+  { href: "/live", name: "Live", icon: "i-ses" },
+  { href: "/swap", name: "Swap", icon: "i-swap", match: ["/swap", "/perps", "/trade"] },
+  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena"] },
+  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
+  { href: "/lockers", name: "Lock", icon: "i-lock" },
+  { href: "/members", name: "Members", icon: "i-user", members: true },
+];
+const MORE: Item[] = [
+  { href: "/app", name: "All App tools", icon: "i-grid" },
+  { href: "/analytics", name: "Token scanner", icon: "i-search", match: ["/analytics", "/pro"] },
+  { href: "/buy", name: "$AUTISTIK", icon: "i-buy", match: ["/buy", "/fund"] },
+  { href: "/about", name: "What is AUTISTIK?", icon: "i-inf" },
+  { href: "/autism", name: "About autism", icon: "i-learn" },
+  { href: "/safety", name: "Safety", icon: "i-safe" },
 ];
 
 const Icon = ({ id }: { id: string }) => <svg aria-hidden="true"><use href={"#" + id} /></svg>;
@@ -61,7 +55,18 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
   menuPop: ReactNode;
   children: ReactNode;
 }) {
-  const section = GROUPS.flat().find((i) => isOn(path, i));
+  const section = [...MAIN, ...MORE].find((i) => isOn(path, i));
+  const [more, setMore] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setMore(false); }, [path]);
+  useEffect(() => {
+    if (!more) return;
+    const close = (e: MouseEvent) => { if (!moreRef.current?.contains(e.target as Node)) setMore(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMore(false); };
+    document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
+  }, [more]);
+  const moreItems = me?.is_admin ? [...MORE, { href: "/admin", name: "Admin", icon: "i-adm" }] : MORE;
   const link = (i: Item) => (
     <Link key={i.href} href={i.href} className="nx-link" aria-current={isOn(path, i) ? "page" : undefined}>
       <Icon id={i.icon} /><span>{i.name}</span>
@@ -75,11 +80,19 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
           <b>AUTISTIK</b>
         </Link>
         <nav className="nx-nav">
-          {GROUPS.map((g, gi) => (
-            <div key={gi} className="nx-group">
-              {g.filter((i) => (!i.members || me) && (!i.admin || me?.is_admin)).map(link)}
-            </div>
-          ))}
+          {MAIN.filter((i) => !i.members || me).map(link)}
+          <div className="nx-more" ref={moreRef}>
+            <button type="button" className="nx-link" aria-expanded={more} aria-haspopup="menu" aria-current={moreItems.some((i) => isOn(path, i)) ? "page" : undefined} onClick={() => setMore(!more)}>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M8 12h.01M12 12h.01M16 12h.01" strokeWidth="3" /></svg><span>More</span>
+            </button>
+            {more && (
+              <div className="nx-more-pop" role="menu">
+                {moreItems.map((i) => (
+                  <Link key={i.href} role="menuitem" href={i.href} aria-current={isOn(path, i) ? "page" : undefined}><Icon id={i.icon} /><span>{i.name}</span></Link>
+                ))}
+              </div>
+            )}
+          </div>
         </nav>
         <Link href="/launchpad/new" className="nx-cta"><Icon id="i-rocket" /><span>Launch a token</span></Link>
         <div className="nx-acct me-menu" ref={menuRef}>
