@@ -40,16 +40,16 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
   const [big, setBig] = useState(false);
   const [theme, setTheme] = useState<"auto" | "light" | "dark">("dark");
   const [copied, setCopied] = useState(false);
-  // Layout: "new" = the three-column layout (components/RailShell.tsx), "classic" = the menus from before. Phones and
-  // narrow windows always get the classic layout.
-  const [layout, setLayout] = useState<"new" | "classic">("new");
+  // Layout: "classic" (the default: the original site and front page) or "new" (the X-style three-column layout,
+  // components/RailShell.tsx), chosen under Display → Layout and saved in this browser. Phones always get classic.
+  const [layout, setLayout] = useState<"new" | "classic">("classic");
   const [wide, setWide] = useState(true);
 
   useEffect(() => {
     try {
       setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1");
       const t = localStorage.getItem("theme2"); if (t === "light" || t === "dark" || t === "auto") setTheme(t);
-      if (localStorage.getItem("layout") === "classic") setLayout("classic");
+      if (localStorage.getItem("layout-choice") === "new") setLayout("new");
     } catch {}
     // The app helper (public/sw.js): faster opening on phones and an offline page. Only on the live site.
     if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
@@ -65,7 +65,6 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
     on(); mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  useEffect(() => { try { localStorage.setItem("layout", layout); } catch {} }, [layout]);
   useEffect(() => {
     document.documentElement.dataset.calm = calm ? "on" : "off";
     document.documentElement.dataset.size = big ? "large" : "";
@@ -142,8 +141,8 @@ export default function Shell({ me, children }: { me: { alias: string; color: st
                     <button className="me-row" type="button" onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}>
                       <Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
                     </button>
-                    <button className="me-row" type="button" onClick={() => { const l = layout === "new" ? "classic" : "new"; setLayout(l); tell(l === "new" ? "New layout" : "Classic layout"); }}>
-                      <Icon id="i-grid" /><span>Layout<small>{layout === "new" ? "New: menu left, news right" : "Classic"} · tap to switch</small></span>
+                    <button className="me-row" type="button" onClick={() => { const l = layout === "new" ? "classic" : "new"; setLayout(l); try { localStorage.setItem("layout-choice", l); } catch {} tell(l === "new" ? "New layout" : "Classic layout"); }}>
+                      <Icon id="i-grid" /><span>Layout<small>{layout === "new" ? "New: menu left, trending right" : "Classic"} · tap to switch</small></span>
                     </button>
                     <InstallApp />
                   </div>
