@@ -84,7 +84,7 @@ type State = {
   /** Solana wallets on this device (Phantom, Solflare, Backpack…), and the one connected. */
   solFound: Wallet[]; sol: SolConn | null;
   /** A WalletConnect code for one wallet, shown in our own window: scan it with that wallet's app. */
-  qr: { uri: string; name: string; logo: string; install?: string } | null;
+  qr: { uri: string; name: string; logo: string; install?: string; href?: string } | null;
 };
 let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null, qr: null };
 const subs = new Set<() => void>();
@@ -282,6 +282,7 @@ const flagWc = (on: boolean) => { try { on ? localStorage.setItem(WC_FLAG, Strin
 const wcFlagAge = () => { try { const t = Number(localStorage.getItem(WC_FLAG)); return t ? Date.now() - t : Infinity; } catch { return Infinity; } };
 
 let wcChain = 0;
+const WC_CHAINS = [56, 1, 8453, 42161, 10, 137, 43114, 59144, 324];
 async function initWc(chainId = netOf(state.network).chainId || 56) {
   // A new network before connecting: start a fresh WalletConnect with that network required.
   if (wc && !wc.session && wcChain !== chainId) { try { await wc.disconnect(); } catch { /* not connected */ } wc = null; }
@@ -297,7 +298,9 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
     // names no required network at all. Every other network stays optional, so nothing else needs approving up front.
     chains: [chainId],
     rpcMap: Object.fromEntries(NETWORKS.filter((n) => n.chainId).map((n) => [n.chainId!, (n.add as any).rpcUrls[0]])),
-    optionalChains: NETWORKS.filter((n) => n.chainId).map((n) => n.chainId!) as [number, ...number[]],
+    // Only networks nearly every wallet knows: a long list makes some wallets (Trust among them) refuse the
+    // connection. Any other network is added to the wallet when the member switches to it.
+    optionalChains: [...new Set([chainId, ...WC_CHAINS])] as [number, ...number[]],
     showQrModal: true,
     qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
     metadata: {
@@ -351,9 +354,11 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
       wc.rpc.showQrModal = false;
       wc.once("display_uri", (uri: string) => {
         if (direct) {
-          const base = direct.native || direct.wc!;
+          const base = direct.native || direct.wc!, href = wcHref(base, uri);
           try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: direct.name })); } catch { /* private mode */ }
-          location.href = wcHref(base, uri);
+          // Also an "Open <wallet>" button, in case the phone blocks opening the app without a fresh tap.
+          set({ open: true, qr: { uri, name: direct.name, logo: direct.logo, install: direct.install, href }, busy: "" });
+          location.href = href;
         } else set({ qr: { uri, name: top!.name, logo: top!.logo, install: top!.install }, busy: "" });
       });
     } else {
@@ -584,7 +589,7 @@ export async function chooseSolWalletConnect(t: WcTarget) {
     if (up.session?.namespaces?.solana?.accounts?.[0]) { await finishSolWc(t, up); return; }
     up.once?.("display_uri", (uri: string) => {
       const base = t.native || t.wc;
-      if (mobile && base) location.href = wcHref(base, uri);
+      if (mobile && base) { const href = wcHref(base, uri); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); location.href = href; }
       else set({ qr: { uri, name: t.name, logo: t.logo, install: t.install }, busy: "" });
     });
     await up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
@@ -613,4 +618,11 @@ async function restoreSolWc(): Promise<SolConn | null> {
     await finishSolWc(t, up);
     return state.sol;
   } catch { return null; }
+}
+
+/** Gets WalletConnect ready while the Connect window is open, so tapping a wallet opens it straight away. */
+export function warmUp() {
+  if (!WALLETCONNECT_ID || typeof window === "undefined") return;
+  if (state.network === "solana") { if (!solWc) initSolWc().catch(() => {}); }
+  else if (!state.current) initWc().catch(() => {});
 }

@@ -37,3 +37,6 @@ create trigger avatar_guard before update of avatar_url on public.profiles for e
 -- Members can change their own avatar_url (profiles only grants UPDATE on chosen columns; avatar_guard and the
 -- "edit own profile" policy still apply).
 grant update (avatar_url) on public.profiles to authenticated;
+
+-- avatar_guard is a trigger only: nobody may call it through the API.
+revoke execute on function public.avatar_guard() from public, anon, authenticated;
