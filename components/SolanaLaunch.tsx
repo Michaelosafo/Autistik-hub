@@ -106,6 +106,48 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
   );
 }
 
+/** No pool yet: create the Raydium pool (token / SOL) with amounts the member picks. */
+function SolCreatePool({ mint, sw, picker, busy, setBusy, setMsg, onCreated }: {
+  mint: string; sw: SolWallet | null; picker: ReturnType<typeof useSolWallet>["picker"]; busy: boolean;
+  setBusy: (b: boolean) => void; setMsg: (m: string) => void; onCreated: (pool: string, lpMint: string) => void;
+}) {
+  const [tok, setTok] = useState("");
+  const [sol, setSol] = useState("");
+  const [have, setHave] = useState<{ amount: string; decimals: number | null; sol: string } | null>(null);
+  useEffect(() => {
+    if (!sw) return;
+    solLaunchApi<{ amount: string; decimals: number | null; sol: string }>("balance", { owner: sw.account.address, mint }).then(setHave).catch(() => {});
+  }, [sw, mint]);
+  const all = have?.decimals != null ? fmtUnits(BigInt(have.amount), have.decimals) : null;
+  const price = Number(sol) > 0 && Number(tok) > 0 ? Number(sol) / Number(tok) : null;
+  async function create() {
+    if (!sw) return;
+    setBusy(true);
+    try {
+      setMsg("Confirm the new Raydium pool in your wallet…");
+      const r = await solLaunchApi<{ tx: string; pool: string; lpMint: string }>("create-pool", { owner: sw.account.address, mint, tokens: tok, sol });
+      const sig = await signAndSend(sw, r.tx);
+      reportActivity("liquidity", "solana", sig, `Created a Raydium pool with ${sol} SOL`);
+      setMsg("✅ Pool created and trading is open. Now burn the LP tokens so buyers can trust it.");
+      onCreated(r.pool, r.lpMint);
+    } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
+  }
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="notice">🆕 This token has no pool yet. Create it on Raydium: the amounts you put in set the starting price.</div>
+      {picker(busy, setMsg)}
+      <label className="field"><span>Tokens</span><input value={tok} onChange={(e) => setTok(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
+      {all && <small className="muted">You have {Number(all).toLocaleString("en-US")} tokens · {(Number(have!.sol) / 1e9).toFixed(4)} SOL. <button type="button" className="linkish" onClick={() => setTok(all)}>Use all my tokens</button></small>}
+      <label className="field"><span>SOL</span><input value={sol} onChange={(e) => setSol(e.target.value.trim())} inputMode="decimal" placeholder="0.5" /></label>
+      {price && <small className="muted">Starting price: 1 token = {price.toPrecision(4)} SOL</small>}
+      <button className="btn primary" type="button" disabled={!sw || busy || !(Number(tok) > 0) || !(Number(sol) >= 0.01)} onClick={create}>
+        {busy ? "Working…" : `Create the pool (${sol || 0} SOL + about ${SOL_POOL_COST} SOL in fees)`}
+      </button>
+      <small className="muted">Raydium charges about 0.15 SOL to create a pool. You get LP tokens back; burn them next so the liquidity stays forever.</small>
+    </div>
+  );
+}
+
 /** "Already made the token?": continue a launch that stopped after step 1, with that token. */
 function ResumeToken({ owner, busy, onFound, onErr }: { owner: string; busy: boolean; onFound: (m: { mint: string; sig: string }) => void; onErr: (m: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -136,13 +178,16 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [lp, setLp] = useState<string | null>(null);
+  const [noPool, setNoPool] = useState(false);
   const mint = mintIn.trim();
 
   useEffect(() => {
     setPool(null); setLp(null); setMsg("");
     if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) return;
     let gone = false;
-    solLaunchApi<Pool>("find", { mint, pool: fixedPool }).then((p) => { if (!gone) setPool(p); }).catch((e) => { if (!gone) setMsg(solErr(e)); });
+    setNoPool(false);
+    solLaunchApi<Pool>("find", { mint, pool: fixedPool }).then((p) => { if (!gone) setPool(p); })
+      .catch((e) => { if (gone) return; if (/No Raydium pool/i.test(String(e?.message))) setNoPool(true); else setMsg(solErr(e)); });
     return () => { gone = true; };
   }, [mint, fixedPool]);
 
@@ -180,6 +225,11 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
       const r = await solLaunchApi<{ tx: string }>("burn", { owner: sw.account.address, lpMint: lp });
       reportActivity("lp-burn", "solana", await signAndSend(sw, r.tx), "Burned LP tokens on Solana");
       setLp(null); setMsg("🔥 LP tokens burned. This liquidity can never be removed.");
+      // Made here earlier? Add it to the Hub's list now that its pool exists and the LP is burned.
+      if (pool) solLaunchApi<{ sig: string }>("resume", { owner: sw.account.address, mint })
+        .then((r) => fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "solana", token: mint, pair: pool.pool, txHash: r.sig, lock: "burn", lpMint: lp }) }))
+        .then((res) => res?.ok && setMsg("🔥 LP tokens burned and your token is listed on the Hub."))
+        .catch(() => {});
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
   }
 
@@ -195,6 +245,10 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
           <button className="btn primary" type="button" disabled={!sw || busy || !(Number(amtSol) > 0)} onClick={add}>Add liquidity</button>
           <small className="muted">Up to 5% price movement is allowed. You get Raydium LP tokens back.</small>
         </>
+      )}
+      {noPool && !pool && !lp && (
+        <SolCreatePool mint={mint} sw={sw} picker={picker} busy={busy} setBusy={setBusy} setMsg={setMsg}
+          onCreated={(p, lpMint) => { setNoPool(false); setLp(lpMint); solLaunchApi<Pool>("find", { mint, pool: p }).then(setPool).catch(() => {}); }} />
       )}
       {lp && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap", borderTop: "1px solid var(--line)", paddingTop: 8 }}>

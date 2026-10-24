@@ -56,6 +56,29 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
   const [lp, setLp] = useState<{ pair: `0x${string}`; amount: bigint; hash: string } | null>(null);
 
   const pub = useMemo(() => createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any, [c]);
+  // Paste any token address: Solana or EVM is told apart by its shape, and an 0x token's network is found by
+  // looking for its contract on each network (the one already picked first).
+  const [paste, setPaste] = useState("");
+  const [finding, setFinding] = useState("");
+  useEffect(() => {
+    const v = paste.trim();
+    if (fixedToken || !v) return;
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) && chains.some((x) => isSolana(x))) { setChain("solana" as ChainKey); return; }
+    if (!isAddress(v)) return;
+    setTokenIn(v);
+    let gone = false;
+    const order = [CHAINS[chain], ...chains.filter((x) => x.key !== chain)].filter((x) => x.router && !isSolana(x));
+    setFinding("Finding the token's network…");
+    (async () => {
+      for (const x of order) {
+        const code = await (createPublicClient({ chain: viemChain(x), transport: http(x.rpc) }) as any).getBytecode({ address: getAddress(v) }).catch(() => null);
+        if (gone) return;
+        if (code && code !== "0x") { setChain(x.key); setFinding(`Found on ${x.name}.`); return; }
+      }
+      if (!gone) setFinding("Couldn't find this token on our networks. Pick the network above.");
+    })();
+    return () => { gone = true; };
+  }, [paste]);
   const token = isAddress(tokenIn.trim()) ? getAddress(tokenIn.trim()) : null;
 
   // Read the token and its pool as soon as a full address is there.
@@ -190,14 +213,19 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
   return (
     <div className="card stack" style={{ gap: 10 }}>
       <b>💧 Add liquidity</b>
-      <small className="muted">Put more {c.coin} and tokens into a token&apos;s pool on {c.dex}, straight from your wallet. You get LP tokens back, which you can burn{isSolana(c) ? "" : " or lock"}.</small>
+      <small className="muted">Paste your token&apos;s address: we find its network, then you add {c.coin} and tokens to its pool on {c.dex} (or create the pool if there isn&apos;t one), straight from your wallet. You get LP tokens back, which you can burn{isSolana(c) ? "" : " or lock"}.</small>
+      {!fixedToken && (
+        <>
+          <input value={paste} onChange={(e) => setPaste(e.target.value)} placeholder="Paste your token address (any network, Solana too)" spellCheck={false} aria-label="Token address" />
+          {finding && <small className="muted">{finding}</small>}
+        </>
+      )}
       {!fixedChain && (
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           {chains.map((x) => <button key={x.key} type="button" className={"btn small" + (x.key === chain ? " primary" : "")} onClick={() => setChain(x.key)}>{x.name}</button>)}
         </div>
       )}
-      {isSolana(c) ? <SolAddLiquidity key={fixedToken ?? "any"} mint={fixedToken} pool={pair} /> : <>
-      {!fixedToken && <input value={tokenIn} onChange={(e) => setTokenIn(e.target.value)} placeholder={`Token address on ${c.name} (0x…)`} spellCheck={false} aria-label="Token address" />}
+      {isSolana(c) ? <SolAddLiquidity key={fixedToken ?? (paste.trim() || "any")} mint={fixedToken ?? (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(paste.trim()) ? paste.trim() : undefined)} pool={pair} /> : <>
       {pool && (
         <>
           <div className="notice">

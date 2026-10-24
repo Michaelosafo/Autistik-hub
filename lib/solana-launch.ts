@@ -124,13 +124,20 @@ export async function buildPool(creator: string, mint: string, tokens: bigint, l
   // The standard 0.25% pool, as on raydium.io; falls back to the first config Raydium lists.
   const feeConfig = configs.find((c) => c.tradeFeeRate === 2500) ?? configs[0];
   if (!feeConfig) throw new Error("Raydium didn't return its pool settings. Try again.");
+  // Raydium wants the two coins of a pool in address order (smaller first); most tokens sort after SOL.
+  const conn = connection();
+  const info = await conn.getParsedAccountInfo(pk(mint)).catch(() => null);
+  const decimals = Number((info?.value?.data as any)?.parsed?.info?.decimals ?? SOL_DECIMALS);
+  const tokenSide = { address: mint, decimals, programId: TOKEN_PROGRAM_ID.toBase58() };
+  const tokenFirst = Buffer.compare(pk(mint).toBuffer(), NATIVE_MINT.toBuffer()) < 0;
+  const [mintA, mintB, amountA, amountB] = tokenFirst ? [tokenSide, SOL_TOKEN, tokens, lamports] : [SOL_TOKEN, tokenSide, lamports, tokens];
   const { transaction, extInfo } = await r.cpmm.createPool({
     programId: CREATE_CPMM_POOL_PROGRAM,
     poolFeeAccount: CREATE_CPMM_POOL_FEE_ACC,
-    mintA: { address: mint, decimals: SOL_DECIMALS, programId: TOKEN_PROGRAM_ID.toBase58() },
-    mintB: SOL_TOKEN,
-    mintAAmount: new BN(tokens.toString()),
-    mintBAmount: new BN(lamports.toString()),
+    mintA,
+    mintB,
+    mintAAmount: new BN(amountA.toString()),
+    mintBAmount: new BN(amountB.toString()),
     startTime: new BN(0),
     feeConfig,
     associatedOnly: false,

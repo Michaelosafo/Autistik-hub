@@ -58,6 +58,29 @@ export async function POST(req: Request) {
         if (!SOL_ADDR.test(String(b.lpMint || ""))) return json({ error: "Missing the pool's LP token." }, 400);
         return json(await buildClaimLp(owner, b.lpMint));
       }
+      case "create-pool": {
+        // A Raydium pool for a token that has none yet: the creator sets both amounts (that sets the starting price).
+        if (!SOL_ADDR.test(String(b.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
+        const info = await connection().getParsedAccountInfo(new PublicKey(b.mint)).catch(() => null);
+        const dec = Number((info?.value?.data as any)?.parsed?.info?.decimals);
+        if (!Number.isInteger(dec)) return json({ error: "No token found at that address on Solana." }, 404);
+        let tokens = 0n, lamports = 0n;
+        try { tokens = parseUnits(String(b.tokens || ""), dec); lamports = parseUnits(String(b.sol || ""), 9); } catch {}
+        if (tokens <= 0n || lamports <= 0n) return json({ error: "Type how many tokens and how much SOL to put in." }, 400);
+        if (lamports < 10_000_000n) return json({ error: "Put in at least 0.01 SOL." }, 400);
+        if (await findPool(b.mint).catch(() => null)) return json({ error: "That token already has a pool. Add liquidity to it instead." }, 400);
+        return json(await buildPool(owner, b.mint, tokens, lamports));
+      }
+      case "balance": {
+        // How many of this token the wallet holds (to fill in "all my tokens").
+        if (!SOL_ADDR.test(String(b.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
+        const r = await connection().getParsedTokenAccountsByOwner(new PublicKey(owner), { mint: new PublicKey(b.mint) }).catch(() => null);
+        const accs = r?.value || [];
+        const amount = accs.reduce((t, a) => t + BigInt((a.account.data as any).parsed.info.tokenAmount.amount), 0n);
+        const decimals = accs[0] ? Number((accs[0].account.data as any).parsed.info.tokenAmount.decimals) : null;
+        const sol = await connection().getBalance(new PublicKey(owner)).catch(() => 0);
+        return json({ amount: amount.toString(), decimals, sol: String(sol) });
+      }
       case "resume": {
         // A token made here earlier whose launch stopped after step 1: its creation transaction, so the launch can
         // carry on with this token (the pool, then the burn or lock) instead of making a new one.
