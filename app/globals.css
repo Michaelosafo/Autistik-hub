@@ -2885,3 +2885,22 @@ img.has-photo{object-fit:cover;display:block;background:var(--surface-2)}
 .mp-settings .me-sec-h b{color:var(--rail-hi)}
 /* Signed in on a computer, the account lives in your panel on the left, so the top-right button is only for phones. */
 @media (min-width:861px){ .topbar .me-menu.rail-dup{display:none} }
+
+/* Your panel as a drawer from the left (phones, the App's pages, the front page): components/Shell.tsx */
+.mp-drawer{position:fixed;inset:0;z-index:200;background:rgba(10,6,20,.55);display:flex;animation:mpFade .15s ease-out}
+.mp-drawer-in{width:min(380px,92vw);height:100dvh;background:var(--rail);color:var(--rail-ink);display:flex;flex-direction:column;gap:12px;
+  padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(14px + env(safe-area-inset-bottom,0px));box-shadow:12px 0 40px rgba(0,0,0,.35);animation:mpSlide .2s ease-out}
+.mp-drawer-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mp-drawer-h b{color:var(--rail-hi);font-size:1.05em}
+.mp-x{all:unset;cursor:pointer;width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:var(--rail-2);color:var(--rail-hi);font-weight:800}
+.mp-x:focus-visible{outline:3px solid var(--sun-bright)}
+@keyframes mpFade{from{opacity:0}to{opacity:1}}
+@keyframes mpSlide{from{transform:translateX(-24px);opacity:.6}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.mp-drawer,.mp-drawer-in{animation:none}}
+html[data-calm="on"] .mp-drawer,html[data-calm="on"] .mp-drawer-in{animation:none}
+/* Your picture in the App's top bar */
+.ax-me{all:unset;position:relative;cursor:pointer;display:grid;place-items:center;border-radius:50%;flex:none}
+.ax-me .me-av{width:36px;height:36px;font-size:.95em}
+.ax-me:focus-visible{outline:3px solid var(--sun-bright)}
+.ax-me .bell-n{position:absolute;right:-4px;top:-4px}
+button.lp-signin{font:inherit;font-weight:800;cursor:pointer}
