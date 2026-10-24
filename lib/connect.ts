@@ -8,6 +8,9 @@
  *
  * Browser only. Nothing here ever sees a private key: wallets sign inside their own apps.
  */
+import { getWallets } from "@wallet-standard/app";
+import type { Wallet, WalletAccount } from "@wallet-standard/base";
+
 export type WalletInfo = { uuid: string; name: string; icon: string; rdns: string };
 type Detected = { info: WalletInfo; provider: any };
 
@@ -39,10 +42,37 @@ const WC_FEATURED = [
 
 export const WALLETCONNECT_ID = (process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "").trim();
 
+// ---------------------------------------------------------------- networks
+
+/** The networks people can pick before (or after) connecting. EVM ones switch the wallet; Solana uses Solana wallets. */
+export type NetKey = "bsc" | "ethereum" | "base" | "arbitrum" | "solana";
+export const NETWORKS: { key: NetKey; name: string; short: string; chainId?: number; color: string; add?: object }[] = [
+  { key: "bsc", name: "BNB Chain", short: "BNB", chainId: 56, color: "#F0B90B",
+    add: { chainName: "BNB Smart Chain", nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 }, rpcUrls: ["https://bsc-dataseed.binance.org"], blockExplorerUrls: ["https://bscscan.com"] } },
+  { key: "ethereum", name: "Ethereum", short: "ETH", chainId: 1, color: "#8EA2FF" },
+  { key: "base", name: "Base", short: "Base", chainId: 8453, color: "#2F6BFF",
+    add: { chainName: "Base", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://mainnet.base.org"], blockExplorerUrls: ["https://basescan.org"] } },
+  { key: "arbitrum", name: "Arbitrum", short: "ARB", chainId: 42161, color: "#28A0F0",
+    add: { chainName: "Arbitrum One", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://arb1.arbitrum.io/rpc"], blockExplorerUrls: ["https://arbiscan.io"] } },
+  { key: "solana", name: "Solana", short: "SOL", color: "#14F195" },
+];
+export const netOf = (k: NetKey) => NETWORKS.find((n) => n.key === k) ?? NETWORKS[0];
+const savedNet = (): NetKey => {
+  try { const v = localStorage.getItem("aw-network"); if (NETWORKS.some((n) => n.key === v)) return v as NetKey; } catch { /* private mode */ }
+  return "bsc";
+};
+
 // ---------------------------------------------------------------- state shared with the sheet
 
-type State = { open: boolean; detected: Detected[]; current: { name: string; provider: any } | null; error: string; busy: string };
-let state: State = { open: false, detected: [], current: null, error: "", busy: "" };
+export type SolConn = { name: string; wallet: Wallet; account: WalletAccount };
+type State = {
+  open: boolean; detected: Detected[]; current: { name: string; provider: any } | null; error: string; busy: string;
+  /** The network picked in the top bar or the Connect window. */
+  network: NetKey;
+  /** Solana wallets on this device (Phantom, Solflare, Backpack…), and the one connected. */
+  solFound: Wallet[]; sol: SolConn | null;
+};
+let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<State>) => { state = { ...state, ...p }; subs.forEach((f) => f()); };
 export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
@@ -55,6 +85,13 @@ let started = false;
 export function startDiscovery() {
   if (started || typeof window === "undefined") return;
   started = true;
+  set({ network: savedNet() });
+  // Solana wallets (Wallet Standard): the ones here now, and any that load a moment later.
+  try {
+    const ws = getWallets();
+    const refresh = () => set({ solFound: ws.get().filter(isSolWallet) });
+    refresh(); ws.on("register", refresh);
+  } catch { /* old browsers */ }
   window.addEventListener("eip6963:announceProvider", (e: any) => {
     const d = e?.detail as Detected | undefined;
     if (!d?.info?.uuid || !d.provider) return;
@@ -92,8 +129,44 @@ export function closePicker() {
   resolver?.(null); resolver = null;
 }
 
+let watched: any = null;
+/** Keeps the network button in step when the member switches network inside their wallet. */
+function watchChain(provider: any) {
+  if (watched === provider) return;
+  watched = provider;
+  const on = (hex: string) => { const n = NETWORKS.find((x) => x.chainId === parseInt(String(hex), 16)); if (n && state.network !== "solana") rememberNet(n.key); };
+  provider.request?.({ method: "eth_chainId" }).then(on).catch(() => {});
+  provider.on?.("chainChanged", on);
+}
+const rememberNet = (k: NetKey) => { set({ network: k }); try { localStorage.setItem("aw-network", k); } catch { /* private mode */ } };
+
+/** Asks the wallet to move to a network (adding it first if the wallet doesn't know it). */
+export async function switchEvm(provider: any, chainId: number) {
+  const hex = "0x" + chainId.toString(16);
+  try { await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: hex }] }); }
+  catch (e: any) {
+    const add = NETWORKS.find((n) => n.chainId === chainId)?.add;
+    if (!add || (e?.code !== 4902 && !/unrecognized|not added|unknown chain/i.test(String(e?.message)))) throw e;
+    await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: hex, ...add }] });
+  }
+}
+
+/**
+ * Picks the network. EVM: the connected wallet is asked to switch to it. Solana: opens the Connect window on Solana
+ * wallets if none is connected yet.
+ */
+export async function setNetwork(k: NetKey) {
+  rememberNet(k);
+  const n = netOf(k);
+  if (n.chainId && state.current) {
+    try { await switchEvm(state.current.provider, n.chainId); }
+    catch (e: any) { set({ error: /reject|denied|cancel/i.test(String(e?.message)) ? "You stayed on the old network in your wallet." : "Switch the network inside your wallet app." }); }
+  }
+}
+
 function choose(name: string, provider: any) {
   if (name === "WalletConnect") flagWc(true);
+  watchChain(provider);
   set({ current: { name, provider }, open: false, busy: "", error: "" });
   try { sessionStorage.setItem("aw-wallet", name); localStorage.setItem("aw-last-wallet", name); } catch { /* private mode */ }
   resolver?.(provider); resolver = null;
@@ -105,6 +178,8 @@ export async function chooseInjected(name: string, provider: any) {
   set({ busy: name, error: "" });
   try {
     await provider.request({ method: "eth_requestAccounts" });
+    const id = netOf(state.network).chainId;
+    if (id) await switchEvm(provider, id).catch(() => { /* they can switch later from the network button */ });
     choose(name, provider);
   } catch (e: any) {
     set({ busy: "", error: /reject|denied|cancel/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 160) });
@@ -119,15 +194,19 @@ const flagWc = (on: boolean) => { try { on ? localStorage.setItem(WC_FLAG, Strin
 // Set when a connection starts; a connection that never finished is forgotten after 15 minutes.
 const wcFlagAge = () => { try { const t = Number(localStorage.getItem(WC_FLAG)); return t ? Date.now() - t : Infinity; } catch { return Infinity; } };
 
-async function initWc() {
+let wcChain = 0;
+async function initWc(chainId = netOf(state.network).chainId || 56) {
+  // A new network before connecting: start a fresh WalletConnect with that network required.
+  if (wc && !wc.session && wcChain !== chainId) { try { await wc.disconnect(); } catch { /* not connected */ } wc = null; }
   if (wc) return wc;
+  wcChain = chainId;
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
   wc = await EthereumProvider.init({
     projectId: WALLETCONNECT_ID,
-    // BNB Chain is the one required network: Trust Wallet and several others refuse a connection that names no
-    // required network at all. Every other network stays optional, so nothing else needs approving up front.
-    chains: [56],
-    rpcMap: { 56: "https://bsc-dataseed.binance.org" },
+    // The network picked is the one required network: Trust Wallet and several others refuse a connection that
+    // names no required network at all. Every other network stays optional, so nothing else needs approving up front.
+    chains: [chainId],
+    rpcMap: { 56: "https://bsc-dataseed.binance.org", 1: "https://ethereum-rpc.publicnode.com", 8453: "https://mainnet.base.org", 42161: "https://arb1.arbitrum.io/rpc" },
     optionalChains: [56, 1, 8453, 42161, 10, 137, 43114, 59144, 130, 146, 999, 324, 534352, 81457, 5000, 100, 80094, 143, 42220, 1329, 480, 57073, 34443],
     showQrModal: true,
     qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
@@ -153,7 +232,11 @@ export async function chooseWalletConnect(walletId?: string) {
   const direct = isMobile() ? TOP_WALLETS.find((w) => w.id === walletId && w.wc) : undefined;
   try {
     await initWc();
-    if (wc.session) { choose("WalletConnect", wc); return; }
+    if (wc.session) {
+      const id = netOf(state.network).chainId;
+      if (id) await switchEvm(wc, id).catch(() => {});
+      choose("WalletConnect", wc); return;
+    }
     flagWc(true);
     if (direct) {
       // Skip the WalletConnect list: open this wallet's app with the request. Later signing requests open it too.
@@ -214,3 +297,63 @@ export const isMobile = () => typeof navigator !== "undefined" && /Android|iPhon
 
 /** The wallet used last time on this device (for a "Last used" badge). */
 export const lastWalletName = () => { try { return localStorage.getItem("aw-last-wallet") || ""; } catch { return ""; } };
+
+// ---------------------------------------------------------------- Solana wallets
+
+const isSolWallet = (w: Wallet) => "standard:connect" in w.features && "solana:signTransaction" in w.features && w.chains.some((c) => c.startsWith("solana:"));
+
+/** Connects a Solana wallet (Phantom, Solflare, Backpack…). Remembered for this tab. */
+export async function chooseSol(w: Wallet, silent = false): Promise<SolConn | null> {
+  if (!silent) set({ busy: w.name, error: "" });
+  try {
+    const { accounts } = await (w.features["standard:connect"] as any).connect(silent ? { silent: true } : undefined);
+    const account = (accounts as WalletAccount[]).find((a) => a.chains.some((c) => c.startsWith("solana:"))) ?? accounts?.[0];
+    if (!account) { if (!silent) set({ busy: "", error: "The wallet didn't share an account." }); return null; }
+    const sol = { name: w.name, wallet: w, account };
+    rememberNet("solana");
+    set({ sol, open: false, busy: "", error: "" });
+    try { sessionStorage.setItem("aw-sol", w.name); localStorage.setItem("aw-last-wallet", w.name); } catch { /* private mode */ }
+    resolver?.(null); resolver = null;
+    try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: w.name })); } catch { /* old browsers */ }
+    return sol;
+  } catch (e: any) {
+    if (!silent) set({ busy: "", error: /reject|denied|cancel|declined/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 160) });
+    return null;
+  }
+}
+
+/** The Solana wallet connected earlier in this tab, without a pop-up, if it still allows it. */
+export async function restoreSol(): Promise<SolConn | null> {
+  startDiscovery();
+  if (state.sol) return state.sol;
+  let name = "";
+  try { name = sessionStorage.getItem("aw-sol") || ""; } catch { /* private mode */ }
+  if (!name) return null;
+  await new Promise((r) => setTimeout(r, 200));
+  const w = state.solFound.find((x) => x.name === name);
+  return w ? chooseSol(w, true) : null;
+}
+
+export async function disconnectSol() {
+  const w = state.sol?.wallet;
+  set({ sol: null });
+  try { sessionStorage.removeItem("aw-sol"); } catch { /* private mode */ }
+  try { await (w?.features["standard:disconnect"] as any)?.disconnect(); } catch { /* fine */ }
+  try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: null })); } catch { /* old browsers */ }
+}
+
+const toBytes = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const toB64 = (bytes: Uint8Array) => { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s); };
+/** Signs a base64 Solana transaction in the connected Solana wallet; returns it signed (base64). */
+export async function signSol(txBase64: string): Promise<string> {
+  const c = state.sol;
+  if (!c) throw new Error("Connect a Solana wallet first.");
+  const [out] = await (c.wallet.features["solana:signTransaction"] as any).signTransaction({ account: c.account, transaction: toBytes(txBase64), chain: "solana:mainnet" });
+  return toB64(out.signedTransaction);
+}
+
+/** Solana wallet apps, for phones without one in the browser: opens this page inside the app. */
+export const SOL_APPS: { id: string; name: string; install: string; dapp: (url: string) => string }[] = [
+  { id: "phantom", name: "Phantom", install: "https://phantom.com/download", dapp: (u) => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
+  { id: "solflare", name: "Solflare", install: "https://solflare.com/download", dapp: (u) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
+];

@@ -2919,3 +2919,19 @@ button.lp-signin{font:inherit;font-weight:800;cursor:pointer}
 .logo-mark{display:block;flex:none;filter:drop-shadow(0 4px 12px rgba(181,124,255,.28));transition:transform .15s ease}
 .ax-logo:hover .logo-mark,.lp-logo:hover .logo-mark{transform:scale(1.06)}
 html[data-calm="on"] .logo-mark{transition:none}
+
+/* Network choice in the Connect window and the App bar */
+.wp-nets{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.wp-nets::-webkit-scrollbar{display:none}
+.wp-net{flex:none;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:99px;border:1px solid #4a4160;background:rgba(255,255,255,.04);color:#F4EEFF;font:inherit;font-size:.85em;font-weight:700;cursor:pointer}
+.wp-net i{width:9px;height:9px;border-radius:50%}
+.wp-net.on{border-color:var(--gold,#F0B90B);background:rgba(240,185,11,.14)}
+.wp-net:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}
+.ax-net{position:relative}
+.ax-net > button{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:14px;border:0;background:#372F47;color:#F4EEFF;font:inherit;font-weight:700;font-size:.86em;cursor:pointer;white-space:nowrap}
+.ax-net > button i{width:10px;height:10px;border-radius:50%}
+.ax-net > button svg{width:12px;height:12px}
+.ax-net .ax-menu b i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px}
+@media (max-width:600px){ .ax-net > button{padding:7px 9px;font-size:.8em} .ax-net .ax-net-name{display:none} }
+.ax-net-short{display:none}
+@media (max-width:600px){ .ax-net .ax-net-short{display:inline} }

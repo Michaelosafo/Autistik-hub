@@ -1,4 +1,5 @@
 "use client";
+import LogoMark from "@/components/LogoMark";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
@@ -215,8 +216,8 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
       <div className="app">
         <aside className="rail">
           <Link href="/" className="brand" style={{ textDecoration: "none" }}>
-            <svg width="44" height="22"><use href="#i-inf" /></svg>
-            <div><b>AUTISTIK HUB</b><small>Different wavelength. Same channel.</small></div>
+            <LogoMark size={46} title="AUTISTIK Hub" />
+            <div><small>Different wavelength. Same channel.</small></div>
           </Link>
           {me && (
             <button type="button" className={"rail-me" + (panel ? " on" : "")} aria-expanded={panel} onClick={() => setPanel(!panel)}
