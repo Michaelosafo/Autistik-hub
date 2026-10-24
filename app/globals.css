@@ -2706,19 +2706,15 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
 /* ===== New layout (components/RailShell.tsx, HomeFeed.tsx): like X — the menu fixed on the left on every page including
    Home, the page in the middle, and the side column on the right. The classic layout above is kept (Display → Layout). */
 .nx{display:grid;grid-template-columns:260px minmax(0,700px) 350px;justify-content:center;min-height:100%}
-.nx-rail{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px;overflow:hidden}
+.nx-rail{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px;overflow-y:auto;scrollbar-width:none}
 .nx-rail::-webkit-scrollbar{display:none}
 .nx-brand{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:2px;text-decoration:none;color:var(--ink);border-radius:999px;align-self:flex-start}
 .nx-brand:hover{background:var(--surface-2)}
 .nx-brand b{font-family:var(--f-display);font-size:1.1em;letter-spacing:.05em}
-.nx-nav{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none;display:flex;flex-direction:column;
-  mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);padding-bottom:16px}
-.nx-nav::-webkit-scrollbar{display:none}
-.nx-group{display:flex;flex-direction:column}
-.nx-group + .nx-group{margin-top:6px;padding-top:6px;border-top:1px solid var(--line)}
-.nx-link{display:flex;align-items:center;gap:15px;padding:8px 16px 8px 12px;border-radius:999px;color:var(--ink);text-decoration:none;font-size:1.08em;font-weight:500;align-self:flex-start;flex:none;
+.nx-nav{display:flex;flex-direction:column;gap:0}
+.nx-link{display:flex;align-items:center;gap:16px;padding:10px 16px 10px 12px;border-radius:999px;color:var(--ink);text-decoration:none;font-size:1.16em;font-weight:500;align-self:flex-start;
   background:none;border:0;cursor:pointer;font-family:inherit;line-height:1.3}
-.nx-link svg{width:24px;height:24px;flex:none}
+.nx-link svg{width:26px;height:26px;flex:none}
 .nx-link:hover{background:var(--surface-2)}
 .nx-link[aria-current="page"]{font-weight:800}
 .nx-link[aria-current="page"] svg{color:var(--violet);stroke-width:2.6}
@@ -2728,11 +2724,11 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
 .nx-more-pop a{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:10px;color:var(--ink);text-decoration:none;font-weight:700}
 .nx-more-pop a svg{width:20px;height:20px;color:var(--muted)}
 .nx-more-pop a:hover,.nx-more-pop a[aria-current="page"]{background:var(--surface-2)}
-.nx-cta{flex:none;display:flex;align-items:center;justify-content:center;gap:9px;margin:4px 4px 0;padding:14px 16px;border-radius:999px;text-decoration:none;font-weight:800;font-size:1.04em;color:#fff;
+.nx-cta{display:flex;align-items:center;justify-content:center;gap:9px;margin:10px 4px 0;padding:14px 16px;border-radius:999px;text-decoration:none;font-weight:800;font-size:1.04em;color:#fff;
   background:linear-gradient(135deg,#6141D4,#2F8FE0 55%,#3DB66A)}
 .nx-cta svg{width:20px;height:20px}
 .nx-cta:hover{filter:brightness(1.08)}
-.nx-acct{flex:none}
+.nx-acct{margin-top:auto}
 .nx-me{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:999px}
 .nx-me:hover,.nx-me[aria-expanded="true"]{background:var(--surface-2)}
 .nx-me:focus-visible{outline:3px solid var(--sun-bright)}
@@ -2828,6 +2824,6 @@ input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
 .hf-empty{padding:22px 18px}
 @media (max-width:1260px){ .nx{grid-template-columns:230px minmax(0,1fr) 320px} }
 @media (max-width:1080px){ .nx{grid-template-columns:88px minmax(0,1fr) 300px} .nx-link span,.nx-brand b,.nx-me-t,.nx-dots,.nx-cta span{display:none}
-  .nx-link,.nx-brand{align-self:center} .nx-link{padding:12px} .nx-cta{width:52px;height:52px;padding:0;margin:10px auto 0} .nx-me{justify-content:center} }
+  .nx-link,.nx-brand,.nx-more{align-self:center} .nx-link{padding:12px} .nx-cta{width:52px;height:52px;padding:0;margin:10px auto 0} .nx-me{justify-content:center} }
 @media (max-width:960px){ .nx{grid-template-columns:88px minmax(0,1fr)} .nx-side{display:none} }
 [data-calm="on"] .nx-cta{filter:none}
