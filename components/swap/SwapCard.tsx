@@ -38,7 +38,30 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
   allow?: (c: XChain) => string | null; onPick: (side: Side, net: XChain, token: XToken) => void; onFlip: () => void;
 }) {
   const [sheet, setSheet] = useState<Side | null>(null);
-  const len = io.amount.length;
+  // Amounts are typed in US dollars; the token amount the swap uses is worked out from the coin's price. Coins without
+  // a price, or a tap on the switch, fall back to typing the token amount.
+  const price = from.token?.priceUsd && from.token.priceUsd > 0 ? from.token.priceUsd : null;
+  const [inDollars, setInDollars] = useState(true);
+  const dollars = inDollars && !!price;
+  const [usdText, setUsdText] = useState("");
+  const typedRef = useRef(false);
+  // Keep the dollar box in step when the token amount changes from outside (Max, flipping the coins, a new coin).
+  useEffect(() => {
+    if (!dollars) return;
+    if (typedRef.current) { typedRef.current = false; return; }
+    const n = Number(io.amount);
+    setUsdText(io.amount && n > 0 && price ? String(Math.round(n * price * 100) / 100) : "");
+  }, [io.amount, price, dollars]); // eslint-disable-line react-hooks/exhaustive-deps
+  function typeDollars(v: string) {
+    const clean = v.replace(",", ".").replace(/[^\d.]/g, "").replace(/^(\d*\.\d{0,2}).*$/, "$1");
+    setUsdText(clean);
+    typedRef.current = true;
+    const n = Number(clean);
+    io.setAmount(clean && n > 0 && price ? String(Math.floor((n / price) * 1e8) / 1e8) : "");
+  }
+  const shown = dollars ? usdText : io.amount;
+  const len = shown.length + (dollars ? 1 : 0);
+  const tokenLine = io.amount && Number(io.amount) > 0 ? `${amt(Number(io.amount))} ${from.token?.symbol || ""}` : `0 ${from.token?.symbol || ""}`;
   const pill = (side: Side, p: Pick) => (
     <button type="button" className="sc-pill" onClick={() => setSheet(side)} aria-label={side === "from" ? "Pick the coin you pay with" : "Pick the coin you get"}>
       {p.token ? <TokenLogo t={p.token} c={p.net} logos={logos} size={30} /> : <ChainBadge c={p.net} logo={logos[p.net.id]} size={30} />}
@@ -52,14 +75,21 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
           {pill("from", from)}
           {io.balance != null && <span className="sc-have">
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="currentColor"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4H18v3H6.5a.5.5 0 0 0 0 1H20v10.5a1.5 1.5 0 0 1-1.5 1.5h-12A2.5 2.5 0 0 1 4 17.5zM16 13a1.25 1.25 0 1 0 0 2.5A1.25 1.25 0 0 0 16 13" /></svg>
-            {amt(io.balance)}
+            {dollars && price ? money(io.balance * price) : amt(io.balance)}
             {io.onMax && <button type="button" className="sc-max" onClick={io.onMax}>Max</button>}
           </span>}
         </div>
-        <input className="sc-amt" inputMode="decimal" value={io.amount} placeholder="0" aria-label="Amount to pay" autoComplete="off"
-          style={len > 9 ? { fontSize: len > 14 ? "1.6em" : "2.1em" } : undefined}
-          onChange={(e) => io.setAmount(e.target.value.replace(",", ".").replace(/[^\d.]/g, ""))} />
-        <div className="sc-usd"><span aria-hidden="true">⇅</span> {money(io.inUsd)}</div>
+        <div className="sc-amt-row">
+          {dollars && <span className="sc-cur" aria-hidden="true">$</span>}
+          <input className="sc-amt" inputMode="decimal" value={shown} placeholder={dollars ? "0.00" : "0"} autoComplete="off"
+            aria-label={dollars ? "Amount to pay, in US dollars" : `Amount to pay, in ${from.token?.symbol || "tokens"}`}
+            style={len > 9 ? { fontSize: len > 14 ? "1.6em" : "2.1em" } : undefined}
+            onChange={(e) => (dollars ? typeDollars(e.target.value) : io.setAmount(e.target.value.replace(",", ".").replace(/[^\d.]/g, "")))} />
+        </div>
+        <button type="button" className="sc-usd sc-switch" disabled={!price} onClick={() => setInDollars(!inDollars)}
+          title={price ? (dollars ? `Type the amount in ${from.token?.symbol || "tokens"} instead` : "Type the amount in US dollars instead") : "No price for this coin yet, so amounts are in tokens"}>
+          <span aria-hidden="true">⇅</span> {dollars ? tokenLine : money(io.inUsd)}
+        </button>
       </div>
       <button type="button" className="sc-flip" onClick={onFlip} aria-label="Switch the two coins">
         <span><Chevron up /><Chevron /></span>
@@ -67,7 +97,9 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
       <div className="sc-box sc-get">
         <div className="sc-top">
           {pill("to", to)}
-          <span className="sc-out"><b>{io.out}</b>{io.outUsd ? <small>{usd(io.outUsd)}</small> : null}</span>
+          <span className="sc-out">{dollars
+            ? <><b>{io.outUsd ? usd(io.outUsd) : Number(io.amount) > 0 ? "$ –" : "$0.00"}</b><small>{io.out} {to.token?.symbol || ""}</small></>
+            : <><b>{io.out}</b>{io.outUsd ? <small>{usd(io.outUsd)}</small> : null}</>}</span>
         </div>
         {io.toExtra}
       </div>
