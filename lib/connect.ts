@@ -19,15 +19,16 @@ type Detected = { info: WalletInfo; provider: any };
 export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string; wc?: string }[] = [
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
-  { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
+  // Bitget and Trust first: both handle every network and switch between them easily.
+  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkapp.vip", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
   { id: "trust", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
+  { id: "metamask", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "binance", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
-  { id: "okx", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
+  { id: "okx", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", wc: "okex://main", dapp: (u) => `okx://wallet/dapp/url?dappUrl=${encodeURIComponent(u)}` },
   { id: "coinbase", name: "Coinbase Wallet", rdns: ["com.coinbase.wallet"], color: "#0052FF", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(u)}` },
-  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
   { id: "safepal", name: "SafePal", rdns: ["com.safepal"], color: "#4A21EF", install: "https://www.safepal.com/download", wc: "https://link.safepal.io" },
-  { id: "tokenpocket", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app", dapp: (u) => `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: u }))}` },
-  { id: "rabby", name: "Rabby", rdns: ["io.rabby"], color: "#7084FF", install: "https://rabby.io/" },
+  { id: "tokenpocket", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app", wc: "tpoutside://", dapp: (u) => `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: u }))}` },
+  { id: "rabby", name: "Rabby", rdns: ["io.rabby"], color: "#7084FF", install: "https://rabby.io/", wc: "rabby://" },
   { id: "phantom", name: "Phantom", rdns: ["app.phantom"], color: "#AB9FF2", install: "https://phantom.com/download", dapp: (u) => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
 ];
 
@@ -81,7 +82,7 @@ type State = {
   /** Solana wallets on this device (Phantom, Solflare, Backpack…), and the one connected. */
   solFound: Wallet[]; sol: SolConn | null;
   /** A WalletConnect code for one wallet, shown in our own window: scan it with that wallet's app. */
-  qr: { uri: string; name: string; logo: string } | null;
+  qr: { uri: string; name: string; logo: string; install?: string } | null;
 };
 let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null, qr: null };
 const subs = new Set<() => void>();
@@ -238,9 +239,23 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
  * WalletConnect: a QR code on a computer; on a phone, a list of wallet apps that opens the one picked.
  * With `walletId` (a top wallet with its own link) on a phone, that wallet's app opens directly.
  */
-export async function chooseWalletConnect(walletId?: string) {
+/** A wallet to connect through WalletConnect: its app link on phones, and its logo for our own code window. */
+export type WcTarget = { name: string; logo: string; wc?: string; install?: string };
+
+/** The wallet app's WalletConnect link (same rules as WalletConnect's own list). */
+export function wcHref(base: string, uri: string) {
+  const u = encodeURIComponent(uri);
+  if (base.includes("://") && !/^https?:/.test(base)) {
+    const b = base.endsWith("://") ? base : base.endsWith("/") ? base : base + "/";
+    return `${b}wc?uri=${u}`;
+  }
+  return `${base.replace(/\/$/, "")}/wc?uri=${u}`;
+}
+
+export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
-  const top = TOP_WALLETS.find((w) => w.id === walletId);
+  const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
+  const top: WcTarget | undefined = !t ? undefined : "id" in t ? { name: t.name, logo: `/wallets/${(t as any).id}.svg`, wc: (t as any).wc, install: (t as any).install } : t;
   set({ busy: top?.name || "WalletConnect", error: "", qr: null });
   const mobile = isMobile();
   // On a phone: that wallet's own app opens with the request. On a computer: our window shows a code to scan
@@ -260,8 +275,8 @@ export async function chooseWalletConnect(walletId?: string) {
       wc.once("display_uri", (uri: string) => {
         if (direct) {
           try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: direct.wc, name: direct.name })); } catch { /* private mode */ }
-          location.href = `${direct.wc}/wc?uri=${encodeURIComponent(uri)}`;
-        } else set({ qr: { uri, name: top!.name, logo: `/wallets/${top!.id}.svg` }, busy: "" });
+          location.href = wcHref(direct.wc!, uri);
+        } else set({ qr: { uri, name: top!.name, logo: top!.logo, install: top!.install }, busy: "" });
       });
     } else {
       // Hide our sheet while WalletConnect shows its own QR / wallet list.
@@ -387,3 +402,23 @@ export const SOL_APPS: { id: string; name: string; install: string; dapp: (url: 
   { id: "phantom", name: "Phantom", install: "https://phantom.com/download", dapp: (u) => `https://phantom.app/ul/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
   { id: "solflare", name: "Solflare", install: "https://solflare.com/download", dapp: (u) => `https://solflare.com/ul/v1/browse/${encodeURIComponent(u)}?ref=${encodeURIComponent(new URL(u).origin)}` },
 ];
+
+// ---------------------------------------------------------------- every WalletConnect wallet (600+)
+
+export type ListedWallet = { id: string; name: string; logo: string; wc?: string; install?: string; rdns?: string; chains: string[] };
+/** One page of WalletConnect's wallet list (searchable), with each wallet's logo and app link. */
+export async function listWallets(page: number, search = ""): Promise<{ wallets: ListedWallet[]; total: number }> {
+  if (!WALLETCONNECT_ID) return { wallets: [], total: 0 };
+  const q = new URLSearchParams({ projectId: WALLETCONNECT_ID, entries: "40", page: String(page), ...(search ? { search } : {}) });
+  const r = await fetch(`https://explorer-api.walletconnect.com/v3/wallets?${q}`).then((x) => x.json()).catch(() => null);
+  const wallets = Object.values(r?.listings || {}).map((w: any): ListedWallet => {
+    const uni = typeof w.mobile?.universal === "string" && w.mobile.universal && !w.mobile.universal.includes("?") ? w.mobile.universal : "";
+    const nat = typeof w.mobile?.native === "string" ? w.mobile.native : "";
+    return {
+      id: String(w.id), name: String(w.name || "Wallet").slice(0, 40), logo: String(w.image_url?.sm || ""),
+      wc: uni || nat || undefined, install: w.app?.ios || w.app?.android || w.homepage || undefined,
+      rdns: w.rdns || undefined, chains: Array.isArray(w.chains) ? w.chains : [],
+    };
+  });
+  return { wallets, total: Number(r?.total || r?.count || wallets.length) };
+}
