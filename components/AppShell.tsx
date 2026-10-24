@@ -8,7 +8,7 @@ import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import Avatar from "@/components/Avatar";
 import LogoMark from "@/components/LogoMark";
-import { TOP_WALLETS, disconnectWallet, getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
+import { NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
 export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
@@ -85,17 +85,21 @@ export default function AppShell({ admin, me, onMe, children }: {
   const [acct, setAcct] = useState<string | null>(null);
   const [acctMenu, setAcctMenu] = useState(false);
   const bar = useRef<HTMLDivElement>(null);
-  const wallet = useSyncExternalStore(subscribe, getState, getState).current;
+  const cs = useSyncExternalStore(subscribe, getState, getState);
+  const wallet = cs.current;
+  const net = netOf(cs.network);
+  const solMode = cs.network === "solana";
+  const [netMenu, setNetMenu] = useState(false);
 
-  useEffect(() => { setOpen(null); setMore(false); setAcctMenu(false); }, [path]);
+  useEffect(() => { setOpen(null); setMore(false); setAcctMenu(false); setNetMenu(false); }, [path]);
   useEffect(() => {
-    const close = (e: MouseEvent) => { if (!bar.current?.contains(e.target as Node)) { setOpen(null); setAcctMenu(false); } };
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(null); setAcctMenu(false); setMore(false); } };
+    const close = (e: MouseEvent) => { if (!bar.current?.contains(e.target as Node)) { setOpen(null); setAcctMenu(false); setNetMenu(false); } };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(null); setAcctMenu(false); setMore(false); setNetMenu(false); } };
     document.addEventListener("mousedown", close); document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
   }, []);
   // Show the connected address (wallet picked anywhere on the site, in this tab).
-  useEffect(() => { restoreWallet().catch(() => {}); }, []);
+  useEffect(() => { restoreWallet().catch(() => {}); restoreSol().catch(() => {}); }, []);
   useEffect(() => {
     const p = wallet?.provider;
     if (!p) { setAcct(null); return; }
@@ -136,9 +140,42 @@ export default function AppShell({ admin, me, onMe, children }: {
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
-          <span className="ax-chain" title="Network"><i />BNB Chain</span>
+          <div className="ax-net">
+            <button type="button" aria-haspopup="menu" aria-expanded={netMenu} aria-label={`Network: ${net.name}. Change network`} onClick={() => { setNetMenu(!netMenu); setAcctMenu(false); }}>
+              <i style={{ background: net.color }} aria-hidden="true" /><span className="ax-net-name">{net.name}</span><span className="ax-net-short">{net.short}</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {netMenu && (
+              <div className="ax-menu right" role="menu" aria-label="Choose a network">
+                {NETWORKS.map((n) => (
+                  <button key={n.key} type="button" role="menuitemradio" aria-checked={n.key === cs.network}
+                    onClick={() => { setNetMenu(false); setNetwork(n.key).then(() => { if (n.key === "solana" ? !getState().sol : !getState().current) pickWallet({ fresh: true }); }); }}>
+                    <b><i style={{ background: n.color }} aria-hidden="true" />{n.name}{n.key === cs.network ? " ✓" : ""}</b>
+                    <small>{n.key === "solana" ? "Phantom, Solflare, Backpack…" : "MetaMask, Trust, OKX, Binance…"}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
-          {acct ? (
+          {solMode && cs.sol ? (
+            <div className="ax-acct">
+              <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>
+                {cs.sol.wallet.icon ? <img src={cs.sol.wallet.icon} alt="" /> : <i />}
+                {cs.sol.account.address.slice(0, 4)}…{cs.sol.account.address.slice(-4)}
+              </button>
+              {acctMenu && (
+                <div className="ax-menu right" role="menu">
+                  <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{cs.sol.name} · Solana</small></Link>
+                  <button type="button" role="menuitem" onClick={() => { navigator.clipboard?.writeText(cs.sol!.account.address).catch(() => {}); setAcctMenu(false); }}><b>Copy address</b></button>
+                  <button type="button" role="menuitem" onClick={() => { pickWallet({ fresh: true }); setAcctMenu(false); }}><b>Switch wallet</b></button>
+                  <button type="button" role="menuitem" onClick={() => { disconnectSol(); setAcctMenu(false); }}><b>Disconnect</b></button>
+                </div>
+              )}
+            </div>
+          ) : solMode ? (
+            <button type="button" className="ax-connect" onClick={() => pickWallet({ fresh: true })}>Connect<span className="ax-hide-sm">Wallet</span></button>
+          ) : acct ? (
             <div className="ax-acct">
               <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>
                 {(() => { const w = TOP_WALLETS.find((x) => wallet?.name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0])); return w ? <img src={`/wallets/${w.id}.svg`} alt="" /> : wallet?.name === "WalletConnect" ? <img src="/wallets/walletconnect.svg" alt="" /> : <i />; })()}

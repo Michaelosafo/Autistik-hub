@@ -5,6 +5,7 @@
  * AUTISTIK news). The classic layouts (components/Shell.tsx for the website, components/AppShell.tsx for the App) are
  * kept as they are, and people can switch back any time. Phones always use the classic layouts.
  */
+import LogoMark from "@/components/LogoMark";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
@@ -76,8 +77,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
     <div className="nx">
       <aside className="nx-rail" aria-label="Menu">
         <Link href="/" className="nx-brand" aria-label="AUTISTIK Hub: home">
-          <svg width="44" height="22" aria-hidden="true"><use href="#i-inf" /></svg>
-          <b>AUTISTIK</b>
+          <LogoMark size={42} title="AUTISTIK Hub" />
         </Link>
         <nav className="nx-nav">
           {MAIN.filter((i) => !i.members || me).map(link)}

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { TOP_WALLETS, WALLETCONNECT_ID, chooseInjected, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, startDiscovery, subscribe } from "@/lib/connect";
+import { NETWORKS, SOL_APPS, TOP_WALLETS, WALLETCONNECT_ID, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
 
@@ -47,8 +47,24 @@ export default function WalletPicker() {
     return out;
   }, [s.detected, last, mobile]);
 
+  // Solana: the Solana wallets on this device, or the apps to get one.
+  const solRows = useMemo<Row[]>(() => {
+    const out: Row[] = s.solFound.map((w) => ({
+      key: "sol-" + w.name, name: w.name, logo: w.icon || null, badge: w.name === last ? "Last used" : "Installed", sub: "Ready on this device", here: true,
+      go: () => { chooseSol(w); },
+    }));
+    for (const a of SOL_APPS) {
+      if (s.solFound.some((w) => w.name.toLowerCase().startsWith(a.name.toLowerCase()))) continue;
+      out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.id === "phantom" ? "/wallets/phantom.svg" : null, sub: mobile ? "Opens this site in the app" : "Get the app",
+        go: () => { if (mobile) location.href = a.dapp(location.href); else window.open(a.install, "_blank", "noopener,noreferrer"); } });
+    }
+    return out;
+  }, [s.solFound, last, mobile]);
+
   if (!s.open) return null;
-  const shown = q ? rows.filter((r) => r.name.toLowerCase().includes(q.toLowerCase())) : rows;
+  const solMode = s.network === "solana";
+  const pool = solMode ? solRows : rows;
+  const shown = q ? pool.filter((r) => r.name.toLowerCase().includes(q.toLowerCase())) : pool;
   const installed = shown.filter((r) => r.here);
   const others = shown.filter((r) => !r.here);
 
@@ -66,28 +82,38 @@ export default function WalletPicker() {
       <div className="wp" role="dialog" aria-modal="true" aria-label="Connect a wallet" onClick={(e) => e.stopPropagation()}>
         <div className="wp-main">
           <div className="wp-head">
-            <div><b>Connect a wallet</b><small>Pick the wallet you use</small></div>
+            <div><b>Connect a wallet</b><small>Pick your network, then your wallet</small></div>
             <button type="button" className="wp-x" onClick={closePicker} aria-label="Close">×</button>
+          </div>
+          <div className="wp-nets" role="radiogroup" aria-label="Network">
+            {NETWORKS.map((n) => (
+              <button key={n.key} type="button" role="radio" aria-checked={s.network === n.key} className={"wp-net" + (s.network === n.key ? " on" : "")}
+                onClick={() => setNetwork(n.key)} disabled={!!s.busy}>
+                <i style={{ background: n.color }} aria-hidden="true" />{n.name}
+              </button>
+            ))}
           </div>
           <input className="wp-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search wallets" aria-label="Search wallets" autoComplete="off" spellCheck={false} />
           <div className="wp-list">
             {installed.length > 0 && <div className="wp-label">On this device</div>}
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
+            {!solMode && <>
             <div className="wp-label">Any wallet</div>
             <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => chooseWalletConnect()}>
             <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
-            <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : "300+ wallets · QR code or open your app") : "Coming soon"}</small></span>
+            <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : `300+ wallets on ${netOf(s.network).name} · QR code or open your app`) : "Coming soon"}</small></span>
             <i className="wp-chev" aria-hidden="true" />
           </button>
-            {others.length > 0 && <div className="wp-label">Popular</div>}
+            </>}
+            {others.length > 0 && <div className="wp-label">{solMode ? "Get a Solana wallet" : "Popular"}</div>}
             {others.map((r) => <RowBtn key={r.key} r={r} />)}
-            {!shown.length && <div className="wp-empty">No wallet called &ldquo;{q}&rdquo;. Try WalletConnect below: it works with 300+ wallets.</div>}
+            {!shown.length && <div className="wp-empty">{solMode ? <>No Solana wallet called &ldquo;{q}&rdquo;.</> : <>No wallet called &ldquo;{q}&rdquo;. Try WalletConnect: it works with 300+ wallets.</>}</div>}
           </div>
           {s.error && <div className="wp-err" role="alert">{s.error}</div>}
-          {mobile && (s.error || last) && (
+          {!solMode && mobile && (s.error || last) && (
             <div className="wp-label" style={{ marginTop: 8 }}>Still not connecting? Open this site inside your wallet app</div>
           )}
-          {mobile && (s.error || last) && TOP_WALLETS.filter((w) => w.dapp).slice(0, 5).map((w) => (
+          {!solMode && mobile && (s.error || last) && TOP_WALLETS.filter((w) => w.dapp).slice(0, 5).map((w) => (
             <a key={w.id} className="wp-row" href={w.dapp!(location.href)}>
               <img src={`/wallets/${w.id}.svg`} alt="" width={40} height={40} loading="lazy" decoding="async" />
               <span className="wp-row-t"><b>{w.name}</b><small>Opens autistik.io in the app&apos;s browser</small></span>
