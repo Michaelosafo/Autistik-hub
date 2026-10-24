@@ -38,7 +38,7 @@ export async function vanityMint(): Promise<Keypair> {
     const row = Array.isArray(data) ? data[0] : null;
     if (row?.seed) {
       const kp = Keypair.fromSeed(Buffer.from(row.seed, "base64"));
-      if (kp.publicKey.toBase58() === row.pubkey) return kp;
+      if (kp.publicKey.toBase58() === row.pubkey && kp.publicKey.toBase58().endsWith(VANITY_SUFFIX)) return kp;
     }
   }
   const found = grind(Number(process.env.LAUNCH_SOLANA_VANITY_GRIND_MS || 120_000));
