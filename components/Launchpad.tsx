@@ -5,7 +5,7 @@ import Link from "next/link";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
 import { SolanaLaunch } from "@/components/SolanaLaunch";
-import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, lockExplain, solLockerProgram, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, solLaunchFee, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, lockExplain, solLockerProgram, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
@@ -312,7 +312,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>Liquidity</th><td>{plan.lock === "burn" ? "LP tokens burned forever" : `LP tokens ${LOCKS[plan.lock].short.toLowerCase()} in the AUTISTIK Solana Locker`}</td></tr>
                 <tr><th>Tax</th><td>No tax</td></tr>
                 <tr><th>Trading</th><td>Opens as soon as the pool exists</td></tr>
-                <tr><th>Fees</th><td>About {SOL_POOL_COST} SOL: Raydium&apos;s pool fee (≈0.15 SOL) plus network fees</td></tr>
+                <tr><th>Fees</th><td>About {+(SOL_POOL_COST + solLaunchFee()).toFixed(3)} SOL: Raydium&apos;s pool fee (≈0.15 SOL), network fees{solLaunchFee() ? <> and the {solLaunchFee()} SOL AUTISTIK launch fee (to marketing)</> : null}</td></tr>
               </tbody></table>
               <div className="notice warn" style={{ fontSize: ".86em" }}>{lockExplain(plan.lock, true)} You sign three times: the token, the pool, then the {plan.lock === "burn" ? "burn" : "lock"}. Token prices can go to zero.</div>
               <label className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "nowrap", fontSize: ".9em" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> <span>{plan.lock === "burn" ? <>I understand the liquidity is burned forever and I can&apos;t take it back.</> : <>I understand the liquidity is {LOCKS[plan.lock].short.toLowerCase()} and nobody, including me, can take it out before then.</>}</span></label>

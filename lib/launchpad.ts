@@ -246,6 +246,22 @@ export const SOL_MAX_SUPPLY = 10n ** 13n;
 export const SOL_POOL_COST = 0.2;
 
 /**
+ * The AUTISTIK marketing wallet on Solana (NEXT_PUBLIC_SOLANA_FEE_WALLET). It receives the Solana launch fee and the
+ * 0.5% fee on Solana swaps made on the Hub. Without it, Solana launches and swaps carry no AUTISTIK fee.
+ */
+export const solFeeWallet = () => {
+  const v = (process.env.NEXT_PUBLIC_SOLANA_FEE_WALLET || process.env.SOLANA_FEE_WALLET || "").trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) ? v : null;
+};
+/** The small fee for launching on Solana, in SOL, paid to the marketing wallet with the token step. */
+export const SOL_LAUNCH_FEE = (() => {
+  const n = Number(process.env.NEXT_PUBLIC_SOLANA_LAUNCH_FEE_SOL || 0.02);
+  return isFinite(n) && n >= 0 && n <= 1 ? n : 0.02;
+})();
+/** The launch fee as it applies right now (0 until the marketing wallet is set). */
+export const solLaunchFee = () => (solFeeWallet() ? SOL_LAUNCH_FEE : 0);
+
+/**
  * The AUTISTIK Solana Locker's program address (programs/autistik-locker), once deployed. Without it Solana launches
  * can only burn their LP tokens; with it they can also lock them for 6 months or 1 year, like on the EVM chains.
  */

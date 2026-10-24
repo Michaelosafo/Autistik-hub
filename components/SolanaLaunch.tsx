@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { parseUnits } from "viem";
 import type { Wallet } from "@wallet-standard/base";
-import { CHAINS, LOCKS, SOL_POOL_COST, type LaunchPlan } from "@/lib/launchpad";
+import { CHAINS, LOCKS, SOL_POOL_COST, solLaunchFee, type LaunchPlan } from "@/lib/launchpad";
 import { reportActivity } from "@/lib/activity-client";
 import { connectSol, signAndSend, solErr, solLaunchApi, solWallets, type SolWallet } from "@/lib/sol-wallet";
 
@@ -87,7 +87,7 @@ export function SolanaLaunch({ plan, agree, onDone }: { plan: LaunchPlan; agree:
       </ol>
       {mint && <small className="muted">Token: <a href={`${c.explorer}/token/${mint.mint}`} target="_blank" rel="noopener noreferrer" className="mono">{short(mint.mint)}</a></small>}
       <button className="btn primary" type="button" disabled={!sw || !agree || busy} onClick={next}>
-        {busy ? "Working…" : step === "token" ? `Launch for ${plan.liquidity} SOL + about ${SOL_POOL_COST} SOL in fees` : `Continue: ${stepName(step, plan).toLowerCase()}`}
+        {busy ? "Working…" : step === "token" ? `Launch for ${plan.liquidity} SOL + about ${+(SOL_POOL_COST + solLaunchFee()).toFixed(3)} SOL in fees` : `Continue: ${stepName(step, plan).toLowerCase()}`}
       </button>
       {msg && <span className="muted" style={{ fontSize: ".88em" }}>{msg}</span>}
     </div>
