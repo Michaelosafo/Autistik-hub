@@ -1,5 +1,5 @@
 /**
- * Where the AUTISTIK Launch Pad lives on each chain, and which version it is (3 = token addresses ending in "aaaaa"). Saved by the team's one-click deploy (checked on-chain)
+ * Where the AUTISTIK Launch Pad lives on each chain, and which version it is (3 = token addresses ending in "aaa"). Saved by the team's one-click deploy (checked on-chain)
  * and read here by pages and API routes. Server only.
  */
 import { getAddress, isAddress } from "viem";
@@ -34,7 +34,7 @@ export async function padOn(chain: ChainKey) {
   return (await padSites())[chain] ?? null;
 }
 
-/** The version of a chain's Launch Pad: 3 gives token addresses ending in "aaaaa", 2 is the one before. */
+/** The version of a chain's Launch Pad: 3 gives token addresses ending in "aaa", 2 is the one before. */
 export async function padVersion(chain: ChainKey) {
   return (await padInfo()).versions[chain] ?? 2;
 }
