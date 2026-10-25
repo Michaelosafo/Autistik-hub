@@ -22,11 +22,14 @@ type Update = { kind: string; id: string; at: string; body?: string; author?: { 
 
 /** Shortcuts at the top of your panel. */
 const ACTIONS = [
-  { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "🚀" },
-  { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "💧" },
-  { href: "/lockers", name: "Lock", note: "Lock LP or team tokens", icon: "🔒" },
-  { href: "/stake", name: "Earn", note: "Stake and rewards", icon: "💰" },
+  { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "📋", color: "#FFD84D" },
+  { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "🚀", color: "#FF6B9A" },
+  { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "💧", color: "#4FD1FF" },
+  { href: "/lockers", name: "Lock", note: "Lock LP or team tokens", icon: "🔒", color: "#B57CFF" },
+  { href: "/stake", name: "Earn", note: "Stake and rewards", icon: "💰", color: "#5BE38F" },
 ];
+type Coin = { chain: string; token: string; name: string; symbol: string; logo: string | null; market: { marketCap: number | null; change24h: number | null } | null };
+const short$ = (n: number | null | undefined) => n == null ? "–" : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
 const BAR = ["#F0B90B", "#B57CFF", "#4FD1FF", "#5BE38F"];
 const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
 const ago = (iso: string) => {
@@ -46,12 +49,14 @@ export default function MePanel({ me, settings }: {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [scan, setScan] = useState("");
+  const [coins, setCoins] = useState<Coin[] | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const [crop, setCrop] = useState<File | null>(null);
   const [view, setView] = useState(false);
 
   useEffect(() => {
     fetch("/api/me/summary").then((r) => r.json()).then(setSum).catch(() => setSum({ signedIn: true }));
+    fetch("/api/board").then((r) => r.json()).then((d) => setCoins(Array.isArray(d?.tokens) ? d.tokens : [])).catch(() => setCoins([]));
     fetch("/api/feed?tab=following").then((r) => r.json()).then((d) => setUpdates((d.items || []).slice(0, 4))).catch(() => setUpdates([]));
   }, []);
 
@@ -93,12 +98,18 @@ export default function MePanel({ me, settings }: {
     if (old && old.startsWith(me.id + "/")) await sb.storage.from("avatars").remove([old]).catch(() => {});
     setPhoto(null); setBusy(false); setMsg("Photo removed."); router.refresh();
   }
+  const q = scan.trim().toLowerCase();
+  const isAddr = /^0x[0-9a-fA-F]{40}$/.test(scan.trim()) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(scan.trim());
+  const found = q && !isAddr ? (coins || []).filter((c) => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q)).slice(0, 5) : [];
   function goScan(e: React.FormEvent) {
     e.preventDefault();
     const v = scan.trim();
-    if (/^0x[0-9a-fA-F]{40}$/.test(v)) router.push(`/analytics/bsc/${v}`);
+    const mine = (coins || []).find((c) => c.token.toLowerCase() === v.toLowerCase());
+    if (mine) router.push(`/launchpad/${mine.chain}/${mine.token}`);
+    else if (/^0x[0-9a-fA-F]{40}$/.test(v)) router.push(`/analytics/bsc/${v}`);
     else if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)) router.push(`/analytics/solana/${v}`);
-    else setMsg("Paste a token address (0x… or a Solana address).");
+    else if (found[0]) router.push(`/launchpad/${found[0].chain}/${found[0].token}`);
+    else setMsg("No coin with that name. Paste a token address to scan it.");
   }
 
   return (
@@ -144,6 +155,24 @@ export default function MePanel({ me, settings }: {
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
 
+      <form className="mp-search" onSubmit={goScan} role="search">
+        <span aria-hidden="true">🔎</span>
+        <input value={scan} onChange={(e) => setScan(e.target.value)} placeholder="Search coins or paste an address" spellCheck={false} aria-label="Search coins or paste a token address" />
+        {scan && <button type="submit" className="mp-search-go">{isAddr ? "Scan" : "Go"}</button>}
+      </form>
+      {(found.length > 0 || (isAddr && scan)) && (
+        <div className="mp-results">
+          {found.map((c) => (
+            <Link key={c.chain + c.token} href={`/launchpad/${c.chain}/${c.token}`} className="mp-coin">
+              {c.logo ? <img src={c.logo} alt="" /> : <span className="mp-coin-l">{c.symbol.slice(0, 2)}</span>}
+              <span className="mp-coin-t"><b>{c.name}</b><small>${c.symbol} · {c.chain}</small></span>
+              <small>{short$(c.market?.marketCap)}</small>
+            </Link>
+          ))}
+          {isAddr && <button type="button" className="mp-coin" onClick={goScan as any}><span className="mp-coin-l">🔎</span><span className="mp-coin-t"><b>Scan this token</b><small className="mono">{scan.trim().slice(0, 6)}…{scan.trim().slice(-4)}</small></span></button>}
+        </div>
+      )}
+
       <section className="mp-sec mp-wallet">
         <div className="mp-sec-h"><b>👛 Wallet</b><Link href="/wallet">Open</Link></div>
         {!sum ? <small className="mp-dim">Loading…</small> : sum.wallet ? (
@@ -160,11 +189,26 @@ export default function MePanel({ me, settings }: {
         ) : <small className="mp-dim">No wallet yet. <Link href="/wallet">Set one up</Link>.</small>}
       </section>
 
-      <nav className="mp-links" aria-label="Launch and earn">
+      <nav className="mp-links" aria-label="Create and earn">
+        <small className="mp-cap">Create &amp; earn</small>
         {ACTIONS.map((a) => (
-          <Link key={a.href} href={a.href} className="mp-link"><span aria-hidden="true">{a.icon}</span><b>{a.name}</b><small>{a.note}</small><i aria-hidden="true">›</i></Link>
+          <Link key={a.href} href={a.href} className="mp-link" style={{ ["--ic" as any]: a.color }}><span className="mp-ic" aria-hidden="true">{a.icon}</span><span className="mp-link-t"><b>{a.name}</b><small>{a.note}</small></span><i aria-hidden="true">›</i></Link>
         ))}
       </nav>
+
+      {coins && coins.length > 0 && (
+        <section className="mp-sec mp-live">
+          <div className="mp-sec-h"><b><i className="mp-pulse" aria-hidden="true" />Live on the Board</b><Link href="/board">All</Link></div>
+          {[...coins].sort((a, b) => (b.market?.marketCap ?? 0) - (a.market?.marketCap ?? 0)).slice(0, 3).map((c, i) => (
+            <Link key={c.chain + c.token} href={`/launchpad/${c.chain}/${c.token}`} className="mp-coin">
+              <span className="mp-rank">#{i + 1}</span>
+              {c.logo ? <img src={c.logo} alt="" /> : <span className="mp-coin-l">{c.symbol.slice(0, 2)}</span>}
+              <span className="mp-coin-t"><b>{c.name}</b><small>${c.symbol} · MC {short$(c.market?.marketCap)}</small></span>
+              {c.market?.change24h != null && <small className={c.market.change24h >= 0 ? "mp-up-c" : "mp-down-c"}>{c.market.change24h >= 0 ? "▲" : "▼"}{Math.abs(c.market.change24h).toFixed(0)}%</small>}
+            </Link>
+          ))}
+        </section>
+      )}
 
       <section className="mp-sec">
         <div className="mp-sec-h"><b>🔔 Updates from people you follow</b><Link href="/members">All</Link></div>
@@ -178,13 +222,6 @@ export default function MePanel({ me, settings }: {
         ))}
       </section>
 
-      <section className="mp-sec">
-        <div className="mp-sec-h"><b>🔎 Token scanner</b><Link href="/analytics">Open</Link></div>
-        <form className="mp-scan" onSubmit={goScan}>
-          <input value={scan} onChange={(e) => setScan(e.target.value)} placeholder="Paste a token address" spellCheck={false} aria-label="Token address to scan" />
-          <button type="submit" className="btn small primary">Scan</button>
-        </form>
-      </section>
 
       <section className="mp-sec">
         <div className="mp-sec-h"><b>🚀 My launches &amp; locks</b><Link href="/lockers">Lockers</Link></div>
