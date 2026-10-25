@@ -3,7 +3,6 @@ import { TOKEN_ADDRESS } from "@/lib/groups";
 import { buyLink } from "@/lib/listings";
 import TokenLogo from "@/components/TokenLogo";
 import AppMe from "@/components/AppMe";
-import FeaturedToken from "@/components/FeaturedToken";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { getBoard, trending, type BoardToken } from "@/lib/board";
 import { CHAINS } from "@/lib/launchpad";
@@ -60,7 +59,12 @@ export default async function AppHome() {
   const top = trending(board).slice(0, 5);
   return (
     <div className="ah">
-      <FeaturedToken />
+      {/* No single featured coin here: every coin is on the Board. */}
+      <Link href="/board" className="ah-board">
+        <span aria-hidden="true">📋</span>
+        <span><b>The Board</b><small>Every coin launched on AUTISTIK, live, ranked as it trades{board.length ? ` · ${board.length} coin${board.length === 1 ? "" : "s"}` : ""}</small></span>
+        <i aria-hidden="true">Open →</i>
+      </Link>
       <section className="ah-hero" aria-label="Your account">
         <AppMe />
         <nav className="ah-actions" aria-label="Quick actions">
