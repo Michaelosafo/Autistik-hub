@@ -25,11 +25,12 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   // Solana addresses are case-sensitive base58; EVM ones get their checksum.
   const token = sol ? params.token : getAddress(params.token);
   const sb = supabaseServer();
-  const [{ data: launch }, user, board, access] = await Promise.all([
+  const [{ data: launch }, user, board, access, { data: logoRow }] = await Promise.all([
     sb.from("launches").select("*").eq("chain", c.key).eq("token", token).maybeSingle(),
     currentUser(),
     getBoard(60),
     launchAccess(),
+    sb.from("token_logos").select("url").eq("chain", c.key).eq("token", token).maybeSingle(),
   ]);
   if (!launch) notFound();
 
@@ -53,7 +54,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
       <Link href="/launchpad" className="muted" style={{ fontSize: ".9em" }}>← Trending</Link>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <div className="row" style={{ gap: 14 }}>
-          <TokenLogo src={m?.imageUrl} symbol={launch.symbol} big />
+          <TokenLogo src={logoRow?.url || m?.imageUrl} symbol={launch.symbol} big />
           <div className="page-head" style={{ gap: 2 }}>
             <div className="label">{c.name} · {c.dex}{promotedUntil && <> · <span className="badge">Promoted</span></>}</div>
             <h1 style={{ margin: 0 }}>{launch.name} <span className="muted">${launch.symbol}</span></h1>

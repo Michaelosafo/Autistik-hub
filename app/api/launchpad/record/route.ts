@@ -1,4 +1,5 @@
 import { rateLimit } from "@/lib/ratelimit";
+import { saveLogo } from "@/lib/launch-names";
 import { logActivity } from "@/lib/activity";
 import { createPublicClient, getAddress, http, parseEventLogs } from "viem";
 import { json } from "@/lib/ai";
@@ -78,7 +79,8 @@ export async function POST(req: Request) {
     pad,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
-  if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
+  if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your token launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on-chain." : "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
+  await saveLogo(chain.key, row.token, body?.logo, user?.id ?? null).catch(() => {});
   // Analytics follows every token launched here: its top wallets and the creator as the dev.
   if (isAChain(chain.key)) await scanToken(chain.key, row.token, { dev: row.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chain.key}/${row.token}`);
@@ -124,7 +126,7 @@ async function recordSolana(body: any) {
     supply: v.supply, tx_hash: sig, lp_lock: lpLock, lp_unlock_at: lpUnlockAt, user_id: owner,
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
-  if (error) return json({ error: "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
+  if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your token launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on-chain." : "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
   if (isAChain("solana")) await scanToken("solana", mint, { dev: v.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Launched ${row.symbol || mint} on Solana`, `/launchpad/solana/${mint}`);
   return json({ launch: row });
