@@ -3184,3 +3184,23 @@ html[data-calm="on"] .mp-pulse{animation:none}
 .mp-link-t{flex:1;min-width:0;display:flex;flex-direction:column}
 .mp-link-t small{flex:none}
 .mp-link:hover .mp-ic{background:color-mix(in srgb,var(--ic) 32%,transparent)}
+
+/* ---------- Desktop App bar, cleaner: Board first, one-tap names, icon menus, Create button ---------- */
+.ax-top{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:12px;color:#B8ADD2;font-weight:700;text-decoration:none;white-space:nowrap}
+.ax-top svg{width:16px;height:16px;opacity:.85}
+.ax-top:hover,.ax-top[aria-expanded=true]{background:#27262C;color:#F4EEFF}
+.ax-top.on{background:linear-gradient(135deg,rgba(240,185,11,.22),rgba(240,185,11,.08));color:#F0B90B}
+.ax-top:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}
+.ax-menu{min-width:300px;padding:8px}
+.ax-menu-tip{display:block;padding:4px 10px 6px;font-size:.7em!important;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#8B879C!important}
+.ax-menu .ax-mi{flex-direction:row!important;align-items:center;gap:12px!important}
+.ax-menu .ax-mi > span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.ax-menu .ax-mi .ax-ic{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:rgba(240,185,11,.1);color:#F0B90B}
+.ax-menu .ax-mi .ax-ic svg{width:18px;height:18px}
+.ax-menu .ax-mi[aria-current=page] .ax-ic{background:rgba(240,185,11,.22)}
+.ax-create{display:flex;align-items:center;padding:9px 14px;border-radius:12px;font-weight:900;font-size:.88em;text-decoration:none;color:#191326;white-space:nowrap;
+  background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);box-shadow:0 4px 14px rgba(240,185,11,.25)}
+.ax-create:hover{filter:brightness(1.06)}
+.ax-create:focus-visible{outline:3px solid #fff}
+@media (max-width:1100px){ .ax-top svg{display:none} .ax-top{padding:8px 10px} }
+@media (max-width:860px){ .ax-create{display:none} }

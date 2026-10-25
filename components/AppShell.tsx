@@ -16,30 +16,31 @@ export const APP_PATHS = ["/app", "/board", "/swap", "/wallet", "/stake", "/rewa
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string; icon?: string };
-const MENU: { name: string; match: string[]; items: Item[] }[] = [
-  // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
-  { name: "Wallet", match: ["/wallet", "/arena", "/analytics", "/pro"], items: [
-    { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade", icon: "i-wallet" },
-    { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match", icon: "i-ball" },
-    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
-    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
+const MENU: { name: string; icon: string; tip: string; match: string[]; items: Item[] }[] = [
+  // The Board first: every coin launched here, and everything to make one (create, liquidity, trending).
+  { name: "Board", icon: "i-fire", tip: "Coins launched on AUTISTIK, live", match: ["/board", "/launchpad", "/momentum", "/liquidity"], items: [
+    { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
+    { href: "/launchpad/new", name: "Create a coin", note: "Pick a network, fill 5 steps, sign once", icon: "i-rocket" },
+    { href: "/liquidity", name: "Add liquidity", note: "Paste your token address: add to its pool or create one", icon: "i-swap" },
+    { href: "/launchpad", name: "Trending", note: "What people are buying", icon: "i-trend" },
+    { href: "/momentum", name: "Momentum", note: "New coins picking up speed", icon: "i-bolt" },
   ] },
-  { name: "Trade", match: ["/swap", "/perps", "/trade"], items: [
+  { name: "Trade", icon: "i-swap", tip: "Swap any token", match: ["/swap", "/perps", "/trade"], items: [
     { href: "/swap", name: "Swap", note: "Trade any token at the best price, on any network", icon: "i-swap" },
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
-  { name: "Earn", match: ["/stake", "/rewards"], items: [
+  // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
+  { name: "Wallet", icon: "i-wallet", tip: "Your coins", match: ["/wallet", "/arena", "/analytics", "/pro"], items: [
+    { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade", icon: "i-wallet" },
+    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
+    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
+    { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match", icon: "i-ball" },
+  ] },
+  { name: "Earn", icon: "i-rew", tip: "Stake and rewards", match: ["/stake", "/rewards"], items: [
     { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
     { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops", icon: "i-gift" },
   ] },
-  { name: "Launch", match: ["/launchpad", "/momentum", "/liquidity", "/board"], items: [
-    { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
-    { href: "/launchpad/new", name: "Launch a token", note: "Liquidity locked, no code", icon: "i-rocket" },
-    { href: "/liquidity", name: "Add liquidity", note: "Paste your token address: add to its pool or create one", icon: "i-swap" },
-    { href: "/launchpad", name: "Trending", note: "What people are buying", icon: "i-fire" },
-    { href: "/momentum", name: "Momentum", note: "New coins picking up speed", icon: "i-bolt" },
-  ] },
-  { name: "Lock", match: ["/lockers"], items: [
+  { name: "Lock", icon: "i-lock", tip: "Lock liquidity or tokens", match: ["/lockers"], items: [
     { href: "/lockers", name: "Lockers", note: "Lock liquidity or team tokens", icon: "i-lock" },
   ] },
 ];
@@ -130,17 +131,28 @@ export default function AppShell({ admin, me, onMe, children }: {
         <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
-            <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)}>
-              <button type="button" className={on(m.match) ? "on" : ""} aria-expanded={open === m.name} onClick={() => setOpen(m.name)}>{m.name}</button>
+            <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)} onFocus={() => setOpen(m.name)}
+              onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(null); }}>
+              {/* The name opens its main page in one tap; hovering (or tabbing) shows everything inside. */}
+              <Link href={m.items[0].href} className={"ax-top" + (on(m.match) ? " on" : "")} aria-haspopup="menu" aria-expanded={open === m.name} title={m.tip}>
+                <svg aria-hidden="true"><use href={"#" + m.icon} /></svg>{m.name}
+              </Link>
               {open === m.name && (
                 <div className="ax-menu" role="menu">
-                  {m.items.map((i) => <Link key={i.href} role="menuitem" href={i.href} aria-current={path === i.href ? "page" : undefined}><b>{i.name}</b>{i.note && <small>{i.note}</small>}</Link>)}
+                  <small className="ax-menu-tip">{m.tip}</small>
+                  {m.items.map((i) => (
+                    <Link key={i.href} role="menuitem" href={i.href} className="ax-mi" aria-current={path === i.href ? "page" : undefined}>
+                      <i className="ax-ic"><svg aria-hidden="true"><use href={"#" + (i.icon || "i-grid")} /></svg></i>
+                      <span><b>{i.name}</b>{i.note && <small>{i.note}</small>}</span>
+                    </Link>
+                  ))}
                 </div>
               )}
             </div>
           ))}
         </nav>
         <div className="ax-right">
+          <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">＋ Create</Link>
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
