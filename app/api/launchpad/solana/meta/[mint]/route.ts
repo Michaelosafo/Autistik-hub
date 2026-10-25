@@ -19,6 +19,6 @@ export async function GET(_req: Request, { params }: { params: { mint: string } 
     name: meta.name, symbol: meta.symbol,
     description: `${meta.name} ($${meta.symbol}), launched on the AUTISTIK Launch Pad with its liquidity burned.`,
     external_url: l ? `${site}/launchpad/solana/${params.mint}` : site,
-    ...(logo?.url ? { image: logo.url, properties: { files: [{ uri: logo.url, type: "image/webp" }], category: "image" } } : {}),
+    ...(logo?.url ? (() => { const img = logo.url.startsWith("/") ? site + logo.url : logo.url; return { image: img, properties: { files: [{ uri: img, type: "image/webp" }], category: "image" } }; })() : {}),
   }, { headers: { "cache-control": "public, max-age=300" } });
 }
