@@ -1,4 +1,5 @@
 import { rateLimit } from "@/lib/ratelimit";
+import { namesTaken, takenError } from "@/lib/launch-names";
 import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http, keccak256, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { json } from "@/lib/ai";
@@ -40,6 +41,11 @@ export async function POST(req: Request) {
   if (!chain || !pad) return json({ error: "That chain isn't open for launches." }, 400);
   if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return json({ error: "That isn't a wallet address." }, 400);
   const creator = getAddress(wallet);
+  // Each name and ticker launches only once here.
+  if (body?.name || body?.symbol) {
+    const t = takenError(await namesTaken(String(body.name || ""), String(body.symbol || "")));
+    if (t) return json({ error: t }, 409);
+  }
 
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
   // Launch Pad v3: the salt that gives this launch a token address ending in "aaaaa" (taken only when it's needed).

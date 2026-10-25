@@ -3,6 +3,8 @@ import { pickWallet } from "@/lib/connect";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import NetIcon from "@/components/connect/NetIcon";
+import PhotoCrop from "@/components/PhotoCrop";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { NETWORKS, type Net } from "@/lib/connect";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
@@ -163,7 +165,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
 
       // The Hub checks this wallet holds $20+ of AUTISTIK on BNB Chain and gives a 5-minute, one-use permit the contract checks.
       setStatus(admin ? "Getting your admin launch permit and your token address…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
-      const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, wallet: account }) });
+      const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, wallet: account, name: plan.name, symbol: plan.symbol }) });
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); say(permit.error || ""); return; }
 
@@ -196,7 +198,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
       if (!ev) { setStatus("Launched, but we couldn't read the result. Check your wallet's activity."); return; }
       const token = getAddress(ev.args.token), pair = getAddress(ev.args.pair);
 
-      const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, txHash: hash }) });
+      const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, txHash: hash, logo: plan.logo }) });
       const data = await res.json().catch(() => ({}));
       setDone({ token, pair, hash, listed: res.ok });
       setStatus("");
@@ -371,8 +373,35 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
   const [f, setF] = useState({
     chain: (live[0]?.key ?? "bsc") as LaunchPlan["chain"], name: "", symbol: "", supply: "1000000000", creatorPercent: "5",
     liquidity: "", lock: "burn" as LiquidityLock, description: "", website: "", x: "", telegram: "",
-    buyTax: "0", sellTax: "0", taxWallet: "", wl1: "", wl2: "", wl3: "", devBuy: "0",
+    buyTax: "0", sellTax: "0", taxWallet: "", wl1: "", wl2: "", wl3: "", devBuy: "0", logo: "",
   });
+  // The token's picture: picked, fitted into a square, uploaded to the Hub's token-logos storage.
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoBusy, setLogoBusy] = useState("");
+  const logoInput = useRef<HTMLInputElement>(null);
+  async function uploadLogo(blob: Blob) {
+    setLogoFile(null); setLogoBusy("Uploading…");
+    try {
+      const sb = supabaseBrowser();
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) throw new Error("Sign in to add a picture.");
+      const path = `${user.id}/logo-${Date.now()}.webp`;
+      const { error } = await sb.storage.from("token-logos").upload(path, blob, { contentType: "image/webp" });
+      if (error) throw new Error(error.message);
+      setF((x) => ({ ...x, logo: sb.storage.from("token-logos").getPublicUrl(path).data.publicUrl }));
+      setLogoBusy("");
+    } catch (e: any) { setLogoBusy(e?.message?.includes("Sign in") ? e.message : "Couldn't upload that picture. Try another one."); }
+  }
+  // Each name and ticker launches only once here: checked while typing.
+  const [taken, setTaken] = useState<{ name: boolean; symbol: boolean } | null>(null);
+  useEffect(() => {
+    setTaken(null);
+    if (!f.name.trim() && !f.symbol.trim()) return;
+    const t = setTimeout(() => {
+      fetch(`/api/launchpad/name-check?name=${encodeURIComponent(f.name)}&symbol=${encodeURIComponent(f.symbol)}`).then((r) => r.json()).then(setTaken).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [f.name, f.symbol]);
   const [err, setErr] = useState("");
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const coin = CHAINS[f.chain]?.coin ?? "BNB";
@@ -382,6 +411,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
     e.preventDefault();
     const r = checkPlan({ ...f, creatorPercent: Number(f.creatorPercent), buyTax: Number(f.buyTax || 0), sellTax: Number(f.sellTax || 0), whitelist: [f.wl1, f.wl2, f.wl3] }, pads);
     if ("error" in r) { setErr(r.error); return; }
+    if (taken?.name || taken?.symbol) { setErr(taken.name ? "That name was already launched here. Pick another name." : "That ticker was already launched here. Pick another ticker."); return; }
     setErr("");
     onPlan(r.plan);
     setTimeout(() => document.getElementById("launch-plan")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
@@ -426,8 +456,19 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
         <section className="ql-sec">
           <h4><i>2</i>Token</h4>
           <div className="form-grid">
-            <label className="field"><span>Token name</span><input value={f.name} onChange={set("name")} maxLength={32} placeholder="e.g. Calm Otter" required /></label>
-            <label className="field"><span>Ticker</span><input value={f.symbol} onChange={(e) => setF({ ...f, symbol: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} maxLength={13} placeholder="e.g. OTTER" required /></label>
+            <div className="ql-pic" style={{ gridColumn: "1 / -1" }}>
+              <button type="button" className="ql-pic-btn" onClick={() => logoInput.current?.click()} aria-label={f.logo ? "Change the token picture" : "Add a token picture"}>
+                {f.logo ? <img src={f.logo} alt="" /> : <span>🖼️<small>Add picture</small></span>}
+              </button>
+              <div><b>Token picture</b><small className="muted">Square works best (PNG, JPG, WebP or GIF). It shows on the Board, the token page{sol ? " and in Solana wallets" : ""}.</small>
+                {logoBusy && <small className="muted">{logoBusy}</small>}
+                {f.logo && <button type="button" className="linkish" style={{ fontSize: ".82em" }} onClick={() => setF({ ...f, logo: "" })}>Remove</button>}
+              </div>
+              <input ref={logoInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const x = e.target.files?.[0]; if (x) setLogoFile(x); e.target.value = ""; }} />
+              {logoFile && <PhotoCrop file={logoFile} onCancel={() => setLogoFile(null)} onDone={uploadLogo} />}
+            </div>
+            <label className="field"><span>Token name {taken?.name ? <b className="ql-bad">already launched</b> : f.name.trim() && taken ? <b className="ql-good">✓ available</b> : null}</span><input value={f.name} onChange={set("name")} maxLength={32} placeholder="e.g. Calm Otter" required aria-invalid={!!taken?.name} /></label>
+            <label className="field"><span>Ticker {taken?.symbol ? <b className="ql-bad">already launched</b> : f.symbol.trim() && taken ? <b className="ql-good">✓ available</b> : null}</span><input value={f.symbol} onChange={(e) => setF({ ...f, symbol: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} maxLength={13} placeholder="e.g. OTTER" required aria-invalid={!!taken?.symbol} /></label>
             <label className="field" style={{ gridColumn: "1 / -1" }}><span>One-line description <small className="muted">optional</small></span><input value={f.description} onChange={set("description")} maxLength={500} placeholder="What makes it special?" /></label>
           </div>
         </section>
@@ -497,7 +538,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
       <aside className="ql-preview" aria-label="Live preview">
         <div className="ql-card">
           <div className="ql-card-top">
-            <span className="ql-logo" aria-hidden="true">{(f.symbol || "?").slice(0, 3)}</span>
+            {f.logo ? <img className="ql-logo" src={f.logo} alt="" /> : <span className="ql-logo" aria-hidden="true">{(f.symbol || "?").slice(0, 3)}</span>}
             <div><b>{f.name || "Your token"}</b><small>${f.symbol || "TICKER"} · {ch?.name}</small></div>
             <span className="ql-live">Preview</span>
           </div>

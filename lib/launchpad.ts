@@ -328,7 +328,12 @@ export type LaunchPlan = {
   website: string;
   x: string;
   telegram: string;
+  /** The token's picture, uploaded to the Hub's token-logos storage. */
+  logo?: string;
 };
+
+/** Token pictures can only come from the Hub's own storage (the member's folder is checked where it's saved). */
+export const LOGO_RE = /^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\/token-logos\/[0-9a-f-]{36}\/[A-Za-z0-9._-]+$/;
 
 /** The creator's free share plus their first buy can be at most 30% of the supply. */
 export const MAX_CREATOR_PERCENT = 30;
@@ -413,6 +418,7 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined, pads: Pads)
       website: link(p.website),
       x: link(p.x),
       telegram: link(p.telegram),
+      ...(typeof p.logo === "string" && LOGO_RE.test(p.logo) ? { logo: p.logo } : {}),
     },
   };
 }

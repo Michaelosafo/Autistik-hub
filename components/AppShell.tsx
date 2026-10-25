@@ -12,7 +12,7 @@ import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/app", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
+export const APP_PATHS = ["/app", "/board", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string; icon?: string };
@@ -32,7 +32,8 @@ const MENU: { name: string; match: string[]; items: Item[] }[] = [
     { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
     { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops", icon: "i-gift" },
   ] },
-  { name: "Launch", match: ["/launchpad", "/momentum", "/liquidity"], items: [
+  { name: "Launch", match: ["/launchpad", "/momentum", "/liquidity", "/board"], items: [
+    { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
     { href: "/launchpad/new", name: "Launch a token", note: "Liquidity locked, no code", icon: "i-rocket" },
     { href: "/liquidity", name: "Add liquidity", note: "Paste your token address: add to its pool or create one", icon: "i-swap" },
     { href: "/launchpad", name: "Trending", note: "What people are buying", icon: "i-fire" },
@@ -64,7 +65,7 @@ const MORE: { name: string; items: Item[] }[] = [
 // Phone bar: Swap sits in the middle as the big button; everything else is behind the ☰ Menu button.
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
   { href: "/", name: "Home", icon: "i-home", match: [] },
-  { href: "/launchpad/new", name: "Launch", icon: "i-rocket", match: ["/launchpad", "/momentum", "/liquidity"] },
+  { href: "/board", name: "Board", icon: "i-rocket", match: ["/board", "/launchpad", "/momentum", "/liquidity"] },
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },

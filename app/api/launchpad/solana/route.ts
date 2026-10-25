@@ -1,4 +1,5 @@
 import { rateLimit } from "@/lib/ratelimit";
+import { namesTaken, saveLogo, takenError } from "@/lib/launch-names";
 import { parseUnits } from "viem";
 import { json } from "@/lib/ai";
 import { launchAccess } from "@/lib/admin";
@@ -30,10 +31,15 @@ export async function POST(req: Request) {
   try {
     switch (action) {
       case "mint": {
-        if (!(await currentUser())) return json({ error: "Please sign in first." }, 401);
+        const me = await currentUser();
+        if (!me) return json({ error: "Please sign in first." }, 401);
         const r = checkPlan({ ...b.plan, chain: "solana" }, {});
         if ("error" in r) return json({ error: r.error }, 400);
-        return json(await buildMint(owner, r.plan));
+        const taken = takenError(await namesTaken(r.plan.name, r.plan.symbol));
+        if (taken) return json({ error: taken }, 409);
+        const built = await buildMint(owner, r.plan);
+        await saveLogo("solana", built.mint, r.plan.logo, me.id).catch(() => {});
+        return json(built);
       }
       case "pool": {
         const r = checkPlan({ ...b.plan, chain: "solana" }, {});

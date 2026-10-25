@@ -15,6 +15,8 @@ export type BoardToken = {
   /** When the paid trending slot ends, if one is running. */
   promotedUntil: string | null;
   market: Market | null;
+  /** The picture chosen at launch (falls back to DexScreener's). */
+  logo: string | null;
 };
 
 const key = (chain: string, token: string) => `${chain}:${token.toLowerCase()}`;
@@ -46,7 +48,11 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
   const rows = [...(launches || []), ...(older || []).filter((l: any) => !seen.has(key(l.chain, l.token)) && until.has(key(l.chain, l.token)))]
     .filter((l: any) => CHAINS[l.chain as ChainKey]);
   const watchers = new Map<string, number>((counts || []).map((c: any) => [key(c.chain, c.token), c.watchers as number]));
-  const markets = await getMarkets(rows.map((r: any) => ({ chain: r.chain, token: r.token })));
+  const [markets, { data: logos }] = await Promise.all([
+    getMarkets(rows.map((r: any) => ({ chain: r.chain, token: r.token }))),
+    rows.length ? sb.from("token_logos").select("chain,token,url").in("token", rows.map((r: any) => r.token)) : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const logoOf = new Map<string, string>((logos || []).map((l: any) => [key(l.chain, l.token), l.url]));
   return rows.map((r: any) => ({
     // Only the public fields: rows are read with * so the board keeps working before new columns exist.
     chain: r.chain, token: r.token, pair: r.pair, name: r.name, symbol: r.symbol, created_at: r.created_at,
@@ -54,6 +60,7 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
     watchers: watchers.get(key(r.chain, r.token)) ?? 0,
     promotedUntil: until.get(key(r.chain, r.token)) ?? null,
     market: markets[r.token.toLowerCase()] ?? null,
+    logo: logoOf.get(key(r.chain, r.token)) ?? markets[r.token.toLowerCase()]?.imageUrl ?? null,
   }));
 }
 
