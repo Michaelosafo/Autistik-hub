@@ -1,0 +1,30 @@
+/** Languages the site can switch to (automatic translation, cached for everyone). English is the original. */
+export const LANGS: { code: string; name: string; native: string }[] = [
+  { code: "en", name: "English", native: "English" },
+  { code: "es", name: "Spanish", native: "Español" },
+  { code: "fr", name: "French", native: "Français" },
+  { code: "pt", name: "Portuguese", native: "Português" },
+  { code: "de", name: "German", native: "Deutsch" },
+  { code: "it", name: "Italian", native: "Italiano" },
+  { code: "nl", name: "Dutch", native: "Nederlands" },
+  { code: "pl", name: "Polish", native: "Polski" },
+  { code: "ru", name: "Russian", native: "Русский" },
+  { code: "uk", name: "Ukrainian", native: "Українська" },
+  { code: "tr", name: "Turkish", native: "Türkçe" },
+  { code: "ar", name: "Arabic", native: "العربية" },
+  { code: "hi", name: "Hindi", native: "हिन्दी" },
+  { code: "bn", name: "Bengali", native: "বাংলা" },
+  { code: "zh", name: "Chinese (Simplified)", native: "中文" },
+  { code: "ja", name: "Japanese", native: "日本語" },
+  { code: "ko", name: "Korean", native: "한국어" },
+  { code: "id", name: "Indonesian", native: "Bahasa Indonesia" },
+  { code: "vi", name: "Vietnamese", native: "Tiếng Việt" },
+  { code: "th", name: "Thai", native: "ไทย" },
+  { code: "fil", name: "Filipino", native: "Filipino" },
+  { code: "sw", name: "Swahili", native: "Kiswahili" },
+  { code: "ha", name: "Hausa", native: "Hausa" },
+  { code: "yo", name: "Yoruba", native: "Yorùbá" },
+  { code: "ak", name: "Twi (Akan)", native: "Twi" },
+];
+export const LANG_CODES = new Set(LANGS.map((l) => l.code));
+export const langName = (code: string) => LANGS.find((l) => l.code === code)?.name || code;
