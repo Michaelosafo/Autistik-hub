@@ -3748,3 +3748,14 @@ img.bd-logo{background:none!important}
 .bd-buy:focus-visible{outline:3px solid #fff;outline-offset:2px}
 .bd-buy-king{position:static;align-self:flex-start;display:inline-flex;padding:10px 18px;font-size:.9em}
 .bd-cell>.bd-card{padding-bottom:46px}
+
+/* Desktop: Home stands on its own, clearly apart from the menu (Board, Trade, Wallet, Earn, Lock) */
+@media (min-width:900px){
+  .ax-home{position:relative;margin:0 22px 0 8px;padding:9px 16px;border-radius:12px;font-size:.92em;font-weight:800;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .ax-home::after{content:"";position:absolute;right:-12px;top:50%;width:1px;height:26px;transform:translateY(-50%);background:var(--line)}
+  .ax-home:hover{border-color:#F0B90B;color:var(--ink)}
+  .ax-nav{gap:6px}
+  .ax-top{border:1px solid transparent}
+  .ax-top:hover{border-color:var(--line)}
+}
