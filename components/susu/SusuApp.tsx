@@ -150,6 +150,29 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
         <small className="muted">Wallet <span className="mono">{short(me)}</span> · <button type="button" className="linkish" onClick={connect} disabled={busy}>Switch</button></small>
       )}
 
+      {me && rows && rows.length > 0 && (() => {
+        const active = rows.filter((r) => !r.withdrawn);
+        const sum = (list: Row[]) => list.reduce((x, r) => x + r.saved, 0n);
+        const days = rows.reduce((x, r) => x + r.paidDays, 0);
+        const next = active.length ? Math.min(...active.map((r) => r.unlocksAt)) : null;
+        const goal = active.reduce((x, r) => x + r.daily * BigInt(r.totalDays), 0n);
+        return (
+          <section className="card susu-me" aria-label="Your savings">
+            <div className="susu-me-main">
+              <small>Saving right now</small>
+              <b className="susu-total">${money(sum(active))}</b>
+              {goal > 0n && <><div className="susu-bar"><i style={{ width: `${Math.min(100, Number((sum(active) * 100n) / goal))}%` }} /></div><small>of ${money(goal)} goal{active.length > 1 ? ` across ${active.length} plans` : ""}</small></>}
+            </div>
+            <ul>
+              <li><span>Saved all time</span><b>${money(sum(rows))}</b></li>
+              <li><span>Already paid back to you</span><b>${money(sum(rows.filter((r) => r.withdrawn)))}</b></li>
+              <li><span>Days you&apos;ve saved</span><b>{days}</b></li>
+              <li><span>Next payout</span><b>{next ? date(next) : "–"}</b></li>
+            </ul>
+          </section>
+        );
+      })()}
+
       {dueToday.length > 0 && (
         <div className="notice warn susu-due" role="status">
           <b>You haven&apos;t saved today.</b> {dueToday.map((r) => `${money(r.daily * BigInt(r.due))} ${r.symbol}`).join(" + ")} due. Keep your streak going!
