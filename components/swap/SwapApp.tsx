@@ -7,6 +7,7 @@ import MarketForm from "@/components/wallet/MarketForm";
 import { api, store, type Holding } from "@/components/wallet/util";
 import { XCHAINS, XCHAIN_BY_KEY, XCHAIN_LIST, isXNative, xNative, type XChain, type XToken } from "@/lib/bridge-chains";
 import BridgeForm from "./BridgeForm";
+import { pickWallet, setNetwork } from "@/lib/connect";
 import { SwapPanels, type CardIO, type Side } from "./SwapCard";
 
 /** What each network's swap opens with: the chain's coin -> AUTISTIK (BNB Chain) or USDC. */
@@ -35,7 +36,7 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   const [logos, setLogos] = useState<Record<number, string>>({});
   useEffect(() => { api<{ logos: Record<number, string> }>("x-chains", {}).then((d) => setLogos(d.logos)).catch(() => {}); }, []);
   const local = fromNet.id === toNet.id && fromNet.wchain ? fromNet.wchain : null;
-  const solFromOk = (c: XChain) => (c.kind === "solana" && signer.mode === "browser" ? "Solana needs the AUTISTIK wallet" : null);
+  const solFromOk = (_c: XChain): string | null => null;
 
   const [xFrom, setXFrom] = useState<XToken | null>(nativeOf(first));
   const [xTo, setXTo] = useState<XToken | null>(defaultTo(first));
@@ -125,7 +126,10 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         ) : (
           <div className="sw-pre">
             {card({ amount: preAmount, setAmount: setPreAmount, balance: null, onMax: null, inUsd: null, out: <span className="tx-dim">0</span>, outUsd: null })}
-            <button type="button" className="sw-connect" onClick={signer.loginExternal ?? signer.login}>Connect Wallet</button>
+            {c.kind === "solana"
+              ? <button type="button" className="sw-connect" onClick={() => { setNetwork("solana"); pickWallet({ fresh: true }); }}>Connect a Solana wallet</button>
+              : <button type="button" className="sw-connect" onClick={signer.loginExternal ?? signer.login}>Connect Wallet</button>}
+            {c.kind === "solana" && <small className="sw-alt" style={{ textAlign: "center" }}>Phantom, Bitget, Trust, Solflare, OKX, Backpack and more</small>}
             {signer.loginEmbedded && <button type="button" className="sw-alt" onClick={signer.loginEmbedded}>or use the AUTISTIK wallet (email, Google, Apple)</button>}
           </div>
         )}

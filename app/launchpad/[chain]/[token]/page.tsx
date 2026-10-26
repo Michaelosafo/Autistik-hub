@@ -80,7 +80,8 @@ export default async function TokenPage({ params }: { params: { chain: string; t
           <div className="card stack" style={{ fontSize: ".9em" }}>
             <div className="field"><span>Contract address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{token}</span></div>
             <div className="row" style={{ gap: 6 }}>
-              {swap && <a className="btn small primary" href={swap} target="_blank" rel="noopener noreferrer">Trade on {c.dex}</a>}
+              <Link className="btn small primary" href={`/swap?chain=${c.key}&buy=${token}`}>Buy ${launch.symbol} on AUTISTIK</Link>
+              {swap && <a className="btn small" href={swap} target="_blank" rel="noopener noreferrer">{c.dex}</a>}
               <a className="btn small" href={dexscreenerUrl(c, launch.pair, token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>

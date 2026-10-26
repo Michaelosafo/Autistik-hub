@@ -106,6 +106,7 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
           <Change v={king.market?.change24h} />
         </Link>
       )}
+      {king && <Link href={`/swap?chain=${king.chain}&buy=${king.token}`} className="bd-buy bd-buy-king">Buy {king.symbol} now</Link>}
 
       <div className="bd-bar">
         <div className="bd-tabs" role="tablist">
@@ -126,7 +127,8 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
           {shown.map((t, i) => {
             const k = t.chain + t.token;
             return (
-              <Link key={k} data-k={k} href={`/launchpad/${t.chain}/${t.token}`} className={"bd-card" + (fresh.has(k) ? " fresh" : "") + (i < 3 ? ` top${i + 1}` : "")}>
+              <div key={k} data-k={k} className="bd-cell">
+              <Link href={`/launchpad/${t.chain}/${t.token}`} className={"bd-card" + (fresh.has(k) ? " fresh" : "") + (i < 3 ? ` top${i + 1}` : "")}>
                 <span className="bd-rank">#{i + 1}</span>
                 <Logo t={t} />
                 <div className="bd-info">
@@ -136,6 +138,8 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
                   <small className="muted">{ago(t.created_at)} ago · Vol {usd(t.market?.volume24h)}{t.promotedUntil ? " · Promoted" : ""}{t.source === "listed" ? " · Listed" : ""}</small>
                 </div>
               </Link>
+              <Link href={`/swap?chain=${t.chain}&buy=${t.token}`} className="bd-buy" aria-label={`Buy ${t.symbol}`}>Buy</Link>
+              </div>
             );
           })}
         </div>

@@ -1,12 +1,12 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { PrivyProvider, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useExportWallet as useSolExport, useSignTransaction, useWallets as useSolWallets } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { bsc } from "viem/chains";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { XCHAIN_LIST } from "@/lib/bridge-chains";
-import { WALLETCONNECT_ID, disconnectWallet, pickWallet } from "@/lib/connect";
+import { WALLETCONNECT_ID, disconnectWallet, getState as connectState, pickWallet, restoreSol, signSol, subscribe as connectSub } from "@/lib/connect";
 import { useSiteWallet } from "./site-wallet";
 import WalletApp from "./WalletApp";
 import AuthenticatorGate from "./AuthenticatorGate";
@@ -105,13 +105,17 @@ function Inner({ member, start, app }: { member: Member | null; start: Start; ap
   const using: "embedded" | "external" = prefer ?? (evmOwn || solExternal ? "external" : "embedded");
   const evm = using === "external" ? evmOwn || evmBuilt : evmBuilt || evmOwn;
   const sw: any = using === "external" ? solExternal || solEmbedded : solEmbedded || solExternal;
+  // An outside Solana wallet (Phantom, Bitget, Trust, Solflare…) connected with the site's Connect button.
+  const siteSol = useSyncExternalStore(connectSub, connectState, connectState).sol;
+  useEffect(() => { restoreSol().catch(() => {}); }, []);
+  const useSiteSol = !!siteSol && (!sw || using === "external");
 
   const signer: Signer = {
-    mode: "privy", ready: ready && site.ready, active: (ready && authenticated && !!sw) || !!evm,
+    mode: "privy", ready: ready && site.ready, active: (ready && authenticated && !!sw) || !!evm || !!siteSol,
     label: user?.email?.address || null,
     using, canSwitch: !!(evmEmbedded || solEmbedded) && !!(evmOwn || solExternal), switchTo: setPrefer,
     evm,
-    sol: sw ? {
+    sol: useSiteSol ? { address: siteSol!.account.address, sign: signSol } : sw ? {
       address: sw.address,
       async sign(txBase64) {
         const { signedTransaction } = await signTransaction({ transaction: fromB64(txBase64), wallet: sw, chain: "solana:mainnet" });
