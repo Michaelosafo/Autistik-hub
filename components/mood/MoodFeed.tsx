@@ -18,7 +18,7 @@ export default function MoodFeed({ limit = 20, compact, more: moreLink }: { limi
       {tiks === null ? <small className="muted">Loading Tiks…</small> : !tiks.length ? (
         me ? <p className="muted" style={{ margin: 0 }}>No Tiks yet. Be the first to share how you feel.</p> : null
       ) : tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={compact} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
-      {moreLink ? <Link href="/mood" className="mood-more">View more on Autistik Mood</Link>
+      {moreLink ? <Link href="/mood" className="mood-more">View more on Autistik Madness</Link>
         : more && <button type="button" className="tik-more" onClick={loadMore}>Load more</button>}
     </div>
   );

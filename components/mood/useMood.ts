@@ -4,8 +4,9 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { TIK_COLS, shapeTiks, type Tik } from "@/lib/mood";
 
 /** Loads Tiks (the feed, or the replies to one Tik) for the signed-in member, newest first. */
-export function useTiks(opts: { replyTo?: string | null; limit?: number; refreshKey?: number }) {
-  const { replyTo = null, limit = 20, refreshKey = 0 } = opts;
+export function useTiks(opts: { replyTo?: string | null; limit?: number; refreshKey?: number; authors?: string[] | null; only?: string | null }) {
+  const { replyTo = null, limit = 20, refreshKey = 0, authors = null, only = null } = opts;
+  const authorsKey = authors ? authors.join(",") : "";
   const [tiks, setTiks] = useState<Tik[] | null>(null);
   const [me, setMe] = useState<string | null>(null);
   const [more, setMore] = useState(false);
@@ -17,6 +18,11 @@ export function useTiks(opts: { replyTo?: string | null; limit?: number; refresh
     let q = sb.from("tiks").select(TIK_COLS).eq("hidden", false).order("created_at", { ascending: !!replyTo }).limit(limit + 1);
     q = replyTo ? q.eq("reply_to", replyTo) : q.is("reply_to", null);
     if (before) q = replyTo ? q.gt("created_at", before) : q.lt("created_at", before);
+    if (only) q = sb.from("tiks").select(TIK_COLS).eq("id", only).limit(1);
+    else if (authors) {
+      if (!authors.length) { setTiks([]); setMore(false); return; }
+      q = q.in("author_id", authors.slice(0, 300));
+    }
     const { data, error } = await q;
     if (error) { setErr("Couldn't load Tiks right now."); setTiks((t) => t ?? []); return; }
     const rows = (data || []) as any[];
@@ -29,7 +35,7 @@ export function useTiks(opts: { replyTo?: string | null; limit?: number; refresh
     }
     const shaped = shapeTiks(page, mine);
     setTiks((t) => (before && t ? [...t, ...shaped] : shaped));
-  }, [replyTo, limit]);
+  }, [replyTo, limit, authorsKey, only]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load, refreshKey]);
   const loadMore = () => { if (tiks?.length) load(tiks[tiks.length - 1].created_at); };
   return { tiks, setTiks, me, more, loadMore, err, reload: () => load() };

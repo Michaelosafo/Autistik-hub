@@ -3907,3 +3907,31 @@ img.bd-logo{background:none!important}
 .room-btn.end{color:#fff;background:#E5484D}
 .room-btn:focus-visible,.room-mini:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
 @media (max-width:900px){ .room-bar{bottom:84px} }
+
+/* ---------- Autistik Madness (pinned in your panel, opens on tap) ---------- */
+.mad{padding:0 !important;overflow:hidden}
+.mad-head{all:unset;cursor:pointer;box-sizing:border-box;width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px}
+.mad-head:focus-visible{outline:2px solid #F0B90B;outline-offset:-2px}
+.mad-pin{flex:none;width:36px;height:36px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#FF6B9A,#B57CFF)}
+.mad-pin svg{width:19px;height:19px}
+.mad-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.mad-t b{font-family:var(--f-display);font-size:.95rem}
+.mad-t small{color:var(--muted);font-size:.74em}
+.mad-badge{font-style:normal;font-size:.7em;font-weight:900;padding:2px 7px;border-radius:99px;background:#E5484D;color:#fff}
+.mad-chev{width:9px;height:9px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .2s;opacity:.7;margin-right:4px}
+.mad.open .mad-chev{transform:rotate(225deg)}
+.mad-body{display:flex;flex-direction:column;gap:10px;padding:0 12px 12px}
+.mad-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.mad-tabs button{all:unset;cursor:pointer;flex:none;padding:6px 12px;border-radius:99px;font-size:.78em;font-weight:800;color:var(--muted);background:rgba(var(--wc),.06)}
+.mad-tabs button[aria-selected=true]{color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A)}
+.mad-feed{display:flex;flex-direction:column;gap:8px}
+.mad .tik,.mad .tik-new{background:rgba(var(--wc),.04);border-color:transparent}
+.mad-empty{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.mad-cta,.mad-open{all:unset;cursor:pointer;align-self:flex-start;padding:7px 14px;border-radius:99px;font-weight:800;font-size:.8em;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);text-decoration:none}
+.mad-open{align-self:center;background:rgba(var(--wc),.08);color:var(--ink)}
+.mad-acts,.mad-notes{display:flex;flex-direction:column;gap:4px}
+.mad-act,.mad-note{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 6px;padding:8px 10px;border-radius:12px;text-decoration:none;color:var(--ink);background:rgba(var(--wc),.04);font-size:.86em}
+.mad-act span,.mad-note span{color:var(--muted);overflow-wrap:anywhere}
+.mad-act small,.mad-note small{margin-left:auto;color:var(--muted);font-size:.75em}
+.mad-note.new{box-shadow:inset 3px 0 0 #F0B90B}
+.tik-focus{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:18px;background:rgba(240,185,11,.08)}
