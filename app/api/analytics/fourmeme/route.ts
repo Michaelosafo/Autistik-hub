@@ -38,18 +38,22 @@ export async function GET() {
   async function read(from: bigint, to: bigint) {
     const logs = await c.request({ method: "eth_getLogs", params: [{ address: TM2, fromBlock: `0x${from.toString(16)}`, toBlock: `0x${to.toString(16)}`, topics: [TOPICS as any] }] } as any) as any[];
     const rows: any[] = [], bonds: string[] = [];
+    // Each event's time, from the timestamps of the range's first and last blocks (blocks come at a steady pace).
+    const [b0, b1] = await Promise.all([c.getBlock({ blockNumber: from }), c.getBlock({ blockNumber: to })]);
+    const t0 = Number(b0.timestamp), t1 = Number(b1.timestamp), span = Number(to - from) || 1;
+    const timeOf = (bn: bigint) => new Date((t0 + ((t1 - t0) * Number(bn - from)) / span) * 1000).toISOString();
     for (const l of logs) {
       try {
         const e = decodeEventLog({ abi: ABI, data: l.data, topics: l.topics }) as any;
         if (e.eventName === "TokenCreate") rows.push({
           token: String(e.args.token).toLowerCase(), creator: String(e.args.creator).toLowerCase(), name: String(e.args.name).slice(0, 80), symbol: String(e.args.symbol).slice(0, 30),
-          created_at: new Date(Number(e.args.launchTime) * 1000).toISOString(), block: Number(BigInt(l.blockNumber)),
+          created_at: timeOf(BigInt(l.blockNumber)), block: Number(BigInt(l.blockNumber)),
         });
         else bonds.push(String(e.args.base).toLowerCase());
       } catch { /* another event */ }
     }
     if (rows.length) await sb.from("fm_tokens").upsert(rows, { onConflict: "token", ignoreDuplicates: true });
-    if (bonds.length) await sb.from("fm_tokens").update({ bonded_at: new Date().toISOString() }).in("token", bonds).is("bonded_at", null);
+    if (bonds.length) await sb.from("fm_tokens").update({ bonded_at: timeOf(to) }).in("token", bonds).is("bonded_at", null);
     created += rows.length; bonded += bonds.length;
   }
 
