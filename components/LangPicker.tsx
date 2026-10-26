@@ -9,25 +9,36 @@ let prompted = false; // one prompt per page, even with two top bars
 
 /** First visit: ask once whether to keep English or switch, suggesting the browser's own language. */
 function LangPrompt({ onPick }: { onPick: (code: string) => void }) {
+  // Step 1: just "Keep English?". Step 2 (only if they say no): the languages.
+  const [step, setStep] = useState<"ask" | "list">("ask");
   const [all, setAll] = useState(false);
   const nav = (typeof navigator !== "undefined" ? navigator.language || "en" : "en").toLowerCase();
   const guess = LANGS.find((l) => l.code !== "en" && (nav === l.code || nav.startsWith(l.code + "-")));
-  const list = all ? LANGS : TOP.map((c) => LANGS.find((l) => l.code === c)!).filter(Boolean);
+  const list = (all ? LANGS : TOP.map((c) => LANGS.find((l) => l.code === c)!).filter(Boolean)).filter((l) => l.code !== "en");
+  if (step === "ask") return (
+    <div className="lp-bg" role="dialog" aria-modal="true" aria-label="Language">
+      <div className="lp-box lp-small">
+        <b className="lp-title">Keep English?</b>
+        <small className="lp-sub">Language · 语言 · 言語 · Langue · Idioma · اللغة</small>
+        <button type="button" className="lp-guess" onClick={() => onPick("en")}>Yes, keep English</button>
+        <button type="button" className="lp-keep" onClick={() => setStep("list")}>No, choose my language</button>
+      </div>
+    </div>
+  );
   return (
     <div className="lp-bg" role="dialog" aria-modal="true" aria-label="Choose your language">
       <div className="lp-box">
         <b className="lp-title">Choose your language</b>
-        <small className="lp-sub">Language · 语言 · 言語 · Langue · Idioma · اللغة</small>
-        {guess && <button type="button" className="lp-guess" onClick={() => onPick(guess.code)}>Continue in {guess.native}</button>}
+        {guess && <button type="button" className="lp-guess" onClick={() => onPick(guess.code)}>{guess.native}</button>}
         <div className="lp-grid">
           {list.map((l) => (
-            <button key={l.code} type="button" onClick={() => onPick(l.code)} className={l.code === "en" ? "en" : ""}>
+            <button key={l.code} type="button" onClick={() => onPick(l.code)}>
               <b>{l.native}</b>{l.native !== l.name && <small>{l.name}</small>}
             </button>
           ))}
         </div>
-        {!all && <button type="button" className="lp-more" onClick={() => setAll(true)}>More languages ({LANGS.length})</button>}
-        <button type="button" className="lp-keep" onClick={() => onPick("en")}>Keep English</button>
+        {!all && <button type="button" className="lp-more" onClick={() => setAll(true)}>More languages ({LANGS.length - 1})</button>}
+        <button type="button" className="lp-keep" onClick={() => onPick("en")}>Back to English</button>
         <small className="lp-note">You can change it any time with the globe button at the top.</small>
       </div>
     </div>
