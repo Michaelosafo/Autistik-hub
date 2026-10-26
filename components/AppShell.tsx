@@ -14,7 +14,7 @@ import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/app", "/mood", "/spaces", "/board", "/swap", "/wallet", "/stake", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
+export const APP_PATHS = ["/app", "/mood", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string; icon?: string };
@@ -38,8 +38,9 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
     { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
     { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match", icon: "i-ball" },
   ] },
-  { name: "Earn", icon: "i-rew", tip: "Stake and rewards", match: ["/stake", "/rewards"], items: [
+  { name: "Earn", icon: "i-rew", tip: "Stake, Susu savings and rewards", match: ["/stake", "/susu", "/rewards"], items: [
     { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
+    { href: "/susu", name: "Susu", note: "Save USDT or BUSD every day, get it all at the end", icon: "i-gift" },
     { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops", icon: "i-gift" },
   ] },
   { name: "Lock", icon: "i-lock", tip: "Lock liquidity or tokens", match: ["/lockers"], items: [
@@ -71,7 +72,7 @@ const MORE: { name: string; items: Item[] }[] = [
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
   { href: "/", name: "Home", icon: "i-home", match: [] },
   { href: "/board", name: "Board", icon: "i-rocket", match: ["/board", "/launchpad", "/momentum", "/liquidity"] },
-  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
+  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/susu", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/analytics", "/pro"] },

@@ -25,7 +25,7 @@ const MAIN: Item[] = [
   { href: "/live", name: "Live", icon: "i-ses" },
   { href: "/swap", name: "Swap", icon: "i-swap", match: ["/swap", "/perps", "/trade"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena"] },
-  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/rewards"] },
+  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/susu", "/rewards"] },
   { href: "/lockers", name: "Lock", icon: "i-lock" },
   { href: "/members", name: "Members", icon: "i-user", members: true },
 ];

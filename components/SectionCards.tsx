@@ -11,6 +11,7 @@ export const TOKEN_CARDS: SectionCard[] = [
 // Earn, inside the App: staking and rewards.
 export const EARN_CARDS: SectionCard[] = [
   { href: "/stake", name: "Stake", blurb: "Earn from platform fees", tone: "sun" },
+  { href: "/susu", name: "Susu", blurb: "Save daily, collect at the end", tone: "teal" },
   { href: "/rewards", name: "Rewards", blurb: "Points & airdrops", tone: "violet" },
 ];
 
