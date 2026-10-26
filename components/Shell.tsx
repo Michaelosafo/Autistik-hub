@@ -292,7 +292,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
           <WalletPicker />
           <Toaster />
           <div className="page">{children}</div>
-          <footer className="site-note">Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety</Link> · <Link href="/privacy">Privacy policy</Link></footer>
+          <footer className="site-note">Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety</Link> · <Link href="/privacy">Privacy policy</Link> · <Link href="/terms">Terms of use</Link></footer>
         </main>
       </div>
       <nav className="tabbar">
