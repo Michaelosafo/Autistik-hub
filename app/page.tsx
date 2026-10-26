@@ -94,7 +94,6 @@ export default async function Home() {
         </nav>
         <LangPicker />
         <ThemeToggle />
-        <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
         {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         {user && owner && <Link href="/admin" className="lp-signin lp-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
