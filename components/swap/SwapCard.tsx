@@ -40,9 +40,23 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
   const [sheet, setSheet] = useState<Side | null>(null);
   // Amounts are typed in US dollars; the token amount the swap uses is worked out from the coin's price. Coins without
   // a price, or a tap on the switch, fall back to typing the token amount.
-  const price = from.token?.priceUsd && from.token.priceUsd > 0 ? from.token.priceUsd : null;
+  // A coin picked without a price (BNB, ETH, SOL, a pasted token) gets one looked up, so dollars still work.
+  const [looked, setLooked] = useState<Record<string, number>>({});
+  const fk = from.token ? `${from.net.id}:${from.token.address.toLowerCase()}` : "";
+  useEffect(() => {
+    const t = from.token;
+    if (!t || (t.priceUsd && t.priceUsd > 0) || looked[fk] !== undefined) return;
+    const save = (v: number | null | undefined) => setLooked((l) => ({ ...l, [fk]: v && v > 0 ? v : 0 }));
+    const a = t.address.toLowerCase();
+    api<{ tokens: XToken[] }>("x-tokens", { chain: from.net.id, q: t.address })
+      .then((d) => d.tokens.find((x) => x.address.toLowerCase() === a)?.priceUsd || d.tokens.find((x) => x.symbol === t.symbol)?.priceUsd)
+      .catch(() => null)
+      .then((v) => v ? save(v) : api<{ token: XToken }>("x-detect", { address: t.address }).then((d) => save(d.token.priceUsd)).catch(() => save(0)));
+  }, [fk]); // eslint-disable-line react-hooks/exhaustive-deps
+  const price = from.token?.priceUsd && from.token.priceUsd > 0 ? from.token.priceUsd : looked[fk] || null;
   const [inDollars, setInDollars] = useState(true);
-  const dollars = inDollars && !!price;
+  const pricing = !!from.token && !price && looked[fk] === undefined;
+  const dollars = inDollars && (!!price || pricing);
   const [usdText, setUsdText] = useState("");
   const typedRef = useRef(false);
   // Keep the dollar box in step when the token amount changes from outside (Max, flipping the coins, a new coin).
@@ -52,6 +66,11 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
     const n = Number(io.amount);
     setUsdText(io.amount && n > 0 && price ? String(Math.round(n * price * 100) / 100) : "");
   }, [io.amount, price, dollars]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!dollars || !price || !usdText || io.amount) return;
+    const n = Number(usdText);
+    if (n > 0) { typedRef.current = true; io.setAmount(String(Math.floor((n / price) * 1e8) / 1e8)); }
+  }, [price]); // eslint-disable-line react-hooks/exhaustive-deps
   function typeDollars(v: string) {
     const clean = v.replace(",", ".").replace(/[^\d.]/g, "").replace(/^(\d*\.\d{0,2}).*$/, "$1");
     setUsdText(clean);
@@ -79,6 +98,7 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
             {io.onMax && <button type="button" className="sc-max" onClick={io.onMax}>Max</button>}
           </span>}
         </div>
+        <div className="sc-lab">{dollars ? "You pay, in US dollars" : `You pay, in ${from.token?.symbol || "tokens"}`}</div>
         <div className="sc-amt-row">
           {dollars && <span className="sc-cur" aria-hidden="true">$</span>}
           <input className="sc-amt" inputMode="decimal" value={shown} placeholder={dollars ? "0.00" : "0"} autoComplete="off"
@@ -88,13 +108,14 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
         </div>
         <button type="button" className="sc-usd sc-switch" disabled={!price} onClick={() => setInDollars(!inDollars)}
           title={price ? (dollars ? `Type the amount in ${from.token?.symbol || "tokens"} instead` : "Type the amount in US dollars instead") : "No price for this coin yet, so amounts are in tokens"}>
-          <span aria-hidden="true">⇅</span> {dollars ? tokenLine : money(io.inUsd)}
+          <span aria-hidden="true">⇅</span> {dollars ? (pricing && !price ? "Getting the price…" : `= ${tokenLine}`) : money(io.inUsd)}
         </button>
       </div>
       <button type="button" className="sc-flip" onClick={onFlip} aria-label="Switch the two coins">
         <span><Chevron up /><Chevron /></span>
       </button>
       <div className="sc-box sc-get">
+        <div className="sc-lab">You get (about)</div>
         <div className="sc-top">
           {pill("to", to)}
           <span className="sc-out">{dollars
