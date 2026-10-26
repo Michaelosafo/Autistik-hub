@@ -13,15 +13,15 @@
   --base:15px; --r:14px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0D1020; --surface:#161A2E; --surface-2:#1F2440; --ink:#EEF0F8; --muted:#9CA3C0; --line:#2B3154;
-  --rail:#080A16; --rail-2:#161A33; --rail-ink:#A9AFCC; --rail-hi:#FFFFFF;
+  --bg:#0B0A12; --surface:#17141F; --surface-2:#221D30; --ink:#F4EEFF; --muted:#B8ADD2; --line:#383241;
+  --rail:#0E0C16; --rail-2:#1A1626; --rail-ink:#B8ADD2; --rail-hi:#FFFFFF;
   --coral:#FF7C66; --coral-soft:#3A1D1A; --teal:#3FCABB; --teal-soft:#10302C;
   --violet:#A48EFF; --violet-soft:#251E48; --sun:#F7C54F; --sun-soft:#382B0E; --sun-bright:#F7C54F;
   --orange:#FF9A4D; --orange-soft:#3A2614;
   --alert:#FF8A80; --alert-soft:#3B1C1A; color-scheme:dark }}
 :root[data-theme="dark"]{
-  --bg:#0D1020; --surface:#161A2E; --surface-2:#1F2440; --ink:#EEF0F8; --muted:#9CA3C0; --line:#2B3154;
-  --rail:#080A16; --rail-2:#161A33; --rail-ink:#A9AFCC; --rail-hi:#FFFFFF;
+  --bg:#0B0A12; --surface:#17141F; --surface-2:#221D30; --ink:#F4EEFF; --muted:#B8ADD2; --line:#383241;
+  --rail:#0E0C16; --rail-2:#1A1626; --rail-ink:#B8ADD2; --rail-hi:#FFFFFF;
   --coral:#FF7C66; --coral-soft:#3A1D1A; --teal:#3FCABB; --teal-soft:#10302C;
   --violet:#A48EFF; --violet-soft:#251E48; --sun:#F7C54F; --sun-soft:#382B0E; --sun-bright:#F7C54F;
   --orange:#FF9A4D; --orange-soft:#3A2614;
@@ -3235,3 +3235,18 @@ html[data-calm="on"] .mp-pulse{animation:none}
 .mp-person .btn.small{padding:6px 10px;font-size:.78em}
 .mp-tick{display:inline-grid;place-items:center;width:15px;height:15px;margin-left:5px;border-radius:50%;background:#4FA3FF;color:#fff;font-size:.62em;vertical-align:middle}
 .mp-sec-h b{display:flex;align-items:center}
+
+
+/* ---------- The Board's colours everywhere (dark theme): warm near-black, gold, pink and violet ---------- */
+:root[data-theme="dark"] body,html:not([data-theme="light"]) body{background:
+  radial-gradient(80% 50% at 85% -10%,rgba(240,185,11,.10),transparent 60%),
+  radial-gradient(70% 45% at -10% 0%,rgba(181,124,255,.14),transparent 60%),var(--bg)}
+:root[data-theme="dark"] .rail,:root[data-theme="dark"] .mp-drawer-in,:root[data-theme="dark"] .nx-rail{
+  background:linear-gradient(180deg,#120F1C,#0B0A12);border-right:1px solid #2A2536}
+:root[data-theme="dark"] .mp-sec,:root[data-theme="dark"] .mp-links,:root[data-theme="dark"] .mp-search,:root[data-theme="dark"] .mp-results{border:1px solid #2A2536}
+:root[data-theme="dark"] .mp-hero{border:1px solid transparent;background:linear-gradient(#17141F,#17141F) padding-box,linear-gradient(120deg,rgba(255,216,77,.55),rgba(255,107,154,.4),rgba(181,124,255,.45)) border-box}
+:root[data-theme="dark"] .card{background:var(--surface);border-color:#2A2536}
+:root[data-theme="dark"] .me-pop,:root[data-theme="dark"] .ax-sheet-in{background:#17141F;border-color:#383241}
+:root[data-theme="dark"] .rail .nav a[aria-current=page],:root[data-theme="dark"] .rail .nav button[aria-current=page]{background:linear-gradient(135deg,rgba(240,185,11,.22),rgba(240,185,11,.08));color:#F0B90B}
+:root[data-theme="dark"] .page-head h1,:root[data-theme="dark"] .mp-name b{background:linear-gradient(90deg,#FFFFFF,#FFE7A3);-webkit-background-clip:text;background-clip:text;color:transparent}
+:root[data-theme="dark"] .btn.primary{background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);color:#191326;border-color:transparent}
