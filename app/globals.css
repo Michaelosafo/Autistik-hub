@@ -3738,3 +3738,13 @@ img.bd-logo{background:none!important}
 :root[data-theme="light"] .lp-hero p.lp-why{color:#1B1530;background:#FFF6DA}
 :root[data-theme="light"] .lp-why b{color:#8A5A00 !important}
 :root[data-theme="light"] .lp-hero p{color:#241E38}
+
+/* Board: Buy buttons (buys go through the AUTISTIK swap) */
+.bd-cell{position:relative;display:flex;min-width:0}
+.bd-cell>.bd-card{flex:1;min-width:0}
+.bd-buy{position:absolute;right:10px;bottom:10px;z-index:2;padding:6px 14px;border-radius:99px;font-weight:800;font-size:.8em;text-decoration:none;color:#191326;
+  background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);box-shadow:0 4px 12px rgba(240,185,11,.3)}
+.bd-buy:hover{filter:brightness(1.05);transform:translateY(-1px)}
+.bd-buy:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.bd-buy-king{position:static;align-self:flex-start;display:inline-flex;padding:10px 18px;font-size:.9em}
+.bd-cell>.bd-card{padding-bottom:46px}
