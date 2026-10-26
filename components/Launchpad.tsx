@@ -221,11 +221,11 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
     <div className="stack">
       <div className="launch-modes" role="tablist" aria-label="How do you want to launch?">
         <button type="button" role="tab" className="sun" aria-selected={mode === "quick"} onClick={() => pickMode("quick")}>
-          <span className="ln-icon" aria-hidden="true">⚡</span>
+          
           <span className="ln-text"><b>Quick launch</b><small>One short form. Free and unlimited.</small></span>
         </button>
         <button type="button" role="tab" className="violet" aria-selected={mode === "ai"} onClick={() => pickMode("ai")}>
-          <span className="ln-icon" aria-hidden="true">🤖</span>
+          
           <span className="ln-text"><b>Launch with Autistik</b><small>Answer a few questions by text or voice. {AI_LAUNCH_SESSIONS} a day{sessionsLeft !== null ? ` · ${sessionsLeft} left today` : ""}.</small></span>
         </button>
       </div>
@@ -237,7 +237,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
             <span className="lux-online"><i />{talking ? "Speaking…" : "Assistant online"}</span>
             {canSpeak && (
               <button className="lux-icon" type="button" aria-pressed={voice} onClick={toggleVoice} title={voice ? "Autistik reads its questions aloud. Tap to turn off." : "Read questions aloud"}>
-                {talking ? "🔊" : voice ? "🔉" : "🔈"}<span className="sr-only">Read questions aloud</span>
+                {talking ? "Stop" : voice ? "Voice on" : "Voice"}<span className="sr-only">Read questions aloud</span>
               </button>
             )}
             {msgs.length > 0 && (
@@ -251,7 +251,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
               <div className="lux-ring"><Art kind="robot" who="autistik" mood="motivation" className="lux-bot" /></div>
               <div className="lux-hello">
                 <h2>Hi, I&apos;m <span className="lux-name">Autistik</span></h2>
-                <p>Your launch assistant. I ask a few quick questions, build your launch plan, and you sign. 🚀</p>
+                <p>Your launch assistant. I ask a few quick questions, build your launch plan, and you sign.</p>
                 <span className="lux-here"><i />{sessionsLeft !== null ? `${sessionsLeft} of ${AI_LAUNCH_SESSIONS} launch chats left today` : "Ready to launch"}</span>
               </div>
             </div>
@@ -261,12 +261,12 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
               : m.kind === "sys" ? <div key={i} className="msg sys">{m.text}</div>
               : <div key={i} className="msgrow"><Bot />{m.pending ? <WritingNote name="Autistik" /> : <Handwritten text={m.text} done fresh={!!m.born && Date.now() - m.born < 20_000} />}</div>
             )}
-            {listening && <div className="msg me listening">🎙️ {input || "Listening… speak now"}</div>}
+            {listening && <div className="msg me listening">{input || "Listening… speak now"}</div>}
           </div>
           {msgs.length === 0 && signedIn && (
             <div className="lux-moods" role="group" aria-label="Pick a chain to start">
               {liveChains(pads).map((x) => (
-                <button key={x.key} type="button" onClick={() => send(x.name)} disabled={busy}>🚀<span>{x.name}</span></button>
+                <button key={x.key} type="button" onClick={() => send(x.name)} disabled={busy}><span>{x.name}</span></button>
               ))}
             </div>
           )}
@@ -290,7 +290,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
 
           {done && c ? (
             <div className="card stack">
-              <h3>🚀 {plan?.symbol} is live!</h3>
+              <h3>{plan?.symbol} is live!</h3>
               <p className="muted" style={{ fontSize: ".9em" }}>Liquidity: {plan ? LOCKS[plan.lock].short.toLowerCase() : "locked"}. DexScreener usually shows the pair within a few minutes of the first trade.</p>
               {!isSolana(c) && <StartTrading c={c} token={done.token} />}
               <div className="field"><span>Token address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{done.token}</span></div>
@@ -301,7 +301,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
               </div>
               <a className="btn small" href="https://marketplace.dexscreener.com/product/token-info" target="_blank" rel="noopener noreferrer">Add logo &amp; links on DexScreener</a>
               {done.listed
-                ? <Link className="btn primary" href={`/launchpad/${c.key}/${done.token}`}>Open token page &amp; make it trend 🔥</Link>
+                ? <Link className="btn primary" href={`/launchpad/${c.key}/${done.token}`}>Open token page &amp; make it trend</Link>
                 : <span className="muted" style={{ fontSize: ".85em" }}>Your token is live, but we couldn&apos;t add it to the Hub list.</span>}
             </div>
           ) : plan && c && isSolana(c) ? (
@@ -350,12 +350,12 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
             </div>
           ) : (
             <div className="card stack how-launch">
-              <h3>📖 How it works</h3>
+              <h3>How it works</h3>
               <ol className="how-steps">
                 <li><b>1</b><span>{mode === "ai" ? "Answer Autistik's questions (type or speak)." : "Fill in the short form above."}</span></li>
                 <li><b>2</b><span>Check your launch plan.</span></li>
                 <li><b>3</b><span>Sign once in your wallet.</span></li>
-                <li><b>4</b><span>🚀 Press Start trading. Your token is live on {[...new Set(liveChains(pads).map((x) => x.dex))].join(", ") || "the DEX"}.</span></li>
+                <li><b>4</b><span>Press Start trading. Your token is live on {[...new Set(liveChains(pads).map((x) => x.dex))].join(", ") || "the DEX"}.</span></li>
               </ol>
               <p className="muted" style={{ fontSize: ".86em" }}>Free to launch. {admin ? "Admin: no AUTISTIK needed, launch as many as you like." : `You need $${MIN_HOLD_USD}+ of AUTISTIK on BNB Chain.`} Liquidity is locked in the AUTISTIK Locker (6 months or 1 year) or burned forever, so it can&apos;t be pulled. No blacklist, tax max {MAX_TAX_PERCENT}%, anti-sniper protection.</p>
             </div>
@@ -594,10 +594,10 @@ function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
     } finally { setBusy(false); }
   }
   async function start() {
-    if (await send("openTrading")) { setOpen(true); setMsg("✅ Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots."); }
+    if (await send("openTrading")) { setOpen(true); setMsg("Trading is open. For the first 5 minutes each buy is limited, to stop sniper bots."); }
   }
   async function renounce() {
-    if (await send("renounceOwnership")) { setRenounced(true); setMsg("✅ Renounced. Nobody, not even you, can change this token's settings now. Scanners will show it as renounced."); }
+    if (await send("renounceOwnership")) { setRenounced(true); setMsg("Renounced. Nobody, not even you, can change this token's settings now. Scanners will show it as renounced."); }
   }
   if (renounced) return <div className="notice"><span>{msg}</span></div>;
   return (
@@ -613,7 +613,7 @@ function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
         <>
           <span><b>Last step: renounce ownership.</b> Buyers trust tokens nobody controls. After this you can&apos;t lower the tax or change the tax wallet any more, and your tax keeps going to the same wallet. The token&apos;s code can never be changed either way.</span>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            <button className="btn primary" type="button" disabled={busy} onClick={renounce}>{busy ? "Renouncing…" : "🔒 Renounce ownership"}</button>
+            <button className="btn primary" type="button" disabled={busy} onClick={renounce}>{busy ? "Renouncing…" : "Renounce ownership"}</button>
             <button className="btn small" type="button" disabled={busy} onClick={() => { setLater(true); setMsg(""); }}>Later</button>
           </div>
         </>
