@@ -1,6 +1,4 @@
-import ProHero from "@/components/ProHero";
-import Guide from "@/components/Guide";
-import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
+import EarnTop from "@/components/EarnTop";
 import SusuApp from "@/components/susu/SusuApp";
 import { adminState } from "@/lib/admin";
 import { currentUser } from "@/lib/supabase/server";
@@ -14,15 +12,16 @@ export const metadata = {
 export default async function SusuPage() {
   const [{ admin }, user] = await Promise.all([adminState(), currentUser()]);
   return (
-    <div className="stack" style={{ maxWidth: 980 }}>
-      <ProHero kicker="AUTISTIK Susu" title="Susu" tone="gold" />
-      <SectionCards items={EARN_CARDS} active="/susu" label="Earn" />
-      <Guide id="susu" title="How Susu works" tip="Your savings sit in a smart contract on BNB Chain. Nobody can take them out early, including AUTISTIK." steps={[
-        "Pick USDT or BUSD, how much to save each day, and for how long (for example 30 days).",
-        "Confirm in your wallet. Day 1 is saved straight away.",
-        "Come back every day and press Save today. Missed a day? You can catch up.",
-        "When the plan ends, press Withdraw and everything you saved comes back to your wallet in one go.",
-      ]} />
+    <div className="stack">
+      <EarnTop active="/susu" title="Susu savings"
+        text="Save a little every day in USDT or BUSD, and get it all back in one go at the end. Like a susu box, on the blockchain."
+        steps={[
+          { t: "Choose your plan", d: "USDT or BUSD, how much a day, and for how long: a week, a month, up to a year." },
+          { t: "Save every day", d: "Day 1 is saved when you start. Come back daily and press Save today; we remind you." },
+          { t: "Collect it all", d: "When the plan ends, press Withdraw and everything you saved comes back to your wallet." },
+        ]}
+        facts={[<><b>No fees</b>, only the small BNB network fee</>, <><b>Locked</b> until the end: nobody can take it early, not even AUTISTIK</>, <>Missed a day? You can <b>catch up</b></>, <>On <b>BNB Chain</b></>]}
+      />
       <SusuApp admin={admin} signedIn={!!user} />
     </div>
   );

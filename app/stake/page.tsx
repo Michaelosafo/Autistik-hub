@@ -1,7 +1,5 @@
 import dynamicImport from "next/dynamic";
-import ProHero from "@/components/ProHero";
-import Guide from "@/components/Guide";
-import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
+import EarnTop from "@/components/EarnTop";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 import { adminState } from "@/lib/admin";
@@ -21,15 +19,16 @@ export default async function StakePage({ searchParams }: { searchParams: { pool
   const { admin } = await adminState();
   const pool = /^\d{1,6}$/.test(searchParams.pool || "") ? Number(searchParams.pool) : undefined;
   return (
-    <div className="stack" style={{ maxWidth: 980 }}>
-      <ProHero kicker="AUTISTIK Staking" title="Stake" tone="gold" />
-      <SectionCards items={EARN_CARDS} active="/stake" label="Earn" />
-      <Guide id="stake" title="How staking works" tip="Rewards come only from what each pool's team adds. APR changes as people join and leave." steps={[
-        "Pick a pool. The Official pool: stake $AUTISTIK, earn BNB from the platform's trading fees.",
-        "Tap Stake, type an amount and confirm twice in your wallet (allow, then stake).",
-        "Rewards build up every second. Tap Collect any time. Withdraw when your lock ends.",
-        "Token teams: open Create a pool, add rewards, and share the link with your holders.",
-      ]} />
+    <div className="stack">
+      <EarnTop active="/stake" title="Stake & earn"
+        text="Put your tokens to work. Stake $AUTISTIK and earn BNB from the fees people pay on AUTISTIK."
+        steps={[
+          { t: "Pick a pool", d: "The Official pool: stake $AUTISTIK, earn BNB from platform fees. Token teams run their own pools too." },
+          { t: "Stake", d: "Type an amount and confirm twice in your wallet: allow, then stake." },
+          { t: "Collect any time", d: "Rewards build up every second. Withdraw when your lock ends." },
+        ]}
+        facts={[<><b>BNB</b> rewards from platform fees</>, <>Lock longer for up to <b>3x</b></>, <>Your tokens stay <b>yours</b>: nobody else can move them</>, <>Rewards come only from what each pool&apos;s team adds; APR moves as people join and leave</>]}
+      />
       <WalletLoader appId={appId} member={member} start={{ pool, admin }} app="stake" />
       {admin && <StakeAdmin />}
     </div>

@@ -150,26 +150,43 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
         </div>
       )}
 
-      <section className="card stack susu-new" style={{ gap: 12 }}>
-        <h3 style={{ margin: 0 }}>Start a Susu</h3>
+      <div className="susu-grid">
+      <section className="card stack susu-new" style={{ gap: 14 }}>
+        <div className="susu-head"><b>Start a Susu</b><small className="muted">Three choices, then confirm in your wallet.</small></div>
+        <small className="susu-label"><i>1</i>Save in</small>
         <div className="hr-chips" role="radiogroup" aria-label="Stablecoin">
           {SUSU_TOKENS.map((x) => <button key={x.address} type="button" role="radio" aria-checked={f.token === x.address} className={f.token === x.address ? "on" : ""} onClick={() => setF({ ...f, token: x.address })}>{x.symbol}</button>)}
         </div>
-        <label className="field"><span>Save every day ({t.symbol})</span>
-          <input value={f.daily} onChange={(e) => setF({ ...f, daily: e.target.value.replace(/[^\d.]/g, "") })} inputMode="decimal" /></label>
+        <small className="susu-label"><i>2</i>Every day</small>
+        <div className="susu-amount">
+          <input value={f.daily} onChange={(e) => setF({ ...f, daily: e.target.value.replace(/[^\d.]/g, "") })} inputMode="decimal" aria-label={`Amount to save every day in ${t.symbol}`} />
+          <span>{t.symbol} a day</span>
+        </div>
+        <div className="hr-chips" aria-label="Quick amounts">
+          {[1, 2, 5, 10, 20, 50].map((v) => <button key={v} type="button" className={Number(f.daily) === v ? "on" : ""} onClick={() => setF({ ...f, daily: String(v) })}>${v}</button>)}
+        </div>
         <div className="stack" style={{ gap: 6 }}>
-          <small className="muted">For how long</small>
+          <small className="susu-label"><i>3</i>For how long</small>
           <div className="hr-chips" role="radiogroup" aria-label="Length">
             {SUSU_LENGTHS.map((d) => <button key={d} type="button" role="radio" aria-checked={f.days === d} className={f.days === d ? "on" : ""} onClick={() => setF({ ...f, days: d })}>{d === 30 ? "1 month" : d === 365 ? "1 year" : d === 90 ? "3 months" : d === 180 ? "6 months" : d === 60 ? "2 months" : `${d} days`}</button>)}
           </div>
         </div>
-        <div className="hr-split">
-          <span><small>You&apos;ll have saved</small><b>{(daily * f.days).toLocaleString("en-US", { maximumFractionDigits: 2 })} {t.symbol}</b></span>
-          <span><small>Released on</small><b>{endsOn}</b></span>
-        </div>
-        <small className="muted">Day 1 is saved when you open it. Your savings are locked in the Susu contract until {endsOn}: nobody can take them out early, including you and AUTISTIK. No fees, only the small BNB network fee.</small>
-        <button className="btn primary" type="button" disabled={busy || !daily} onClick={open}>{me ? `Open my Susu · save ${daily || 0} ${t.symbol} today` : "Connect wallet & open my Susu"}</button>
+        <button className="btn primary susu-go" type="button" disabled={busy || !daily} onClick={open}>{me ? `Start my Susu · save ${daily || 0} ${t.symbol} today` : "Connect wallet & start my Susu"}</button>
       </section>
+      <aside className="card susu-sum" aria-label="Your plan">
+        <small className="muted">Your plan</small>
+        <b className="susu-total">{(daily * f.days).toLocaleString("en-US", { maximumFractionDigits: 2 })} <span>{t.symbol}</span></b>
+        <small className="muted">saved by {endsOn}</small>
+        <ul>
+          <li><span>Every day</span><b>{daily || 0} {t.symbol}</b></li>
+          <li><span>Days</span><b>{f.days}</b></li>
+          <li><span>Today (day 1)</span><b>{daily || 0} {t.symbol}</b></li>
+          <li><span>Released</span><b>{endsOn}</b></li>
+          <li><span>Fees</span><b>None</b></li>
+        </ul>
+        <p className="muted">Locked until {endsOn}. Nobody can take it out early, including you and AUTISTIK. Then it all comes back to your wallet in one go.</p>
+      </aside>
+      </div>
 
       {rows && rows.length > 0 && (
         <section className="stack" style={{ gap: 10 }}>
