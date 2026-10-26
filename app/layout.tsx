@@ -1,4 +1,5 @@
 import "./globals.css";
+import BotFab from "@/components/BotFab";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
 import Welcome from "@/components/Welcome";
@@ -47,6 +48,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Welcome />
         {user && needWallet && <WalletGate uid={user.id} />}
         <Shell me={me}>{children}</Shell>
+        <BotFab />
       </body>
     </html>
   );
