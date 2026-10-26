@@ -3351,3 +3351,30 @@ img.ql-logo{object-fit:cover}
 .sc-cur{color:#F0B90B}
 .sw-note,.sw-links{color:#B8ADD2}
 .sw-links a{color:#F0B90B}
+
+/* ---------- Desktop top bar, polished; dropdowns that stay open on the way to their items ---------- */
+.ax-menu::before{content:"";position:absolute;left:-12px;right:-12px;top:-18px;height:18px}
+@media (min-width:900px){
+  .ax-bar{height:68px;padding:0 24px;gap:16px;backdrop-filter:saturate(1.4) blur(14px);-webkit-backdrop-filter:saturate(1.4) blur(14px);box-shadow:0 1px 0 rgba(255,255,255,.04),0 8px 30px rgba(0,0,0,.25)}
+  .ax-nav{flex:1 1 auto;justify-content:center;margin:0 auto;background:none;border:0;padding:0;gap:4px}
+  .ax-top{padding:9px 16px;border-radius:12px;font-size:.95em;letter-spacing:.005em;transition:background .15s,color .15s}
+  .ax-top svg{transition:transform .2s}
+  .ax-dd:hover .ax-top svg{transform:translateY(-1px)}
+  .ax-top::after{content:"";width:7px;height:7px;margin-left:2px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-3px);opacity:.55;transition:transform .2s}
+  .ax-top[aria-expanded=true]::after{transform:rotate(225deg) translate(-2px,-1px)}
+  .ax-menu{top:calc(100% + 10px);left:50%;transform:translateX(-50%);min-width:340px;padding:10px;border-radius:18px;
+    background:linear-gradient(#1A1726,#1A1726) padding-box,linear-gradient(135deg,rgba(240,185,11,.45),rgba(181,124,255,.4)) border-box;border:1px solid transparent;
+    box-shadow:0 24px 60px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.3);animation:axMenuIn .16s ease-out}
+  .ax-menu.right{left:auto;right:0;transform:none}
+  .ax-menu .ax-mi{padding:11px 12px;border-radius:12px;transition:background .12s}
+  .ax-menu .ax-mi b{font-size:.95em}
+  .ax-menu .ax-mi small{line-height:1.35}
+  .ax-menu .ax-mi:hover,.ax-menu .ax-mi:focus-visible{background:rgba(240,185,11,.08);outline:none}
+  .ax-menu .ax-mi:hover .ax-ic{background:rgba(240,185,11,.2)}
+  .ax-right{display:flex;align-items:center;gap:10px}
+}
+@keyframes axMenuIn{from{opacity:0;transform:translate(-50%,-6px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){ .ax-menu{animation:none} }
+:root[data-calm="on"] .ax-menu{animation:none}
+@media (min-width:900px){ .ax-menu.right{animation:axMenuInR .16s ease-out} }
+@keyframes axMenuInR{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
