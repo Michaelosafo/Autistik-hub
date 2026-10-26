@@ -114,6 +114,16 @@ export default function AppShell({ admin, me, onMe, children }: {
     return () => p.removeListener?.("accountsChanged", on);
   }, [wallet]);
 
+  // Hover menus: open at once, close only after a short pause, so moving the mouse down (or across) to an item
+  // never shuts the menu on the way.
+  const shut = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hover = (name: string | null) => {
+    if (shut.current) { clearTimeout(shut.current); shut.current = null; }
+    if (name) setOpen(name);
+    else shut.current = setTimeout(() => setOpen(null), 280);
+  };
+  useEffect(() => () => { if (shut.current) clearTimeout(shut.current); }, []);
+  useEffect(() => { setOpen(null); }, [path]);
   const on = (m: string[]) => m.some((x) => path === x || path.startsWith(x + "/"));
 
   return (
@@ -131,7 +141,7 @@ export default function AppShell({ admin, me, onMe, children }: {
         <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
           {MENU.map((m) => (
-            <div key={m.name} className="ax-dd" onMouseEnter={() => setOpen(m.name)} onMouseLeave={() => setOpen(null)} onFocus={() => setOpen(m.name)}
+            <div key={m.name} className="ax-dd" onMouseEnter={() => hover(m.name)} onMouseLeave={() => hover(null)} onFocus={() => hover(m.name)}
               onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpen(null); }}>
               {/* The name opens its main page in one tap; hovering (or tabbing) shows everything inside. */}
               <Link href={m.items[0].href} className={"ax-top" + (on(m.match) ? " on" : "")} aria-haspopup="menu" aria-expanded={open === m.name} title={m.tip}>
