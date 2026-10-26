@@ -3393,3 +3393,30 @@ img.ql-logo{object-fit:cover}
 .fp-q svg{width:18px;height:18px;flex:none;opacity:.7}
 .fp-q input{all:unset;flex:1;min-width:0;font-size:16px}
 .fp-more{font-size:.85em;font-weight:700;color:#F0B90B;text-align:center;padding-top:2px}
+
+/* ---------- Your panel: richer, catchier colours; bigger profile pictures ---------- */
+.mp-drawer-in{background:
+  radial-gradient(120% 38% at 105% -5%,rgba(255,107,154,.30),transparent 60%),
+  radial-gradient(110% 40% at -10% 12%,rgba(181,124,255,.34),transparent 62%),
+  radial-gradient(90% 30% at 50% 102%,rgba(240,185,11,.18),transparent 65%),
+  linear-gradient(180deg,#1E1536 0%,#130E24 45%,#0D0A18 100%) !important;
+  box-shadow:-20px 0 60px rgba(0,0,0,.45)}
+.mp-hero{background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.03)) padding-box,linear-gradient(120deg,#FFD84D,#FF6B9A 50%,#B57CFF) border-box !important;
+  border:1.5px solid transparent !important;box-shadow:0 14px 40px rgba(16,8,40,.55),inset 0 1px 0 rgba(255,255,255,.12)}
+.mp-hero-bg{opacity:.9}
+.mp-av{width:84px!important;height:84px!important;font-size:2em!important}
+.mp-hero .mp-av{box-shadow:0 0 0 3px #1E1536,0 0 0 6px #FFD84D,0 0 28px rgba(255,107,154,.55),0 10px 28px rgba(0,0,0,.45)!important}
+.mp-name b{font-size:1.25rem!important}
+.mp-stats b{background:linear-gradient(90deg,#FFD84D,#FF6B9A);-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent}
+.mp-sec,.mp-links,.mp-start,.mp-team,.mp-live,.mp-wallet,.mp-earn,.fp,.mp-search,.mp-results{
+  background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035)) !important;border-radius:18px !important;
+  box-shadow:0 8px 24px rgba(8,4,24,.35),inset 0 1px 0 rgba(255,255,255,.07) !important}
+.mp-wallet{background:linear-gradient(135deg,rgba(240,185,11,.16),rgba(255,107,154,.08) 60%,rgba(255,255,255,.03)) !important}
+.mp-team{background:linear-gradient(135deg,rgba(181,124,255,.18),rgba(79,209,255,.07) 60%,rgba(255,255,255,.03)) !important}
+.mp-live{background:linear-gradient(135deg,rgba(62,229,143,.12),rgba(255,255,255,.03)) !important}
+.mp-link:hover,.mp-person:hover,.mp-coin:hover{background:rgba(255,255,255,.06)}
+.mp-sec-h b,.mp-cap{color:#FFE7A3!important}
+/* Profile picture in the top bars: bigger, with a gold ring */
+.ax-me .me-av,.me-btn .me-av,.rail-me .me-av{width:46px!important;height:46px!important;font-size:1.1em!important;box-shadow:0 0 0 2px #0B0A12,0 0 0 4px #F0B90B,0 0 18px rgba(255,107,154,.45)}
+.ax-me .bell-n,.me-btn .bell-n{right:-5px;top:-5px}
+@media (max-width:520px){ .ax-me .me-av,.me-btn .me-av{width:40px!important;height:40px!important} }
