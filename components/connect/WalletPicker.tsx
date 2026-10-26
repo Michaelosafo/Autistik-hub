@@ -180,9 +180,9 @@ export default function WalletPicker() {
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
             {!solMode && <>
             <div className="wp-label">Any wallet</div>
-            <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => chooseWalletConnect()}>
+            <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => { if (mobile) { setShowAll(true); setTimeout(() => document.querySelector(".wp-more, .wp-list .wp-label:last-of-type")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); } else chooseWalletConnect(); }}>
             <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
-            <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : `300+ wallets on ${netOf(s.network).name} · QR code or open your app`) : "Coming soon"}</small></span>
+            <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : (mobile ? `600+ wallet apps · opens your wallet app directly` : `300+ wallets on ${netOf(s.network).name} · QR code or open your app`)) : "Coming soon"}</small></span>
             <i className="wp-chev" aria-hidden="true" />
           </button>
             </>}
