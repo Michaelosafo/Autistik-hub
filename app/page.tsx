@@ -4,7 +4,6 @@ import Art from "@/components/Art";
 import CopyAddress from "@/components/CopyAddress";
 import MeButton from "@/components/MeButton";
 import LogoMark from "@/components/LogoMark";
-import FeaturedToken from "@/components/FeaturedToken";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { GROUPS, TOKEN_ADDRESS } from "@/lib/groups";
@@ -124,7 +123,6 @@ export default async function Home() {
         <div><b>{GROUPS.length}</b><span>Community groups</span></div>
       </section>
 
-      <section className="lp-sec" aria-label="Featured token"><FeaturedToken /></section>
 
       <section id="why" className="lp-sec">
         <div className="lp-head">
