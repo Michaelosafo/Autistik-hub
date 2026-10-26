@@ -15,7 +15,7 @@ export default async function SpacesPage({ searchParams }: { searchParams: { hos
           <h1>Live rooms</h1>
           <p className="muted">Talk live with the community, like an X Space. Host one, or join and raise your hand to speak.</p>
         </div>
-        <div className="ln-top-r"><Link href="/mood" className="ln-ghost">Autistik Mood</Link></div>
+        <div className="ln-top-r"><Link href="/mood" className="ln-ghost">Autistik Madness</Link></div>
       </header>
       {!user ? (
         <div className="card stack" style={{ alignItems: "flex-start" }}>

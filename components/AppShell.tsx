@@ -53,7 +53,7 @@ const MORE: { name: string; items: Item[] }[] = [
     { href: "/", name: "Home", note: "The AUTISTIK main page", icon: "i-home" },
     { href: "/app", name: "All tools", note: "Every App tool on one page", icon: "i-grid" },
     { href: "/companions", name: "Ask the bot", note: "Chat with Believer, Purity and the AUTISTIK bot", icon: "i-kai" },
-    { href: "/mood", name: "Autistik Mood", note: "Share how you feel, post Tiks and pictures", icon: "i-com" },
+    { href: "/mood", name: "Autistik Madness", note: "Share how you feel, post Tiks, see your people", icon: "i-com" },
     { href: "/spaces", name: "Live rooms", note: "Host or join a live audio room, like an X Space", icon: "i-ses" },
     { href: "/live", name: "Live hub", note: "Join the team's live sessions, get airdrops", icon: "i-ses" },
     { href: "/community", name: "Community", note: "Groups, posts and live sessions", icon: "i-com" },
