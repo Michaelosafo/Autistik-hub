@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, FAST_MODEL, cheap, logCost, guardAI, cleanTurns, json, aiErrorMessage } from "@/lib/ai";
 import { supabaseService } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
-import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, solLaunchFee, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, solLockerProgram, type Pads } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, solLaunchFee, solTradeFeeBps, CHAINS, LOCKS, MAX_CREATOR_PERCENT, MIN_HOLD_USD, checkPlan, liveChains, solLockerProgram, type Pads } from "@/lib/launchpad";
 import { padSites } from "@/lib/launchpad-server";
 import { TRENDING_HOURS, TRENDING_USD } from "@/lib/trending";
 
@@ -60,7 +60,7 @@ How a launch works (explain when useful, don't lecture):
 Chains:
 ${chainLines}
 
-Solana is different: the token is a standard Solana token with a fixed supply (minting and freezing switched off), the pool is on Raydium, and the LP tokens are ${solLockerProgram() ? "burned or locked for 6 months or 1 year in the AUTISTIK Solana Locker (after the lock the creator claims them back from the token page)" : "always burned (no lock option)"}. There is no tax, whitelist, first buy or Start trading step on Solana: trading opens as soon as the pool exists.${solLaunchFee() ? ` Launching costs a small ${solLaunchFee()} SOL AUTISTIK fee (it goes to marketing, paid with the token step).` : ""} Raydium charges about 0.15 SOL to create the pool, so the creator needs their SOL for the pool plus about ${+(SOL_POOL_COST + solLaunchFee()).toFixed(3)} SOL. They sign three times (token, pool, then burn or lock) with a Solana wallet like Phantom or Solflare. Supply on Solana can be at most 10,000,000,000,000.${solLockerProgram() ? "" : ' For Solana, use lock "burn".'}
+Solana is different: the token has a fixed supply (minting and freezing switched off), the pool is on Raydium, and the LP tokens are ${solLockerProgram() ? "burned or locked for 6 months or 1 year in the AUTISTIK Solana Locker (after the lock the creator claims them back from the token page)" : "always burned (no lock option)"}. There is no tax, whitelist, first buy or Start trading step on Solana: trading opens as soon as the pool exists.${solLaunchFee() ? ` Launching costs a small ${solLaunchFee()} SOL AUTISTIK fee (it goes to marketing, paid with the token step).` : ""}${solTradeFeeBps() ? ` Every trade of the coin, on any app or DEX, pays a ${solTradeFeeBps() / 100}% fee to AUTISTIK, built into the coin (a Token-2022 transfer fee that nobody can change).` : ""} Raydium charges about 0.15 SOL to create the pool, so the creator needs their SOL for the pool plus about ${+(SOL_POOL_COST + solLaunchFee()).toFixed(3)} SOL. They sign three times (token, pool, then burn or lock) with a Solana wallet like Phantom or Solflare. Supply on Solana can be at most 10,000,000,000,000.${solLockerProgram() ? "" : ' For Solana, use lock "burn".'}
 
 Collect, in this order:
 1. Chain

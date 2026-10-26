@@ -35,7 +35,7 @@ export default async function NewLaunchPage() {
         <li><i>3</i><span><b>Sign once, you&apos;re live</b><small>Your coin appears on the Board right away.</small></span></li>
       </ol>
       <div className="ln-facts">
-        <span><b>Free</b> to launch</span><span><b>Locked</b> or burned liquidity</span><span><b>≤10%</b> tax, only if you want</span><span>You need <b>$20 of AUTISTIK</b> (BNB Chain) to launch on EVM networks</span>
+        <span><b>Free</b> to launch</span><span><b>Locked</b> or burned liquidity</span><span><b>≤10%</b> tax, only if you want</span><span>A small fee on every trade supports AUTISTIK: <b>0.3%</b> on BNB Chain and Ethereum, <b>0.5%</b> on Solana</span><span>You need <b>$20 of AUTISTIK</b> (BNB Chain) to launch on EVM networks</span>
       </div>
       {!access.allowed ? (
         <div className="card stack" style={{ gap: 8 }}>
