@@ -21,6 +21,10 @@ const nextConfig = {
       { source: "/how-to-buy", destination: "/buy", permanent: true },
     ];
   },
+  // Profile links: autistik.io/@name opens that member's profile.
+  async rewrites() {
+    return [{ source: "/@:handle", destination: "/u/:handle" }];
+  },
   async headers() {
     return [
       {

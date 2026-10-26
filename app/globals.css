@@ -3966,3 +3966,7 @@ img.bd-logo{background:none!important}
 .mad.full .mad-act,.mad.full .mad-note{background:var(--surface);border:1px solid var(--line)}
 .ln-top-r .ln-watch{text-decoration:none}
 .lp-small{width:min(340px,100%);text-align:center;align-items:stretch}
+
+/* Profile link page (autistik.io/@name) */
+.share-card{gap:16px}
+.share-card .avatar.big{width:84px;height:84px}

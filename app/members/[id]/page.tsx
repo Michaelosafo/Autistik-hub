@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
 import FollowButton from "@/components/members/FollowButton";
+import ShareProfile from "@/components/members/ShareProfile";
 import ActivityList from "@/components/members/ActivityList";
 import MemberName from "@/components/members/MemberName";
 import { loadProfiles, memberActivity, memberCard } from "@/lib/members";
@@ -75,7 +76,11 @@ export default async function MemberPage({ params, searchParams }: { params: { i
             </div>
           )}
         </div>
-        {card && !mine && <div className="profile-act"><FollowButton id={prof.id} initial={card.i_follow} /></div>}
+        <div className="profile-act stack" style={{ gap: 8, alignItems: "flex-end" }}>
+          {card && !mine && <FollowButton id={prof.id} initial={card.i_follow} />}
+          <ShareProfile handle={prof.handle ?? null} id={prof.id} name={prof.alias} small />
+          {mine && !prof.handle && <small className="muted">Set an @handle below to get a short link.</small>}
+        </div>
       </div>
       {badges.length > 0 && (
         <div className="card stack">
