@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import FollowButton from "@/components/members/FollowButton";
+import FindPeople from "@/components/FindPeople";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
@@ -163,6 +164,7 @@ export default function MePanel({ me, settings }: {
         </div>
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
+      <FindPeople />
 
       <form className="mp-search" onSubmit={goScan} role="search">
         <Ic id="i-search" />

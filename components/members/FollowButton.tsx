@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 /** Follow / Following toggle. Unfollowing asks once, so a slip of the finger doesn't drop someone. */
-export default function FollowButton({ id, initial, small }: { id: string; initial: boolean; small?: boolean }) {
+export default function FollowButton({ id, initial, small, back, onChange }: { id: string; initial: boolean; small?: boolean; back?: boolean; onChange?: (on: boolean) => void }) {
   const router = useRouter();
   const [on, setOn] = useState(initial);
   const [busy, setBusy] = useState(false);
@@ -22,14 +22,14 @@ export default function FollowButton({ id, initial, small }: { id: string; initi
       : await sb.from("follows").insert({ followee_id: id });
     setBusy(false); setSure(false);
     if (error) { setMsg(/slow down/i.test(error.message) ? error.message : "Couldn't save. Try again."); return; }
-    setOn(!on); router.refresh();
+    setOn(!on); onChange?.(!on); router.refresh();
   }
 
   const cls = `btn ${on ? "" : "primary"} ${small ? "small" : ""}`.trim();
   return (
     <span className="row" style={{ gap: 6 }}>
       <button className={cls} type="button" disabled={busy} onClick={toggle} aria-pressed={on}>
-        {sure ? "Unfollow?" : on ? "Following ✓" : "+ Follow"}
+        {sure ? "Unfollow?" : on ? "Following ✓" : back ? "Follow back" : "+ Follow"}
       </button>
       {sure && <button className={`btn ${small ? "small" : ""}`} type="button" onClick={() => setSure(false)}>Keep</button>}
       {msg && <span className="muted" role="status" style={{ fontSize: ".85em" }}>{msg}</span>}
