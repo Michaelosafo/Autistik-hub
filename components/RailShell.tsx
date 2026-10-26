@@ -7,6 +7,7 @@
  */
 import LogoMark from "@/components/LogoMark";
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import Art from "@/components/Art";
@@ -111,6 +112,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
         {path !== "/" && <header className="nx-top">
           <b>{section?.name ?? "AUTISTIK Hub"}</b>
           <div className="nx-top-r">
+            <ThemeToggle />
             {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
           </div>
