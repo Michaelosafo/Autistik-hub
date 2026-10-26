@@ -3469,3 +3469,5 @@ img.ql-logo{object-fit:cover}
 :root[data-theme="light"]{--lt-s:#FFFFFF;--lt-s2:#F4F0FB;--lt-bar:rgba(255,255,255,.96);--lt-line:#E6E0F0;--lt-ink:#1B1530}
 @media (max-width:520px){ .theme-tg span{display:inline} .theme-tg{width:auto;padding:0 11px;font-size:.74em} }
 @media (max-width:520px){ .theme-tg .tg-word{display:none} }
+:root[data-theme="light"] .ax-bar,:root[data-theme="light"] .lp-bar{background:rgba(255,255,255,.88)}
+:root[data-theme="light"] .lp-bar{border-bottom-color:var(--line)}
