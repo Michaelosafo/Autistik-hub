@@ -11,7 +11,6 @@ import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
-import Art from "@/components/Art";
 import { LINKS } from "@/lib/site";
 import { getState, pickWallet, restoreWallet, subscribe } from "@/lib/connect";
 
@@ -115,7 +114,6 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
           <div className="nx-top-r">
             <LangPicker />
             <ThemeToggle />
-            {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
           </div>
         </header>}
