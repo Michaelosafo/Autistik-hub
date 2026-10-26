@@ -20,6 +20,12 @@ export async function GET(req: Request) {
     sb.from("follows").select("*", { count: "exact", head: true }).eq("followee_id", user.id),
     sb.from("wallets").select("address").eq("user_id", user.id).maybeSingle(),
   ]);
+  // The AUTISTIK team, recommended to everyone to follow (with whether this member already does).
+  const { data: teamRows } = await sb.from("profiles").select("id,alias,handle,color,avatar_url,team_title,is_verified").eq("is_team", true).neq("id", user.id).limit(12);
+  const teamIds = (teamRows || []).map((t: any) => t.id as string);
+  const { data: tf } = teamIds.length ? await sb.from("follows").select("followee_id").eq("follower_id", user.id).in("followee_id", teamIds) : { data: [] as any[] };
+  const followsTeam = new Set((tf || []).map((f: any) => f.followee_id));
+  const team = (teamRows || []).map((t: any) => ({ ...t, following: followsTeam.has(t.id) }));
   const { data: launches } = await sb.from("launches").select("chain,token,symbol,lp_lock,lp_unlock_at,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10);
   const { data: fl } = await sb.from("follows").select("followee_id").eq("follower_id", user.id).order("created_at", { ascending: false }).limit(5);
   const ids = (fl || []).map((f: any) => f.followee_id as string);
@@ -48,7 +54,7 @@ export async function GET(req: Request) {
   }
   return json({
     signedIn: true,
-    profile: prof, following: following ?? 0, followers: followers ?? 0, recent: recentWithLast, launches: launches || [],
+    profile: prof, following: following ?? 0, followers: followers ?? 0, recent: recentWithLast, launches: launches || [], team,
     wallet: address ? { short: `${address.slice(0, 6)}…${address.slice(-4)}`, funds, totalUsd } : null,
   });
 }

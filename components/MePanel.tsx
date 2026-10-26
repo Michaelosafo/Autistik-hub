@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
+import FollowButton from "@/components/members/FollowButton";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
@@ -17,6 +18,7 @@ type Summary = {
   following?: number; followers?: number;
   wallet?: { short: string; totalUsd: number | null; funds: { symbol: string; amount: number; valueUsd: number | null }[] } | null;
   launches?: { chain: string; token: string; symbol: string; lp_lock: string; lp_unlock_at: string | null }[];
+  team?: { id: string; alias: string; handle: string | null; color: string; avatar_url: string | null; team_title: string | null; is_verified: boolean; following: boolean }[];
 };
 type Update = { kind: string; id: string; at: string; body?: string; author?: { id: string; alias: string; color: string; avatar_url?: string | null } | null };
 
@@ -50,6 +52,9 @@ export default function MePanel({ me, settings }: {
   const [msg, setMsg] = useState("");
   const [scan, setScan] = useState("");
   const [coins, setCoins] = useState<Coin[] | null>(null);
+  const [seenBoard, setSeenBoard] = useState(true);
+  useEffect(() => { try { setSeenBoard(localStorage.getItem("seen-board") === "1"); } catch {} }, []);
+  const markBoard = () => { try { localStorage.setItem("seen-board", "1"); } catch {} setSeenBoard(true); };
   const file = useRef<HTMLInputElement>(null);
   const [crop, setCrop] = useState<File | null>(null);
   const [view, setView] = useState(false);
@@ -173,6 +178,29 @@ export default function MePanel({ me, settings }: {
         </div>
       )}
 
+      {sum && (() => {
+        const steps: { done: boolean; label: string; note: string; href?: string; onClick?: () => void }[] = [
+          { done: !!photo, label: "Add a profile photo", note: "So people recognise you", onClick: () => file.current?.click() },
+          { done: !!sum.wallet, label: "Set up your wallet", note: "Free, takes a minute", href: "/wallet" },
+          { done: !sum.team?.length || sum.team.every((t) => t.following), label: "Follow the AUTISTIK team", note: "News, airdrops and live sessions", href: "#mp-team" },
+          { done: seenBoard, label: "Look at the Board", note: "Every coin launched here, live", href: "/board" },
+        ];
+        const done = steps.filter((x) => x.done).length;
+        if (done === steps.length) return null;
+        return (
+          <section className="mp-sec mp-start" aria-label="Get started">
+            <div className="mp-sec-h"><b>👋 Get started</b><small>{done} of {steps.length} done</small></div>
+            <div className="mp-progress" aria-hidden="true"><i style={{ width: `${(done / steps.length) * 100}%` }} /></div>
+            {steps.map((x) => {
+              const body = <><span className={"mp-step-ic" + (x.done ? " ok" : "")} aria-hidden="true">{x.done ? "✓" : ""}</span><span className="mp-link-t"><b>{x.label}</b><small>{x.note}</small></span>{!x.done && <i aria-hidden="true">›</i>}</>;
+              return x.done ? <div key={x.label} className="mp-step done">{body}</div>
+                : x.onClick ? <button key={x.label} type="button" className="mp-step" onClick={x.onClick}>{body}</button>
+                : <Link key={x.label} href={x.href!} className="mp-step" onClick={() => x.href === "/board" && markBoard()}>{body}</Link>;
+            })}
+          </section>
+        );
+      })()}
+
       <section className="mp-sec mp-wallet">
         <div className="mp-sec-h"><b>👛 Wallet</b><Link href="/wallet">Open</Link></div>
         {!sum ? <small className="mp-dim">Loading…</small> : sum.wallet ? (
@@ -192,9 +220,25 @@ export default function MePanel({ me, settings }: {
       <nav className="mp-links" aria-label="Create and earn">
         <small className="mp-cap">Create &amp; earn</small>
         {ACTIONS.map((a) => (
-          <Link key={a.href} href={a.href} className="mp-link" style={{ ["--ic" as any]: a.color }}><span className="mp-ic" aria-hidden="true">{a.icon}</span><span className="mp-link-t"><b>{a.name}</b><small>{a.note}</small></span><i aria-hidden="true">›</i></Link>
+          <Link key={a.href} href={a.href} className="mp-link" style={{ ["--ic" as any]: a.color }} onClick={() => a.href === "/board" && markBoard()}><span className="mp-ic" aria-hidden="true">{a.icon}</span><span className="mp-link-t"><b>{a.name}</b><small>{a.note}</small></span><i aria-hidden="true">›</i></Link>
         ))}
       </nav>
+
+      {!!sum?.team?.length && (
+        <section className="mp-sec mp-team" id="mp-team" aria-label="Recommended: the AUTISTIK team">
+          <div className="mp-sec-h"><b>⭐ Follow the AUTISTIK team</b><Link href="/members">Members</Link></div>
+          <small className="mp-dim">Recommended for everyone: news, airdrops and live sessions first.</small>
+          {sum.team.map((t) => (
+            <div key={t.id} className="mp-person">
+              <Link href={`/members/${t.id}`} className="mp-person-l">
+                <Avatar className="me-av" alias={t.alias} color={t.color} url={t.avatar_url} />
+                <span className="mp-link-t"><b>{t.alias}{t.is_verified && <span className="mp-tick" title="Verified">✓</span>}</b><small>{t.team_title ? `AUTISTIK team · ${t.team_title}` : "AUTISTIK team"}</small></span>
+              </Link>
+              <FollowButton id={t.id} initial={t.following} small />
+            </div>
+          ))}
+        </section>
+      )}
 
       {coins && coins.length > 0 && (
         <section className="mp-sec mp-live">
