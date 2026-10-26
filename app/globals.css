@@ -4181,3 +4181,24 @@ html,body{overflow-x:clip}
 .dev-link:hover{transform:translateY(-1px)}
 :root[data-theme="dark"] .dev-link{background:linear-gradient(135deg,rgba(255,216,77,.14),transparent 70%),var(--surface)}
 :root[data-theme="dark"] .dev-link-cta{color:#FFD84D}
+
+/* ---------- Floating AI helper (side of every page) ---------- */
+.bot-fab{position:fixed;right:18px;bottom:22px;z-index:90;display:flex;align-items:flex-end;gap:10px;pointer-events:none}
+.bot-fab > *{pointer-events:auto}
+.bot-fab-btn{position:relative;display:grid;place-items:center;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#9B7BFF,#6141D4 55%,#4A2FB8);box-shadow:0 10px 28px rgba(97,65,212,.4);text-decoration:none;animation:botfab-bob 3.2s ease-in-out infinite}
+.bot-fab-btn .bot-av{width:48px;height:48px}
+.bot-fab-btn::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:3px solid rgba(240,185,11,.9);opacity:0}
+.bot-fab-btn.talk::after{animation:botfab-ring 1.2s ease-out 3}
+.bot-fab-btn:focus-visible{outline:3px solid #F0B90B;outline-offset:3px}
+.bot-fab-say{order:-1;max-width:220px;padding:11px 14px;border-radius:16px 16px 4px 16px;background:#fff;color:#16111F;font-weight:800;font-size:.9em;line-height:1.35;text-decoration:none;border:1.5px solid #F0B90B;box-shadow:0 10px 28px rgba(20,12,40,.18);animation:botfab-pop .35s cubic-bezier(.2,1.4,.4,1)}
+.bot-fab-say:hover{background:#FFF8E1}
+.bot-fab-x{all:unset;cursor:pointer;position:absolute;right:-4px;bottom:48px;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:14px;line-height:1;background:#16111F;color:#fff;opacity:.75}
+.bot-fab-x:hover{opacity:1}
+.bot-fab-x:focus-visible{outline:2px solid #F0B90B}
+:root[data-theme="dark"] .bot-fab-say{background:#231f30;color:#fff}
+@keyframes botfab-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes botfab-ring{0%{opacity:.9;transform:scale(.9)}100%{opacity:0;transform:scale(1.35)}}
+@keyframes botfab-pop{0%{opacity:0;transform:translateY(8px) scale(.9)}100%{opacity:1;transform:none}}
+@media (max-width:900px){ .bot-fab{right:12px;bottom:92px} .bot-fab-btn{width:52px;height:52px} .bot-fab-btn .bot-av{width:42px;height:42px} .bot-fab-x{bottom:40px} }
+@media (prefers-reduced-motion:reduce){ .bot-fab-btn,.bot-fab-say{animation:none} .bot-fab-btn.talk::after{animation:none} }
+:root[data-calm] .bot-fab-btn,:root[data-calm] .bot-fab-say{animation:none}
