@@ -29,8 +29,9 @@ export async function GET() {
   const c = createPublicClient({ chain: bsc, transport: http(process.env.ANALYTICS_BSC_RPC || "https://bsc-rpc.publicnode.com", { timeout: 20_000 }) });
   const { data: st } = await sb.from("fm_state").select("*").eq("id", 1).single();
   const latest = await c.getBlockNumber();
-  let head = st?.head ? BigInt(st.head) : latest - 15_000n;
-  let tail = st?.tail ? BigInt(st.tail) : head;
+  // Free nodes keep only a few hours of logs: start (or restart, if we fell too far behind) near the top.
+  let head = st?.head && latest - BigInt(st.head) < 8_000n ? BigInt(st.head) : latest - 3_000n;
+  let tail = st?.tail && BigInt(st.tail) <= head ? BigInt(st.tail) : head;
   const end = Date.now() + 45_000;
   let created = 0, bonded = 0, note: string | null = st?.note ?? null;
 
@@ -55,11 +56,11 @@ export async function GET() {
   // New blocks first.
   while (head < latest && Date.now() < end) {
     const to = head + STEP > latest ? latest : head + STEP;
-    try { await read(head + 1n, to); head = to; } catch (e) { note = (e as Error).message.slice(0, 160); break; }
+    try { await read(head + 1n, to); head = to; } catch (e) { note = "new blocks: " + (e as Error).message.slice(0, 140); break; }
     await sb.from("fm_state").update({ head: head.toString(), tail: tail.toString() }).eq("id", 1);
   }
   // Then older history, as far as the node allows.
-  while (Date.now() < end && tail > 0n) {
+  while (Date.now() < end && tail > 0n && !note?.startsWith("new blocks")) {
     const from = tail - STEP;
     try { await read(from, tail - 1n); tail = from; note = null; } catch (e) { note = "older history: " + (e as Error).message.slice(0, 140); break; }
     await sb.from("fm_state").update({ tail: tail.toString() }).eq("id", 1);
