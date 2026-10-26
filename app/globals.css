@@ -4098,3 +4098,11 @@ html,body{overflow-x:clip}
 :root[data-theme="light"] .earn .linkish{color:#A67400}
 :root[data-theme="dark"] .earn .muted,:root[data-theme="dark"] .earn small{color:#CFC6E6}
 :root[data-theme="dark"] .earn .ln-facts b,:root[data-theme="dark"] .earn .susu-total,:root[data-theme="dark"] .earn .earn-tabs a[aria-current=page] b{color:#FFD84D}
+.susu-me{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;align-items:center;border:1.5px solid #F0B90B;background:linear-gradient(135deg,rgba(255,216,77,.18),rgba(255,255,255,0) 60%),var(--surface)}
+.susu-me-main{display:flex;flex-direction:column;gap:6px}
+.susu-me ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.susu-me li{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+.susu-me li span{font-size:.78em;color:var(--muted)}
+.susu-me li b{font-size:1.05em}
+:root[data-theme="light"] .earn .susu-me li b{color:#A67400}
+@media (max-width:640px){ .susu-me{grid-template-columns:1fr} }
