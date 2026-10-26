@@ -138,7 +138,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
   return (
-    <div className="stack" style={{ maxWidth: 1040 }}>
+    <div className="stack scan-page" style={{ maxWidth: 1080 }}>
       <AutoRefresh seconds={60} />
       <div className="token-search">
         <Link href="/analytics" className="muted">← My tokens</Link>
@@ -175,15 +175,28 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         </div>
       </div>
 
-      <nav className="launch-nav n5 an-cards" aria-label="Sections">
-        {VIEWS.map(([k, name], i) => (
-          <Link key={k} href={k === "chess" ? `/arena/${chain}/${t.token}` : `/analytics/${chain}/${t.token}${k === "overview" ? "" : `?view=${k}`}`} aria-current={view === k ? "page" : undefined} scroll={false}
-            className={"ln-card " + (["coral", "violet", "sun", "teal", "ink"] as const)[i]}><span className="ln-text"><b>{name}</b></span></Link>
+      <nav className="scan-tabs" aria-label="Sections">
+        {([
+          ["overview", "Overview", `/analytics/${chain}/${t.token}`],
+          ["dev", "Dev wallet", t.dev ? `/analytics/dev/${chain}/${t.dev}` : null],
+          ["wallets", "Wallets", `/analytics/${chain}/${t.token}?view=wallets`],
+          ["trades", "Trades", `/analytics/${chain}/${t.token}?view=trades`],
+          ["safety", "Safety", `/analytics/${chain}/${t.token}?view=safety`],
+          ["chess", "Game arena", `/arena/${chain}/${t.token}`],
+        ] as const).filter(([, , href]) => href).map(([k, name, href]) => (
+          <Link key={k} href={href!} aria-current={view === k ? "page" : undefined} scroll={false}>{name}</Link>
         ))}
       </nav>
 
       {view === "safety" && <BundleCard b={bundle} explorer={c.explorer} token={t.token} />}
       {view === "safety" && <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />}
+
+      {view === "overview" && t.dev && (
+        <Link href={`/analytics/dev/${chain}/${t.dev}`} className="card dev-link">
+          <span className="grow"><small>Dev wallet</small><b className="mono">{short(t.dev)}</b></span>
+          <span className="dev-link-cta">See their earlier tokens, how many bonded, and the chance this one does well →</span>
+        </Link>
+      )}
 
       {view === "overview" && <div className={"card stack verdict " + call.kind}>
         <div className="label">Buy or sell? The read right now</div>
