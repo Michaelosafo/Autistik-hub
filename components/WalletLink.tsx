@@ -63,7 +63,7 @@ export default function WalletLink({ uid, initial }: { uid: string; initial: str
       <h2>Your BNB Chain wallet</h2>
       {wallet ? (
         <>
-          <div className="notice"><span className="mono" style={{ overflowWrap: "anywhere" }}>{wallet}</span></div>
+          <div className="notice"><span className="mono" title={wallet}>{wallet.slice(0, 6)}…{wallet.slice(-4)}</span></div>
           <p className="muted" style={{ fontSize: ".92em" }}>Airdrops for this account go to this wallet. Only you and the admins can see it.</p>
           {claim && (
             <div className="notice warn stack" style={{ gap: 8 }}>

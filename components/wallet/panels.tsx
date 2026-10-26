@@ -34,8 +34,8 @@ export function Welcome({ signer, member }: { signer: Signer; member?: Member | 
           <b>Your AUTISTIK wallet is ready</b>
           <p className="muted" style={{ margin: "4px 0 0" }}>Made for {member!.email} when you joined. Open it to see your balance, add funds and trade.</p>
           <dl className="aw-addrs">
-            {member!.evm && <div><dt>BNB Chain, Base, Ethereum, Arbitrum</dt><dd className="mono">{member!.evm}</dd></div>}
-            {member!.sol && <div><dt>Solana</dt><dd className="mono">{member!.sol}</dd></div>}
+            {member!.evm && <div><dt>BNB Chain, Base, Ethereum, Arbitrum</dt><dd><ShortAddr address={member!.evm} /></dd></div>}
+            {member!.sol && <div><dt>Solana</dt><dd><ShortAddr address={member!.sol} /></dd></div>}
           </dl>
         </div>
       )}
@@ -161,15 +161,18 @@ export function Send({ c, signer, owner, holdings, start, onDone }: { c: WChain;
 }
 
 export function Receive({ c, address }: { c: WChain; address: string }) {
-  const [qr, setQr] = useState(""); const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState(""); const [copied, setCopied] = useState(false); const [full, setFull] = useState(false);
   useEffect(() => { import("qrcode").then((m) => m.toDataURL(address, { margin: 1, width: 200 })).then(setQr).catch(() => {}); }, [address]);
   return (
     <div className="tx-receive">
       {qr && <img src={qr} alt={`QR code for your ${c.name} address`} width={180} height={180} className="aw-qr" />}
       <div className="stack" style={{ gap: 8, minWidth: 0 }}>
         <b>Deposit on {c.name}</b>
-        <code className="aw-break">{address}</code>
-        <button type="button" className="tx-cta" onClick={() => { navigator.clipboard?.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied" : "Copy address"}</button>
+        <code className="aw-break" title={address}>{full ? address : shortAddr(address)}</code>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button type="button" className="tx-cta" onClick={() => { navigator.clipboard?.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied" : "Copy address"}</button>
+          <button type="button" className="linkish" onClick={() => setFull(!full)}>{full ? "Hide full address" : "Show full address"}</button>
+        </div>
         <small className="tx-dim">Only send {c.name} coins and tokens here. {c.kind === "evm" ? "The same address works on BNB Chain, Base, Ethereum and Arbitrum: always pick the right network when withdrawing from an exchange." : "This is a Solana address: never send BNB or ETH here."}</small>
       </div>
     </div>
@@ -208,5 +211,17 @@ export function Security({ signer }: { signer: Signer }) {
       )}
       <button type="button" className="btn" onClick={signer.logout} style={{ alignSelf: "flex-start" }}>{signer.mode === "privy" ? "Sign out" : "Disconnect"}</button>
     </div>
+  );
+}
+
+/** A wallet address shown short (0x1234…abcd), with the full one on hover and a copy button. */
+export const shortAddr = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+export function ShortAddr({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="row" style={{ gap: 8, alignItems: "center", display: "inline-flex" }}>
+      <span className="mono" title={address}>{shortAddr(address)}</span>
+      <button type="button" className="linkish" onClick={() => { navigator.clipboard?.writeText(address).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "Copied" : "Copy"}</button>
+    </span>
   );
 }
