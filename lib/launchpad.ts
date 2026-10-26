@@ -212,14 +212,14 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     name: "Robinhood Chain",
     dex: process.env.NEXT_PUBLIC_ROBINHOOD_DEX_NAME || "Uniswap V2",
     coin: "ETH",
-    // Robinhood Chain mainnet (an Arbitrum chain). Uniswap V2 router from Uniswap's deployments list; the stablecoin
-    // (used to price the launch fee) comes from the settings until it's confirmed.
+    // Robinhood Chain mainnet (an Arbitrum chain). Uniswap V2 router from Uniswap's deployments list (factory
+    // 0x8BCe…937f, WETH 0x0bd7…aD73). Stablecoin: Paxos USDG (6 decimals), which has a deep USDG/WETH pool there.
     chainId: Number(process.env.NEXT_PUBLIC_ROBINHOOD_CHAIN_ID || 4663),
     rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
     explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "https://robinhoodchain.blockscout.com").replace(/\/+$/, ""),
     dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "robinhood",
     router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89E5Db8B5aA49aa85AC63f691524311aeb649EBA",
-    stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN),
+    stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN) ?? "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
     suggestedLiquidity: "0.1",
     swapUrl: (t) => (process.env.NEXT_PUBLIC_ROBINHOOD_SWAP_URL || "").replace("{token}", t),
   },
