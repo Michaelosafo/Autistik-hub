@@ -5,6 +5,7 @@ import AdBar from "@/components/AdBar";
 import TrendingPay from "@/components/TrendingPay";
 import TokenLogo from "@/components/TokenLogo";
 import TokenControls from "@/components/TokenControls";
+import HolderRewards from "@/components/HolderRewards";
 import WatchButton from "@/components/WatchButton";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
@@ -14,7 +15,7 @@ import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import VerifySource from "@/components/VerifySource";
-import { SolanaClaim } from "@/components/SolanaLaunch";
+import { SolanaClaim, SolanaHolderRewards } from "@/components/SolanaLaunch";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,9 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         </div>
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
+          {!listed && !sol && <HolderRewards chain={c.key} token={token as `0x${string}`} />}
           {!listed && !sol && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
+          {!listed && sol && <SolanaHolderRewards token={token} />}
           {!listed && sol && lock !== "burn" && <SolanaClaim token={token} pair={launch.pair} creator={launch.creator} unlockAt={launch.lp_unlock_at} />}
           {access.allowed && (c.router || sol) && <AddLiquidity pads={{}} chain={c.key} token={token} pair={launch.pair} />}
           <div className="notice warn" style={{ fontSize: ".86em" }}>{listed ? "Listed by a paid promotion, not checked by the AUTISTIK team." : "Made by a community member, not the AUTISTIK team."} Token prices can go to zero. Nothing here is financial advice.</div>

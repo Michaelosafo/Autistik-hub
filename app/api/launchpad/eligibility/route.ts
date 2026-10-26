@@ -49,13 +49,14 @@ export async function POST(req: Request) {
 
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
   // Launch Pad v3: the salt that gives this launch a token address ending in "aaaaa" (taken only when it's needed).
-  const salt = async () => ((await padVersion(chain.key)) >= 3 ? await vanitySalt(chain.key, pad) : null);
+  const version = await padVersion(chain.key);
+  const salt = async () => (version >= 3 ? await vanitySalt(chain.key, pad, version) : null);
   // Not set up yet: the contract's eligibilitySigner should also be the zero address, so no check happens.
   if (!key) {
     const s = await salt();
-    return json({ checked: false, deadline: "0", signature: "0x", ...(s && { salt: s.salt, token: s.token }) });
+    return json({ checked: false, deadline: "0", signature: "0x", padVersion: version, ...(s && { salt: s.salt, token: s.token }) });
   }
-  if (admin) return json({ checked: true, admin: true, ...(await permit(key, pad, chain.chainId, creator, await salt())) });
+  if (admin) return json({ checked: true, admin: true, padVersion: version, ...(await permit(key, pad, chain.chainId, creator, await salt())) });
 
   const bsc = createPublicClient({ transport: http(CHAINS.bsc.rpc) });
   let balance: bigint, decimals: number;
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
     }, 403);
   }
 
-  return json({ checked: true, ...(await permit(key, pad, chain.chainId, creator, await salt())), holdUsd, needTokens });
+  return json({ checked: true, padVersion: version, ...(await permit(key, pad, chain.chainId, creator, await salt())), holdUsd, needTokens });
 }
 
 /**

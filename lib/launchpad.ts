@@ -43,6 +43,61 @@ export const LAUNCHPAD_V3_ABI = parseAbi([
   "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error TransferFailed()", "error TaxTooHigh()",
 ]);
 
+/**
+ * Launch Pad v4 (contracts/AutistikLaunchpadV4.sol): v3 plus optional holder rewards. The creator picks a reward token
+ * (the chain's coin, or BTC/ETH/another token the team allowed) and how much of their tax goes to holders.
+ */
+export const LAUNCHPAD_V4_ABI = parseAbi([
+  "struct LaunchParams { string name; string symbol; uint256 supply; uint256 creatorBps; uint256 devBuyNative; uint256 buyTax; uint256 sellTax; address taxWallet; address[] whitelist; uint256 whitelistNative; uint8 lockOption; address rewardToken; uint256 holderBps; uint256 permitDeadline; uint256 maxFeeAccepted; uint256 deadline; bytes32 salt; }",
+  "function launch(LaunchParams p, bytes permitSig) payable returns (address token)",
+  "function tokenFor(bytes32 salt) view returns (address)",
+  "function rewardAllowed(address token) view returns (bool)",
+  "function setRewardToken(address token, bool allowed)",
+  "event Launched(address indexed token, address indexed pair, address indexed creator, uint256 creatorTokens, uint256 devBuyTokens, uint8 lockOption, uint256 lockId)",
+  "error NotOwner()", "error ZeroAddress()", "error InvalidName()", "error InvalidSymbol()", "error InvalidSupply()", "error InvalidLock()",
+  "error CreatorShareTooHigh()", "error NotEnoughLiquidity()", "error FeeTooHigh()", "error TooLate()", "error NotEligible()", "error PermitExpired()",
+  "error PermitUsed()", "error TooManyWhitelisted()", "error WhitelistTooBig()", "error TransferFailed()", "error TaxTooHigh()", "error RewardNotAllowed()",
+]);
+
+/** The address v4 uses for "the chain's own coin" as the holders' reward. */
+export const NATIVE_REWARD = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as const;
+
+/** Holder-reward tokens creators can pick on each chain (the pad allows them at deploy). The chain's coin is always there. */
+export const REWARD_TOKENS: Partial<Record<ChainKey, { symbol: string; name: string; address: `0x${string}`; decimals: number }[]>> = {
+  bsc: [
+    { symbol: "BTC", name: "Bitcoin (BTCB)", address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", decimals: 18 },
+    { symbol: "ETH", name: "Ethereum (Binance-Peg ETH)", address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals: 18 },
+  ],
+  ethereum: [{ symbol: "BTC", name: "Bitcoin (WBTC)", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8 }],
+};
+
+/** What a creator can pick as the holders' reward on a chain: none, the coin, the listed tokens, or another allowed token. */
+export function rewardChoices(c: LaunchChain) {
+  return [{ key: "native", symbol: c.coin, name: `${c.coin} (the chain's coin)` }, ...(REWARD_TOKENS[c.key] ?? []).map((t) => ({ key: t.address, symbol: t.symbol, name: t.name }))];
+}
+
+/**
+ * Solana holder rewards: what the AUTISTIK rewards wallet buys with the holders' part of a coin's fee and sends to its
+ * holders (lib/solana-rewards.ts). Keys are what plans store.
+ */
+export const SOL_REWARD_TOKENS: Record<string, { symbol: string; name: string; mint: string; decimals: number }> = {
+  sol: { symbol: "SOL", name: "SOL", mint: "So11111111111111111111111111111111111111112", decimals: 9 },
+  btc: { symbol: "BTC", name: "Bitcoin (cbBTC)", mint: "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij", decimals: 8 },
+  eth: { symbol: "ETH", name: "Ethereum (Wormhole ETH)", mint: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", decimals: 8 },
+};
+
+/** Holder rewards on a launched v4 token. */
+export const REWARD_TOKEN_ABI = parseAbi([
+  "function rewardToken() view returns (address)",
+  "function holderBps() view returns (uint256)",
+  "function withdrawableRewards(address) view returns (uint256)",
+  "function totalRewardsEarned(address) view returns (uint256)",
+  "function totalRewardsDistributed() view returns (uint256)",
+  "function rewardHolders() view returns (uint256)",
+  "function excludedFromRewards(address) view returns (bool)",
+  "function claimRewards()",
+]);
+
 /** The ending every Launch Pad v3 token address has (BNB Chain, Ethereum, Robinhood Chain…), shown in capitals ("AAAAA"). */
 export const EVM_VANITY_SUFFIX = "aaaaa";
 
@@ -334,6 +389,13 @@ export type LaunchPlan = {
   whitelist: string[];
   /** Coin for the creator's first buy at launch price (decimal string, "0" for none). */
   devBuy: string;
+  /**
+   * Holder rewards (Launch Pad v4): "" none, "native" for the chain's coin, or a token address (BTC, ETH… allowed
+   * by the team). Paid from the tax.
+   */
+  reward?: string;
+  /** Share of the tax that goes to holders, percent (1–100). The rest goes to the tax (marketing) wallet. */
+  holderPercent?: number;
   description: string;
   website: string;
   x: string;
@@ -384,7 +446,9 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined, pads: Pads)
   const sol = isSolana(chain);
   // Solana launches have no tax, whitelist or first buy (a plain SPL token). The LP tokens are burned, or locked in the
   // AUTISTIK Solana Locker once it's set up (solLockerProgram).
-  if (sol) p = { ...p, lock: solLockerProgram() ? p.lock : "burn", buyTax: 0, sellTax: 0, taxWallet: "", whitelist: [], devBuy: "0" };
+  // Solana holder rewards: one fee on every transfer (Token-2022), split between holders and the creator's wallet.
+  const solReward = sol && typeof p.reward === "string" && p.reward in SOL_REWARD_TOKENS ? p.reward : "";
+  if (sol) p = { ...p, lock: solLockerProgram() ? p.lock : "burn", buyTax: solReward ? p.buyTax : 0, sellTax: solReward ? p.buyTax : 0, taxWallet: solReward ? p.taxWallet : "", whitelist: [], devBuy: "0", reward: solReward };
   const maxSupply = sol ? SOL_MAX_SUPPLY : 10n ** 15n;
   if (!/^\d+$/.test(supply) || BigInt(supply) < 1000n || BigInt(supply) > maxSupply) return { error: `Total supply must be a whole number from 1,000 to ${maxSupply.toLocaleString("en-US")}.` };
   const creatorPercent = Number(p.creatorPercent ?? 0);
@@ -398,10 +462,18 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined, pads: Pads)
   const buyTax = Number(p.buyTax ?? 0), sellTax = Number(p.sellTax ?? 0);
   if (!(buyTax >= 0 && buyTax <= MAX_TAX_PERCENT) || !(sellTax >= 0 && sellTax <= MAX_TAX_PERCENT)) return { error: `Tax can be 0–${MAX_TAX_PERCENT}% on buys and on sells.` };
   const taxWallet = String(p.taxWallet || "").trim();
-  if ((buyTax > 0 || sellTax > 0) && !/^0x[0-9a-fA-F]{40}$/.test(taxWallet)) return { error: "Add the wallet that should receive the tax (0x…)." };
+  if (sol && solReward) {
+    if (!(buyTax >= 1 && buyTax <= MAX_TAX_PERCENT)) return { error: `Holder rewards on Solana come from a fee on every trade: set it to 1–${MAX_TAX_PERCENT}%.` };
+    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(taxWallet)) return { error: "Add the Solana wallet that should receive your part of the fee." };
+  } else if ((buyTax > 0 || sellTax > 0) && !/^0x[0-9a-fA-F]{40}$/.test(taxWallet)) return { error: "Add the wallet that should receive the tax (0x…)." };
   const whitelist = [...new Set((Array.isArray(p.whitelist) ? p.whitelist : []).map((w) => String(w).trim()).filter(Boolean))];
   if (whitelist.length > 3) return { error: "You can whitelist at most 3 wallets." };
   if (whitelist.some((w) => !/^0x[0-9a-fA-F]{40}$/.test(w))) return { error: "Each whitelisted wallet must be a 0x… address." };
+  const reward = sol ? solReward : String(p.reward || "").trim();
+  if (!sol && reward && reward !== "native" && !/^0x[0-9a-fA-F]{40}$/.test(reward)) return { error: "The reward token must be a 0x… address." };
+  const holderPercent = reward ? Number(p.holderPercent ?? 0) : 0;
+  if (reward && !(holderPercent >= 1 && holderPercent <= 100)) return { error: "Choose how much of the tax goes to holders (1–100%)." };
+  if (reward && !(buyTax > 0 || sellTax > 0)) return { error: "Holder rewards come from the tax: set a buy or sell tax first." };
   const devBuy = String(p.devBuy || "0").trim() || "0";
   let devWei = 0n;
   try { devWei = parseEther(devBuy); } catch { return { error: `Your first buy must be an amount of ${chain.coin}, or 0.` }; }
@@ -424,6 +496,7 @@ export function checkPlan(p: Partial<LaunchPlan> | null | undefined, pads: Pads)
       taxWallet: buyTax > 0 || sellTax > 0 ? taxWallet : "",
       whitelist,
       devBuy,
+      ...(reward ? { reward, holderPercent: Math.round(holderPercent * 100) / 100 } : {}),
       description: String(p.description || "").trim().slice(0, 500),
       website: link(p.website),
       x: link(p.x),

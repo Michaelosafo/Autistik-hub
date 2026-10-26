@@ -2,7 +2,7 @@
 import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, encodeAbiParameters, formatEther, getAddress, getContractAddress, http, keccak256, parseEther, toHex, zeroAddress } from "viem";
-import { CHAINS, LAUNCHPAD_ABI, MIN_HOLD_USD, deployable, viemChain, type ChainKey, type LaunchChain } from "@/lib/launchpad";
+import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V4_ABI, MIN_HOLD_USD, REWARD_TOKENS, deployable, viemChain, type ChainKey, type LaunchChain } from "@/lib/launchpad";
 
 const CREATE2 = "0x4e59b44847b379578588920cA78FbF26c0B4956C" as const;
 const PAD_SALT = keccak256(toHex("AUTISTIK Launchpad v2"));
@@ -14,12 +14,13 @@ const CONFIG_TYPE = [{ type: "tuple", components: [
   { name: "team", type: "address" }, { name: "marketing", type: "address" }, { name: "burner", type: "address" },
   { name: "launchFee", type: "uint256" }, { name: "maxLaunchFee", type: "uint256" }, { name: "platformFee", type: "uint256" },
   { name: "minLiquidity", type: "uint256" }, { name: "maxWhitelistNative", type: "uint256" }, { name: "eligibilitySigner", type: "address" },
+  { name: "rewardTokens", type: "address[]" },
 ] }] as const;
 
 type Info = { coin: string; priceUsd: number | null; router: `0x${string}`; stablecoin: `0x${string}`; team: `0x${string}` | null; autistik: `0x${string}`; locker: `0x${string}` | null; signer: `0x${string}`; pad: string | null; padVersion: number | null; burner: string | null };
 const coinFor = (usd: number, price: number) => parseEther((usd / price).toFixed(9));
 
-/** Admin only: put the Launch Pad v2 on a chain (and the AUTISTIK burner on BNB Chain), and keep its $ amounts right. */
+/** Admin only: put the Launch Pad (v4) on a chain (and the AUTISTIK burner on BNB Chain), and keep its $ amounts right. */
 export default function PadDeploy() {
   const chains = Object.values(CHAINS).filter(deployable);
   const [chain, setChain] = useState<ChainKey>(chains[0]?.key ?? "bsc");
@@ -94,11 +95,13 @@ export default function PadDeploy() {
       owner: i.team, router: i.router, locker: i.locker, stablecoin: i.stablecoin, team: i.team, marketing: i.team, burner: burner as `0x${string}`,
       launchFee: coinFor(USD.launchFee, i.priceUsd), maxLaunchFee: coinFor(USD.maxLaunchFee, i.priceUsd), platformFee: 30n,
       minLiquidity: coinFor(USD.minLiquidity, i.priceUsd), maxWhitelistNative: coinFor(USD.maxWhitelist, i.priceUsd), eligibilitySigner: i.signer,
+      // Holder-reward tokens creators can pick from the start (BTC, ETH…). More can be allowed later below.
+      rewardTokens: (REWARD_TOKENS[chain] ?? []).map((t) => t.address),
     };
     const initcode = concat([PAD_BYTECODE, encodeAbiParameters(CONFIG_TYPE, [cfg])]);
     const at = await create2(c, keccak256(concat([PAD_SALT, toHex(c.chainId, { size: 32 })])), initcode, "AUTISTIK Launch Pad");
     await save("pad", at);
-    return `✅ Launch Pad v3 live on ${c.name} at ${at}. New launches here get addresses ending in "AAAAA"; tokens launched before keep working on the old Launch Pad.`;
+    return `✅ Launch Pad v4 live on ${c.name} at ${at}. New launches can give holders rewards and get addresses ending in "AAAAA"; tokens launched before keep working on the old Launch Pad.`;
   });
 
   const sync = () => run(async () => {
@@ -124,6 +127,20 @@ export default function PadDeploy() {
     return on ? `✅ The $${MIN_HOLD_USD} AUTISTIK check is on for ${c.name}.` : `The $${MIN_HOLD_USD} AUTISTIK check is off for ${c.name}. Anyone can launch here.`;
   });
 
+  // v4: let creators pick another token as the holders' reward (it needs a pool with the chain's coin on the DEX).
+  const [rewardAddr, setRewardAddr] = useState("");
+  const allowReward = (allowed: boolean) => run(async () => {
+    const i = info!;
+    const t = rewardAddr.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(t)) throw new Error("Paste the token's 0x… address.");
+    const { w, account, vc, pub } = await wallet(c);
+    setMsg(`Confirm in your wallet: ${allowed ? "allow" : "stop allowing"} ${t.slice(0, 8)}… as a holder reward on ${c.name}.`);
+    const hash = await w.writeContract({ account, chain: vc, address: i.pad, abi: LAUNCHPAD_V4_ABI, functionName: "setRewardToken", args: [getAddress(t), allowed] });
+    await pub.waitForTransactionReceipt({ hash });
+    setRewardAddr("");
+    return allowed ? "✅ Creators can now pick that token as a holder reward. Coins already launched keep theirs." : "✅ New launches can't pick that token any more. Coins already launched keep theirs.";
+  });
+
   const hubKey = info ? info.signer !== zeroAddress : false;
   const checkOn = !!padSigner && padSigner !== zeroAddress;
 
@@ -140,7 +157,7 @@ export default function PadDeploy() {
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {chain === "bsc" && !info.burner && <button className="btn primary" type="button" disabled={busy} onClick={deployBurner}>1. Deploy AUTISTIK burner</button>}
             {!info.pad && <button className="btn primary" type="button" disabled={busy || (chain === "bsc" && !info.burner) || !info.locker} onClick={deployPad}>{chain === "bsc" ? "2. " : ""}Deploy Launch Pad</button>}
-            {info.pad && (info.padVersion ?? 2) < 3 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v3: new token addresses end in &quot;AAAAA&quot;</button>}
+            {info.pad && (info.padVersion ?? 2) < 4 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v4: holder rewards (BNB/ETH, BTC, ETH)</button>}
             {info.pad && <button className="btn small" type="button" disabled={busy} onClick={sync}>Sync $ amounts (≈${USD.launchFee} launch, ≈${USD.maxWhitelist} whitelist)</button>}
           </div>
           {info.pad && (
@@ -153,6 +170,17 @@ export default function PadDeploy() {
                   {checkOn && <button className="btn small" type="button" disabled={busy} onClick={() => setCheck(false)}>Turn it off</button>}
                 </div>
               )}
+            </div>
+          )}
+          {info.pad && (info.padVersion ?? 2) >= 4 && (
+            <div className="stack" style={{ gap: 6 }}>
+              <span>Holder rewards: <b>on</b> · ready-made: {c.coin}{(REWARD_TOKENS[chain] ?? []).map((t) => `, ${t.symbol}`).join("")}</span>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <input value={rewardAddr} onChange={(e) => setRewardAddr(e.target.value)} placeholder="Another reward token 0x…" spellCheck={false} style={{ flex: "1 1 260px" }} aria-label="Reward token address" />
+                <button className="btn small" type="button" disabled={busy} onClick={() => allowReward(true)}>Allow</button>
+                <button className="btn small" type="button" disabled={busy} onClick={() => allowReward(false)}>Remove</button>
+              </div>
+              <small className="muted">Only allow well-known tokens with a deep {c.dex} pool against {c.coin}. A creator could otherwise pick a token they control and pump it with their holders&apos; rewards.</small>
             </div>
           )}
           {info.pad && <small className="muted">Launch Pad: <a href={`${c.explorer}/address/${info.pad}`} target="_blank" rel="noreferrer">{info.pad}</a>. Press &quot;Sync $ amounts&quot; when {c.coin}&apos;s price moves a lot.</small>}

@@ -3,7 +3,7 @@ import { namesTaken, saveLogo, takenError } from "@/lib/launch-names";
 import { parseUnits } from "viem";
 import { json } from "@/lib/ai";
 import { launchAccess } from "@/lib/admin";
-import { currentUser } from "@/lib/supabase/server";
+import { currentUser, supabaseService } from "@/lib/supabase/server";
 import { CHAINS, SOL_DECIMALS, checkPlan } from "@/lib/launchpad";
 import { PublicKey } from "@solana/web3.js";
 import { SOL_ADDR, connection, buildAddLiquidity, buildBurnLp, buildMint, buildPool, findPool } from "@/lib/solana-launch";
@@ -39,6 +39,14 @@ export async function POST(req: Request) {
         if (taken) return json({ error: taken }, 409);
         const built = await buildMint(owner, r.plan);
         await saveLogo("solana", built.mint, r.plan.logo, me.id).catch(() => {});
+        // Holder rewards: what the rewards wallet does with this coin's fee, fixed now (the mint's key is thrown away).
+        if (r.plan.reward && built.creatorFeeBps > 0) {
+          const { error } = await supabaseService().from("sol_reward_coins").insert({
+            mint: built.mint, creator: owner, reward: r.plan.reward, fee_bps: built.creatorFeeBps, platform_bps: built.platformBps,
+            holder_bps: Math.round((r.plan.holderPercent ?? 0) * 100), tax_wallet: r.plan.taxWallet, user_id: me.id,
+          });
+          if (error) return json({ error: "Couldn't set up holder rewards. Try again." }, 500);
+        }
         return json(built);
       }
       case "pool": {

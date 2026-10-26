@@ -2,7 +2,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { parseUnits } from "viem";
 import { getState, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
-import { CHAINS, LOCKS, SOL_POOL_COST, solLaunchFee, type LaunchPlan } from "@/lib/launchpad";
+import { CHAINS, LOCKS, SOL_POOL_COST, SOL_REWARD_TOKENS, solLaunchFee, type LaunchPlan } from "@/lib/launchpad";
 import { autoList, reportActivity } from "@/lib/activity-client";
 import { signAndSend, solErr, solLaunchApi, type SolWallet } from "@/lib/sol-wallet";
 
@@ -301,5 +301,66 @@ export function SolanaClaim({ token, pair, creator, unlockAt }: { token: string;
       )}
       {msg && <small className="muted">{msg}</small>}
     </div>
+  );
+}
+
+/** Token page, Solana: holder rewards (SOL, BTC or ETH) paid from the coin's fee, and the connected wallet's own. */
+export function SolanaHolderRewards({ token }: { token: string }) {
+  const { sw, picker } = useSolWallet();
+  const [info, setInfo] = useState<any>(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const holder = sw?.account.address;
+  const load = () => fetch(`/api/launchpad/solana-rewards?mint=${token}${holder ? `&holder=${holder}` : ""}`, { cache: "no-store" }).then((r) => r.json()).then((d) => setInfo(d.rewards ?? null)).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [token, holder]);
+  if (!info) return null;
+  const r = SOL_REWARD_TOKENS[info.reward];
+  if (!r) return null;
+  const f = (v: string) => { const n = Number(v) / 10 ** r.decimals; return n === 0 ? "0" : n < 0.000001 ? "<0.000001" : n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 8 : 4 }); };
+  const post = (action: string) => fetch("/api/launchpad/solana-rewards", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, mint: token, holder }) });
+  async function claim() {
+    if (!sw) return;
+    setBusy(true); setMsg("Sending your rewards…");
+    try {
+      let res = await post("claim");
+      if (res.status === 409) {
+        // BTC/ETH: the holder's wallet first opens its account for the reward token (a small refundable deposit).
+        setMsg(`Confirm in your wallet: open your ${r.symbol} account (about 0.002 SOL deposit, once).`);
+        const a = await post("account").then((x) => x.json());
+        if (!a.tx) throw new Error(a.error || "Couldn't prepare that.");
+        await signAndSend(sw, a.tx);
+        setMsg("Sending your rewards…");
+        res = await post("claim");
+      }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Couldn't claim right now.");
+      setMsg(`✅ ${f(d.amount)} ${r.symbol} sent to your wallet.`);
+      load();
+    } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
+  }
+  const fee = (info.fee_bps + info.platform_bps) / 100;
+  return (
+    <section className="card stack hr-card" style={{ gap: 10 }} aria-label="Holder rewards">
+      <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <h3 style={{ margin: 0 }}>Holder rewards in {r.symbol}</h3>
+        <small className="muted">{fee}% fee · {info.holder_bps / 100}% of the creator&apos;s part to holders</small>
+      </div>
+      <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Hold this coin and earn {r.symbol}. Every trade pays a fee; part of it buys {r.symbol} and is shared with all holders by how much they hold, sent about every 10 minutes.{info.active ? "" : " Rewards start once the pool is live."}</p>
+      <div className="hr-stats">
+        <div><small>Shared with holders so far</small><b className="num">{f(info.distributed)} {r.symbol}</b></div>
+        <div><small>Holders earning</small><b className="num">{Number(info.holders).toLocaleString("en-US")}</b></div>
+      </div>
+      {!sw ? picker(busy, setMsg) : info.mine && (
+        <div className="hr-mine">
+          <span className="stack" style={{ gap: 2 }}>
+            <small className="muted">Your rewards: {f(info.mine.earned)} {r.symbol} earned</small>
+            <b className="num">{f(info.mine.due)} {r.symbol} not sent yet</b>
+          </span>
+          <button className="btn primary" type="button" disabled={busy || info.mine.due === "0"} onClick={claim}>{info.mine.due === "0" ? "Nothing to claim yet" : "Claim now"}</button>
+        </div>
+      )}
+      {msg && <small className="muted" role="status">{msg}</small>}
+    </section>
   );
 }
