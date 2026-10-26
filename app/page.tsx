@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
+import LangPicker from "@/components/LangPicker";
 import Art from "@/components/Art";
 import CopyAddress from "@/components/CopyAddress";
 import MeButton from "@/components/MeButton";
@@ -91,6 +92,7 @@ export default async function Home() {
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
+        <LangPicker />
         <ThemeToggle />
         <Link href="/companions" className="lp-launch bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>
         {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}

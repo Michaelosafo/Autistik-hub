@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
+import LangPicker from "@/components/LangPicker";
 import Art from "@/components/Art";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -163,6 +164,7 @@ export default function AppShell({ admin, me, onMe, children }: {
           ))}
         </nav>
         <div className="ax-right">
+          <LangPicker />
           <ThemeToggle />
           <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
