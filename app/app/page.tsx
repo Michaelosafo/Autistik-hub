@@ -61,7 +61,7 @@ export default async function AppHome() {
     <div className="ah">
       {/* No single featured coin here: every coin is on the Board. */}
       <Link href="/board" className="ah-board">
-        <span aria-hidden="true">📋</span>
+        <span aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-fire" /></svg></span>
         <span><b>The Board</b><small>Every coin launched on AUTISTIK, live, ranked as it trades{board.length ? ` · ${board.length} coin${board.length === 1 ? "" : "s"}` : ""}</small></span>
         <i aria-hidden="true">Open →</i>
       </Link>

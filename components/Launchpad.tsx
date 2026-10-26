@@ -440,7 +440,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
   return (
     <form className="ql" onSubmit={review}>
       <div className="ql-main card">
-        <div className="ql-top"><b>⚡ Launch a token</b><small className="muted">Five quick steps, a live preview, then you sign once.</small></div>
+        <div className="ql-top"><b>Launch a token</b><small className="muted">Five quick steps, a live preview, then you sign once.</small></div>
 
         <section className="ql-sec">
           <h4><i>1</i>Network</h4>
@@ -458,7 +458,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
           <div className="form-grid">
             <div className="ql-pic" style={{ gridColumn: "1 / -1" }}>
               <button type="button" className="ql-pic-btn" onClick={() => logoInput.current?.click()} aria-label={f.logo ? "Change the token picture" : "Add a token picture"}>
-                {f.logo ? <img src={f.logo} alt="" /> : <span>🖼️<small>Add picture</small></span>}
+                {f.logo ? <img src={f.logo} alt="" /> : <span><svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-cam" /></svg><small>Add picture</small></span>}
               </button>
               <div><b>Token picture</b><small className="muted">Square works best (PNG, JPG, WebP or GIF). It shows on the Board, the token page{sol ? " and in Solana wallets" : ""}.</small>
                 {logoBusy && <small className="muted">{logoBusy}</small>}
@@ -491,7 +491,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
             <div className="ql-locks" role="radiogroup" aria-label="Liquidity lock">
               {(Object.keys(LOCKS) as LiquidityLock[]).map((k) => (
                 <button key={k} type="button" role="radio" aria-checked={f.lock === k} className={"ql-lock" + (f.lock === k ? " on" : "")} onClick={() => setF({ ...f, lock: k })}>
-                  <span aria-hidden="true">{k === "burn" ? "🔥" : "🔒"}</span><b>{LOCKS[k].label}</b>
+                  <span aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20"><use href={k === "burn" ? "#i-fire" : "#i-lock"} /></svg></span><b>{LOCKS[k].label}</b>
                 </button>
               ))}
             </div>
@@ -549,7 +549,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
             <div><small>Liquidity</small><b>{liqN ? `${liqN} ${coin}` : "–"}</b></div>
             <div><small>Start price</small><b>{tiny(price)} {price ? coin : ""}</b></div>
             <div><small>Start market cap</small><b>{mcap ? `${+mcap.toFixed(4)} ${coin}` : "–"}</b></div>
-            <div><small>Liquidity</small><b>{f.lock === "burn" ? "🔥 Burned" : `🔒 ${lp.short}`}</b></div>
+            <div><small>Liquidity</small><b>{f.lock === "burn" ? "Burned" : lp.short}</b></div>
           </div>
           <ul className="ql-checks">
             {checks.map(([ok, t]) => <li key={t} className={ok ? "ok" : "warn"}><i aria-hidden="true">{ok ? "✓" : "!"}</i>{t}</li>)}
