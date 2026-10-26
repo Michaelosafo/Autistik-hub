@@ -165,6 +165,29 @@ const DEX_ALIAS: Record<string, string> = { gnosischain: "gnosis", seiv2: "sei",
 const CODE_ORDER = ["bsc", "base", "ethereum", "arbitrum", "polygon", "optimism", "avalanche", "sonic", "hyperevm", "unichain", "linea", "berachain", "blast", "monad"];
 
 /**
+ * A Solana coin that isn't in LI.FI's list yet (new coins, like those launched on AUTISTIK): its decimals from the
+ * mint itself, and its name, symbol, logo and price from DexScreener.
+ */
+async function solMint(mint: string): Promise<XToken | null> {
+  const rpc = process.env.WALLET_SOLANA_RPC || process.env.ANALYTICS_SOLANA_RPC || "https://api.mainnet-beta.solana.com";
+  const r = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(6000),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getAccountInfo", params: [mint, { encoding: "jsonParsed" }] }) } as any);
+  const info = (await r.json())?.result?.value;
+  const parsed = info?.data?.parsed;
+  if (!parsed || parsed.type !== "mint") return null;
+  const decimals = Number(parsed.info?.decimals);
+  if (!Number.isInteger(decimals)) return null;
+  let hint: Partial<XToken> = {};
+  try {
+    const d = await fetch(`${DEX_API}/latest/dex/tokens/${mint}`, { signal: AbortSignal.timeout(6000), next: { revalidate: 300 } } as any);
+    const pairs: any[] = d.ok ? ((await d.json())?.pairs ?? []) : [];
+    const p = pairs.filter((x) => x?.chainId === "solana" && x?.baseToken?.address === mint).sort((a, b) => num(b?.liquidity?.usd) - num(a?.liquidity?.usd))[0];
+    if (p) hint = { symbol: p.baseToken.symbol, name: p.baseToken.name, logo: p.info?.imageUrl || null, priceUsd: num(p.priceUsd) || null };
+  } catch { /* name from the mint address below */ }
+  return { address: mint, symbol: hint.symbol || mint.slice(0, 4), name: hint.name || "Solana token", decimals, logo: hint.logo ?? null, priceUsd: hint.priceUsd ?? null };
+}
+
+/**
  * The network a pasted coin address lives on, and the coin itself, so nobody has to pick a network first.
  * Solana addresses look different from 0x ones. For 0x addresses: DexScreener's pools (the network with the most
  * liquidity wins), then the networks' own nodes (the first where that address is a contract).
@@ -175,7 +198,8 @@ export async function xDetect(raw: string): Promise<{ chain: number; token: XTok
   if (!a.startsWith("0x") && isXAddress(sol, a)) {
     const list = await xTokens(sol, a).catch(() => []);
     const t = list.find((x) => x.address === a);
-    return t ? { chain: sol.id, token: t } : null;
+    if (t) return { chain: sol.id, token: t };
+    return solMint(a).then((m) => (m ? { chain: sol.id, token: m } : null)).catch(() => null);
   }
   if (!/^0x[0-9a-fA-F]{40}$/.test(a)) return null;
   const addr = getAddress(a);
