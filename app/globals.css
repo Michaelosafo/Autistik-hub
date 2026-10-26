@@ -3378,3 +3378,18 @@ img.ql-logo{object-fit:cover}
 :root[data-calm="on"] .ax-menu{animation:none}
 @media (min-width:900px){ .ax-menu.right{animation:axMenuInR .16s ease-out} }
 @keyframes axMenuInR{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+
+/* ---------- Find people (your panel) ---------- */
+.fp-open{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-radius:14px;font-weight:800;
+  color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);box-shadow:0 8px 20px rgba(240,185,11,.2)}
+.fp-open svg{width:20px;height:20px;flex:none}
+.fp-open span{flex:1}
+.fp-open em{font-style:normal;font-size:.75em;font-weight:800;padding:3px 9px;border-radius:99px;background:#191326;color:#FFD84D;white-space:nowrap}
+.fp-open:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.fp{display:flex;flex-direction:column;gap:8px}
+.fp-x{all:unset;cursor:pointer;font-size:.8em;font-weight:700;color:#F0B90B}
+.fp-q{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+.fp-q:focus-within{border-color:#F0B90B}
+.fp-q svg{width:18px;height:18px;flex:none;opacity:.7}
+.fp-q input{all:unset;flex:1;min-width:0;font-size:16px}
+.fp-more{font-size:.85em;font-weight:700;color:#F0B90B;text-align:center;padding-top:2px}
