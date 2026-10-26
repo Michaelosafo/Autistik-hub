@@ -3935,3 +3935,21 @@ img.bd-logo{background:none!important}
 .mad-act small,.mad-note small{margin-left:auto;color:var(--muted);font-size:.75em}
 .mad-note.new{box-shadow:inset 3px 0 0 #F0B90B}
 .tik-focus{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:18px;background:rgba(240,185,11,.08)}
+
+/* ---------- First-visit language choice ---------- */
+.lp-bg{position:fixed;inset:0;z-index:500;display:grid;place-items:center;padding:16px;background:rgba(10,6,20,.55);backdrop-filter:blur(4px)}
+.lp-box{width:min(480px,100%);max-height:calc(100dvh - 32px);overflow:auto;display:flex;flex-direction:column;gap:10px;padding:20px;border-radius:22px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 24px 60px rgba(0,0,0,.35)}
+.lp-title{font-family:var(--f-display);font-size:1.3em;background:linear-gradient(90deg,#C97F00,#D63C74,#6F45D8);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lp-sub{color:var(--muted)}
+.lp-guess{all:unset;cursor:pointer;text-align:center;padding:13px;border-radius:14px;font-weight:900;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A)}
+.lp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:420px){ .lp-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.lp-grid button{all:unset;cursor:pointer;box-sizing:border-box;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:var(--surface-2);border:1.5px solid transparent}
+.lp-grid button:hover,.lp-grid button:focus-visible{border-color:#F0B90B}
+.lp-grid button b{font-size:.95em}
+.lp-grid button small{color:var(--muted);font-size:.72em}
+.lp-more,.lp-keep{all:unset;cursor:pointer;text-align:center;padding:10px;border-radius:12px;font-weight:800;font-size:.9em}
+.lp-more{color:#A86E00}
+.lp-keep{background:var(--surface-2);color:var(--ink)}
+.lp-guess:focus-visible,.lp-more:focus-visible,.lp-keep:focus-visible{outline:3px solid #F0B90B;outline-offset:2px}
+.lp-note{color:var(--muted);text-align:center;font-size:.75em}
