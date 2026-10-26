@@ -20,7 +20,7 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
   // The Board first: every coin launched here, and everything to make one (create, liquidity, trending).
   { name: "Board", icon: "i-fire", tip: "Coins launched on AUTISTIK, live", match: ["/board", "/launchpad", "/momentum", "/liquidity"], items: [
     { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
-    { href: "/launchpad/new", name: "Create a coin", note: "Pick a network, fill 5 steps, sign once", icon: "i-rocket" },
+    { href: "/launchpad/new", name: "Create a coin", note: "Pick a network, 3 simple steps, sign once", icon: "i-rocket" },
     { href: "/liquidity", name: "Add liquidity", note: "Paste your token address: add to its pool or create one", icon: "i-swap" },
     { href: "/launchpad", name: "Trending", note: "What people are buying", icon: "i-trend" },
     { href: "/momentum", name: "Momentum", note: "New coins picking up speed", icon: "i-bolt" },
