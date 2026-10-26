@@ -3965,3 +3965,4 @@ img.bd-logo{background:none!important}
 .mad.full .tik,.mad.full .tik-new{background:var(--surface);border-color:var(--line)}
 .mad.full .mad-act,.mad.full .mad-note{background:var(--surface);border:1px solid var(--line)}
 .ln-top-r .ln-watch{text-decoration:none}
+.lp-small{width:min(340px,100%);text-align:center;align-items:stretch}
