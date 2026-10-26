@@ -5,7 +5,7 @@ import { parseAbi } from "viem";
  * put in that amount each day, and take everything back in one go when the plan ends. Nobody can touch the savings
  * before then. It has no owner, so it always lives at this address once deployed (lib/susu-build.ts).
  */
-export const SUSU_ADDRESS = "0xdC241A4F0d56e6a0784247398638E4e63f90EBa1" as const;
+export const SUSU_ADDRESS = "0x875FdF0Ac230C6044443247AE9CA0d59b0Afb2f9" as const;
 export const SUSU_TOKENS = [
   { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
   { symbol: "BUSD", address: "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56", decimals: 18 },
@@ -20,6 +20,7 @@ export const SUSU_ABI = parseAbi([
   "function open(address token, uint256 daily, uint256 totalDays) returns (uint256 id)",
   "function save(uint256 id, uint256 numDays)",
   "function withdraw(uint256 id)",
+  "function release(uint256[] ids) returns (uint256 count)",
   "function plan(uint256 id) view returns (Plan p, uint256 day, uint256 dueDays, uint256 saved, uint256 unlocksAt)",
   "function plansOf(address owner) view returns (uint256[])",
   "function due(uint256 id) view returns (uint256)",
