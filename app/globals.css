@@ -3294,3 +3294,27 @@ html[data-calm="on"] .mp-pulse{animation:none}
 .ql-good{color:#2EBD85;font-size:.8em;margin-left:6px}
 .ql-bad{color:#F6465D;font-size:.8em;margin-left:6px}
 img.ql-logo{object-fit:cover}
+
+/* ---------- Create a coin page, Board style (app/launchpad/new) ---------- */
+.ln-top{align-items:center}
+.ln-top-r{display:flex;gap:8px;flex-wrap:wrap}
+.ln-watch{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:11px 16px;border-radius:14px;font-weight:800;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);box-shadow:0 8px 22px rgba(240,185,11,.25)}
+.ln-watch small{font-weight:700;opacity:.7}
+.ln-watch:focus-visible,.ln-ghost:focus-visible{outline:3px solid #fff}
+.ln-ghost{display:inline-flex;align-items:center;padding:11px 16px;border-radius:14px;font-weight:800;text-decoration:none;color:#F4EEFF;background:rgba(255,255,255,.05);border:1px solid #383241}
+.ln-ghost:hover{border-color:#F0B90B}
+.ln-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.ln-steps li{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:16px;background:#17141F;border:1px solid #2A2536}
+.ln-steps i{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:900;color:#191326;background:linear-gradient(135deg,#FFD84D,#FF6B9A 60%,#B57CFF)}
+.ln-steps span{display:flex;flex-direction:column;gap:3px}
+.ln-steps b{font-size:.95em}
+.ln-steps small{color:#B8ADD2;font-size:.82em;line-height:1.35}
+.ln-facts{display:flex;flex-wrap:wrap;gap:8px}
+.ln-facts span{padding:7px 12px;border-radius:99px;background:rgba(255,255,255,.04);border:1px solid #2A2536;font-size:.82em;color:#B8ADD2}
+.ln-facts b{color:#F4EEFF}
+.ln-alt{margin:0;font-size:.9em;color:#B8ADD2}
+.ln-alt a{color:#F0B90B;font-weight:700}
+.vb-bg{position:fixed;inset:0;z-index:400;background:rgba(10,6,20,.82);display:grid;place-items:center;padding:16px}
+.vb{width:min(900px,100%);display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:20px;background:#17141F;border:1px solid #383241}
+.vb-h{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.vb video{width:100%;aspect-ratio:16/9;border-radius:12px;background:#000}
