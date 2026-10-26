@@ -3994,3 +3994,23 @@ img.bd-logo{background:none!important}
 .susu-bar{height:10px;border-radius:99px;background:var(--surface-2,rgba(var(--wc),.06));border:1px solid var(--line);overflow:hidden}
 .susu-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#FFD84D,#F0B90B)}
 .susu-due{font-size:.92em}
+
+/* ---------- Network + wallet in one box (top right) ---------- */
+.ax-wbox{display:flex;align-items:center;gap:2px;padding:3px;border-radius:15px;border:1px solid var(--line);background:var(--surface);flex:none;position:relative}
+.ax-wbox .ax-net > button{background:transparent;border-radius:12px;height:34px;box-sizing:border-box}
+.ax-wbox .ax-net > button:hover,.ax-wbox .ax-net > button[aria-expanded=true]{background:var(--surface-2)}
+.ax-wbox .ax-net{border-right:1px solid var(--line);padding-right:2px}
+.ax-wbox .ax-connect{height:34px;box-sizing:border-box;border-radius:12px;padding:0 12px}
+.ax-wbox .ax-connect.on{background:transparent;border:0}
+.ax-wbox .ax-connect.on:hover,.ax-wbox .ax-connect.on[aria-expanded=true]{background:var(--surface-2)}
+.ax-menu-addr{display:flex;flex-direction:column;gap:2px;padding:10px 12px;margin:0 0 4px;border-radius:12px;background:var(--surface-2,rgba(var(--wc),.05))}
+.ax-menu-addr small{color:var(--muted);font-size:.74em}
+.ax-menu-addr b{font-size:.9em;color:var(--ink)}
+/* Phones: no address on screen, only the wallet's icon and a green dot. The address is in the menu. */
+@media (max-width:700px){
+  .ax-wbox .ax-addr{display:none}
+  .ax-wbox .ax-connect.on{padding:0 9px;gap:5px}
+  .ax-wbox .ax-connect.on::before{content:"";width:8px;height:8px;border-radius:50%;background:#31D0AA;flex:none}
+  .ax-wbox .ax-net > button{padding:0 7px;gap:4px}
+  .ax-wbox .ax-net .ax-net-short{display:none}
+}

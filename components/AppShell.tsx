@@ -173,6 +173,9 @@ export default function AppShell({ admin, me, onMe, children }: {
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
+          {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
+          {/* The network and the wallet sit together in one box. */}
+          <div className="ax-wbox">
           <div className="ax-net">
             <button type="button" aria-haspopup="menu" aria-expanded={netMenu} aria-label={`Network: ${net.name}. Change network`} onClick={() => { setNetMenu(!netMenu); setAcctMenu(false); }}>
               <NetIcon n={net} size={18} /><span className="ax-net-name">{net.name}</span><span className="ax-net-short">{net.short}</span>
@@ -192,15 +195,15 @@ export default function AppShell({ admin, me, onMe, children }: {
               </div>
             )}
           </div>
-          {!path.startsWith("/companions") && <Link href="/companions" className="ax-connect bot" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span className="ax-hide-sm">Ask the bot</span></Link>}
           {solMode && cs.sol ? (
             <div className="ax-acct">
               <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>
                 {cs.sol.wallet.icon ? <img src={cs.sol.wallet.icon} alt="" /> : <i />}
-                {cs.sol.account.address.slice(0, 4)}…{cs.sol.account.address.slice(-4)}
+                <span className="ax-addr">{cs.sol.account.address.slice(0, 4)}…{cs.sol.account.address.slice(-4)}</span>
               </button>
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
+                  <div className="ax-menu-addr"><small>Connected · Solana</small><b className="mono">{cs.sol.account.address.slice(0, 6)}…{cs.sol.account.address.slice(-6)}</b></div>
                   <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{cs.sol.name} · Solana</small></Link>
                   <button type="button" role="menuitem" onClick={() => { navigator.clipboard?.writeText(cs.sol!.account.address).catch(() => {}); setAcctMenu(false); }}><b>Copy address</b></button>
                   <button type="button" role="menuitem" onClick={() => { pickWallet({ fresh: true }); setAcctMenu(false); }}><b>Switch wallet</b></button>
@@ -214,10 +217,11 @@ export default function AppShell({ admin, me, onMe, children }: {
             <div className="ax-acct">
               <button type="button" className="ax-connect on" onClick={() => setAcctMenu(!acctMenu)} aria-expanded={acctMenu}>
                 {(() => { const w = TOP_WALLETS.find((x) => wallet?.name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0])); return w ? <img src={`/wallets/${w.id}.svg`} alt="" /> : wallet?.name === "WalletConnect" ? <img src="/wallets/walletconnect.svg" alt="" /> : <i />; })()}
-                {short(acct)}
+                <span className="ax-addr">{short(acct)}</span>
               </button>
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
+                  <div className="ax-menu-addr"><small>Connected · {net.name}</small><b className="mono">{acct.slice(0, 6)}…{acct.slice(-6)}</b></div>
                   <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{wallet?.name}</small></Link>
                   <div className="ax-switch" role="group" aria-label="Switch network">
                     <small>Switch network</small>
@@ -240,6 +244,7 @@ export default function AppShell({ admin, me, onMe, children }: {
           ) : (
             <button type="button" className="ax-connect" onClick={() => pickWallet({ fresh: true })}>Connect<span className="ax-hide-sm">Wallet</span></button>
           )}
+          </div>
         </div>
       </header>
 
