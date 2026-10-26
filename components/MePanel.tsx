@@ -11,6 +11,8 @@ import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import FollowButton from "@/components/members/FollowButton";
 import FindPeople from "@/components/FindPeople";
+import MoodFeed from "@/components/mood/MoodFeed";
+import LiveNow from "@/components/rooms/LiveNow";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
@@ -165,6 +167,16 @@ export default function MePanel({ me, settings }: {
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
       <FindPeople />
+
+      <section className="mp-sec mp-mood" aria-label="Autistik Mood">
+        <div className="mp-sec-h"><b>Autistik Mood</b><Link href="/mood">View more</Link></div>
+        <MoodFeed limit={3} compact more />
+      </section>
+
+      <section className="mp-sec mp-livenow" aria-label="Live rooms">
+        <div className="mp-sec-h"><b><i className="mp-pulse" aria-hidden="true" />Live rooms</b><Link href="/spaces">All</Link></div>
+        <LiveNow max={3} />
+      </section>
 
       <form className="mp-search" onSubmit={goScan} role="search">
         <Ic id="i-search" />

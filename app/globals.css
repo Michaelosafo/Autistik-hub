@@ -3821,3 +3821,89 @@ img.bd-logo{background:none!important}
   .ax-home::after{display:none}
   .ax-home{margin-right:6px}
 }
+
+/* ---------- Autistik Mood (Tiks) ---------- */
+.mood-feed{display:flex;flex-direction:column;gap:10px;min-width:0}
+.mood-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media (max-width:900px){ .mood-grid{grid-template-columns:minmax(0,1fr)} }
+.mood-side{position:sticky;top:84px}
+.tik-new{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:16px;background:var(--surface);border:1px solid var(--line)}
+.tik-new.reply{padding:8px;border-radius:12px;background:var(--surface-2);border:0}
+.tik-new textarea{all:unset;box-sizing:border-box;width:100%;min-height:52px;padding:10px 12px;border-radius:12px;background:var(--surface-2);color:var(--ink);font:inherit;font-size:16px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.tik-new textarea:focus-visible{outline:2px solid #F0B90B}
+.tik-moods{display:flex;gap:6px;flex-wrap:wrap}
+.tik-moods button{all:unset;cursor:pointer;padding:5px 11px;border-radius:99px;font-size:.78em;font-weight:800;color:var(--ink);background:var(--surface-2);border:1.5px solid transparent}
+.tik-moods button:hover{border-color:var(--mc)}
+.tik-moods button.on{background:var(--mc);color:#fff;border-color:var(--mc)}
+.tik-moods button:focus-visible{outline:2px solid var(--mc);outline-offset:2px}
+.tik-new-row{display:flex;align-items:center;gap:8px}
+.tik-attach{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border-radius:10px;font-weight:700;font-size:.82em;color:var(--ink);background:var(--surface-2)}
+.tik-attach svg{width:16px;height:16px}
+.tik-count{margin-left:auto;color:var(--muted);font-size:.75em}
+.tik-post{all:unset;cursor:pointer;padding:8px 16px;border-radius:99px;font-weight:800;font-size:.86em;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A)}
+.tik-post:disabled{opacity:.5;cursor:default}
+.tik-post:focus-visible,.tik-attach:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
+.tik-msg{color:var(--muted)}
+.tik-pic-prev{position:relative;align-self:flex-start}
+.tik-pic-prev img{display:block;max-width:220px;max-height:180px;border-radius:12px;object-fit:cover}
+.tik-pic-prev button{all:unset;cursor:pointer;position:absolute;top:6px;right:6px;padding:3px 9px;border-radius:99px;font-size:.72em;font-weight:800;background:rgba(0,0,0,.65);color:#fff}
+.tik{display:flex;gap:10px;padding:12px;border-radius:16px;background:var(--surface);border:1px solid var(--line);min-width:0}
+.tik.compact{padding:10px}
+.tik-av .me-av{width:40px;height:40px}
+.tik.compact .tik-av .me-av{width:32px;height:32px}
+.tik-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.tik-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:.92em}
+.tik-team{font-size:.68em;font-weight:800;padding:2px 7px;border-radius:99px;background:rgba(240,185,11,.16);color:#A86E00}
+.tik-mood{font-size:.72em;font-weight:800;padding:2px 8px;border-radius:99px;color:var(--mc);background:color-mix(in srgb,var(--mc) 14%,transparent)}
+.tik-time{margin-left:auto;color:var(--muted);font-size:.75em}
+.tik-body{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.45}
+.tik-img{all:unset;cursor:zoom-in;display:block;border-radius:14px;overflow:hidden;max-width:100%}
+.tik-img img{display:block;width:100%;max-height:420px;object-fit:cover}
+.tik-actions{display:flex;gap:4px}
+.tik-act{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:99px;font-size:.8em;font-weight:700;color:var(--muted)}
+.tik-act:hover{background:var(--surface-2);color:var(--ink)}
+.tik-act svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2}
+.tik-act.on{color:#E0457B}
+.tik-act.on svg{fill:#E0457B;stroke:#E0457B}
+.tik-act.del{margin-left:auto;font-size:.74em}
+.tik-act:focus-visible{outline:2px solid #F0B90B}
+.tik-replies{display:flex;flex-direction:column;gap:8px;padding-top:4px}
+.tik-more,.mood-more{all:unset;cursor:pointer;align-self:center;padding:7px 14px;border-radius:99px;font-weight:800;font-size:.82em;color:var(--ink);background:var(--surface-2);text-decoration:none}
+.tik-zoom{position:fixed;inset:0;z-index:400;background:rgba(6,4,14,.88);display:grid;place-items:center;padding:16px;cursor:zoom-out}
+.tik-zoom img{max-width:100%;max-height:100%;border-radius:12px}
+/* In the panel */
+.mp-mood .mood-feed{gap:8px}
+.mp-mood .tik,.mp-mood .tik-new{background:rgba(var(--wc),.04);border-color:transparent}
+
+/* ---------- Live rooms ---------- */
+.room-live{display:inline-flex;align-items:center;gap:6px;font-size:.72em;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#E5484D}
+.room-live i{width:8px;height:8px;border-radius:50%;background:#E5484D;animation:anpulse 1.6s infinite}
+.live-now{display:flex;flex-direction:column;gap:6px}
+.live-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;text-decoration:none;color:var(--ink);background:var(--surface-2)}
+.live-row:hover{outline:1.5px solid #F0B90B}
+.live-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.live-t b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live-t small{color:var(--muted);font-size:.75em}
+.live-join{font-weight:800;font-size:.8em;color:#A86E00}
+.live-host{align-self:flex-start;margin-top:2px;padding:8px 14px;border-radius:99px;font-weight:800;font-size:.84em;text-decoration:none;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A)}
+.room{gap:14px}
+.room-top{display:flex;flex-direction:column;gap:4px}
+.room-top h1{margin:0;font-family:var(--f-display);font-size:clamp(1.4em,4vw,2em)}
+.room-stage{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:16px;border-radius:20px;background:var(--surface);border:1px solid var(--line)}
+.room-person{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;min-width:0}
+.room-person .me-av{width:64px;height:64px;transition:box-shadow .15s}
+.room-person.small .me-av{width:44px;height:44px}
+.room-person.talking .me-av{box-shadow:0 0 0 3px #F0B90B,0 0 18px rgba(240,185,11,.6)}
+.room-person b{font-size:.9em;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room-person small{color:var(--muted);font-size:.75em}
+.room-mini{all:unset;cursor:pointer;font-size:.7em;font-weight:800;padding:3px 9px;border-radius:99px;background:var(--surface-2);color:var(--ink)}
+.room-audience{display:flex;flex-direction:column;gap:8px}
+.room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px}
+.room-hands{gap:8px}
+.room-hand{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.room-bar{position:sticky;bottom:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;padding:10px;border-radius:99px;background:var(--surface);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.room-btn{all:unset;cursor:pointer;padding:10px 18px;border-radius:99px;font-weight:800;font-size:.9em;color:var(--ink);background:var(--surface-2)}
+.room-btn.on{color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A)}
+.room-btn.end{color:#fff;background:#E5484D}
+.room-btn:focus-visible,.room-mini:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
+@media (max-width:900px){ .room-bar{bottom:84px} }
