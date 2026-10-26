@@ -4014,3 +4014,19 @@ img.bd-logo{background:none!important}
   .ax-wbox .ax-net > button{padding:0 7px;gap:4px}
   .ax-wbox .ax-net .ax-net-short{display:none}
 }
+
+/* ---------- Phones: the top bar always fits the screen (nothing pushes the page sideways) ---------- */
+html,body{overflow-x:clip}
+@media (max-width:480px){
+  .ax-bar{gap:6px}
+  .ax-right{gap:5px;min-width:0}
+  .theme-tg{padding:0 9px}
+  .ax-admin span{display:none}
+  .ax-admin{padding:0 8px}
+  .lang-btn{width:34px;height:34px}
+}
+@media (max-width:400px){
+  .ax-right .ax-connect.bot{display:none}
+  .theme-tg > span{display:none}
+  .theme-tg{width:34px;padding:0;justify-content:center}
+}
