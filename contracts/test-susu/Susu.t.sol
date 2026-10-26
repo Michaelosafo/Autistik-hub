@@ -39,11 +39,11 @@ contract SusuTest is Test {
         vm.expectRevert(AutistikSusu.TooEarly.selector);
         vm.prank(alice); s.withdraw(id);
         vm.warp(block.timestamp + 1 days);
-        vm.expectRevert(AutistikSusu.NotOwner.selector);
-        vm.prank(bob); s.withdraw(id);
         uint256 b = usdt.balanceOf(alice);
-        vm.prank(alice); s.withdraw(id);
+        uint256 bobBefore = busd.balanceOf(bob) + usdt.balanceOf(bob);
+        vm.prank(bob); s.withdraw(id); // anyone can trigger it, the money goes to alice
         assertEq(usdt.balanceOf(alice) - b, 150 ether);
+        assertEq(busd.balanceOf(bob) + usdt.balanceOf(bob), bobBefore);
         vm.expectRevert(AutistikSusu.AlreadyWithdrawn.selector);
         vm.prank(alice); s.withdraw(id);
     }
@@ -72,10 +72,9 @@ contract SusuTest is Test {
         usdt.mint(bob, 1 ether);
         vm.startPrank(bob); usdt.approve(address(s), 1 ether); s.save(id, 1); vm.stopPrank();
         vm.warp(block.timestamp + 7 days);
-        vm.expectRevert(AutistikSusu.NotOwner.selector);
-        vm.prank(bob); s.withdraw(id);
         vm.prank(alice); s.withdraw(id);
         assertEq(usdt.balanceOf(alice), 1_001 ether);
+        assertEq(usdt.balanceOf(bob), 0);
     }
 
     function test_limits() public {
@@ -90,6 +89,20 @@ contract SusuTest is Test {
         (AutistikSusu.Plan memory p,,, uint256 saved,) = s.plan(id);
         assertEq(p.owner, bob); assertEq(saved, 3 ether);
         assertEq(s.plansOf(bob).length, 1);
+    }
+
+    function test_botReleasesOnlyEndedPlans() public {
+        vm.prank(alice); uint256 a = s.open(address(usdt), 10 ether, 7);
+        vm.prank(bob); uint256 b = s.open(address(busd), 10 ether, 14);
+        vm.warp(block.timestamp + 7 days);
+        uint256[] memory ids = new uint256[](3);
+        ids[0] = a; ids[1] = b; ids[2] = 99;
+        vm.prank(address(0xB07));
+        assertEq(s.release(ids), 1);
+        assertEq(usdt.balanceOf(alice), 1_000 ether);
+        assertEq(busd.balanceOf(address(s)), 10 ether);
+        vm.prank(address(0xB07));
+        assertEq(s.release(ids), 0); // already paid, nothing twice
     }
 
     function test_plansAreSeparate() public {

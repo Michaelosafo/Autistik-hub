@@ -19,7 +19,7 @@ export default async function StakePage({ searchParams }: { searchParams: { pool
   const { admin } = await adminState();
   const pool = /^\d{1,6}$/.test(searchParams.pool || "") ? Number(searchParams.pool) : undefined;
   return (
-    <div className="stack">
+    <div className="stack earn">
       <EarnTop active="/stake" title="Stake & earn"
         text="Put your tokens to work. Stake $AUTISTIK and earn BNB from the fees people pay on AUTISTIK."
         steps={[

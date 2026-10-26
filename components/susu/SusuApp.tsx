@@ -20,7 +20,13 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
   const [rows, setRows] = useState<Row[] | null>(null);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
-  const [f, setF] = useState({ token: SUSU_TOKENS[0].address as string, daily: "5", days: 30 });
+  const [f, setF] = useState({ token: SUSU_TOKENS[0].address as string, daily: "5", days: 30, date: "" });
+  // Your own end date: the plan runs until that day (7 days to 1 year from today).
+  const dayStr = (d: number) => new Date(Date.now() + d * DAY_SECONDS * 1000).toISOString().slice(0, 10);
+  const pickDate = (v: string) => {
+    const days = Math.ceil((Date.parse(v + "T23:59:59") - Date.now()) / (DAY_SECONDS * 1000));
+    setF((x) => ({ ...x, date: v, days: Math.min(365, Math.max(7, days || 7)) }));
+  };
 
   useEffect(() => { pub().getCode({ address: SUSU_ADDRESS }).then((c: string) => setLive(!!c && c !== "0x")).catch(() => setLive(false)); }, []);
 
@@ -168,8 +174,13 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
         <div className="stack" style={{ gap: 6 }}>
           <small className="susu-label"><i>3</i>For how long</small>
           <div className="hr-chips" role="radiogroup" aria-label="Length">
-            {SUSU_LENGTHS.map((d) => <button key={d} type="button" role="radio" aria-checked={f.days === d} className={f.days === d ? "on" : ""} onClick={() => setF({ ...f, days: d })}>{d === 30 ? "1 month" : d === 365 ? "1 year" : d === 90 ? "3 months" : d === 180 ? "6 months" : d === 60 ? "2 months" : `${d} days`}</button>)}
+            {SUSU_LENGTHS.map((d) => <button key={d} type="button" role="radio" aria-checked={!f.date && f.days === d} className={!f.date && f.days === d ? "on" : ""} onClick={() => setF({ ...f, days: d, date: "" })}>{d === 30 ? "1 month" : d === 365 ? "1 year" : d === 90 ? "3 months" : d === 180 ? "6 months" : d === 60 ? "2 months" : `${d} days`}</button>)}
           </div>
+          <label className={`susu-date${f.date ? " on" : ""}`}>
+            <span>Or pick your own end date</span>
+            <input type="date" value={f.date} min={dayStr(7)} max={dayStr(365)} onChange={(e) => e.target.value && pickDate(e.target.value)} />
+            {f.date && <small>{f.days} days</small>}
+          </label>
         </div>
         <button className="btn primary susu-go" type="button" disabled={busy || !daily} onClick={open}>{me ? `Start my Susu · save ${daily || 0} ${t.symbol} today` : "Connect wallet & start my Susu"}</button>
       </section>
@@ -182,9 +193,10 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
           <li><span>Days</span><b>{f.days}</b></li>
           <li><span>Today (day 1)</span><b>{daily || 0} {t.symbol}</b></li>
           <li><span>Released</span><b>{endsOn}</b></li>
+          <li><span>Paid out</span><b>Automatically</b></li>
           <li><span>Fees</span><b>None</b></li>
         </ul>
-        <p className="muted">Locked until {endsOn}. Nobody can take it out early, including you and AUTISTIK. Then it all comes back to your wallet in one go.</p>
+        <p className="muted">Locked until {endsOn}. Nobody can take it out early, including you and AUTISTIK. On that day the AUTISTIK bot sends it all to your wallet automatically; you don&apos;t have to do anything.</p>
       </aside>
       </div>
 
@@ -198,7 +210,7 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
               <div key={r.id} className="card stack susu-plan" style={{ gap: 8 }}>
                 <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                   <b>{money(r.daily)} {r.symbol} a day · {r.totalDays} days</b>
-                  <small className="muted">{r.withdrawn ? "Withdrawn" : ended ? "Ready to withdraw" : `Day ${r.day} of ${r.totalDays} · releases ${date(r.unlocksAt)}`}</small>
+                  <small className="muted">{r.withdrawn ? "Paid out to your wallet" : ended ? "Ended · being sent to your wallet" : `Day ${r.day} of ${r.totalDays} · releases ${date(r.unlocksAt)}`}</small>
                 </div>
                 <div className="susu-bar" aria-label={`${r.paidDays} of ${r.totalDays} days saved`}><i style={{ width: `${pct}%` }} /></div>
                 <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>

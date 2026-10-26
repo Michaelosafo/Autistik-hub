@@ -12,7 +12,8 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * plan ends, the owner takes everything they saved, in one go.
  * - Nobody can take the savings before the end, including the saver, the AUTISTIK team or anyone else.
  * - There is no owner, admin, fee, pause or upgrade. The stablecoins it accepts are fixed when it's deployed.
- * - Only the plan's owner can withdraw, and only to their own wallet.
+ * - When a plan ends, the savings can only ever go to the plan's owner. The owner can withdraw, and so can anyone
+ *   else on their behalf (the AUTISTIK bot does it automatically), but the money always lands in the owner's wallet.
  */
 contract AutistikSusu is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -94,13 +95,27 @@ contract AutistikSusu is ReentrancyGuard {
         emit Saved(id, msg.sender, numDays, amount, p.paidDays);
     }
 
-    /// @notice At the end of the plan, the owner takes everything they saved.
+    /// @notice At the end of the plan, everything saved goes to the plan's owner. Anyone can trigger it (the owner,
+    /// or the AUTISTIK bot on their behalf); the money only ever goes to the owner.
     function withdraw(uint256 id) external nonReentrant {
         if (id >= _plans.length) revert UnknownPlan();
-        Plan storage p = _plans[id];
-        if (msg.sender != p.owner) revert NotOwner();
         if (block.timestamp < unlockAt(id)) revert TooEarly();
-        if (p.withdrawn) revert AlreadyWithdrawn();
+        if (_plans[id].withdrawn) revert AlreadyWithdrawn();
+        _release(id);
+    }
+
+    /// @notice Pays out every plan in `ids` that has ended and isn't paid yet (skips the rest). Used by the bot.
+    function release(uint256[] calldata ids) external nonReentrant returns (uint256 count) {
+        for (uint256 k; k < ids.length; k++) {
+            uint256 id = ids[k];
+            if (id >= _plans.length || _plans[id].withdrawn || block.timestamp < unlockAt(id)) continue;
+            _release(id);
+            count++;
+        }
+    }
+
+    function _release(uint256 id) private {
+        Plan storage p = _plans[id];
         p.withdrawn = true;
         uint256 amount = uint256(p.daily) * p.paidDays;
         if (amount > 0) IERC20(p.token).safeTransfer(p.owner, amount);

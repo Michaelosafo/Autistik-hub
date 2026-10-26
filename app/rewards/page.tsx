@@ -23,7 +23,7 @@ export default async function Rewards() {
   const pts = me?.points ?? 0;
 
   return (
-    <div className="stack">
+    <div className="stack earn">
       <EarnTop active="/rewards" title="Rewards & airdrops"
         text={<>Take part in the community and earn points. Each round, members who qualify share a $AUTISTIK airdrop. You never need to share anything about your health.</>}
         right={<><span className="earn-live">{settings?.round_name || "Round 1"} · open</span><Link href="/community" className="ln-ghost">Join a group</Link></>}
