@@ -3989,3 +3989,8 @@ img.bd-logo{background:none!important}
 .hr-card .hr-stats small{color:var(--muted);font-size:.76em}
 .hr-card .hr-mine{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;padding:10px 12px;border-radius:12px;border:1px solid rgba(240,185,11,.5);background:rgba(240,185,11,.07)}
 @media (max-width:520px){ .hr-split{grid-template-columns:1fr} }
+
+/* ---------- Susu (daily savings) ---------- */
+.susu-bar{height:10px;border-radius:99px;background:var(--surface-2,rgba(var(--wc),.06));border:1px solid var(--line);overflow:hidden}
+.susu-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#FFD84D,#F0B90B)}
+.susu-due{font-size:.92em}
