@@ -17,8 +17,34 @@ const ACT: Record<string, string> = { post: "posted in a group", live: "joined a
  * Autistik Madness, pinned in your panel and closed until you tap it: Tiks and activity from people you follow,
  * everyone's Tiks, your notifications (likes and replies), finding people, and a box to post how you feel.
  */
-export default function MadnessPanel() {
-  const [open, setOpen] = useState(false);
+/** The row in your panel: opens the Autistik Madness page (like Create a coin opens its own page). */
+export function MadnessLink({ onGo }: { onGo?: () => void }) {
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    (async () => {
+      const sb = supabaseBrowser();
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) return;
+      const { count } = await sb.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null);
+      setUnread(count || 0);
+    })();
+  }, []);
+  return (
+    <Link href="/mood" className="mp-sec mad mad-link" onClick={onGo} aria-label="Open Autistik Madness">
+      <span className="mad-head">
+        <span className="mad-pin" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 21s-7-4.6-9.2-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.2 6c-2.2 4.4-9.2 9-9.2 9z" /></svg>
+        </span>
+        <span className="mad-t"><b>Autistik Madness</b><small>Post how you feel, see your people, have fun</small></span>
+        {unread > 0 && <em className="mad-badge">{unread > 9 ? "9+" : unread}</em>}
+        <i className="mad-go" aria-hidden="true">›</i>
+      </span>
+    </Link>
+  );
+}
+
+export default function MadnessPanel({ full }: { full?: boolean }) {
+  const [open, setOpen] = useState(!!full);
   const [tab, setTab] = useState<Tab>("following");
   const [k, setK] = useState(0);
   const [me, setMe] = useState<string | null>(null);
@@ -26,7 +52,7 @@ export default function MadnessPanel() {
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
-    try { if (localStorage.getItem("madness-open") === "1") setOpen(true); } catch {}
+    if (!full) { try { if (localStorage.getItem("madness-open") === "1") setOpen(true); } catch {} }
     (async () => {
       const sb = supabaseBrowser();
       const { data: { user } } = await sb.auth.getUser();
@@ -43,15 +69,15 @@ export default function MadnessPanel() {
   const toggle = () => { const o = !open; setOpen(o); try { localStorage.setItem("madness-open", o ? "1" : "0"); } catch {} };
 
   return (
-    <section className={"mp-sec mad" + (open ? " open" : "")} aria-label="Autistik Madness">
-      <button type="button" className="mad-head" onClick={toggle} aria-expanded={open}>
+    <section className={"mp-sec mad" + (open ? " open" : "") + (full ? " full" : "")} aria-label="Autistik Madness">
+      {!full && <button type="button" className="mad-head" onClick={toggle} aria-expanded={open}>
         <span className="mad-pin" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 21s-7-4.6-9.2-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.2 6c-2.2 4.4-9.2 9-9.2 9z" /></svg>
         </span>
         <span className="mad-t"><b>Autistik Madness</b><small>Feelings, posts and what your people are doing</small></span>
         {unread > 0 && <em className="mad-badge">{unread > 9 ? "9+" : unread}</em>}
         <i className="mad-chev" aria-hidden="true" />
-      </button>
+      </button>}
       {open && (
         <div className="mad-body">
           <div className="mad-tabs" role="tablist">
@@ -59,26 +85,31 @@ export default function MadnessPanel() {
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{l}</button>
             ))}
           </div>
-          {(tab === "following" || tab === "everyone") && me && <TikComposer compact onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
-          {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} />}
-          {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} />}
+          {(tab === "following" || tab === "everyone") && me && <TikComposer compact={!full} onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
+          {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={full ? 20 : 5} />}
+          {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={full ? 20 : 5} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
           {tab === "people" && <FindPeople />}
-          <Link href="/mood" className="mad-open">Open Autistik Madness</Link>
+          {!full && <Link href="/mood" className="mad-open">Open Autistik Madness</Link>}
         </div>
       )}
     </section>
   );
 }
 
-function Feed({ me, authors, refreshKey }: { me: string | null; authors: string[] | null; refreshKey: number }) {
-  const { tiks, setTiks } = useTiks({ limit: 5, refreshKey, authors });
+function Feed({ me, authors, refreshKey, limit = 5 }: { me: string | null; authors: string[] | null; refreshKey: number; limit?: number }) {
+  const { tiks, setTiks, more, loadMore } = useTiks({ limit, refreshKey, authors });
   if (tiks === null) return <small className="mp-dim">Loading…</small>;
   if (!tiks.length) return <small className="mp-dim">{authors ? "No Tiks from people you follow yet." : "No Tiks yet. Be the first."}</small>;
-  return <div className="mad-feed">{tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}</div>;
+  return (
+    <div className="mad-feed">
+      {tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={limit <= 5} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
+      {limit > 5 && more && <button type="button" className="tik-more" onClick={loadMore}>Load more</button>}
+    </div>
+  );
 }
 
-function Following({ me, follows, refreshKey, onFind }: { me: string | null; follows: string[] | null; refreshKey: number; onFind: () => void }) {
+function Following({ me, follows, refreshKey, onFind, limit }: { me: string | null; follows: string[] | null; refreshKey: number; onFind: () => void; limit: number }) {
   const [acts, setActs] = useState<(Act & { alias: string })[] | null>(null);
   useEffect(() => {
     if (!follows?.length) { setActs([]); return; }
@@ -101,7 +132,7 @@ function Following({ me, follows, refreshKey, onFind }: { me: string | null; fol
   );
   return (
     <>
-      <Feed me={me} authors={me ? [...follows, me] : follows} refreshKey={refreshKey} />
+      <Feed me={me} authors={me ? [...follows, me] : follows} refreshKey={refreshKey} limit={limit} />
       {!!acts?.length && (
         <div className="mad-acts">
           <small className="mp-cap">What they&apos;re doing</small>

@@ -3953,3 +3953,15 @@ img.bd-logo{background:none!important}
 .lp-keep{background:var(--surface-2);color:var(--ink)}
 .lp-guess:focus-visible,.lp-more:focus-visible,.lp-keep:focus-visible{outline:3px solid #F0B90B;outline-offset:2px}
 .lp-note{color:var(--muted);text-align:center;font-size:.75em}
+
+/* Autistik Madness: its own page; the panel row opens it */
+.mad-link{display:block;text-decoration:none;color:var(--ink)}
+.mad-link:hover .mad-pin{transform:scale(1.06)}
+.mad-pin{transition:transform .15s}
+.mad-go{font-style:normal;font-size:1.4em;font-weight:900;color:var(--muted)}
+.mad.full{padding:0 !important;background:none !important;box-shadow:none !important;overflow:visible}
+.mad.full .mad-body{padding:0;gap:12px}
+.mad.full .mad-tabs button{font-size:.88em;padding:8px 16px}
+.mad.full .tik,.mad.full .tik-new{background:var(--surface);border-color:var(--line)}
+.mad.full .mad-act,.mad.full .mad-note{background:var(--surface);border:1px solid var(--line)}
+.ln-top-r .ln-watch{text-decoration:none}
