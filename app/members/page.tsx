@@ -85,7 +85,7 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
       <p style={{ overflowWrap: "anywhere" }}>{x.body.length > 280 ? x.body.slice(0, 280) + "…" : x.body}</p>
     </> })),
     ...extra.map((x) => ({ at: x.at, who: x.user_id, key: "a" + x.user_id + x.at + x.kind, el: <p>{(ACTIVITY[x.kind]?.icon || "•")} <span className="muted">{ACTIVITY[x.kind]?.verb}</span> {x.link ? <Link href={x.link}>{x.label}</Link> : x.label}</p> })),
-    ...joins.map((x) => ({ at: x.joined_at, who: x.user_id, key: "j" + x.session_id + x.user_id, el: <p>🎙️ Joined the live session <Link href="/live"><b>{x.session?.title || "Live session"}</b></Link></p> })),
+    ...joins.map((x) => ({ at: x.joined_at, who: x.user_id, key: "j" + x.session_id + x.user_id, el: <p>Joined the live session <Link href="/live"><b>{x.session?.title || "Live session"}</b></Link></p> })),
   ].sort((a, b) => b.at.localeCompare(a.at));
 
   const tabs: [Tab, string][] = [["feed", "Following feed"], ["find", "Find members"], ["followers", "Followers"], ["following", "Following"]];
@@ -109,7 +109,7 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
         <p className="muted">Like X: everyone has a nickname and an @handle you can search. Team accounts wear a gold <span className="team-badge">✓ TEAM</span> badge, so you always know it&apos;s really us.</p></div>
       <nav className="chips" aria-label="Members">
         {tabs.map(([t, name]) => <Link key={t} className="chip" aria-current={tab === t ? "page" : undefined} href={`/members?tab=${t}`}>{name}{t === "following" && following.size ? ` (${following.size})` : ""}</Link>)}
-        <Link className="chip" href="/live">🎙️ Live hub</Link>
+        <Link className="chip" href="/live">Live hub</Link>
       </nav>
 
       {tab === "feed" && !!suggested.length && (

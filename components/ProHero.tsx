@@ -4,11 +4,11 @@ export type HeroTone = "cyan" | "violet" | "gold" | "coral" | "green" | "rose";
 export type HeroStat = [value: React.ReactNode, label: string];
 
 /**
- * The dark "pro" header used at the top of every main page: a kicker line, the title, a short line of text,
+/* Board-style header (same look as the Board and Create a coin) used at the top of every main page: a kicker line, the title, a short line of text,
  * an optional Live badge, live numbers and an optional tool (a search box, buttons) inside the panel.
  */
-export default function ProHero({ kicker, title, tone = "cyan", live, stats, link, children }: {
-  /** `text` is accepted but no longer shown: headers stay short (title and numbers). */
+export default function ProHero({ kicker, title, text, tone = "cyan", live, stats, link, children }: {
+  /** `text` is one plain sentence under the title, like the Board and Create a coin. */
   kicker: string; title: React.ReactNode; text?: React.ReactNode; tone?: HeroTone; live?: string | false;
   stats?: HeroStat[]; link?: { href: string; text: React.ReactNode }; children?: React.ReactNode;
 }) {
@@ -18,6 +18,7 @@ export default function ProHero({ kicker, title, tone = "cyan", live, stats, lin
         <div>
           <div className="an-kicker">{kicker}</div>
           <h1>{title}</h1>
+          {text && <p>{text}</p>}
         </div>
         {live && <div className="an-live"><i />{live}</div>}
       </div>
@@ -27,7 +28,7 @@ export default function ProHero({ kicker, title, tone = "cyan", live, stats, lin
           {stats.map(([v, l]) => <div key={l}><b>{v}</b><span>{l}</span></div>)}
         </div>
       )}
-      {link && <Link href={link.href} className="an-pro">{link.text}</Link>}
+      {link && <Link href={link.href} className="ln-ghost an-pro">{link.text}</Link>}
     </section>
   );
 }

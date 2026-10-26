@@ -46,7 +46,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   const swap = c.swapUrl(token);
   const listed = launch.source === "listed";
   const lock = isLock(launch.lp_lock) ? launch.lp_lock : "burn";
-  const lockNote = listed ? "" : lock === "burn" ? "🔥 burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `🔒 locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "🔓 lock ended";
+  const lockNote = listed ? "" : lock === "burn" ? "burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "lock ended";
 
   return (
     <div className="stack">

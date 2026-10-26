@@ -46,7 +46,7 @@ function status(h: any, last: any) {
   return { cls: "", text: "Holding" };
 }
 
-const VIEWS = [["overview", "Overview"], ["chess", "⚽ Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
+const VIEWS = [["overview", "Overview"], ["chess", "Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
 type View = (typeof VIEWS)[number][0];
 
 export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string } }) {
@@ -119,7 +119,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const { data: pin } = await pinPromise;
   const [myLocks, locker] = await lockPromise;
   const [pro, record] = await Promise.all([isPro(user?.id), trackRecord(chain, t.token)]);
-  const LABEL: Record<SignalState, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
+  const LABEL: Record<SignalState, string> = { buy: "Buy", take_profit: "Take profit", sell: "Sell", wait: "Wait", avoid: "Avoid" };
   const now = { short: stateOf(plans.short, call, "short"), long: stateOf(plans.long, call, "long") };
   const lastEvent = new Map<string, any>();
   for (const e of events || []) if (!lastEvent.has(e.wallet)) lastEvent.set(e.wallet, e);
@@ -202,11 +202,11 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         )}
         <div className="signal-now" aria-label="Signal right now">
           <span className="label">Signal right now</span>
-          <span className={"sig " + now.short}>⚡ Day trade: <b>{LABEL[now.short]}</b></span>
-          <span className={"sig " + now.long}>📅 Long term: <b>{LABEL[now.long]}</b></span>
-          <small className="muted">📌 Pin this token to get an alert the moment these change.</small>
+          <span className={"sig " + now.short}>Day trade: <b>{LABEL[now.short]}</b></span>
+          <span className={"sig " + now.long}>Long term: <b>{LABEL[now.long]}</b></span>
+          <small className="muted">Pin this token to get an alert the moment these change.</small>
         </div>
-        <p className="fin-note">⚠️ Nothing stated here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Do your own research and never put in more than you can afford to lose.</p>
+        <p className="fin-note">Nothing stated here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Do your own research and never put in more than you can afford to lose.</p>
       </div>}
 
       {/* Overview shows the quick read above; everything else is one tap away so the page stays short. */}
@@ -277,7 +277,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         <div className="alert-list">
           {(trades || []).slice(0, 15).map((x: any) => (
             <a key={x.tx_hash + x.wallet + x.side} className={"alert-row trade " + x.side} href={`${c.explorer}/tx/${x.tx_hash}`} target="_blank" rel="noopener noreferrer">
-              <span className="alert-ic">{x.side === "buy" ? "🟢" : x.wallet === t.dev ? "⚠️" : "🔴"}</span>
+              <span className="alert-ic">{x.side === "buy" ? "Buy" : x.wallet === t.dev ? "Dev" : "Sell"}</span>
               <span className="grow">
                 <span className="mono">{short(x.wallet)}</span>{x.wallet === t.dev ? " (dev)" : ""} {x.side === "buy" ? "bought" : "sold"} <b>{amt(x.amount)} {t.symbol}</b>
                 {Number(t.total_supply) > 0 && <span className="muted"> · {((Number(x.amount) / Number(t.total_supply)) * 100).toFixed(2)}% of supply</span>}
@@ -301,7 +301,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
               {(dev.acquired_at || dev.first_seen_at) && <span className="muted">· since {heldFor(dev.acquired_at || dev.first_seen_at)} ago</span>}
             </div>
             {devEvents.length
-              ? <ul className="dev-sells">{devEvents.slice(0, 5).map((e: any) => <li key={e.id}>⚠️ {e.kind === "exit" ? "Sold everything" : `Sold ${Math.round(e.pct_of_holding)}% (${amt(e.amount)} ${t.symbol})`} · {heldFor(e.created_at)} ago</li>)}</ul>
+              ? <ul className="dev-sells">{devEvents.slice(0, 5).map((e: any) => <li key={e.id}>{e.kind === "exit" ? "Sold everything" : `Sold ${Math.round(e.pct_of_holding)}% (${amt(e.amount)} ${t.symbol})`} · {heldFor(e.created_at)} ago</li>)}</ul>
               : <p className="muted">✓ No sells by the dev since we started tracking.</p>}
           </>
         )}
@@ -339,7 +339,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         <div className="alert-list">
           {(events || []).slice(0, 30).map((e: any) => (
             <div key={e.id} className={"alert-row" + (e.is_dev ? " dev" : "")}>
-              <span className="alert-ic">{e.kind === "buy" ? "🟢" : e.is_dev ? "⚠️" : e.kind === "exit" ? "🏃" : "📉"}</span>
+              <span className="alert-ic">{e.kind === "buy" ? "Buy" : e.is_dev ? "Dev" : e.kind === "exit" ? "Exit" : "Sell"}</span>
               <span className="grow">
                 {e.is_dev ? "Dev" : "Wallet"} <span className="mono">{short(e.wallet)}</span> {e.kind === "buy" ? `bought ${amt(e.amount)}` : e.kind === "exit" ? "sold everything" : `sold ${Math.round(e.pct_of_holding)}% (${amt(e.amount)})`} {t.symbol}
                 {e.kind !== "buy" && e.held_since && <span className="muted"> · after {heldFor(e.held_since, Date.parse(e.created_at))}</span>}

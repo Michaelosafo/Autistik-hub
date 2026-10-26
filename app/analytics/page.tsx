@@ -43,7 +43,7 @@ export default async function AnalyticsPage() {
     const { data: t } = await sb.from("tracked_tokens").select("symbol").eq("chain", latest.chain).eq("token", latest.token).maybeSingle();
     latestSym = t?.symbol || short(latest.token);
   }
-  const SIG: Record<string, string> = { buy: "🟢 Buy", take_profit: "💰 Take profit", sell: "🔴 Sell", wait: "⏳ Wait", avoid: "🚫 Avoid" };
+  const SIG: Record<string, string> = { buy: "Buy", take_profit: "Take profit", sell: "Sell", wait: "Wait", avoid: "Avoid" };
 
   return (
     <div className="stack" style={{ maxWidth: 1020 }}>
@@ -62,7 +62,7 @@ export default async function AnalyticsPage() {
           <div><b>{(movesToday ?? 0).toLocaleString("en-US")}</b><span>wallet moves today</span></div>
           <div><b>10 min</b><span>refresh</span></div>
         </div>
-        <Link href="/pro" className="an-pro">💎 <b>Pro</b> · 3 timeframes, whale radar, track record &amp; analyst report →</Link>
+        <Link href="/pro" className="an-pro"><b>Pro</b> · 3 timeframes, whale radar, track record &amp; analyst report →</Link>
       </section>
       <Guide id="analytics" title="Check a coin, in 3 steps" steps={[
         <>Paste a coin&apos;s address in the box above. We find its network for you.</>,
@@ -72,7 +72,7 @@ export default async function AnalyticsPage() {
 
       {user && latest && (
         <Link href={`/analytics/${latest.chain}/${latest.token}`} className={"an-notify" + (latest.is_dev ? " dev" : "")}>
-          <span className="an-bell">🔔{(alertsToday ?? 0) > 0 && <em>{alertsToday}</em>}</span>
+          <span className="an-bell">Alerts{(alertsToday ?? 0) > 0 && <em>{alertsToday}</em>}</span>
           <span className="grow"><b>${latestSym}</b> · {latest.is_dev ? "Dev" : "Top holder"} {latest.kind === "exit" ? "sold everything" : `sold ${Math.round(latest.pct_of_holding)}%`}</span>
           <span className="muted nowrap">{ago(latest.created_at)} →</span>
         </Link>
@@ -98,7 +98,7 @@ export default async function AnalyticsPage() {
 
         <section className="card stack">
           <div className="row" style={{ justifyContent: "space-between" }}><h2>My pins</h2>{user && <Link className="btn small" href="/analytics/pins">All →</Link>}</div>
-          {!pins?.length && <div className="empty">Pin a token (📌 on its page) for buy, take-profit, sell and wait alerts.</div>}
+          {!pins?.length && <div className="empty">Pin a token (on its page) for buy, take-profit, sell and wait alerts.</div>}
           <div className="an-list">
             {(pins || []).slice(0, 6).map((p: any) => {
               const t = tokenOf(p.chain, p.token);
@@ -107,7 +107,7 @@ export default async function AnalyticsPage() {
                 <Link key={p.chain + p.token} href={`/analytics/${p.chain}/${p.token}`} className="an-item">
                   <TokenLogo src={t.image_url} symbol={t.symbol || "?"} />
                   <span className="grow"><b>{t.symbol || short(p.token)}</b></span>
-                  <span className="an-sigs">{(["short", "long"] as const).map((h) => { const x = sig(h); return <span key={h} className={"sig " + (x?.state || "")}>{h === "short" ? "⚡" : "📅"} {x ? SIG[x.state] : "…"}</span>; })}</span>
+                  <span className="an-sigs">{(["short", "long"] as const).map((h) => { const x = sig(h); return <span key={h} className={"sig " + (x?.state || "")}>{h === "short" ? "Short:" : "Long:"} {x ? SIG[x.state] : "…"}</span>; })}</span>
                 </Link>
               );
             })}

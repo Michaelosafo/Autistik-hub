@@ -3318,3 +3318,26 @@ img.ql-logo{object-fit:cover}
 .vb{width:min(900px,100%);display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:20px;background:#17141F;border:1px solid #383241}
 .vb-h{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .vb video{width:100%;aspect-ratio:16/9;border-radius:12px;background:#000}
+
+/* ---------- Every menu page in the Board / Create a coin look (ProHero, Guide) ---------- */
+.an-hero{background:none !important;border:0;box-shadow:none;padding:0;border-radius:0;overflow:visible;gap:12px;color:#F4EEFF}
+.an-hero::after{content:none}
+.an-hero-top{align-items:flex-end;flex-wrap:wrap}
+.an-kicker{font-family:inherit;letter-spacing:.08em;font-size:.72em;font-weight:800;color:#B8ADD2 !important;text-transform:uppercase}
+.an-hero h1{margin:2px 0 0;font-family:var(--f-display);font-size:clamp(1.6em,4vw,2.2em);background:linear-gradient(90deg,#FFD84D,#FF6B9A,#B57CFF);-webkit-background-clip:text;background-clip:text;color:transparent}
+.an-hero p{color:#B8ADD2 !important;margin:4px 0 0;max-width:62ch;font-size:.95em;line-height:1.45}
+.an-hero .muted{color:#B8ADD2}
+.an-live{color:#7CF5B6;border-color:rgba(124,245,182,.3);background:rgba(62,229,143,.08)}
+.an-metrics{display:flex !important;flex-wrap:wrap;gap:8px !important}
+.an-metrics div{flex-direction:row !important;align-items:baseline;gap:6px;padding:7px 12px !important;border-radius:99px !important;background:rgba(255,255,255,.04) !important;border:1px solid #2A2536 !important;grid-column:auto !important}
+.an-metrics b{font-family:inherit;font-size:.9em;color:#F4EEFF}
+.an-metrics span{font-size:.8em !important;color:#B8ADD2 !important;text-transform:none;letter-spacing:0}
+.an-hero .ln-ghost.an-pro{align-self:flex-start;font-size:.9em;color:#F4EEFF}
+.an-hero .an-pro:hover{text-decoration:none}
+.an-hero .btn{background:rgba(255,255,255,.05);border-color:#383241;color:#F4EEFF;border-radius:14px}
+.an-hero .btn.primary{background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A);border-color:transparent;color:#191326;font-weight:800}
+.an-hero a:not(.btn):not(.an-pro){color:#F0B90B}
+.an-hero .scan-form.pro input{background:#17141F;border-color:#2A2536}
+.ln-guide{display:flex;flex-direction:column;gap:8px}
+.ln-steps .ln-step-t{color:#F4EEFF;font-size:.9em;line-height:1.4}
+.ln-steps .ln-step-t b{color:#FFD84D}

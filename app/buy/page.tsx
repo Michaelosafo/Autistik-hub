@@ -39,7 +39,7 @@ export default function BuyPage() {
       <SectionCards items={TOKEN_CARDS} active="/buy" label="$AUTISTIK" />
       <ProHero tone="gold" kicker="$AUTISTIK · BNB SMART CHAIN" title="How to buy $AUTISTIK"
         text="Six steps, about ten minutes. Take your time, and ask in our Telegram if you get stuck."
-        stats={[["100M", "total supply"], ["30%", "burned at launch"], ["3% / 4%", "buy / sell tax"], ["🔒 Locked", "liquidity"]]}>
+        stats={[["100M", "total supply"], ["30%", "burned at launch"], ["3% / 4%", "buy / sell tax"], ["Locked", "liquidity"]]}>
         <div className="an-actions">
           <a className="btn primary" href={LINKS.pancakeswap} target="_blank" rel="noopener noreferrer">Buy on PancakeSwap</a>
           <a className="btn" href={LINKS.dexscreener} target="_blank" rel="noopener noreferrer">Chart</a>
