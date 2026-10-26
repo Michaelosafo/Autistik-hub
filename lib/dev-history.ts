@@ -122,7 +122,8 @@ function judge(pairs: any[] | undefined, createdAt: string | null, bondedFlag?: 
   let status: DevToken["status"];
   if (bondedFlag === true || realDex) status = alive ? "alive" : liq < 500 && vol < 100 ? "dead" : "bonded";
   else if (!list.length) status = age != null && age > 3 * DAY ? "dead" : bondedFlag === false ? "curve" : "unknown";
-  else status = liq < 500 && vol < 100 && (age == null || age > 2 * DAY) ? "dead" : "curve";
+  // Still on a launchpad curve: dead once it's a couple of days old with almost no trading.
+  else status = age != null && age > 2 * DAY && vol < 100 ? "dead" : "curve";
   return {
     status, dex: realDex?.dexId ?? best?.dexId ?? null, liquidityUsd: list.length ? liq : null, marketCap: cap, volume24h: list.length ? vol : null,
     change24h: best ? num(best?.priceChange?.h24) : null,
