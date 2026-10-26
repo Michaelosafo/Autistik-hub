@@ -1,7 +1,6 @@
 import Link from "next/link";
-import Guide from "@/components/Guide";
 import TokenLogo from "@/components/TokenLogo";
-import AnalyticsScan from "@/components/AnalyticsScan";
+import ScanTools from "@/components/ScanTools";
 import { ACHAINS, heldFor, isAChain } from "@/lib/analytics";
 import { SCAN_CHAINS } from "@/lib/analytics-chains";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
@@ -46,16 +45,17 @@ export default async function AnalyticsPage() {
   const SIG: Record<string, string> = { buy: "Buy", take_profit: "Take profit", sell: "Sell", wait: "Wait", avoid: "Avoid" };
 
   return (
-    <div className="stack" style={{ maxWidth: 1020 }}>
+    <div className="stack scan-page" style={{ maxWidth: 1080 }}>
       <section className="an-hero">
         <div className="an-hero-top">
           <div>
-            <div className="an-kicker">AUTISTIK · ON-CHAIN ANALYTICS</div>
-            <h1>Token intelligence</h1>
+            <div className="an-kicker">AUTISTIK · SCANNER</div>
+            <h1>Scan before you buy</h1>
+            <p className="an-sub">Pick a tool, paste an address, and see the overview. Tap any part to open the details.</p>
           </div>
           <div className="an-live"><i />Live</div>
         </div>
-        <AnalyticsScan signedIn={!!user} />
+        <ScanTools signedIn={!!user} />
         <div className="an-metrics">
           <div><b>{SCAN_CHAINS.length}</b><span>networks</span></div>
           <div><b>{(tracked ?? 0).toLocaleString("en-US")}</b><span>tokens tracked</span></div>
@@ -64,11 +64,11 @@ export default async function AnalyticsPage() {
         </div>
         <Link href="/pro" className="an-pro"><b>Pro</b> · 3 timeframes, whale radar, track record &amp; analyst report →</Link>
       </section>
-      <Guide id="analytics" title="Check a coin, in 3 steps" steps={[
-        <>Paste a coin&apos;s address in the box above. We find its network for you.</>,
-        <>See who holds it, the developer&apos;s wallet, taxes, liquidity locks and a buy or sell read in plain words.</>,
-        <>Pin it to get an alert when big holders sell or it reaches a buy or sell zone.</>,
-      ]} />
+      <ol className="ln-steps" aria-label="How it works">
+        <li><i>1</i><span><b>Pick a tool</b><small>Token scan for a coin, Dev wallet for the person behind it.</small></span></li>
+        <li><i>2</i><span><b>Paste the address</b><small>We find the network for you and show the overview.</small></span></li>
+        <li><i>3</i><span><b>Open the details</b><small>Holders, dev history, trades, safety and the game arena, one tap each.</small></span></li>
+      </ol>
 
       {user && latest && (
         <Link href={`/analytics/${latest.chain}/${latest.token}`} className={"an-notify" + (latest.is_dev ? " dev" : "")}>
