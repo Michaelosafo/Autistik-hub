@@ -3647,3 +3647,6 @@ img.bd-logo{background:none!important}
 :root[data-theme="light"] .mp-coin-t small,
 :root[data-theme="light"] .mp-search{color:#5A5270}
 :root[data-theme="light"] ::placeholder{color:#9A93AE !important}
+
+:root[data-theme="light"] .sm-tabs button,
+:root[data-theme="light"] .sc-search{color:#4A4360}
