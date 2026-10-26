@@ -11,7 +11,7 @@ import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import FollowButton from "@/components/members/FollowButton";
 import FindPeople from "@/components/FindPeople";
-import MadnessPanel from "@/components/mood/MadnessPanel";
+import { MadnessLink } from "@/components/mood/MadnessPanel";
 import LiveNow from "@/components/rooms/LiveNow";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -166,7 +166,7 @@ export default function MePanel({ me, settings }: {
         </div>
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
-      <MadnessPanel />
+      <MadnessLink />
       <FindPeople />
 
       <section className="mp-sec mp-livenow" aria-label="Live rooms">
