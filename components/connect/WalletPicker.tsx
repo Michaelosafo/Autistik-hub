@@ -234,7 +234,7 @@ export default function WalletPicker() {
           <b>What is a wallet?</b>
           <p><strong>Your own account for crypto.</strong> It holds your coins and signs every action, so nobody else can move them.</p>
           <p><strong>A new way to sign in.</strong> No password: you approve each step in your wallet app.</p>
-          <p className="wp-safe">AUTISTIK will never ask for your seed phrase or private key.</p>
+          <p className="wp-safe">AUTISTIK will never ask for your seed phrase or private key. Connecting only shares your address: nothing moves unless you approve it in your wallet. <a href="/terms" target="_blank" rel="noopener">Terms</a></p>
           <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer" className="wp-get">Get a wallet</a>
         </aside>
       </div>

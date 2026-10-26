@@ -253,7 +253,7 @@ export default function AppShell({ admin, me, onMe, children }: {
       <Toaster />
       <main className="ax-main">{children}</main>
       <footer className="ax-foot">
-        <Link href="/app">All tools</Link><Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link><Link href="/privacy">Privacy</Link>
+        <Link href="/app">All tools</Link><Link href="/">AUTISTIK website</Link><Link href="/community">Community</Link><Link href="/safety">Safety</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link>
         <span>Crypto is risky. Nothing here is financial advice. Never share your seed phrase.</span>
       </footer>
 

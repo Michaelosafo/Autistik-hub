@@ -195,7 +195,7 @@ export default function LoginForm({ next, initialError, initialMode, providers =
               Continue with Apple
             </button>
           </div>
-          <small className="muted" style={{ marginTop: -4 }}>By continuing you confirm you&apos;re 18 or older and will follow the <Link href="/safety" target="_blank">community guidelines</Link>. See our <Link href="/privacy" target="_blank">privacy policy</Link>.</small>
+          <small className="muted" style={{ marginTop: -4 }}>By continuing you confirm you&apos;re 18 or older and will follow the <Link href="/safety" target="_blank">community guidelines</Link>. See our <Link href="/terms" target="_blank">terms</Link> and <Link href="/privacy" target="_blank">privacy policy</Link>.</small>
           <div className="or-line"><span>or use your email</span></div>
         </>
       )}
