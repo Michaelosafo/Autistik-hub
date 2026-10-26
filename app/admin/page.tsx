@@ -5,6 +5,7 @@ import AdminMfa from "@/components/AdminMfa";
 import AIBudget from "@/components/AIBudget";
 import AdminActivity from "@/components/AdminActivity";
 import AdminFees from "@/components/AdminFees";
+import AdminSolCollect from "@/components/AdminSolCollect";
 import AdminAirdrop from "@/components/AdminAirdrop";
 import AdminBadges from "@/components/AdminBadges";
 import AdminTeam from "@/components/AdminTeam";
@@ -23,7 +24,7 @@ export default async function AdminPage() {
     <div className="stack">
       <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only the Hub owner can open this page.</p></div>
       <AdminWalletBackfill />
-      {admin ? <><div className="notice">Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><AdminFees /><AdminActivity /><AdminAirdrop /><AdminBadges /><AdminTeam /><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
+      {admin ? <><div className="notice">Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><AdminFees /><AdminSolCollect /><AdminActivity /><AdminAirdrop /><AdminBadges /><AdminTeam /><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
     </div>
   );
 }

@@ -260,6 +260,16 @@ export const SOL_LAUNCH_FEE = (() => {
 })();
 /** The launch fee as it applies right now (0 until the marketing wallet is set). */
 export const solLaunchFee = () => (solFeeWallet() ? SOL_LAUNCH_FEE : 0);
+/**
+ * The fee on every trade of a new Solana coin launched here, in basis points (50 = 0.5%). It is built into the coin
+ * itself (a Token-2022 transfer fee), so it applies wherever the coin is traded; only the marketing wallet can collect
+ * it, and nobody can change it after launch. 0 until the marketing wallet is set.
+ */
+export const SOL_TRADE_FEE_BPS = (() => {
+  const n = Number(process.env.NEXT_PUBLIC_SOLANA_TRADE_FEE_BPS || 50);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : 50;
+})();
+export const solTradeFeeBps = () => (solFeeWallet() ? SOL_TRADE_FEE_BPS : 0);
 
 /**
  * The AUTISTIK Solana Locker's program address (programs/autistik-locker), once deployed. Without it Solana launches

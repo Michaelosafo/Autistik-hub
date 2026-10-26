@@ -14,11 +14,15 @@ import {
   TransactionMessage, VersionedTransaction,
 } from "@solana/web3.js";
 import {
-  AuthorityType, MINT_SIZE, NATIVE_MINT, TOKEN_PROGRAM_ID, createAssociatedTokenAccountIdempotentInstruction, createBurnInstruction,
-  createInitializeMint2Instruction, createMintToInstruction, createSetAuthorityInstruction, getAssociatedTokenAddressSync,
+  AuthorityType, ExtensionType, LENGTH_SIZE, MINT_SIZE, NATIVE_MINT, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, TYPE_SIZE,
+  createAssociatedTokenAccountIdempotentInstruction, createBurnInstruction, createInitializeMetadataPointerInstruction,
+  createInitializeMint2Instruction, createInitializeTransferFeeConfigInstruction, createMintToInstruction, createSetAuthorityInstruction,
+  createWithdrawWithheldTokensFromAccountsInstruction, createWithdrawWithheldTokensFromMintInstruction, getAssociatedTokenAddressSync,
+  getMintLen, getTokenMetadata, getTransferFeeAmount, getTransferFeeConfig, unpackAccount, unpackMint,
 } from "@solana/spl-token";
+import { createInitializeInstruction as createInitializeMetadataInstruction, pack as packMetadata } from "@solana/spl-token-metadata";
 import { CREATE_CPMM_POOL_FEE_ACC, CREATE_CPMM_POOL_PROGRAM, Percent, Raydium, TxVersion } from "@raydium-io/raydium-sdk-v2";
-import { SOL_DECIMALS, solFeeWallet, solLaunchFee } from "@/lib/launchpad";
+import { SOL_DECIMALS, solFeeWallet, solLaunchFee, solTradeFeeBps } from "@/lib/launchpad";
 import { vanityMint } from "@/lib/solana-vanity";
 
 const RPC = process.env.LAUNCH_SOLANA_RPC || process.env.WALLET_SOLANA_RPC || process.env.ANALYTICS_SOLANA_RPC || "https://api.mainnet-beta.solana.com";
@@ -72,7 +76,11 @@ function createMetadataIx(mint: PublicKey, creator: PublicKey, name: string, sym
 /** Reads name, ticker and update authority back from a token's Metaplex metadata. */
 export async function readMetadata(mint: PublicKey) {
   const acc = await connection().getAccountInfo(metadataPda(mint));
-  if (!acc || !acc.owner.equals(METADATA_PROGRAM)) return null;
+  if (!acc || !acc.owner.equals(METADATA_PROGRAM)) {
+    // Coins launched with the trade fee keep their name and ticker in the Token-2022 metadata extension.
+    const m = await getTokenMetadata(connection(), mint, "confirmed", TOKEN_2022_PROGRAM_ID).catch(() => null);
+    return m && m.updateAuthority ? { name: m.name, symbol: m.symbol, updateAuthority: m.updateAuthority } : null;
+  }
   const d = acc.data;
   const updateAuthority = new PublicKey(d.subarray(1, 33));
   let o = 65;
@@ -83,29 +91,63 @@ export async function readMetadata(mint: PublicKey) {
 
 // ---------------------------------------------------------------- 1. the token
 
-/** A new token: fixed supply to the creator, minting switched off, no freeze authority. Returns the half-signed transaction. */
+/**
+ * A new token: fixed supply to the creator, minting switched off, no freeze authority. Returns the half-signed transaction.
+ * With the marketing wallet set, it is a Token-2022 coin with a fee on every transfer (so on every trade, on any app or
+ * DEX): solTradeFeeBps(), withheld in the receiving account and collectable only by the marketing wallet. Nobody can
+ * change the fee afterwards (no fee authority). Without it, a standard SPL token as before.
+ */
 export async function buildMint(creatorAddr: string, plan: { name: string; symbol: string; supply: string }) {
   const creator = pk(creatorAddr);
   // Its address ends in "tik" (lib/solana-vanity.ts), like pump.fun addresses end in "pump".
   const mint = await vanityMint();
   const conn = connection();
-  const rent = await conn.getMinimumBalanceForRentExemption(MINT_SIZE);
-  const ata = getAssociatedTokenAddressSync(mint.publicKey, creator);
   const amount = BigInt(plan.supply) * 10n ** BigInt(SOL_DECIMALS);
-  const ixs = [
-    ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }),
+  const feeTo = solFeeWallet(), tradeFee = solTradeFeeBps();
+  const uri = `${SITE}/api/launchpad/solana/meta/${mint.publicKey.toBase58()}`;
+  const ixs: TransactionInstruction[] = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 250_000 }),
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY }),
-    SystemProgram.createAccount({ fromPubkey: creator, newAccountPubkey: mint.publicKey, lamports: rent, space: MINT_SIZE, programId: TOKEN_PROGRAM_ID }),
-    createInitializeMint2Instruction(mint.publicKey, SOL_DECIMALS, creator, null),
-    createMetadataIx(mint.publicKey, creator, plan.name, plan.symbol, `${SITE}/api/launchpad/solana/meta/${mint.publicKey.toBase58()}`),
-    createAssociatedTokenAccountIdempotentInstruction(creator, ata, creator, mint.publicKey),
-    createMintToInstruction(mint.publicKey, ata, creator, amount),
-    createSetAuthorityInstruction(mint.publicKey, creator, AuthorityType.MintTokens, null),
   ];
-  const feeTo = solFeeWallet(), fee = BigInt(Math.round(solLaunchFee() * 1e9));
+  let program = TOKEN_PROGRAM_ID;
+  if (feeTo && tradeFee > 0) {
+    program = TOKEN_2022_PROGRAM_ID;
+    const mintLen = getMintLen([ExtensionType.TransferFeeConfig, ExtensionType.MetadataPointer]);
+    const metaLen = TYPE_SIZE + LENGTH_SIZE + packMetadata({ mint: mint.publicKey, updateAuthority: creator, name: plan.name, symbol: plan.symbol, uri, additionalMetadata: [] }).length;
+    const rent = await conn.getMinimumBalanceForRentExemption(mintLen + metaLen);
+    ixs.push(
+      SystemProgram.createAccount({ fromPubkey: creator, newAccountPubkey: mint.publicKey, lamports: rent, space: mintLen, programId: program }),
+      // The fee: no fee authority (it can never change), the marketing wallet is the only one that can collect it.
+      createInitializeTransferFeeConfigInstruction(mint.publicKey, null, pk(feeTo), tradeFee, 18_446_744_073_709_551_615n, program),
+      createInitializeMetadataPointerInstruction(mint.publicKey, creator, mint.publicKey, program),
+      createInitializeMint2Instruction(mint.publicKey, SOL_DECIMALS, creator, null, program),
+      createInitializeMetadataInstruction({ programId: program, metadata: mint.publicKey, updateAuthority: creator, mint: mint.publicKey, mintAuthority: creator, name: plan.name, symbol: plan.symbol, uri }),
+    );
+  } else {
+    const rent = await conn.getMinimumBalanceForRentExemption(MINT_SIZE);
+    ixs.push(
+      SystemProgram.createAccount({ fromPubkey: creator, newAccountPubkey: mint.publicKey, lamports: rent, space: MINT_SIZE, programId: program }),
+      createInitializeMint2Instruction(mint.publicKey, SOL_DECIMALS, creator, null, program),
+      createMetadataIx(mint.publicKey, creator, plan.name, plan.symbol, uri),
+    );
+  }
+  const ata = getAssociatedTokenAddressSync(mint.publicKey, creator, false, program);
+  ixs.push(
+    createAssociatedTokenAccountIdempotentInstruction(creator, ata, creator, mint.publicKey, program),
+    createMintToInstruction(mint.publicKey, ata, creator, amount, [], program),
+    createSetAuthorityInstruction(mint.publicKey, creator, AuthorityType.MintTokens, null, [], program),
+  );
+  const fee = BigInt(Math.round(solLaunchFee() * 1e9));
   if (feeTo && fee > 0n) ixs.push(SystemProgram.transfer({ fromPubkey: creator, toPubkey: pk(feeTo), lamports: fee }));
   const tx = await v0(creator, ixs, [mint]);
-  return { tx: b64(tx), mint: mint.publicKey.toBase58() };
+  return { tx: b64(tx), mint: mint.publicKey.toBase58(), tradeFeeBps: program.equals(TOKEN_2022_PROGRAM_ID) ? tradeFee : 0 };
+}
+
+/** Which token program a mint belongs to (standard SPL or Token-2022). */
+async function tokenProgramOf(mint: string) {
+  const acc = await connection().getAccountInfo(pk(mint));
+  if (!acc) throw new Error("That token wasn't found on Solana yet. Wait a few seconds and try again.");
+  return acc.owner.equals(TOKEN_2022_PROGRAM_ID) ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
 }
 
 // ---------------------------------------------------------------- 2. the pool, and adding to any pool
@@ -128,7 +170,7 @@ export async function buildPool(creator: string, mint: string, tokens: bigint, l
   const conn = connection();
   const info = await conn.getParsedAccountInfo(pk(mint)).catch(() => null);
   const decimals = Number((info?.value?.data as any)?.parsed?.info?.decimals ?? SOL_DECIMALS);
-  const tokenSide = { address: mint, decimals, programId: TOKEN_PROGRAM_ID.toBase58() };
+  const tokenSide = { address: mint, decimals, programId: (await tokenProgramOf(mint)).toBase58() };
   const tokenFirst = Buffer.compare(pk(mint).toBuffer(), NATIVE_MINT.toBuffer()) < 0;
   const [mintA, mintB, amountA, amountB] = tokenFirst ? [tokenSide, SOL_TOKEN, tokens, lamports] : [SOL_TOKEN, tokenSide, lamports, tokens];
   const { transaction, extInfo } = await r.cpmm.createPool({
@@ -203,11 +245,53 @@ export async function verifyLaunch(mintAddr: string, poolAddr: string) {
   const mint = pk(mintAddr), pool = pk(poolAddr);
   const [mintAcc, poolAcc, meta] = await Promise.all([conn.getParsedAccountInfo(mint), conn.getAccountInfo(pool), readMetadata(mint)]);
   const info: any = (mintAcc.value?.data as any)?.parsed?.info;
-  if (!info || !mintAcc.value?.owner.equals(TOKEN_PROGRAM_ID)) return { error: "That isn't a token on Solana." };
+  if (!info || !(mintAcc.value?.owner.equals(TOKEN_PROGRAM_ID) || mintAcc.value?.owner.equals(TOKEN_2022_PROGRAM_ID))) return { error: "That isn't a token on Solana." };
   if (info.mintAuthority || info.freezeAuthority) return { error: "Only tokens with minting and freezing switched off can be listed." };
   if (!meta) return { error: "That token has no name and ticker on-chain." };
   if (!poolAcc || !poolAcc.owner.equals(CREATE_CPMM_POOL_PROGRAM)) return { error: "That isn't a Raydium pool." };
   // The pool account holds both mints; make sure this one is in it.
   if (!poolAcc.data.includes(mint.toBuffer())) return { error: "That pool isn't for this token." };
   return { name: meta.name, symbol: meta.symbol, creator: meta.updateAuthority.toBase58(), supply: (BigInt(info.supply) / 10n ** BigInt(info.decimals)).toString() };
+}
+
+// ---------------------------------------------------------------- collecting the trade fee (marketing wallet)
+
+/**
+ * Transactions for the marketing wallet to collect the trade fee withheld on coins launched here (Token-2022). The fee
+ * sits in each holder's and the pool's token account until collected; this moves it into the marketing wallet's own
+ * account for that coin. Only the marketing wallet can sign these. Up to 20 accounts per transaction.
+ */
+export async function buildCollectFees(authorityAddr: string, mints: string[]) {
+  const authority = pk(authorityAddr);
+  const conn = connection();
+  const txs: string[] = [];
+  const found: { mint: string; amount: string; accounts: number }[] = [];
+  for (const m of mints.slice(0, 20)) {
+    const mint = pk(m);
+    const acc = await conn.getAccountInfo(mint).catch(() => null);
+    if (!acc || !acc.owner.equals(TOKEN_2022_PROGRAM_ID)) continue;
+    const cfg = getTransferFeeConfig(unpackMint(mint, acc, TOKEN_2022_PROGRAM_ID));
+    if (!cfg || !cfg.withdrawWithheldAuthority.equals(authority)) continue;
+    const holders = await conn.getProgramAccounts(TOKEN_2022_PROGRAM_ID, { filters: [{ memcmp: { offset: 0, bytes: mint.toBase58() } }] }).catch(() => []);
+    const sources: PublicKey[] = [];
+    let total = cfg.withheldAmount;
+    for (const h of holders) {
+      try {
+        const w = getTransferFeeAmount(unpackAccount(h.pubkey, h.account, TOKEN_2022_PROGRAM_ID))?.withheldAmount ?? 0n;
+        if (w > 0n) { sources.push(h.pubkey); total += w; }
+      } catch { /* not a token account */ }
+    }
+    if (total === 0n) continue;
+    found.push({ mint: m, amount: total.toString(), accounts: sources.length });
+    const dest = getAssociatedTokenAddressSync(mint, authority, false, TOKEN_2022_PROGRAM_ID);
+    const head = [ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY }), createAssociatedTokenAccountIdempotentInstruction(authority, dest, authority, mint, TOKEN_2022_PROGRAM_ID)];
+    if (cfg.withheldAmount > 0n) head.push(createWithdrawWithheldTokensFromMintInstruction(mint, dest, authority, [], TOKEN_2022_PROGRAM_ID));
+    for (let i = 0; i < Math.max(1, sources.length); i += 20) {
+      const chunk = sources.slice(i, i + 20);
+      const ixs = i === 0 ? [...head] : [ComputeBudgetProgram.setComputeUnitPrice({ microLamports: PRIORITY })];
+      if (chunk.length) ixs.push(createWithdrawWithheldTokensFromAccountsInstruction(mint, dest, authority, [], chunk, TOKEN_2022_PROGRAM_ID));
+      if (ixs.length > 1) txs.push(b64(await v0(authority, ixs)));
+    }
+  }
+  return { txs, found };
 }
