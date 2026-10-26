@@ -3970,3 +3970,22 @@ img.bd-logo{background:none!important}
 /* Profile link page (autistik.io/@name) */
 .share-card{gap:16px}
 .share-card .avatar.big{width:84px;height:84px}
+
+/* ---------- Holder rewards (Launch Pad v4) ---------- */
+.hr-pick{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:14px;border:1px dashed rgba(240,185,11,.55);background:rgba(240,185,11,.05)}
+.hr-head{display:flex;flex-direction:column;gap:2px}
+.hr-chips{display:flex;flex-wrap:wrap;gap:6px}
+.hr-chips button{all:unset;cursor:pointer;box-sizing:border-box;padding:7px 13px;border-radius:99px;font-weight:800;font-size:.86em;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)}
+.hr-chips button:hover{border-color:#F0B90B}
+.hr-chips button:focus-visible{outline:3px solid #F0B90B;outline-offset:2px}
+.hr-chips button.on{background:linear-gradient(135deg,#FFD84D,#F0B90B);border-color:#F0B90B;color:#191326}
+.hr-split{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.hr-split span{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.hr-split small{color:var(--muted);font-size:.76em}
+.hr-split b{font-size:.84em}
+.hr-pick input[type=range]{width:100%;accent-color:#F0B90B}
+.hr-card .hr-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.hr-card .hr-stats div{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:12px;background:var(--surface-2,rgba(var(--wc),.04));border:1px solid var(--line)}
+.hr-card .hr-stats small{color:var(--muted);font-size:.76em}
+.hr-card .hr-mine{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between;padding:10px 12px;border-radius:12px;border:1px solid rgba(240,185,11,.5);background:rgba(240,185,11,.07)}
+@media (max-width:520px){ .hr-split{grid-template-columns:1fr} }

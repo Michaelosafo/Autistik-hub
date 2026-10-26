@@ -4,10 +4,11 @@ import Link from "next/link";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { currentUser } from "@/lib/supabase/server";
-import { padSites } from "@/lib/launchpad-server";
+import { padInfo } from "@/lib/launchpad-server";
 import { adminState, launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import PadDeploy from "@/components/PadDeploy";
+import PadTestnetTrial from "@/components/PadTestnetTrial";
 import AdminListTokens from "@/components/AdminListTokens";
 import VideoButton from "@/components/VideoButton";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
 
 export default async function NewLaunchPage() {
-  const [user, board, pads, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padSites(), adminState(), launchAccess()]);
+  const [user, board, { pads, versions }, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
@@ -46,13 +47,14 @@ export default async function NewLaunchPage() {
         <>
           {!access.public && <div className="notice warn">Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Remove <span className="mono">LAUNCH_PUBLIC=0</span> in Vercel to open it to all.</div>}
           <p className="ln-alt">Already made your token, here or anywhere else? <Link href="/liquidity">Add liquidity by pasting its address</Link></p>
-          <Launchpad signedIn={!!user} pads={pads} admin={admin} />
+          <Launchpad signedIn={!!user} pads={pads} versions={versions} admin={admin} />
           <AddLiquidity pads={pads} />
         </>
       )}
       {owner && !admin && <div className="notice">Your admin tools (deploy the Launch Pad on a new chain, list tokens) show here after your 2-step code. <Link href="/admin">Enter it on the Admin page</Link>, then come back to this page.</div>}
       {admin && <AdminListTokens />}
       {admin && <PadDeploy />}
+      {admin && <PadTestnetTrial />}
       <p className="muted" style={{ fontSize: ".9em" }}>Already launched, or launched somewhere else? See the <Link href="/launchpad">Trending</Link> tab to get your token listed and promoted.</p>
     </div>
   );

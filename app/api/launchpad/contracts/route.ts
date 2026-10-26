@@ -3,7 +3,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { adminState } from "@/lib/admin";
 import { json } from "@/lib/ai";
 import { logActivity } from "@/lib/activity";
-import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, deployable, viemChain, type ChainKey } from "@/lib/launchpad";
+import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCHPAD_V4_ABI, deployable, viemChain, type ChainKey } from "@/lib/launchpad";
 import { padInfo } from "@/lib/launchpad-server";
 import { lockerOn } from "@/lib/locker-server";
 import { getMarkets } from "@/lib/market";
@@ -74,8 +74,9 @@ export async function POST(req: Request) {
       if (getAddress(router) !== getAddress(c.router!)) return json({ error: "That launchpad uses a different DEX router." }, 400);
       if (!ourLocker || getAddress(locker) !== ourLocker.address) return json({ error: "That launchpad doesn't use the AUTISTIK Locker on this chain." }, 400);
       if (!TREASURY || getAddress(owner) !== getAddress(TREASURY)) return json({ error: "That launchpad isn't owned by the AUTISTIK team wallet." }, 400);
-      // v3 answers tokenFor() (token addresses ending in "aaaaa"); v2 doesn't.
-      const version = await pub.readContract({ address: at, abi: LAUNCHPAD_V3_ABI, functionName: "tokenFor", args: [`0x${"00".repeat(32)}`] }).then(() => 3, () => 2);
+      // v3 answers tokenFor() (token addresses ending in "aaaaa"); v2 doesn't. v4 also answers rewardAllowed() (holder rewards).
+      let version = await pub.readContract({ address: at, abi: LAUNCHPAD_V3_ABI, functionName: "tokenFor", args: [`0x${"00".repeat(32)}`] }).then(() => 3, () => 2);
+      if (version === 3) version = await pub.readContract({ address: at, abi: LAUNCHPAD_V4_ABI, functionName: "rewardAllowed", args: [at] }).then(() => 4, () => 3);
       const { error } = await sb.from("launchpad_contracts").upsert({ chain, address: at, version, tx_hash: typeof txHash === "string" ? txHash : null, deployed_at: new Date().toISOString() }, { onConflict: "chain" });
       if (error) return json({ error: "Couldn't save it. Try again." }, 500);
     }

@@ -9,7 +9,7 @@ import { NETWORKS, type Net } from "@/lib/connect";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { maleUtterance } from "@/lib/voice";
 import { SolanaLaunch } from "@/components/SolanaLaunch";
-import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, solLaunchFee, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, lockExplain, solLockerProgram, type LiquidityLock, type Pads, type LaunchChain } from "@/lib/launchpad";
+import { AI_LAUNCH_SESSIONS, SOL_POOL_COST, isSolana, solLaunchFee, CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCHPAD_V4_ABI, NATIVE_REWARD, rewardChoices, LAUNCH_TOKEN_ABI, LOCKS, MIN_HOLD_USD, dexscreenerUrl, isLive, SOL_REWARD_TOKENS, solTradeFeeBps, liveChains, readLimits, viemChain, type LaunchPlan, checkPlan, MAX_CREATOR_PERCENT, MAX_TAX_PERCENT, lockExplain, solLockerProgram, type LiquidityLock, type Pads, type LaunchChain, type ChainKey } from "@/lib/launchpad";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import Art from "@/components/Art";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
@@ -36,7 +36,7 @@ function Bot() {
 const fmt = (n: string) => BigInt(n).toLocaleString("en-US");
 
 /** `admin`: the Hub admin launches without holding any AUTISTIK (the Hub signs the permit without checking). */
-export default function Launchpad({ signedIn, pads, admin = false }: { signedIn: boolean; pads: Pads; admin?: boolean }) {
+export default function Launchpad({ signedIn, pads, versions = {}, admin = false }: { signedIn: boolean; pads: Pads; versions?: Partial<Record<ChainKey, number>>; admin?: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const turns = useRef<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -171,9 +171,17 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
 
       // Launch Pad v3: the Hub picked a salt that gives the token an address ending in "aaaaa", signed into the permit.
       const salt = /^0x[0-9a-fA-F]{64}$/.test(String(permit.salt || "")) ? (permit.salt as `0x${string}`) : null;
+      // Launch Pad v4 adds holder rewards (its launch() takes two more fields).
+      const v4 = salt && Number(permit.padVersion) >= 4;
+      if (plan.reward && !v4) { setStatus(`Holder rewards aren't open on ${c.name} yet. Remove them to launch now, or try again soon.`); return; }
+      const rewardToken = (plan.reward === "native" ? NATIVE_REWARD : plan.reward || "0x0000000000000000000000000000000000000000") as `0x${string}`;
+      if (v4 && plan.reward && plan.reward !== "native") {
+        const ok = await pub.readContract({ address: pad, abi: LAUNCHPAD_V4_ABI, functionName: "rewardAllowed", args: [rewardToken] } as any).catch(() => false);
+        if (!ok) { setStatus("That reward token isn't approved on the Launch Pad yet. Pick the coin, BTC or ETH, or ask the AUTISTIK team to approve it."); return; }
+      }
       setStatus(salt && permit.token ? `Your token's address will be ${String(permit.token).slice(0, 8)}…${String(permit.token).slice(-8)}. Confirm the launch in your wallet…` : "Confirm the launch in your wallet…");
       const call = {
-        account, address: pad, abi: salt ? LAUNCHPAD_V3_ABI : LAUNCHPAD_ABI, functionName: "launch",
+        account, address: pad, abi: v4 ? LAUNCHPAD_V4_ABI : salt ? LAUNCHPAD_V3_ABI : LAUNCHPAD_ABI, functionName: "launch",
         args: [{
           name: plan.name, symbol: plan.symbol, supply: BigInt(plan.supply) * 10n ** 18n,
           creatorBps: BigInt(Math.round(plan.creatorPercent * 100)), devBuyNative: devBuy,
@@ -181,6 +189,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
           taxWallet: (plan.taxWallet || "0x0000000000000000000000000000000000000000") as `0x${string}`,
           whitelist: plan.whitelist as `0x${string}`[], whitelistNative: plan.whitelist.length ? maxWhitelistNative : 0n,
           lockOption: LOCKS[plan.lock].option,
+          ...(v4 && { rewardToken: plan.reward ? rewardToken : ("0x0000000000000000000000000000000000000000" as `0x${string}`), holderBps: plan.reward ? BigInt(Math.round((plan.holderPercent ?? 0) * 100)) : 0n }),
           permitDeadline: BigInt(permit.deadline || 0),
           // The contribution shown now is the most this launch will pay, and it must happen within 20 minutes.
           maxFeeAccepted: f, deadline: BigInt(Math.floor(Date.now() / 1000) + 20 * 60),
@@ -210,6 +219,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
         : /FeeTooHigh|TooLate/.test(reason) ? "The launch contribution changed or the launch took too long. Nothing was launched. Press Launch again."
         : /CreatorShareTooHigh/.test(reason) ? `Your share plus your first buy would be over ${MAX_CREATOR_PERCENT}% of the supply. Lower one of them.`
         : /WhitelistTooBig/.test(reason) ? "The whitelist limit just changed. Press Launch again."
+        : /RewardNotAllowed/.test(reason) ? "That reward token isn't approved on the Launch Pad. Pick another reward."
         : e?.shortMessage || "You cancelled in your wallet. Nothing was launched.");
     } finally { setLaunching(false); }
   }
@@ -230,7 +240,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
         </button>
       </div>
       <div className="kai lp">
-        {mode === "quick" ? <QuickLaunch pads={pads} disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
+        {mode === "quick" ? <QuickLaunch pads={pads} versions={versions} disabled={launching} onPlan={(p) => { setPlan(p); setAgree(false); setDone(null); setStatus(""); }} /> : (
         <div className="card chat lux launch-ai" data-c="autistik" data-mood="motivation">
           <div className="lux-top">
             <div className="lux-who"><button type="button" aria-selected="true" tabIndex={-1}><Bot /><span>Autistik · Launch Assistant</span></button></div>
@@ -314,7 +324,8 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>You keep</th><td className="num">{plan.creatorPercent}% · {creatorTokens.toLocaleString("en-US")}</td></tr>
                 <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {plan.liquidity} SOL</td></tr>
                 <tr><th>Liquidity</th><td>{plan.lock === "burn" ? "LP tokens burned forever" : `LP tokens ${LOCKS[plan.lock].short.toLowerCase()} in the AUTISTIK Solana Locker`}</td></tr>
-                <tr><th>Tax</th><td>No tax</td></tr>
+                <tr><th>Fee</th><td>{plan.reward ? `${plan.buyTax}% on every trade and transfer (plus the ${solTradeFeeBps() / 100}% AUTISTIK fee). Fixed forever.` : "No tax"}</td></tr>
+                {plan.reward && <tr><th>Holder rewards</th><td>{plan.holderPercent}% of your fee buys {SOL_REWARD_TOKENS[plan.reward]?.symbol} for every holder, by how much they hold, sent about every 10 minutes (holders can also claim on the coin&apos;s page). The other {+(100 - (plan.holderPercent ?? 0)).toFixed(2)}% goes to {plan.taxWallet.slice(0, 4)}…{plan.taxWallet.slice(-4)} in your coin.</td></tr>}
                 <tr><th>Trading</th><td>Opens as soon as the pool exists</td></tr>
                 <tr><th>Fees</th><td>About {+(SOL_POOL_COST + solLaunchFee()).toFixed(3)} SOL: Raydium&apos;s pool fee (≈0.15 SOL), network fees{solLaunchFee() ? <> and the {solLaunchFee()} SOL AUTISTIK launch fee (to marketing)</> : null}</td></tr>
               </tbody></table>
@@ -334,6 +345,7 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
                 <tr><th>Into the pool</th><td className="num">{(BigInt(plan.supply) - creatorTokens).toLocaleString("en-US")} + {fee === null ? plan.liquidity : formatEther(parseEther(plan.liquidity) - fee)} {c.coin}</td></tr>
                 <tr><th>Liquidity</th><td>{LOCKS[plan.lock].label}</td></tr>
                 <tr><th>Tax</th><td>{plan.buyTax || plan.sellTax ? `${plan.buyTax}% buy · ${plan.sellTax}% sell → ${plan.taxWallet.slice(0, 6)}…${plan.taxWallet.slice(-4)} (can only be lowered later)` : "No tax"}</td></tr>
+                {plan.reward && <tr><th>Holder rewards</th><td>{plan.holderPercent}% of the tax buys {rewardName(c, plan.reward)} for every holder, by how much they hold. Paid automatically as people trade; holders can also claim any time. The other {+(100 - (plan.holderPercent ?? 0)).toFixed(2)}% goes to your tax wallet. Fixed at launch.</td></tr>}
                 <tr><th>Whitelist</th><td>{plan.whitelist.length ? `${plan.whitelist.length} wallet${plan.whitelist.length > 1 ? "s" : ""} may buy up to ${maxWl ? formatEther(maxWl) : "…"} ${c.coin} (≈$40) each before trading opens` : "None"}</td></tr>
                 <tr><th>Trading</th><td>Starts when you press Start trading (opens by itself after 24h). First 5 minutes: max 1% of supply per buy.</td></tr>
                 <tr><th>You must hold</th><td>{admin ? "Nothing: admin launch" : `$${MIN_HOLD_USD}+ of AUTISTIK (BNB Chain), same wallet`}</td></tr>
@@ -368,12 +380,19 @@ export default function Launchpad({ signedIn, pads, admin = false }: { signedIn:
 }
 
 /** The launch form without AI: the same plan Autistik would prepare, filled in directly. */
-function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => void; disabled?: boolean; pads: Pads }) {
+/** The holders' reward as people read it: "BNB", "BTC", or a shortened address. */
+function rewardName(c: LaunchChain, reward: string) {
+  const k = rewardChoices(c).find((x) => x.key.toLowerCase() === reward.toLowerCase());
+  return k ? k.symbol : `${reward.slice(0, 6)}…${reward.slice(-4)}`;
+}
+
+function QuickLaunch({ onPlan, disabled, pads, versions = {} }: { onPlan: (p: LaunchPlan) => void; disabled?: boolean; pads: Pads; versions?: Partial<Record<ChainKey, number>> }) {
   const live = liveChains(pads);
   const [f, setF] = useState({
     chain: (live[0]?.key ?? "bsc") as LaunchPlan["chain"], name: "", symbol: "", supply: "1000000000", creatorPercent: "5",
     liquidity: "", lock: "burn" as LiquidityLock, description: "", website: "", x: "", telegram: "",
     buyTax: "0", sellTax: "0", taxWallet: "", wl1: "", wl2: "", wl3: "", devBuy: "0", logo: "",
+    reward: "", rewardOther: "", holderPercent: "50",
   });
   // The token's picture: picked, fitted into a square, uploaded to the Hub's token-logos storage.
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -403,13 +422,16 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
     return () => clearTimeout(t);
   }, [f.name, f.symbol]);
   const [err, setErr] = useState("");
+  // Rewards differ per chain: start again when the chain changes.
+  useEffect(() => { setF((x) => ({ ...x, reward: "", rewardOther: "", buyTax: "0", sellTax: "0", taxWallet: "" })); }, [f.chain]);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const coin = CHAINS[f.chain]?.coin ?? "BNB";
   const sol = isSolana(CHAINS[f.chain]);
 
   function review(e: React.FormEvent) {
     e.preventDefault();
-    const r = checkPlan({ ...f, creatorPercent: Number(f.creatorPercent), buyTax: Number(f.buyTax || 0), sellTax: Number(f.sellTax || 0), whitelist: [f.wl1, f.wl2, f.wl3] }, pads);
+    const reward = f.reward === "other" ? f.rewardOther.trim() : f.reward;
+    const r = checkPlan({ ...f, creatorPercent: Number(f.creatorPercent), buyTax: Number(f.buyTax || 0), sellTax: Number(f.sellTax || 0), whitelist: [f.wl1, f.wl2, f.wl3], reward, holderPercent: Number(f.holderPercent || 0) }, pads);
     if ("error" in r) { setErr(r.error); return; }
     if (taken?.name || taken?.symbol) { setErr(taken.name ? "That name was already launched here. Pick another name." : "That ticker was already launched here. Pick another ticker."); return; }
     setErr("");
@@ -436,6 +458,7 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
     ...(sol ? [[true, "Address ends in tik"] as [boolean, string]] : []),
     ...(!sol ? [[true, "Anti-sniper: max 1% per buy for 5 minutes"] as [boolean, string], [Number(f.buyTax) <= 5 && Number(f.sellTax) <= 5, `Tax ${f.buyTax || 0}% buy · ${f.sellTax || 0}% sell`] as [boolean, string]] : []),
     [share <= 10, `Your share ${share}%`],
+    ...(!sol && f.reward ? [[true, `Holders earn ${f.reward === "other" ? "a reward token" : rewardChoices(ch).find((x) => x.key === f.reward)?.symbol ?? ""} from ${f.holderPercent}% of the tax`] as [boolean, string]] : []),
   ];
   return (
     <form className="ql" onSubmit={review}>
@@ -496,7 +519,8 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
               ))}
             </div>
           )}
-          {sol && <div className="notice" style={{ fontSize: ".86em" }}>Solana: standard token with a fixed supply and a Raydium pool; the LP tokens are {solLockerProgram() ? "burned or locked" : "burned forever"}. No tax, whitelist or first buy. Raydium charges about 0.15 SOL for the pool.</div>}
+          {sol && <SolRewardsPick f={f} setF={setF} />}
+          {sol && <div className="notice" style={{ fontSize: ".86em" }}>{f.reward ? "Solana: a coin with a fee on every trade that pays your holders" : "Solana: standard token"} with a fixed supply and a Raydium pool; the LP tokens are {solLockerProgram() ? "burned or locked" : "burned forever"}. {f.reward ? "No whitelist or first buy." : "No tax, whitelist or first buy."} Raydium charges about 0.15 SOL for the pool.</div>}
         </section>
 
         {!sol && (
@@ -505,8 +529,9 @@ function QuickLaunch({ onPlan, disabled, pads }: { onPlan: (p: LaunchPlan) => vo
             <div className="form-grid">
               <label className="field"><span>Buy tax % <small className="muted">max {MAX_TAX_PERCENT}</small></span><input value={f.buyTax} onChange={set("buyTax")} inputMode="decimal" /></label>
               <label className="field"><span>Sell tax % <small className="muted">max {MAX_TAX_PERCENT}</small></span><input value={f.sellTax} onChange={set("sellTax")} inputMode="decimal" /></label>
-              {(Number(f.buyTax) > 0 || Number(f.sellTax) > 0) && <label className="field" style={{ gridColumn: "1 / -1" }}><span>Tax wallet (receives the tax)</span><input value={f.taxWallet} onChange={set("taxWallet")} placeholder="0x…" spellCheck={false} /></label>}
+              {(Number(f.buyTax) > 0 || Number(f.sellTax) > 0) && <label className="field" style={{ gridColumn: "1 / -1" }}><span>Tax wallet (receives the tax){f.reward ? " · your marketing wallet" : ""}</span><input value={f.taxWallet} onChange={set("taxWallet")} placeholder="0x…" spellCheck={false} /></label>}
             </div>
+            <HolderRewardsPick f={f} setF={setF} ch={ch} open={(versions[f.chain] ?? 0) >= 4} />
             <details>
               <summary><b>Whitelist &amp; first buy</b></summary>
               <div className="stack" style={{ gap: 8, marginTop: 8 }}>
@@ -619,6 +644,96 @@ function StartTrading({ c, token }: { c: LaunchChain; token: string }) {
         </>
       )}
       {msg && <small className="muted">{msg}</small>}
+    </div>
+  );
+}
+
+/**
+ * Launch Pad v4: part of the tax buys a reward token (BNB/ETH, BTC, ETH or another approved token) and shares it with
+ * every holder by how much they hold. The rest of the tax goes to the creator's tax (marketing) wallet.
+ */
+function HolderRewardsPick({ f, setF, ch, open }: { f: any; setF: (fn: (x: any) => any) => void; ch: LaunchChain; open: boolean }) {
+  const choices = rewardChoices(ch);
+  const pick = (reward: string) => setF((x: any) => ({ ...x, reward }));
+  const buy = Number(f.buyTax) || 0, sell = Number(f.sellTax) || 0, hp = Math.min(100, Math.max(0, Number(f.holderPercent) || 0));
+  const name = f.reward === "other" ? "the token you picked" : choices.find((c) => c.key === f.reward)?.symbol ?? "";
+  const split = (t: number) => `${+(t * hp / 100).toFixed(2)}% to holders · ${+(t * (100 - hp) / 100).toFixed(2)}% to you`;
+  return (
+    <div className="hr-pick">
+      <div className="hr-head">
+        <b>Holder rewards</b>
+        <small className="muted">Optional. Part of your tax buys a token and shares it with every holder.</small>
+      </div>
+      {!open ? <small className="muted">Holder rewards open on {ch.name} soon.</small> : (
+        <>
+          <div className="hr-chips" role="radiogroup" aria-label="Reward for holders">
+            <button type="button" role="radio" aria-checked={!f.reward} className={!f.reward ? "on" : ""} onClick={() => pick("")}>No rewards</button>
+            {choices.map((c) => <button key={c.key} type="button" role="radio" aria-checked={f.reward === c.key} className={f.reward === c.key ? "on" : ""} onClick={() => pick(c.key)} title={c.name}>{c.symbol}</button>)}
+            <button type="button" role="radio" aria-checked={f.reward === "other"} className={f.reward === "other" ? "on" : ""} onClick={() => pick("other")}>Other token</button>
+          </div>
+          {f.reward === "other" && (
+            <label className="field"><span>Reward token address</span><input value={f.rewardOther} onChange={(e) => setF((x: any) => ({ ...x, rewardOther: e.target.value }))} placeholder="0x…" spellCheck={false} />
+              <small className="muted">It needs a {ch.dex} pool with {ch.coin}, and the AUTISTIK team must approve it first (this keeps holders safe from fake reward tokens).</small></label>
+          )}
+          {f.reward && (
+            <>
+              <label className="field"><span>Share of your tax that goes to holders: <b>{hp}%</b></span>
+                <input type="range" min={1} max={100} step={1} value={hp} onChange={(e) => setF((x: any) => ({ ...x, holderPercent: e.target.value }))} aria-label="Share of tax to holders" /></label>
+              {!(buy > 0 || sell > 0) ? <div className="notice warn" style={{ fontSize: ".86em" }}>Rewards come from the tax. Set a buy or sell tax above.</div> : (
+                <div className="hr-split">
+                  <span><small>On buys ({buy}%)</small><b>{split(buy)}</b></span>
+                  <span><small>On sells ({sell}%)</small><b>{split(sell)}</b></span>
+                </div>
+              )}
+              <small className="muted">Holders get {name} automatically, a few at a time as people trade, and can claim theirs any time on the coin&apos;s page. The pool and burn address never earn. Nobody can change the reward or the share after launch.</small>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Solana holder rewards: one fee on every trade (Token-2022), collected by the AUTISTIK rewards wallet. Part of it
+ * buys SOL, BTC or ETH for holders; the rest goes to the creator's wallet (lib/solana-rewards.ts).
+ */
+function SolRewardsPick({ f, setF }: { f: any; setF: (fn: (x: any) => any) => void }) {
+  const [ready, setReady] = useState<boolean | null>(null);
+  useEffect(() => { fetch("/api/launchpad/solana-rewards?status=1").then((r) => r.json()).then((d) => setReady(!!d.ready)).catch(() => setReady(false)); }, []);
+  const pick = (reward: string) => setF((x: any) => ({ ...x, reward, buyTax: reward && Number(x.buyTax) === 0 ? "3" : reward ? x.buyTax : "0" }));
+  const fee = Number(f.buyTax) || 0, hp = Math.min(100, Math.max(0, Number(f.holderPercent) || 0));
+  const sym = SOL_REWARD_TOKENS[f.reward]?.symbol;
+  if (ready === null) return null;
+  return (
+    <div className="hr-pick">
+      <div className="hr-head">
+        <b>Holder rewards</b>
+        <small className="muted">Optional. A fee on every trade; part of it buys SOL, BTC or ETH for every holder.</small>
+      </div>
+      {!ready ? <small className="muted">Holder rewards on Solana open soon.</small> : (
+        <>
+          <div className="hr-chips" role="radiogroup" aria-label="Reward for holders">
+            <button type="button" role="radio" aria-checked={!f.reward} className={!f.reward ? "on" : ""} onClick={() => pick("")}>No rewards</button>
+            {Object.entries(SOL_REWARD_TOKENS).map(([k, t]) => <button key={k} type="button" role="radio" aria-checked={f.reward === k} className={f.reward === k ? "on" : ""} onClick={() => pick(k)} title={t.name}>{t.symbol}</button>)}
+          </div>
+          {f.reward && (
+            <>
+              <div className="form-grid">
+                <label className="field"><span>Fee on every trade % <small className="muted">1–{MAX_TAX_PERCENT}</small></span><input value={f.buyTax} onChange={(e) => setF((x: any) => ({ ...x, buyTax: e.target.value, sellTax: e.target.value }))} inputMode="decimal" /></label>
+                <label className="field"><span>Your wallet (gets your part, in your coin)</span><input value={f.taxWallet} onChange={(e) => setF((x: any) => ({ ...x, taxWallet: e.target.value.trim() }))} placeholder="Solana address" spellCheck={false} /></label>
+              </div>
+              <label className="field"><span>Share of the fee that goes to holders: <b>{hp}%</b></span>
+                <input type="range" min={1} max={100} step={1} value={hp} onChange={(e) => setF((x: any) => ({ ...x, holderPercent: e.target.value }))} aria-label="Share of fee to holders" /></label>
+              <div className="hr-split">
+                <span><small>Holders get</small><b>{+(fee * hp / 100).toFixed(2)}% of every trade, as {sym}</b></span>
+                <span><small>You get</small><b>{+(fee * (100 - hp) / 100).toFixed(2)}% of every trade</b></span>
+              </div>
+              <small className="muted">On Solana the fee applies to every transfer, buys and sells alike, plus the {solTradeFeeBps() / 100}% AUTISTIK fee. The AUTISTIK rewards wallet collects it, buys {sym} on Jupiter and sends it to holders about every 10 minutes; holders can also claim on the coin&apos;s page. Pools and lockers never earn. Nobody can change the fee after launch.</small>
+            </>
+          )}
+        </>
+      )}
     </div>
   );
 }

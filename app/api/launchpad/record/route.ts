@@ -127,6 +127,8 @@ async function recordSolana(body: any) {
   };
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your token launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on-chain." : "Your token launched, but we couldn't add it to the list. It's still live on-chain." }, 500);
+  // Holder rewards start once the coin and its pool are live (the rewards wallet's job only runs on active coins).
+  await supabaseService().from("sol_reward_coins").update({ active: true, pool }).eq("mint", mint).eq("active", false);
   if (isAChain("solana")) await scanToken("solana", mint, { dev: v.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Launched ${row.symbol || mint} on Solana`, `/launchpad/solana/${mint}`);
   return json({ launch: row });

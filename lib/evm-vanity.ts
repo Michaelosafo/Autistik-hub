@@ -1,6 +1,6 @@
 /**
  * Launch Pad v3 token addresses that end in "AAAAA" (BNB Chain, Ethereum, Robinhood Chain…). Server only.
- * A token's address is CREATE2(deployer, salt, TOKEN_INIT_HASH), so it depends only on the salt. The server finds
+ * A token's address is CREATE2(deployer, salt, token init hash of the pad's version), so it depends only on the salt. The server finds
  * salts ahead of time (app/api/launchpad/grind-evm keeps a pool, supabase/evm-vanity.sql) and each launch takes one.
  * Capitals: an address's upper/lower case is its checksum (EIP-55), set by the address's own hash, so the search keeps
  * going until all five a's come out as capitals (1 in 32 of the "aaaaa" addresses). With an empty pool a launch
@@ -11,7 +11,7 @@ import { randomBytes } from "crypto";
 import { createKeccak } from "hash-wasm";
 import { createPublicClient, getAddress, http, toHex } from "viem";
 import { CHAINS, EVM_VANITY_SUFFIX, LAUNCHPAD_V3_ABI, type ChainKey } from "@/lib/launchpad";
-import { TOKEN_INIT_HASH } from "@/lib/launchpad-build";
+import { tokenInitHash } from "@/lib/launchpad-build";
 import { supabaseService } from "@/lib/supabase/server";
 
 const hexBytes = (h: string) => Uint8Array.from(Buffer.from(h.replace(/^0x/, ""), "hex"));
@@ -37,14 +37,14 @@ type Found = { salt: `0x${string}`; token: `0x${string}`; caps: boolean };
  * first mixed-case "aaaaa" it met on the way (found within a second or two), or null.
  * keccak runs in WebAssembly (hash-wasm), about 10x faster than in JavaScript: roughly 30 seconds per capitals address.
  */
-export async function grindSalt(deployer: string, ms: number): Promise<Found | null> {
+export async function grindSalt(deployer: string, ms: number, version = 3): Promise<Found | null> {
   const keccak = await createKeccak(256);
   // keccak256(0xff ++ deployer ++ salt ++ initCodeHash): only the salt's last bytes change between tries.
   const buf = new Uint8Array(85);
   buf[0] = 0xff;
   buf.set(hexBytes(deployer), 1);
   buf.set(randomBytes(32), 21);
-  buf.set(hexBytes(TOKEN_INIT_HASH), 53);
+  buf.set(hexBytes(tokenInitHash(version)), 53);
   let mixed: Found | null = null;
   const end = Date.now() + ms;
   while (Date.now() < end) {
@@ -65,13 +65,13 @@ export async function grindSalt(deployer: string, ms: number): Promise<Found | n
 }
 
 /** A salt for a new launch on a v3 Launch Pad: one giving an address ending in "AAAAA" whenever possible. */
-export async function vanitySalt(chain: ChainKey, pad: string): Promise<{ salt: `0x${string}`; token: string | null; vanity: boolean }> {
+export async function vanitySalt(chain: ChainKey, pad: string, version = 3): Promise<{ salt: `0x${string}`; token: string | null; vanity: boolean }> {
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const { data } = await supabaseService().rpc("take_vanity_salt", { p_chain: chain, p_pad: getAddress(pad) }).then((r) => r, () => ({ data: null }));
     const row = Array.isArray(data) ? data[0] : null;
     if (row?.salt && /^0x[0-9a-f]{64}$/i.test(row.salt)) return { salt: row.salt, token: row.token, vanity: true };
   }
   const deployer = await deployerOf(chain, pad).catch(() => null);
-  const found = deployer ? await grindSalt(deployer, 20_000) : null;
+  const found = deployer ? await grindSalt(deployer, 20_000, version) : null;
   return found ? { salt: found.salt, token: found.token, vanity: true } : { salt: toHex(randomBytes(32)), token: null, vanity: false };
 }
