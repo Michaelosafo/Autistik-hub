@@ -3552,3 +3552,17 @@ img.ql-logo{object-fit:cover}
 :root[data-theme="light"] .lp-eyebrow{color:#946200 !important}
 @media (max-width:520px){ .lp-bar .lp-launch.bot span,.lp-bar .lp-signin span,.lp-bar .lp-openapp span{display:none} .lp-bar{gap:8px} }
 img.bd-logo{background:none!important}
+
+/* ---------- Light mode: clear, readable text everywhere ---------- */
+:root[data-theme="light"] .ah{--ah-card:#FFFFFF;--ah-card-2:#F4F0FB;--ah-line:#E6E0F0;--ah-line-2:#D9D1EA;--ah-ink:#1B1530;--ah-mute:#5A5270;--ah-up:#0A8F5A;--ah-down:#D12C45}
+:root[data-theme="light"] .lp{--lp-card:#FFFFFF;--lp-card-2:#F4F0FB;--lp-line:#E6E0F0;--lp-line-2:#D9D1EA;--lp-mute:#5A5270;--lp-up:#0A8F5A;--lp-down:#D12C45}
+:root[data-theme="light"] .tx{--tx-bg:#F7F5FC;--tx-p:#FFFFFF;--tx-p2:#F4F0FB;--tx-ink:#1B1530;--tx-dim:#5A5270;--tx-buy:#0A8F5A;--tx-sell:#D12C45}
+:root[data-theme="light"] .sw{--tx-p:#FFFFFF;--tx-p2:#F4F0FB;--tx-buy:#0A8F5A;--tx-sell:#D12C45}
+:root[data-theme="light"] .ah-btn.gold,:root[data-theme="light"] .lp-btn.gold,:root[data-theme="light"] .ah .gold{color:#191326 !important}
+/* Green and red numbers, Live badges */
+:root[data-theme="light"] .bd-live,:root[data-theme="light"] .bd-ch.up,:root[data-theme="light"] .up,:root[data-theme="light"] .an-live,:root[data-theme="light"] .mp-pulse+*{color:#0A8F5A !important}
+:root[data-theme="light"] .bd-ch.down,:root[data-theme="light"] .down{color:#D12C45 !important}
+:root[data-theme="light"] .bd-mc b{color:#0A7A4D !important}
+:root[data-theme="light"] .bd-live i{background:#0A8F5A}
+/* Grey helper text a touch darker on white */
+:where(:root[data-theme="light"]) :where(.muted,small,dt){color:#5A5270}
