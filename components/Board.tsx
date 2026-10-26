@@ -12,7 +12,7 @@ import { NETWORKS } from "@/lib/connect";
 import NetIcon from "@/components/connect/NetIcon";
 
 type Tab = "trending" | "new" | "mcap" | "gainers";
-const TABS: [Tab, string][] = [["trending", "🔥 Trending"], ["new", "✨ New"], ["mcap", "🏆 Market cap"], ["gainers", "📈 Gainers"]];
+const TABS: [Tab, string][] = [["trending", "Trending"], ["new", "New"], ["mcap", "Market cap"], ["gainers", "Gainers"]];
 const REFRESH = 8000;
 
 const usd = (n: number | null | undefined) => n == null ? "–" : n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(n < 1 ? 4 : 0)}`;
@@ -91,12 +91,12 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
           <h1>The Board</h1>
           <p className="muted">Every coin launched on AUTISTIK, live. <span className="bd-live"><i />{live ? "Live" : "Paused"}</span></p>
         </div>
-        <Link href="/launchpad/new" className="bd-create">＋ Create coin</Link>
+        <Link href="/launchpad/new" className="bd-create">Create coin</Link>
       </header>
 
       {king && (
         <Link href={`/launchpad/${king.chain}/${king.token}`} className="bd-king">
-          <span className="bd-crown" aria-hidden="true">👑</span>
+          <span className="bd-crown" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" fill="currentColor"/></svg></span>
           <Logo t={king} big />
           <div className="bd-king-t">
             <small>King of the Hill · #1 right now</small>
@@ -112,7 +112,7 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
           {TABS.map(([k, l]) => <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
         </div>
         <input className="bd-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ticker or address" aria-label="Search coins" />
-        <button type="button" className="bd-pause" onClick={() => setLive(!live)} aria-pressed={!live}>{live ? "⏸ Pause" : "▶ Live"}</button>
+        <button type="button" className="bd-pause" onClick={() => setLive(!live)} aria-pressed={!live}>{live ? "Pause" : "Resume"}</button>
       </div>
       <div className="bd-nets" role="group" aria-label="Network">
         <button type="button" className={chain === "all" ? "on" : ""} onClick={() => setChain("all")}>All networks</button>
@@ -133,7 +133,7 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
                   <b>{t.name}</b>
                   <span className="bd-sym">${t.symbol} <NetIcon n={net(t.chain) as any} size={13} /></span>
                   <span className="bd-mc">MC <b>{usd(t.market?.marketCap)}</b> <Change v={t.market?.change24h} /></span>
-                  <small className="muted">{ago(t.created_at)} ago · Vol {usd(t.market?.volume24h)}{t.promotedUntil ? " · 🚀 Promoted" : ""}{t.source === "listed" ? " · Listed" : ""}</small>
+                  <small className="muted">{ago(t.created_at)} ago · Vol {usd(t.market?.volume24h)}{t.promotedUntil ? " · Promoted" : ""}{t.source === "listed" ? " · Listed" : ""}</small>
                 </div>
               </Link>
             );

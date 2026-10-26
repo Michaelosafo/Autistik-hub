@@ -24,14 +24,18 @@ type Update = { kind: string; id: string; at: string; body?: string; author?: { 
 
 /** Shortcuts at the top of your panel. */
 const ACTIONS = [
-  { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "📋", color: "#FFD84D" },
-  { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "🚀", color: "#FF6B9A" },
-  { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "💧", color: "#4FD1FF" },
-  { href: "/lockers", name: "Lock", note: "Lock LP or team tokens", icon: "🔒", color: "#B57CFF" },
-  { href: "/stake", name: "Earn", note: "Stake and rewards", icon: "💰", color: "#5BE38F" },
+  { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire", color: "#FFD84D" },
+  { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "i-rocket", color: "#FF6B9A" },
+  { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "i-swap", color: "#4FD1FF" },
+  { href: "/lockers", name: "Lock", note: "Lock LP or team tokens", icon: "i-lock", color: "#B57CFF" },
+  { href: "/stake", name: "Earn", note: "Stake and rewards", icon: "i-rew", color: "#5BE38F" },
 ];
 type Coin = { chain: string; token: string; name: string; symbol: string; logo: string | null; market: { marketCap: number | null; change24h: number | null } | null };
 const short$ = (n: number | null | undefined) => n == null ? "–" : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
+/** A line icon from the site's icon set. */
+function Ic({ id }: { id: string }) {
+  return <svg className="mp-svg" aria-hidden="true"><use href={"#" + id} /></svg>;
+}
 const BAR = ["#F0B90B", "#B57CFF", "#4FD1FF", "#5BE38F"];
 const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
 const ago = (iso: string) => {
@@ -126,7 +130,7 @@ export default function MePanel({ me, settings }: {
             <button type="button" className="mp-photo" onClick={() => (photo ? setView(true) : file.current?.click())} disabled={busy} aria-label={photo ? "View your photo" : "Add a profile photo"}>
               <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
             </button>
-            <button type="button" className="mp-cam" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo">📷</button>
+            <button type="button" className="mp-cam" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo"><Ic id="i-cam" /></button>
           </span>
           <div className="mp-name">
             <b>{sum?.profile?.alias || me.alias}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
@@ -161,7 +165,7 @@ export default function MePanel({ me, settings }: {
       {msg && <small className="mp-msg">{msg}</small>}
 
       <form className="mp-search" onSubmit={goScan} role="search">
-        <span aria-hidden="true">🔎</span>
+        <Ic id="i-search" />
         <input value={scan} onChange={(e) => setScan(e.target.value)} placeholder="Search coins or paste an address" spellCheck={false} aria-label="Search coins or paste a token address" />
         {scan && <button type="submit" className="mp-search-go">{isAddr ? "Scan" : "Go"}</button>}
       </form>
@@ -174,7 +178,7 @@ export default function MePanel({ me, settings }: {
               <small>{short$(c.market?.marketCap)}</small>
             </Link>
           ))}
-          {isAddr && <button type="button" className="mp-coin" onClick={goScan as any}><span className="mp-coin-l">🔎</span><span className="mp-coin-t"><b>Scan this token</b><small className="mono">{scan.trim().slice(0, 6)}…{scan.trim().slice(-4)}</small></span></button>}
+          {isAddr && <button type="button" className="mp-coin" onClick={goScan as any}><span className="mp-coin-l"><Ic id="i-search" /></span><span className="mp-coin-t"><b>Scan this token</b><small className="mono">{scan.trim().slice(0, 6)}…{scan.trim().slice(-4)}</small></span></button>}
         </div>
       )}
 
@@ -189,7 +193,7 @@ export default function MePanel({ me, settings }: {
         if (done === steps.length) return null;
         return (
           <section className="mp-sec mp-start" aria-label="Get started">
-            <div className="mp-sec-h"><b>👋 Get started</b><small>{done} of {steps.length} done</small></div>
+            <div className="mp-sec-h"><b>Get started</b><small>{done} of {steps.length} done</small></div>
             <div className="mp-progress" aria-hidden="true"><i style={{ width: `${(done / steps.length) * 100}%` }} /></div>
             {steps.map((x) => {
               const body = <><span className={"mp-step-ic" + (x.done ? " ok" : "")} aria-hidden="true">{x.done ? "✓" : ""}</span><span className="mp-link-t"><b>{x.label}</b><small>{x.note}</small></span>{!x.done && <i aria-hidden="true">›</i>}</>;
@@ -202,7 +206,7 @@ export default function MePanel({ me, settings }: {
       })()}
 
       <section className="mp-sec mp-wallet">
-        <div className="mp-sec-h"><b>👛 Wallet</b><Link href="/wallet">Open</Link></div>
+        <div className="mp-sec-h"><b>Wallet</b><Link href="/wallet">Open</Link></div>
         {!sum ? <small className="mp-dim">Loading…</small> : sum.wallet ? (
           <>
             <div className="mp-total"><b>{usd(sum.wallet.totalUsd)}</b><small className="mono">{sum.wallet.short}</small></div>
@@ -220,13 +224,13 @@ export default function MePanel({ me, settings }: {
       <nav className="mp-links" aria-label="Create and earn">
         <small className="mp-cap">Create &amp; earn</small>
         {ACTIONS.map((a) => (
-          <Link key={a.href} href={a.href} className="mp-link" style={{ ["--ic" as any]: a.color }} onClick={() => a.href === "/board" && markBoard()}><span className="mp-ic" aria-hidden="true">{a.icon}</span><span className="mp-link-t"><b>{a.name}</b><small>{a.note}</small></span><i aria-hidden="true">›</i></Link>
+          <Link key={a.href} href={a.href} className="mp-link" style={{ ["--ic" as any]: a.color }} onClick={() => a.href === "/board" && markBoard()}><span className="mp-ic" aria-hidden="true"><Ic id={a.icon} /></span><span className="mp-link-t"><b>{a.name}</b><small>{a.note}</small></span><i aria-hidden="true">›</i></Link>
         ))}
       </nav>
 
       {!!sum?.team?.length && (
         <section className="mp-sec mp-team" id="mp-team" aria-label="Recommended: the AUTISTIK team">
-          <div className="mp-sec-h"><b>⭐ Follow the AUTISTIK team</b><Link href="/members">Members</Link></div>
+          <div className="mp-sec-h"><b>Follow the AUTISTIK team</b><Link href="/members">Members</Link></div>
           <small className="mp-dim">Recommended for everyone: news, airdrops and live sessions first.</small>
           {sum.team.map((t) => (
             <div key={t.id} className="mp-person">
@@ -255,7 +259,7 @@ export default function MePanel({ me, settings }: {
       )}
 
       <section className="mp-sec">
-        <div className="mp-sec-h"><b>🔔 Updates from people you follow</b><Link href="/members">All</Link></div>
+        <div className="mp-sec-h"><b>Updates from people you follow</b><Link href="/members">All</Link></div>
         {updates === null ? <small className="mp-dim">Loading…</small> : updates.length === 0 ? (
           <small className="mp-dim">Nothing new. <Link href="/members?tab=find">Find people to follow</Link>.</small>
         ) : updates.map((u) => (
@@ -268,13 +272,13 @@ export default function MePanel({ me, settings }: {
 
 
       <section className="mp-sec">
-        <div className="mp-sec-h"><b>🚀 My launches &amp; locks</b><Link href="/lockers">Lockers</Link></div>
+        <div className="mp-sec-h"><b>My launches &amp; locks</b><Link href="/lockers">Lockers</Link></div>
         {!sum ? <small className="mp-dim">Loading…</small> : !sum.launches?.length ? (
           <small className="mp-dim">No launches yet. <Link href="/launchpad/new">Launch a token</Link>.</small>
         ) : sum.launches.slice(0, 4).map((l) => (
           <Link key={l.chain + l.token} className="mp-line" href={`/launchpad/${l.chain}/${l.token}`}>
             <span>${l.symbol}</span>
-            <small>{l.lp_lock === "burn" ? "🔥 burned" : l.lp_unlock_at ? `🔒 to ${new Date(l.lp_unlock_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : "🔒 locked"}</small>
+            <small>{l.lp_lock === "burn" ? "Burned" : l.lp_unlock_at ? `Locked to ${new Date(l.lp_unlock_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : "Locked"}</small>
           </Link>
         ))}
       </section>
