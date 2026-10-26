@@ -11,6 +11,7 @@ import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import FollowButton from "@/components/members/FollowButton";
 import FindPeople from "@/components/FindPeople";
+import ShareProfile from "@/components/members/ShareProfile";
 import { MadnessLink } from "@/components/mood/MadnessPanel";
 import LiveNow from "@/components/rooms/LiveNow";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -142,6 +143,7 @@ export default function MePanel({ me, settings }: {
               <button type="button" className="mp-chip" onClick={() => file.current?.click()} disabled={busy}>{photo ? "Change photo" : "Add a photo"}</button>
               {photo && <button type="button" className="mp-chip" onClick={removePhoto} disabled={busy}>Remove</button>}
               <Link className="mp-chip" href="/me">Profile</Link>
+              <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-chip" />
             </div>
           </div>
         </div>
