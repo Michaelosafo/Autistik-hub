@@ -4,6 +4,8 @@ import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
+import ThemeToggle from "@/components/ThemeToggle";
+import { applyTheme, currentTheme, type Theme } from "@/lib/theme";
 import RailShell from "@/components/RailShell";
 import HomeFeed from "@/components/HomeFeed";
 import MePanel from "@/components/MePanel";
@@ -41,7 +43,8 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
   const router = useRouter();
   const [calm, setCalm] = useState(false);
   const [big, setBig] = useState(false);
-  const [theme, setTheme] = useState<"auto" | "light" | "dark">("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
+  const setTheme = (t: Theme) => { setThemeState(t); applyTheme(t); };
   const [copied, setCopied] = useState(false);
   // Layout: "classic" (the default: the original site and front page) or "new" (the X-style three-column layout,
   // components/RailShell.tsx), chosen under Display → Layout and saved in this browser. Phones always get classic.
@@ -51,7 +54,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
   useEffect(() => {
     try {
       setCalm(localStorage.getItem("calm") === "1"); setBig(localStorage.getItem("big") === "1");
-      const t = localStorage.getItem("theme2"); if (t === "light" || t === "dark" || t === "auto") setTheme(t);
+      setThemeState(currentTheme());
       if (localStorage.getItem("layout-choice") === "new") setLayout("new");
     } catch {}
     // The app helper (public/sw.js): faster opening on phones and an offline page. Only on the live site.
@@ -59,9 +62,11 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
   }, []);
   useEffect(() => {
     const d = document.documentElement;
-    if (theme === "auto") delete d.dataset.theme; else d.dataset.theme = theme;
-    try { localStorage.setItem("theme2", theme); } catch {}
-  }, [theme]);
+    void d;
+    const on = (e: Event) => setThemeState((e as CustomEvent<Theme>).detail);
+    window.addEventListener("autistik-theme", on);
+    return () => window.removeEventListener("autistik-theme", on);
+  }, []);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 900px)");
     const on = () => setWide(mq.matches);
@@ -111,8 +116,8 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
     return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
   }, [menu]);
   const openMenu = () => { const next = !menu; setMenu(next); if (next) setTimeout(alerts.markAll, 2000); };
-  const THEME_NEXT = { auto: "dark", dark: "light", light: "auto" } as const;
-  const THEME_LABEL = { auto: "Colours follow your phone", dark: "Dark colours", light: "Light colours" } as const;
+  const THEME_NEXT = { dark: "light", light: "dark" } as const;
+  const THEME_LABEL = { dark: "Dark mode", light: "Light mode" } as const;
 
   async function copyCA() {
     try { await navigator.clipboard.writeText(TOKEN_ADDRESS); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
@@ -143,7 +148,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
                       <Icon id="i-text" /><span>Larger text</span><i className="sw" />
                     </button>
                     <button className="me-row" type="button" onClick={() => { const t = THEME_NEXT[theme]; setTheme(t); tell(THEME_LABEL[t]); }}>
-                      <Icon id={theme === "auto" ? "i-auto" : theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
+                      <Icon id={theme === "dark" ? "i-moon" : "i-sun"} /><span>Colours<small>{THEME_LABEL[theme]} · tap to change</small></span>
                     </button>
                     <button className="me-row" type="button" onClick={() => { const l = layout === "new" ? "classic" : "new"; setLayout(l); try { localStorage.setItem("layout-choice", l); } catch {} tell(l === "new" ? "New layout" : "Classic layout"); }}>
                       <Icon id="i-grid" /><span>Layout<small>{layout === "new" ? "New: menu left, trending right" : "Classic"} · tap to switch</small></span>
@@ -267,6 +272,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
         <main>
           <div className="topbar mini">
             {!path.startsWith("/companions") && <Link className="bot-btn" href="/companions" aria-label="Chat with the AUTISTIK bot"><Art kind="robot" who="autistik" mood="motivation" className="bot-av" /><span>Ask the bot</span></Link>}
+            <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
             <div className={me ? "me-menu rail-dup" : "me-menu"} ref={menuRef}>
               <button className="me-btn" type="button" aria-expanded={me ? drawer : menu} aria-haspopup="dialog" onClick={me ? openDrawer : openMenu}
@@ -284,7 +290,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
           <WalletPicker />
           <Toaster />
           <div className="page">{children}</div>
-          <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety</Link> · <Link href="/privacy">Privacy policy</Link></footer>
+          <footer className="site-note">Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety</Link> · <Link href="/privacy">Privacy policy</Link></footer>
         </main>
       </div>
       <nav className="tabbar">
