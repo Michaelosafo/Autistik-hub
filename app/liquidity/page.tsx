@@ -17,7 +17,7 @@ export default async function LiquidityPage() {
         stats={[["Paste", "the address"], ["Auto", "network found"], ["Solana", "Raydium pools"], ["Burn", "or lock LP"]]} />
       {!access.allowed ? (
         <div className="card stack" style={{ gap: 8 }}>
-          <b>🚀 Coming soon</b>
+          <b>Coming soon</b>
           <p className="muted" style={{ margin: 0 }}>Adding liquidity here opens with the Launch Pad. Until then, browse coins on <Link href="/launchpad">Trending</Link>.</p>
         </div>
       ) : (

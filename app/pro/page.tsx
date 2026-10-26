@@ -23,7 +23,7 @@ export default async function ProPage() {
         <ul className="pro-feats">{PRO_FEATURES.map((f) => <li key={f.name}><b>{f.icon} {f.name}</b><span>{f.text}</span></li>)}</ul>
         <p className="muted" style={{ fontSize: ".85em" }}>Free members keep the buy/sell zones, the 3 reasons boxes, {FREE_PINS} pins and alerts. Pro adds the rest and up to {PRO_PINS} pins.</p>
       </div>
-      <p className="fin-note">⚠️ Pro gives you more and better signals, not certainty. Nothing here is financial advice. Never put in more than you can afford to lose. Passes aren&apos;t refundable.</p>
+      <p className="fin-note">Pro gives you more and better signals, not certainty. Nothing here is financial advice. Never put in more than you can afford to lose. Passes aren&apos;t refundable.</p>
     </div>
   );
 }

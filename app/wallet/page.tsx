@@ -34,13 +34,13 @@ export default async function WalletPage({ searchParams }: { searchParams: { cha
         </span>
         <span className="wg-title"><b>Player wallet</b><small>Trade, then jump into a match</small></span>
         <span className="wg-links">
-          <Link href="/arena" className="wg-btn arena">⚽ Game arena</Link>
-          <Link href={`/arena/bsc/${TOKEN_ADDRESS}`} className="wg-btn">💎 $AUTISTIK match</Link>
-          <Link href="/analytics" className="wg-btn">🔎 Scanner</Link>
+          <Link href="/arena" className="wg-btn arena">Game arena</Link>
+          <Link href={`/arena/bsc/${TOKEN_ADDRESS}`} className="wg-btn">$AUTISTIK match</Link>
+          <Link href="/analytics" className="wg-btn">Scanner</Link>
         </span>
       </nav>
       <details className="card" style={{ padding: "10px 14px" }}>
-        <summary style={{ cursor: "pointer", fontWeight: 700 }}>💸 Send $AUTISTIK to a member by name</summary>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Send $AUTISTIK to a member by name</summary>
         <div style={{ marginTop: 10 }}><SendTokens /></div>
       </details>
       <WalletLoader appId={appId} member={member} start={start} />

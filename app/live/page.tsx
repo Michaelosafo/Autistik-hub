@@ -73,7 +73,7 @@ export default async function LivePage() {
       </div>
 
       <section className="stack">
-        <h2>{live.length ? "🔴 Live now" : "Live now"}</h2>
+        <h2>{live.length ? "Live now" : "Live now"}</h2>
         {!live.length && <div className="empty">Nothing live right now. {upcoming.length ? "The next session is below." : "Follow the team on the Members page so you see when they go live."}</div>}
         {live.map((s) => (
           <div key={s.id} className="card live-card stack">

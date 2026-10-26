@@ -42,7 +42,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
 
       <div id="lock" style={{ scrollMarginTop: 80 }} />
       {sites.length ? <Locker sites={sites} /> : (
-        <div className="notice warn">🔒 The AUTISTIK Locker opens very soon. You can already check any token&apos;s locks below.</div>
+        <div className="notice warn">The AUTISTIK Locker opens very soon. You can already check any token&apos;s locks below.</div>
       )}
       {admin && <LockerDeploy sites={sites} />}
       <SolanaLocker />
@@ -61,7 +61,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
           <>
             <div className="row" style={{ gap: 8, justifyContent: "space-between" }}>
               <b>{check.symbol ? `$${check.symbol}` : short(qToken)} on {LOCKER_CHAINS[qChain].name}</b>
-              <Link href={`/analytics/${qChain}/${qToken}`}>📊 Full analysis →</Link>
+              <Link href={`/analytics/${qChain}/${qToken}`}>Full analysis →</Link>
             </div>
             <LockCard lp={check.lp} locks={check.locks} chain={qChain} token={qToken} lockerLive={sites.length > 0} />
           </>
@@ -73,8 +73,8 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
           <h2 style={{ margin: 0 }}>🆕 Latest locks</h2>
           {recent.slice(0, 20).map((l) => (
             <Link key={`${l.chain}-${l.id}`} href={`/lockers?chain=${l.chain}&token=${l.token}`} className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap", color: "inherit", textDecoration: "none" }}>
-              <span>{l.isLp ? "💧" : "🪙"} <b>{amt(l.amount)} {l.name}</b>{l.description ? <span className="muted"> · {l.description.slice(0, 60)}</span> : null}</span>
-              <span className="muted">{LOCKER_CHAINS[l.chain].name} · {l.done ? "unlocked" : l.unlockDate * 1000 > Date.now() ? `🔒 ${untilText(l.unlockDate)}` : "unlockable"}</span>
+              <span>{l.isLp ? "LP · " : ""}<b>{amt(l.amount)} {l.name}</b>{l.description ? <span className="muted"> · {l.description.slice(0, 60)}</span> : null}</span>
+              <span className="muted">{LOCKER_CHAINS[l.chain].name} · {l.done ? "unlocked" : l.unlockDate * 1000 > Date.now() ? `${untilText(l.unlockDate)}` : "unlockable"}</span>
             </Link>
           ))}
         </div>
@@ -94,7 +94,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
       </div>
       {admin && (
         <details className="card">
-          <summary><b>🛠️ Admin: getting the locker recognised by scanners</b></summary>
+          <summary><b>Admin: getting the locker recognised by scanners</b></summary>
           <div className="stack" style={{ gap: 8, marginTop: 8 }}>
             <p className="muted" style={{ margin: 0 }}>After the locker is deployed and verified, send this to GoPlus (support / business contact on gopluslabs.io) and DexScreener (support form on dexscreener.com). Copy and paste:</p>
             <pre style={{ whiteSpace: "pre-wrap", fontSize: ".85em", margin: 0 }}>{`Hello, we run AUTISTIK Hub (https://autistik.io) and launched an open-source token & liquidity locker. Please add it to your recognised lockers so locked LP/tokens show as locked.

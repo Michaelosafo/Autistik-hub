@@ -44,12 +44,12 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
         <>Tap <b>Buy</b> to open the Wallet, or turn on alerts to get a message when a coin heats up.</>,
       ]} tip="Fast movers are the riskiest coins. Only use money you can afford to lose." />
       <div className="notice warn" style={{ fontSize: ".9em" }}>
-        ⚠️ <b>Suggestions only, not financial advice.</b> Fast movers are the riskiest tokens there are: many drop as fast as they rise. Only use money you can afford to lose, take profit in steps and always use a stop.
+        <b>Suggestions only, not financial advice.</b> Fast movers are the riskiest tokens there are: many drop as fast as they rise. Only use money you can afford to lose, take profit in steps and always use a stop.
       </div>
 
       {record && record.picks > 0 && (
         <div className="card stack" style={{ gap: 6 }}>
-          <b>📈 Honest track record: Hot picks from the last 7 days</b>
+          <b>Honest track record: Hot picks from the last 7 days</b>
           <div className="mo-stats">
             <span><b>{record.picks}</b> picks</span>
             <span className="up"><b>{record.hit2x}</b> reached 2x ({Math.round((record.hit2x / record.picks) * 100)}%)</span>
@@ -94,19 +94,19 @@ export default async function MomentumPage({ searchParams }: { searchParams: { c
               <span>Age <b>{age(p.ageHours)}</b></span>
             </div>
             <div className={`mo-plan ${p.action}`}>
-              <b>💡 Suggestion: {p.actionText}</b>
+              <b>Suggestion: {p.actionText}</b>
               {p.buy && (p.action === "buy" || p.action === "dip") && (
                 <div className="mo-levels">
-                  <span>🎯 Take profit 1: <b>{usd(p.tp1)}</b> (1.5x, sell about a third)</span>
-                  <span>🚀 Take profit 2: <b>{usd(p.tp2)}</b> (2x, sell another third)</span>
-                  <span>🛑 Stop: <b>{usd(p.stop)}</b> (−20%, get out)</span>
+                  <span>Take profit 1: <b>{usd(p.tp1)}</b> (1.5x, sell about a third)</span>
+                  <span>Take profit 2: <b>{usd(p.tp2)}</b> (2x, sell another third)</span>
+                  <span>Stop: <b>{usd(p.stop)}</b> (−20%, get out)</span>
                 </div>
               )}
               <small className="muted">Time frame: hours to a few days. Move your stop up to your buy price once take profit 1 is hit.</small>
             </div>
             <ul className="mo-why">
-              {p.signs.slice(0, 4).map((s, i) => <li key={i} className={s.lean > 0 ? "up" : s.lean < 0 ? "down" : ""}>{s.lean > 0 ? "✓" : s.lean < 0 ? "✗" : "•"} {s.text}</li>)}
-              {p.risks.map((r, i) => <li key={"r" + i} className="down">⚠ {r}</li>)}
+              {p.signs.slice(0, 4).map((s, i) => <li key={i} className={s.lean > 0 ? "up" : s.lean < 0 ? "down" : ""}>{s.lean > 0 ? "✓" : s.lean < 0 ? "!" : "•"} {s.text}</li>)}
+              {p.risks.map((r, i) => <li key={"r" + i} className="down">{r}</li>)}
             </ul>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "flex-start" }}>
               {isWChain(p.chain) && <Link className="btn small primary" href={`/wallet?chain=${p.chain}&buy=${token}`}>Buy</Link>}
