@@ -3551,3 +3551,4 @@ img.ql-logo{object-fit:cover}
 :root[data-theme="light"] .lp-hero h1 span{color:#B57A00 !important}
 :root[data-theme="light"] .lp-eyebrow{color:#946200 !important}
 @media (max-width:520px){ .lp-bar .lp-launch.bot span,.lp-bar .lp-signin span,.lp-bar .lp-openapp span{display:none} .lp-bar{gap:8px} }
+img.bd-logo{background:none!important}
