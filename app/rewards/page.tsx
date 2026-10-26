@@ -1,8 +1,6 @@
 import Link from "next/link";
-import Guide from "@/components/Guide";
 import WalletLink from "@/components/WalletLink";
-import SectionCards, { EARN_CARDS } from "@/components/SectionCards";
-import ProHero from "@/components/ProHero";
+import EarnTop from "@/components/EarnTop";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -26,15 +24,18 @@ export default async function Rewards() {
 
   return (
     <div className="stack">
-      <SectionCards items={EARN_CARDS} active="/rewards" label="Earn" />
-      <ProHero tone="violet" kicker={`$AUTISTIK · REWARDS · ${(settings?.round_name || "Round 1").toUpperCase()}`} title="Community airdrops" live="Round open"
-        text="$AUTISTIK airdrops reward taking part, and holding. You never need to share anything about your health to qualify."
-        stats={user ? [[pts, "your points"], [need, "to qualify"], [rank ? `#${rank}` : "–", "your rank"], [board.length, "members earning"]] : [[need, "points to qualify"], ["Posts", "earn points"], ["Seats", "earn points"]]} />
-      <Guide id="rewards" action={{ href: "/community", label: "Start earning: join a group" }} title="Earn airdrops, in 3 steps" steps={[
-        <>Take part: post in a group, save a seat at a live session, help others.</>,
-        <>Link your BNB Chain wallet below (a free signature, no money moves).</>,
-        <>Reach the points to qualify. When the round closes, $AUTISTIK is sent to your wallet.</>,
-      ]} />
+      <EarnTop active="/rewards" title="Rewards & airdrops"
+        text={<>Take part in the community and earn points. Each round, members who qualify share a $AUTISTIK airdrop. You never need to share anything about your health.</>}
+        right={<><span className="earn-live">{settings?.round_name || "Round 1"} · open</span><Link href="/community" className="ln-ghost">Join a group</Link></>}
+        steps={[
+          { t: "Take part", d: "Post in a group, save a seat at a live session, help others." },
+          { t: "Link your wallet", d: "Your BNB Chain wallet, below. A free signature: no money moves." },
+          { t: "Get your airdrop", d: <>Reach {need} points. When the round closes, claim your $AUTISTIK here.</> },
+        ]}
+        facts={user
+          ? [<><b>{pts}</b> your points</>, <><b>{need}</b> to qualify</>, <>Your rank <b>{rank ? `#${rank}` : "–"}</b></>, <><b>{board.length}</b> members earning</>]
+          : [<><b>{need}</b> points to qualify</>, <><b>+5</b> per group post</>, <><b>+10</b> per session seat</>]}
+      />
       {!user ? (
         <div className="joincta" data-g="learn"><div><b>Sign in to earn points</b><p className="muted" style={{ fontSize: ".9em" }}>Points come from posting, saving seats at sessions and getting support from others.</p></div><Link className="btn g" href="/login">Sign in / Join</Link></div>
       ) : (
