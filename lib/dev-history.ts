@@ -184,8 +184,15 @@ export async function devReport(chain: AChain, walletIn: string, fresh = false):
       for (const c of pump) if (c.mint) found.set(c.mint, { ...found.get(c.mint), at: c.created_timestamp ? new Date(c.created_timestamp).toISOString() : null, bonded: !!c.complete, name: c.name, symbol: c.symbol, logo: c.image_uri });
     } else limited = "pump.fun didn't answer, so Solana history may be missing tokens.";
   } else {
+    // BNB Chain: tokens this wallet created on four.meme (our own index of its launches), with whether each bonded.
+    if (chain === "bsc") {
+      const { data: fm } = await sb.from("fm_tokens").select("token,name,symbol,created_at,bonded_at").eq("creator", wallet.toLowerCase()).order("created_at", { ascending: false }).limit(300);
+      for (const t of fm || []) found.set(getAddress(t.token), { ...found.get(getAddress(t.token)), at: t.created_at, bonded: t.bonded_at ? true : undefined, name: t.name, symbol: t.symbol });
+      if (fm?.length) sources.push("four.meme");
+    }
     const r = await evmCreated(chain, wallet);
-    if (r.limited) limited = r.limited; else sources.push("Etherscan");
+    if (r.limited) limited = chain === "bsc" ? "Tokens made outside four.meme and four.meme tokens from before our index started may be missing (the free explorer plan doesn't cover BNB Chain)." : r.limited;
+    else sources.push("Etherscan");
     for (const t of r.list) found.set(t.token, { ...found.get(t.token), at: found.get(t.token)?.at ?? t.at });
   }
 

@@ -1,0 +1,1 @@
+-- four.meme index for the dev wallet scanner (app/api/analytics/fourmeme). Applied as migration fourmeme_index.
