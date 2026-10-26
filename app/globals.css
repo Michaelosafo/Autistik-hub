@@ -3423,7 +3423,7 @@ img.ql-logo{object-fit:cover}
 
 /* ---------- Light (the default): white and soft lilac, same gold / pink / violet accents ---------- */
 :root[data-theme="light"],:root:not([data-theme]){
-  --bg:#F7F5FC; --surface:#FFFFFF; --surface-2:#F1EDF9; --ink:#1B1530; --muted:#5A5270; --line:#E6E0F0;
+  --bg:#F7F5FC; --surface:#FFFFFF; --surface-2:#F1EDF9; --ink:#0E0A1A; --muted:#2E2842; --line:#E6E0F0;
   --rail:#FFFFFF; --rail-2:#F3EFFA; --rail-ink:#5A5270; --rail-hi:#1B1530; color-scheme:light }
 :root[data-theme="light"] body{background:radial-gradient(80% 50% at 85% -10%,rgba(240,185,11,.08),transparent 60%),radial-gradient(70% 45% at -10% 0%,rgba(181,124,255,.10),transparent 60%),var(--bg)}
 :root[data-theme="light"] .card,:root[data-theme="light"] .sc-box,:root[data-theme="light"] .bd-card,:root[data-theme="light"] .ln-steps li,
@@ -3565,7 +3565,7 @@ img.bd-logo{background:none!important}
 :root[data-theme="light"] .bd-mc b{color:#0A7A4D !important}
 :root[data-theme="light"] .bd-live i{background:#0A8F5A}
 /* Grey helper text a touch darker on white */
-:where(:root[data-theme="light"]) :where(.muted,small,dt){color:#5A5270}
+:where(:root[data-theme="light"]) :where(.muted,small,dt){color:#2E2842}
 
 /* Light mode: light-grey text becomes dark grey so it reads on white. */
 :root[data-theme="light"] .hero p,
@@ -3593,7 +3593,7 @@ img.bd-logo{background:none!important}
 :root[data-theme="light"] .pc-tip,
 :root[data-theme="light"] .pc-wait,
 :root[data-theme="light"] .mp-sec-h b,
-:root[data-theme="light"] .mp-cap{color:#3E3754}
+:root[data-theme="light"] .mp-cap{color:#241E38}
 :root[data-theme="light"] .tx-choice span,
 :root[data-theme="light"] .tx-mode button,
 :root[data-theme="light"] .sm-top small,
@@ -3645,8 +3645,96 @@ img.bd-logo{background:none!important}
 :root[data-theme="light"] .mp-link small,
 :root[data-theme="light"] .mp-step small,
 :root[data-theme="light"] .mp-coin-t small,
-:root[data-theme="light"] .mp-search{color:#5A5270}
+:root[data-theme="light"] .mp-search{color:#241E38}
 :root[data-theme="light"] ::placeholder{color:#9A93AE !important}
 
 :root[data-theme="light"] .sm-tabs button,
-:root[data-theme="light"] .sc-search{color:#4A4360}
+:root[data-theme="light"] .sc-search{color:#241E38}
+
+/* Light mode: all writing deep dark, highlights deep gold. */
+:root[data-theme="light"] .hero p,
+:root[data-theme="light"] .ln-card,
+:root[data-theme="light"] .tx-choice span,
+:root[data-theme="light"] .sm-top small,
+:root[data-theme="light"] .sm-coin,
+:root[data-theme="light"] .sm-coin .grow small,
+:root[data-theme="light"] .sm-sheet .tx-dim,
+:root[data-theme="light"] .sm-sheet .aw-details span:first-child,
+:root[data-theme="light"] .sm-sheet .tx-receive code,
+:root[data-theme="light"] .stk-top small,
+:root[data-theme="light"] .stk-card small,
+:root[data-theme="light"] .stk-card .muted,
+:root[data-theme="light"] .stk-nums span,
+:root[data-theme="light"] .stk-mine span,
+:root[data-theme="light"] .wp-label,
+:root[data-theme="light"] .gpt-mood select,
+:root[data-theme="light"] .gpt .msg.ai,
+:root[data-theme="light"] .gpt .msg.ai.paper,
+:root[data-theme="light"] .gpt .listen,
+:root[data-theme="light"] .gpt .lux-plus,
+:root[data-theme="light"] .gpt .lux-mic,
+:root[data-theme="light"] .sx-net small,
+:root[data-theme="light"] .sx-net-in .tx-caret,
+:root[data-theme="light"] .sx-on,
+:root[data-theme="light"] .sx-track li,
+:root[data-theme="light"] .sx-ca input::placeholder,
+:root[data-theme="light"] .sx-chip .tx-caret,
+:root[data-theme="light"] .sx-ca-x,
+:root[data-theme="light"] .sx-recv>small,
+:root[data-theme="light"] .toast-x,
+:root[data-theme="light"] .sc-have,
+:root[data-theme="light"] .sc-usd,
+:root[data-theme="light"] .sc-cur,
+:root[data-theme="light"] .sc-switch,
+:root[data-theme="light"] .sc-switch:hover:not(:disabled),
+:root[data-theme="light"] .sc-out small,
+:root[data-theme="light"] .sc-search,
+:root[data-theme="light"] .sc-search input::placeholder,
+:root[data-theme="light"] .sc-list-head,
+:root[data-theme="light"] .sc-row-name small,
+:root[data-theme="light"] .sc-row-bal small,
+:root[data-theme="light"] .sc-empty,
+:root[data-theme="light"] .pf-hero small,
+:root[data-theme="light"] .pf-eye,
+:root[data-theme="light"] .pf-addr,
+:root[data-theme="light"] .pf-act,
+:root[data-theme="light"] .wg-title small,
+:root[data-theme="light"] .lp-head p,
+:root[data-theme="light"] .lp-token p,
+:root[data-theme="light"] .lp-fund p,
+:root[data-theme="light"] .lp-band p,
+:root[data-theme="light"] .lp-tool p,
+:root[data-theme="light"] .lp-tool li,
+:root[data-theme="light"] /* "Why autism?": one line in the hero and four short answers under the numbers (app/page.tsx) */
+.lp-hero p.lp-why,
+:root[data-theme="light"] .lp-why-card p,
+:root[data-theme="light"] .lp-steps small,
+:root[data-theme="light"] .sw .tx-field input::placeholder,
+:root[data-theme="light"] .sc-amt::placeholder,
+:root[data-theme="light"] .ah-me-load,
+:root[data-theme="light"] .ah-me-head small,
+:root[data-theme="light"] .ah-me-box>small,
+:root[data-theme="light"] .ah-me-box>strong em,
+:root[data-theme="light"] .ah-me-box p,
+:root[data-theme="light"] .ah-me-box li,
+:root[data-theme="light"] .ah-me-box li span:last-child,
+:root[data-theme="light"] .ah-me-foot,
+:root[data-theme="light"] .ft h2 span,
+:root[data-theme="light"] .ft p,
+:root[data-theme="light"] .ft-stats dt,
+:root[data-theme="light"] .ft-note,
+:root[data-theme="light"] .wp-qr small,
+:root[data-theme="light"] .ax-switch > small,
+:root[data-theme="light"] .pc-tip,
+:root[data-theme="light"] .pc-wait,
+:root[data-theme="light"] .ql-card .muted,
+:root[data-theme="light"] .ax-menu-tip,
+:root[data-theme="light"] .mp-sec-h b,
+:root[data-theme="light"] .mp-cap,
+:root[data-theme="light"] .mp-link small,
+:root[data-theme="light"] .mp-step small,
+:root[data-theme="light"] .mp-coin-t small,
+:root[data-theme="light"] .mp-search{color:#1B1530}
+:root[data-theme="light"] .lp-hero p.lp-why{color:#1B1530;background:#FFF6DA}
+:root[data-theme="light"] .lp-why b{color:#8A5A00 !important}
+:root[data-theme="light"] .lp-hero p{color:#241E38}
