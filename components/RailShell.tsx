@@ -183,7 +183,7 @@ function SideColumn({ app }: { app: boolean; signedIn: boolean }) {
         )}
       </section>
       <nav className="nx-foot" aria-label="More">
-        <Link href="/about">About</Link><Link href="/autism">About autism</Link><Link href="/safety">Safety</Link><Link href="/privacy">Privacy</Link><a href={`mailto:${LINKS.email}`}>Contact</a>
+        <Link href="/about">About</Link><Link href="/autism">About autism</Link><Link href="/safety">Safety</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><a href={`mailto:${LINKS.email}`}>Contact</a>
       </nav>
     </aside>
   );

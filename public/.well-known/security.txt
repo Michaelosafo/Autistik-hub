@@ -1,0 +1,5 @@
+Contact: mailto:team@autistik.io
+Expires: 2027-10-26T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://autistik.io/.well-known/security.txt
+Policy: https://autistik.io/terms
