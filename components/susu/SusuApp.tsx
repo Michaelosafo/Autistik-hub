@@ -150,25 +150,45 @@ export default function SusuApp({ admin, signedIn }: { admin: boolean; signedIn:
         <small className="muted">Wallet <span className="mono">{short(me)}</span> · <button type="button" className="linkish" onClick={connect} disabled={busy}>Switch</button></small>
       )}
 
-      {me && rows && rows.length > 0 && (() => {
+      {me && rows && (() => {
         const active = rows.filter((r) => !r.withdrawn);
         const sum = (list: Row[]) => list.reduce((x, r) => x + r.saved, 0n);
         const days = rows.reduce((x, r) => x + r.paidDays, 0);
-        const next = active.length ? Math.min(...active.map((r) => r.unlocksAt)) : null;
+        const next = active.length ? active.slice().sort((a, b) => a.unlocksAt - b.unlocksAt)[0] : null;
         const goal = active.reduce((x, r) => x + r.daily * BigInt(r.totalDays), 0n);
+        const behind = active.reduce((x, r) => x + (Date.now() / 1000 < r.unlocksAt ? Math.max(0, r.due - 1) : 0), 0);
+        const pct = goal > 0n ? Math.min(100, Number((sum(active) * 100n) / goal)) : 0;
         return (
-          <section className="card susu-me" aria-label="Your savings">
-            <div className="susu-me-main">
-              <small>Saving right now</small>
-              <b className="susu-total">${money(sum(active))}</b>
-              {goal > 0n && <><div className="susu-bar"><i style={{ width: `${Math.min(100, Number((sum(active) * 100n) / goal))}%` }} /></div><small>of ${money(goal)} goal{active.length > 1 ? ` across ${active.length} plans` : ""}</small></>}
+          <section className="dash" aria-label="My Susu dashboard">
+            <div className="dash-head"><b>My Susu</b><small>{rows.length ? `${active.length} running · ${rows.length - active.length} paid out` : "No plans yet"}</small></div>
+            <div className="dash-cards">
+              <div className="dash-card main"><small>Saving right now</small><b>${money(sum(active))}</b><small>{goal > 0n ? `${pct}% of $${money(goal)} goal` : "start a plan below"}</small></div>
+              <div className="dash-card"><small>Saved all time</small><b>${money(sum(rows))}</b><small>${money(sum(rows.filter((r) => r.withdrawn)))} already paid back</small></div>
+              <div className="dash-card"><small>Days saved</small><b>{days}</b><small>{behind ? <span className="down">{behind} day{behind === 1 ? "" : "s"} to catch up</span> : "you're up to date"}</small></div>
+              <div className="dash-card"><small>Next payout</small><b>{next ? date(next.unlocksAt) : "–"}</b><small>{next ? `$${money(next.saved)} so far, sent automatically` : "no running plans"}</small></div>
             </div>
-            <ul>
-              <li><span>Saved all time</span><b>${money(sum(rows))}</b></li>
-              <li><span>Already paid back to you</span><b>${money(sum(rows.filter((r) => r.withdrawn)))}</b></li>
-              <li><span>Days you&apos;ve saved</span><b>{days}</b></li>
-              <li><span>Next payout</span><b>{next ? date(next) : "–"}</b></li>
-            </ul>
+            {goal > 0n && <div className="susu-bar" aria-label={`${pct}% of your goal`}><i style={{ width: `${pct}%` }} /></div>}
+            {rows.length > 0 && (
+              <div className="dash-table" role="table" aria-label="My Susu plans">
+                <div className="dash-tr th susu-tr" role="row"><span>Plan</span><span>Progress</span><span>Saved</span><span>Pays out</span><span>Today</span><span /></div>
+                {rows.map((r) => {
+                  const ended = Date.now() / 1000 >= r.unlocksAt;
+                  return (
+                    <div key={r.id} className="dash-tr susu-tr" role="row">
+                      <span><b>{money(r.daily)} {r.symbol} / day</b><small>{r.totalDays} days · #{r.id}</small></span>
+                      <span><b>{r.paidDays}/{r.totalDays}</b><small>day {r.day}</small></span>
+                      <span><b>{money(r.saved)} {r.symbol}</b><small>of {money(r.daily * BigInt(r.totalDays))}</small></span>
+                      <span><b>{r.withdrawn ? "Paid ✓" : date(r.unlocksAt)}</b><small>{r.withdrawn ? "in your wallet" : ended ? "being sent now" : `${Math.max(0, Math.ceil((r.unlocksAt - Date.now() / 1000) / 86400))} days left`}</small></span>
+                      <span>{r.withdrawn || ended ? <small>–</small> : r.due > 0 ? <b className="down">Not saved yet</b> : <b className="up">Saved ✓</b>}</span>
+                      <span className="dash-act">
+                        {!r.withdrawn && !ended && r.due > 0 && <button type="button" className="btn small primary" disabled={busy} onClick={() => save(r)}>{r.due > 1 ? `Catch up ${r.due}` : "Save today"}</button>}
+                        {!r.withdrawn && ended && <button type="button" className="btn small" disabled={busy} onClick={() => withdraw(r)}>Withdraw</button>}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         );
       })()}

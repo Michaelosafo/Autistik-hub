@@ -72,6 +72,8 @@ export default function StakeApp({ signer, start }: { signer: Signer; start: { p
         </div>
       )}
 
+      {me && data?.contract && <StakeDashboard pools={mine} onOpen={(pool, kind) => setOpen({ pool, kind })} />}
+
       <div className="sm-tabs" role="tablist">
         {(["pools", "mine", "create"] as const).map((t) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => { setTab(t); if (t !== "create") load(); }}>
@@ -386,5 +388,50 @@ function CreatePool({ signer, data, onDone }: { signer: Signer; data: Data | nul
       {step ? <div className="aw-step"><span className="aw-spin" />{step}</div> : <button type="button" className="tx-cta buy" disabled={!ready} onClick={create}>Open the pool</button>}
       {err && <div className="aw-risk danger">{err}</div>}
     </div>
+  );
+}
+
+/** What you staked, at a glance: totals, then every position with its lock, value, unlock date and rewards. */
+function StakeDashboard({ pools, onOpen }: { pools: PoolView[]; onOpen: (p: PoolView, k: Kind) => void }) {
+  const now = Date.now() / 1000;
+  const rows = pools.flatMap((p) => (p.mine?.positions ?? []).map((x) => ({ p, x })));
+  const stakedUsd = rows.reduce((a, { p, x }) => a + x.amountNum * (p.stake.priceUsd ?? 0), 0);
+  const earnedUsd = pools.reduce((a, p) => a + (p.mine?.earnedNum ?? 0) * (p.reward.priceUsd ?? 0), 0);
+  const next = rows.filter(({ x }) => x.unlockAt > now).sort((a, b) => a.x.unlockAt - b.x.unlockAt)[0];
+  const free = rows.filter(({ x }) => x.unlockAt <= now).reduce((a, { p, x }) => a + x.amountNum * (p.stake.priceUsd ?? 0), 0);
+  const boost = rows.length ? rows.reduce((a, { x }) => a + TIERS[x.tier].boost * x.amountNum, 0) / Math.max(1e-18, rows.reduce((a, { x }) => a + x.amountNum, 0)) : 0;
+  return (
+    <section className="dash" aria-label="My staking dashboard">
+      <div className="dash-head"><b>My staking</b><small>{rows.length ? `${pools.length} pool${pools.length === 1 ? "" : "s"} · ${rows.length} position${rows.length === 1 ? "" : "s"}` : "Nothing staked yet"}</small></div>
+      <div className="dash-cards">
+        <div className="dash-card main"><small>Total staked</small><b>{usd(stakedUsd)}</b><small>{free > 0 ? `${usd(free)} unlocked, ready to withdraw` : "all locked or nothing staked"}</small></div>
+        <div className="dash-card"><small>Rewards ready</small><b className="up">{usd(earnedUsd)}</b><small>collect any time</small></div>
+        <div className="dash-card"><small>Average boost</small><b>{boost ? `${boost.toFixed(2)}x` : "–"}</b><small>longer locks earn more</small></div>
+        <div className="dash-card"><small>Next unlock</small><b>{next ? when(next.x.unlockAt) : "–"}</b><small>{next ? `${amt(next.x.amountNum)} ${next.p.stake.symbol}` : "no locked stakes"}</small></div>
+      </div>
+      {rows.length > 0 ? (
+        <div className="dash-table" role="table" aria-label="My positions">
+          <div className="dash-tr th" role="row"><span>Pool</span><span>Lock</span><span>Amount</span><span>Unlocks</span><span>Rewards</span><span /></div>
+          {rows.map(({ p, x }) => {
+            const open = x.unlockAt <= now;
+            const left = Math.max(0, Math.ceil((x.unlockAt - now) / DAY));
+            const share = p.totalStakedNum ? (x.amountNum / p.totalStakedNum) * 100 : 0;
+            return (
+              <div key={`${p.id}-${x.tier}`} className="dash-tr" role="row">
+                <span className="dash-pool"><Logo t={{ symbol: p.stake.symbol, logo: p.stake.logo }} size={28} /><span><b>{p.stake.symbol}</b><small>earn {p.reward.symbol} · {share >= 0.01 ? share.toFixed(2) : "<0.01"}% of pool</small></span></span>
+                <span><b>{TIERS[x.tier].name}</b><small>{TIERS[x.tier].boost}x boost</small></span>
+                <span><b>{amt(x.amountNum)}</b><small>{p.stake.priceUsd ? usd(x.amountNum * p.stake.priceUsd) : p.stake.symbol}</small></span>
+                <span>{open ? <b className="up">Unlocked</b> : <><b>{when(x.unlockAt)}</b><small>{left} day{left === 1 ? "" : "s"} left</small></>}</span>
+                <span><b className="up">{amt(p.mine?.earnedNum ?? 0)}</b><small>{p.reward.symbol} (whole pool)</small></span>
+                <span className="dash-act">
+                  {(p.mine?.earnedNum ?? 0) > 0 && <button type="button" className="btn small" onClick={() => onOpen(p, "collect")}>Collect</button>}
+                  {open && <button type="button" className="btn small" onClick={() => onOpen(p, "withdraw")}>Withdraw</button>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ) : <p className="muted" style={{ margin: 0 }}>Pick a pool below and tap Stake. Your positions, unlock dates and rewards will show here.</p>}
+    </section>
   );
 }
