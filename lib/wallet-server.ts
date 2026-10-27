@@ -244,13 +244,13 @@ export async function quote(c: WChain, tokenIn: string, tokenOut: string, amount
 
 async function kyberQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true): Promise<Quote> {
   const q = new URLSearchParams({ tokenIn, tokenOut, amountIn: amountIn.toString(), gasInclude: "true", source: "autistik-hub" });
-  if (TREASURY && withFee) q.set("feeAmount", String(FEE_BPS)), q.set("isInBps", "true"), q.set("chargeFeeBy", feeSide(c, tokenIn)), q.set("feeReceiver", TREASURY);
+  if (TREASURY && withFee && FEE_BPS > 0) q.set("feeAmount", String(FEE_BPS)), q.set("isInBps", "true"), q.set("chargeFeeBy", feeSide(c, tokenIn)), q.set("feeReceiver", TREASURY);
   const j = await getJson(`${KYBER}/${c.kyber}/api/v1/routes?${q}`, { headers: KYBER_HEADERS });
   const s = j?.data?.routeSummary;
   if (!s || j.code !== 0) throw new Error(j?.message || "No route found for this pair.");
   const inUsd = num(s.amountInUsd) || null, outUsd = num(s.amountOutUsd) || null;
   return { kind: "kyber", chain: c.key, tokenIn, tokenOut, amountIn: String(s.amountIn), amountOut: String(s.amountOut), inUsd, outUsd,
-    impact: inUsd && outUsd ? Math.max(0, ((inUsd - outUsd) / inUsd) * 100) : null, feeBps: TREASURY && withFee ? FEE_BPS : 0, gasUsd: num(s.gasUsd) || null, route: s };
+    impact: inUsd && outUsd ? Math.max(0, ((inUsd - outUsd) / inUsd) * 100) : null, feeBps: TREASURY && withFee && FEE_BPS > 0 ? FEE_BPS : 0, gasUsd: num(s.gasUsd) || null, route: s };
 }
 
 const V2_ABI = parseAbi([
@@ -292,8 +292,8 @@ const solFeeOf = (lamports: bigint) => (lamports * BigInt(FEE_BPS)) / 10_000n;
  * Other pairs (USDC and a token) pay Jupiter's platform fee into the marketing wallet's USDC account, if it has one.
  */
 async function jupQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true): Promise<Quote> {
-  const solSide = withFee && SOL_TREASURY ? (tokenIn === WSOL ? "in" : tokenOut === WSOL ? "out" : null) : null;
-  const feeAccount = withFee && !solSide ? await solFeeAccount(tokenIn, tokenOut) : null;
+  const solSide = withFee && FEE_BPS > 0 && SOL_TREASURY ? (tokenIn === WSOL ? "in" : tokenOut === WSOL ? "out" : null) : null;
+  const feeAccount = withFee && FEE_BPS > 0 && !solSide ? await solFeeAccount(tokenIn, tokenOut) : null;
   const feeIn = solSide === "in" ? solFeeOf(amountIn) : 0n;
   // Room in the transaction for the fee transfer.
   const q = new URLSearchParams({ inputMint: tokenIn, outputMint: tokenOut, amount: (amountIn - feeIn).toString(), slippageBps: "100", restrictIntermediateTokens: "true", maxAccounts: "54" });
@@ -363,7 +363,7 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
     }
     // The fee account is worked out again here, never taken from the browser.
     // A quote that should carry the fee must carry it (a quote from the browser can't drop it).
-    if (SOL_TREASURY && (q.tokenIn === WSOL || q.tokenOut === WSOL)) throw new Error("Prices changed. Please get a new quote.");
+    if (FEE_BPS > 0 && SOL_TREASURY && (q.tokenIn === WSOL || q.tokenOut === WSOL)) throw new Error("Prices changed. Please get a new quote.");
     const feeAccount = q.feeBps ? await solFeeAccount(q.tokenIn, q.tokenOut) : null;
     if (q.feeBps && !feeAccount) throw new Error("Prices changed. Please get a new quote.");
     const quoteResponse = { ...q.route.quote, slippageBps };
@@ -391,7 +391,7 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
   }
   // KyberSwap: the fee must still be ours (a quote from the browser can't redirect it).
   const fee = q.route?.extraFee;
-  if (TREASURY && (!fee || Number(fee.feeAmount) !== FEE_BPS || String(fee.feeReceiver).toLowerCase() !== TREASURY.toLowerCase())) throw new Error("Prices changed. Please get a new quote.");
+  if (TREASURY && FEE_BPS > 0 && (!fee || Number(fee.feeAmount) !== FEE_BPS || String(fee.feeReceiver).toLowerCase() !== TREASURY.toLowerCase())) throw new Error("Prices changed. Please get a new quote.");
   const j = await getJson(`${KYBER}/${c.kyber}/api/v1/route/build`, { method: "POST", headers: KYBER_HEADERS, timeout: 15_000, body: JSON.stringify({
     routeSummary: q.route, sender: who, recipient: who, slippageTolerance: slippageBps, source: "autistik-hub", enableGasEstimation: false,
   }) });

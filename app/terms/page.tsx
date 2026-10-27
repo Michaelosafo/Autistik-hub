@@ -42,7 +42,7 @@ export default function Terms() {
         <p style={{ margin: 0 }}><b>Nothing on AUTISTIK Hub is financial, investment, legal or tax advice.</b> APRs, rewards and prices shown are estimates and can change at any time.</p>
       </>)}
 
-      {sec("3", "Fees", <p style={{ margin: 0 }}>Some tools charge a small fee, always shown before you confirm: for example 0.3% on Launch Pad trades on BNB Chain and Ethereum, 0.5% on Solana launches and Hub swaps. Blockchain network fees are paid to the network, not to us. Susu savings have no AUTISTIK fee.</p>)}
+      {sec("3", "Fees", <p style={{ margin: 0 }}>Some tools charge a small fee, always shown before you confirm: for example 0.3% on Launch Pad trades on BNB Chain and Ethereum, 0.5% on trades of coins launched on Solana here. Blockchain network fees are paid to the network, not to us. Swaps on the Hub and Susu savings have no AUTISTIK fee.</p>)}
 
       {sec("4", "Who can use it", <ul className="stack" style={{ margin: 0, paddingLeft: 20, gap: 6 }}>
         <li>You must be 18 or older and allowed to use crypto services where you live.</li>

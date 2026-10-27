@@ -18,8 +18,14 @@ export type WChain = {
   wrapped?: `0x${string}`;
 };
 
-/** The swap fee that goes to the AUTISTIK treasury: 0.5%. */
-export const FEE_BPS = 50;
+/**
+ * The AUTISTIK fee on swaps, in basis points. 0 = no fee (the default): people only pay the network's own gas.
+ * To charge one again, set NEXT_PUBLIC_SWAP_FEE_BPS in Vercel (50 = 0.5%, at most 100).
+ */
+export const FEE_BPS = (() => {
+  const n = Number(process.env.NEXT_PUBLIC_SWAP_FEE_BPS ?? 0);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : 0;
+})();
 export const FEE_PERCENT = FEE_BPS / 100;
 /** How the aggregators write "the chain's own coin" (BNB, ETH). */
 export const NATIVE = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
