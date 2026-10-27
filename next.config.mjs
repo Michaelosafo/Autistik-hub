@@ -23,7 +23,7 @@ const nextConfig = {
   },
   // Profile links: autistik.io/@name opens that member's profile.
   async rewrites() {
-    return [{ source: "/@:handle", destination: "/u/:handle" }];
+    return [{ source: "/@:handle", destination: "/u/:handle" }, { source: "/.well-known/assetlinks.json", destination: "/api/assetlinks" }];
   },
   async headers() {
     return [

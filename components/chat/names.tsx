@@ -3,13 +3,14 @@ export type Person = { id: string; alias: string; color?: string | null; avatar_
 export const PERSON = "id,alias,color,avatar_url,is_team,is_verified,handle";
 
 /** A name in gold (team), green (verified) or black (everyone else), with its tick. */
-export function Name({ p, small }: { p: Person | null | undefined; small?: boolean }) {
+export function Name({ p, small, admin }: { p: Person | null | undefined; small?: boolean; admin?: boolean }) {
   if (!p) return <span className="ch-name">Member</span>;
-  const cls = p.is_team ? "team" : p.is_verified ? "ver" : "";
+  // Group admins show in green too, so people know who can guide them.
+  const cls = p.is_team ? "team" : p.is_verified || admin ? "ver" : "";
   return (
     <span className={`ch-name ${cls}${small ? " sm" : ""}`}>
       {p.alias}
-      {p.is_team ? <i className="ch-tick team" title="AUTISTIK team">✓</i> : p.is_verified ? <i className="ch-tick ver" title="Verified">✓</i> : null}
+      {p.is_team ? <i className="ch-tick team" title="AUTISTIK team">✓</i> : p.is_verified || admin ? <i className="ch-tick ver" title={admin && !p.is_verified ? "Group admin" : "Verified"}>✓</i> : null}
     </span>
   );
 }
