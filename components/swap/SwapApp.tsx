@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { WCHAINS, type WChainKey, type WToken } from "@/lib/wallet-chains";
+import { FEE_BPS, WCHAINS, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import type { Signer } from "@/components/wallet/types";
 import MarketForm from "@/components/wallet/MarketForm";
 import { api, store, type Holding } from "@/components/wallet/util";
@@ -139,7 +139,7 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         {local && to && <Link href={`/analytics/${chainKey}/${to.address}`}>Scan {to.symbol} →</Link>}
         <Link href="/stake">Stake AUTISTIK, earn BNB →</Link>
       </div>
-      <p className="sw-note">{local ? "Best price across every DEX (KyberSwap, Jupiter). A 0.5% fee per swap, on every chain, goes to AUTISTIK marketing." : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
+      <p className="sw-note">{local ? (FEE_BPS ? `Best price across every DEX (KyberSwap, Jupiter). A ${FEE_BPS / 100}% fee per swap goes to AUTISTIK marketing.` : "Best price across every DEX (KyberSwap, Jupiter). No AUTISTIK fee: you only pay the network's small gas fee.") : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
     </div>
   );
 }

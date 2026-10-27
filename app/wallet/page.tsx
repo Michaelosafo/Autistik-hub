@@ -6,6 +6,7 @@ import SendTokens from "@/components/live/SendTokens";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 import { adminState } from "@/lib/admin";
+import { FEE_BPS } from "@/lib/wallet-chains";
 
 const OrdersAdmin = dynamicImport(() => import("@/components/wallet/OrdersAdmin"), { ssr: false });
 
@@ -47,7 +48,7 @@ export default async function WalletPage({ searchParams }: { searchParams: { cha
       {admin && <OrdersAdmin />}
       <p className="muted" style={{ fontSize: ".82em" }}>
         Self-custody: your keys, your coins. Swaps use KyberSwap (BNB Chain, Base, Ethereum, Arbitrum) and Jupiter (Solana) to find the best price across every DEX.
-        A 0.5% fee per trade supports the AUTISTIK team. Limit and stop-loss orders fill automatically through the AUTISTIK Orders contract; your tokens stay in your wallet until then. Tokens can lose all their value; nothing here is financial advice.
+        {FEE_BPS ? `A ${FEE_BPS / 100}% fee per trade supports the AUTISTIK team.` : "Swaps have no AUTISTIK fee: you only pay the network's small gas fee."} Limit and stop-loss orders fill automatically through the AUTISTIK Orders contract; your tokens stay in your wallet until then. Tokens can lose all their value; nothing here is financial advice.
       </p>
     </div>
   );

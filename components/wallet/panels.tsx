@@ -41,7 +41,7 @@ export function Welcome({ signer, member }: { signer: Signer; member?: Member | 
       )}
       <div className="aw-why">
         <div className="card"><b>Only you control it</b><p className="muted">AUTISTIK never holds your money or your keys. Every trade needs your approval{builtIn ? " and a code from your authenticator app" : ""}.</p></div>
-        <div className="card"><b>Best price, every DEX</b><p className="muted">Each order is routed across all pools. Trading fee {FEE_PERCENT}%.</p></div>
+        <div className="card"><b>Best price, every DEX</b><p className="muted">Each order is routed across all pools. {FEE_PERCENT ? `Trading fee ${FEE_PERCENT}%.` : "No AUTISTIK swap fee."}</p></div>
         <div className="card"><b>Scam protection</b><p className="muted">Honeypot and tax checks before you buy, price-impact limits and exact approvals.</p></div>
       </div>
     </div>
