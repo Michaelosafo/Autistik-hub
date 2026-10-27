@@ -114,7 +114,14 @@ export const friendlyError = (e: any, native: string) => {
 export async function runTrade(c: WChain, signer: Signer, owner: string, q: Quote, from: WToken, slippageBps: number, step: (s: string) => void): Promise<string> {
   if (c.kind === "solana") {
     step("Preparing your trade…");
-    const { tx } = await api<{ tx: { tx: string } }>("build", { chain: c.key, quote: q, from: owner, slippageBps });
+    const { tx } = await api<{ tx: { kind?: string; tx: string; requestId?: string; gasless?: boolean; sponsored?: boolean } }>("build", { chain: c.key, quote: q, from: owner, slippageBps });
+    if (tx.kind === "ultra") {
+      step(tx.gasless ? "Approve in your wallet… (network fee: free)" : "Approve in your wallet…");
+      const signed = await signer.sol!.sign(tx.tx);
+      step("Swapping…");
+      const { signature } = await api<{ signature: string }>("sol-ultra", { tx: signed, requestId: tx.requestId, sponsored: !!tx.sponsored, from: owner });
+      return signature;
+    }
     step("Approve in your wallet…");
     return sendSol(signer, tx.tx);
   }

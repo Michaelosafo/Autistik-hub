@@ -1,0 +1,1 @@
+-- Gas sponsorship (lib/gasless.ts). Applied as migration gas_sponsorship.

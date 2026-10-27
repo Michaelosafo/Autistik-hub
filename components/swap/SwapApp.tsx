@@ -139,7 +139,7 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         {local && to && <Link href={`/analytics/${chainKey}/${to.address}`}>Scan {to.symbol} →</Link>}
         <Link href="/stake">Stake AUTISTIK, earn BNB →</Link>
       </div>
-      <p className="sw-note">{local ? (FEE_BPS ? `Best price across every DEX (KyberSwap, Jupiter). A ${FEE_BPS / 100}% fee per swap goes to AUTISTIK marketing.` : "Best price across every DEX (KyberSwap, Jupiter). No AUTISTIK fee: you only pay the network's small gas fee.") : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
+      <p className="sw-note">{local ? (FEE_BPS ? `Best price across every DEX (KyberSwap, Jupiter). A ${FEE_BPS / 100}% fee per swap goes to AUTISTIK marketing.` : "Best price across every DEX (KyberSwap, Jupiter). No AUTISTIK fee. Gas-free where we can: on Solana the network fee is covered for you, and on BNB Chain with the built-in AUTISTIK wallet.") : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
     </div>
   );
 }
