@@ -55,13 +55,31 @@ const typedJson = (typed: { domain: any; types: any; primaryType: string; messag
 }, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 const hexMsg = (m: string) => "0x" + Array.from(new TextEncoder().encode(m), (b) => b.toString(16).padStart(2, "0")).join("");
 
+/** Gas-free send through MegaFuel: the paymaster checks it, the wallet signs it with a gas price of 0, MegaFuel sends it. */
+async function sponsoredSend(p: any, from: string, tx: { to: string; data: string; value: string }): Promise<`0x${string}` | null> {
+  const post = (action: string, body: object) => fetch(`/api/wallet/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "bsc", ...body }) }).then((r) => r.json());
+  const gasHex: string = await p.request({ method: "eth_estimateGas", params: [{ from, ...tx }] });
+  const gas = "0x" + ((BigInt(gasHex) * 12n) / 10n).toString(16);
+  const chk = await post("gas-check", { tx: { from, ...tx, gas } });
+  if (!chk?.sponsorable || !chk.nonce) return null;
+  const raw: string = await p.request({ method: "eth_signTransaction", params: [{ from, ...tx, gas, gasPrice: "0x0", nonce: chk.nonce, chainId: "0x38", type: "0x0" }] });
+  const sent = await post("gas-send", { raw });
+  return sent?.hash ?? null;
+}
+
 /** A wallet Privy knows (built-in or connected through Privy) as what the screens sign with. */
 const fromPrivy = (ev: any): Signer["evm"] => ev ? {
   address: ev.address,
   async send(chainId, tx) {
     await ev.switchChain(chainId);
     const p = await ev.getEthereumProvider();
-    return p.request({ method: "eth_sendTransaction", params: [{ from: ev.address, to: tx.to, data: tx.data, value: "0x" + BigInt(tx.value).toString(16) }] });
+    const value = "0x" + BigInt(tx.value).toString(16);
+    // The built-in AUTISTIK wallet on BNB Chain: free gas when BNB Chain's paymaster (MegaFuel) sponsors it.
+    if (chainId === 56 && ev.walletClientType === "privy") {
+      const free = await sponsoredSend(p, ev.address, { to: tx.to, data: tx.data, value }).catch(() => null);
+      if (free) return free;
+    }
+    return p.request({ method: "eth_sendTransaction", params: [{ from: ev.address, to: tx.to, data: tx.data, value }] });
   },
   async signTyped(chainId, typed) {
     await ev.switchChain(chainId);

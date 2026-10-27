@@ -2,7 +2,8 @@ import { json } from "@/lib/ai";
 import { rateLimit } from "@/lib/ratelimit";
 import { isMomentumChain } from "@/lib/momentum";
 import { discover } from "@/lib/momentum-server";
-import { MAX_SLIPPAGE_BPS, WCHAINS, isTokenAddress, isWChain } from "@/lib/wallet-chains";
+import { FEE_BPS, MAX_SLIPPAGE_BPS, WCHAINS, isTokenAddress, isWChain } from "@/lib/wallet-chains";
+import { megafuelCheck, megafuelSend, ultraExecute, ultraSwap } from "@/lib/gasless";
 import { balances, build, market, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
 import { XCHAINS, isXAddress, isXChain } from "@/lib/bridge-chains";
 import { xChainLogos, xDetect, xQuote, xStatus, xTokens } from "@/lib/bridge-server";
@@ -12,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const LIMITS: Record<string, [number, number]> = {
-  token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60],
+  token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60], "sol-ultra": [15, 60], "gas-check": [40, 60], "gas-send": [20, 60],
   "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60],
 };
 
@@ -28,7 +29,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
   const b = await req.json().catch(() => ({}));
   if (action.startsWith("x-")) return cross(action, b);
   const chain = isWChain(b?.chain) ? WCHAINS[b.chain as keyof typeof WCHAINS] : null;
-  if (!chain && !["sol-send", "sol-status"].includes(action)) return json({ error: "Pick a network." }, 400);
+  if (!chain && !["sol-send", "sol-status", "sol-ultra", "gas-send"].includes(action)) return json({ error: "Pick a network." }, 400);
 
   try {
     switch (action) {
@@ -61,7 +62,24 @@ export async function POST(req: Request, { params }: { params: { action: string 
         if (!q || q.chain !== chain!.key || !isTokenAddress(chain!, b.from)) return json({ error: "Get a new quote and try again." }, 400);
         const slip = Math.round(Number(b.slippageBps));
         if (!(slip >= 10 && slip <= MAX_SLIPPAGE_BPS)) return json({ error: `Slippage must be between 0.1% and ${MAX_SLIPPAGE_BPS / 100}%.` }, 400);
+        // Solana with no AUTISTIK fee: Jupiter Ultra, so the network fee can be paid by Jupiter or by AUTISTIK.
+        if (chain!.kind === "solana" && FEE_BPS === 0) return json({ tx: await ultraSwap(q.tokenIn, q.tokenOut, BigInt(q.amountIn), b.from) });
         return json({ tx: await build(chain!, q, b.from, slip) });
+      }
+      case "sol-ultra": {
+        if (typeof b.tx !== "string" || b.tx.length > 4000 || !/^[A-Za-z0-9+/=]+$/.test(b.tx) || typeof b.requestId !== "string" || b.requestId.length > 200) return json({ error: "Bad transaction." }, 400);
+        if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(b.from || ""))) return json({ error: "Bad wallet." }, 400);
+        return json({ signature: await ultraExecute(b.tx, b.requestId, !!b.sponsored, b.from) });
+      }
+      case "gas-check": {
+        const t = b.tx || {};
+        const hex = (v: unknown) => typeof v === "string" && /^0x[0-9a-fA-F]{0,64000}$/.test(v);
+        if (chain!.key !== "bsc" || !isTokenAddress(chain!, t.from) || !isTokenAddress(chain!, t.to) || !hex(t.data) || !hex(t.value) || !hex(t.gas)) return json({ sponsorable: false });
+        return json(await megafuelCheck(t));
+      }
+      case "gas-send": {
+        if (typeof b.raw !== "string" || !/^0x[0-9a-fA-F]{100,200000}$/.test(b.raw)) return json({ error: "Bad transaction." }, 400);
+        return json({ hash: await megafuelSend(b.raw) });
       }
       case "sol-transfer": {
         if (chain!.kind !== "solana") return json({ error: "Solana only." }, 400);
