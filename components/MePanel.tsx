@@ -13,6 +13,7 @@ import FollowButton from "@/components/members/FollowButton";
 import FindPeople from "@/components/FindPeople";
 import ShareProfile from "@/components/members/ShareProfile";
 import { MadnessLink } from "@/components/mood/MadnessPanel";
+import ChatsLink from "@/components/chat/ChatsLink";
 import LiveNow from "@/components/rooms/LiveNow";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -169,6 +170,7 @@ export default function MePanel({ me, settings }: {
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
       <MadnessLink />
+      <ChatsLink />
       <FindPeople />
 
       <section className="mp-sec mp-livenow" aria-label="Live rooms">

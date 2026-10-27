@@ -13,7 +13,7 @@ import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/app", "/mood", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
+export const APP_PATHS = ["/app", "/mood", "/chats", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string; icon?: string };
@@ -54,6 +54,7 @@ const MORE: { name: string; items: Item[] }[] = [
     { href: "/app", name: "All tools", note: "Every App tool on one page", icon: "i-grid" },
     { href: "/companions", name: "Ask the bot", note: "Chat with Believer, Purity and the AUTISTIK bot", icon: "i-kai" },
     { href: "/mood", name: "Autistik Madness", note: "Share how you feel, post Tiks, see your people", icon: "i-com" },
+    { href: "/chats", name: "Chats", note: "Message people you follow, groups, the AUTISTIK group", icon: "i-com" },
     { href: "/spaces", name: "Live rooms", note: "Host or join a live audio room, like an X Space", icon: "i-ses" },
     { href: "/live", name: "Live hub", note: "Join the team's live sessions, get airdrops", icon: "i-ses" },
     { href: "/community", name: "Community", note: "Groups, posts and live sessions", icon: "i-com" },

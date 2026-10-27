@@ -3,10 +3,13 @@ import Avatar from "@/components/Avatar";
 
 export type MemberLite = { id: string; alias: string; color?: string | null; avatar_url?: string | null; is_team?: boolean | null; team_title?: string | null; is_verified?: boolean | null; handle?: string | null };
 
-/** A member's nickname and @handle (like X), with the gold TEAM badge on team accounts so everyone can tell it's really the team. */
+/**
+ * A member's nickname and @handle (like X). Name colours: gold = AUTISTIK team, green = verified member (applied and
+ * approved), black = everyone else.
+ */
 export default function MemberName({ m, link = true, avatar = false, handle = true }: { m: MemberLite; link?: boolean; avatar?: boolean; handle?: boolean }) {
   const name = (
-    <span className={m.is_team ? "mname team" : "mname"}>
+    <span className={m.is_team ? "mname team" : m.is_verified ? "mname ver" : "mname"}>
       {avatar && <Avatar className="avatar sm" alias={m.alias} color={m.color} url={m.avatar_url} />}
       <span className="mname-col">
         <span className="mname-text">{m.alias}</span>
