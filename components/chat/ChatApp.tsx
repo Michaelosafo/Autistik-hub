@@ -109,6 +109,7 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
   const [msgs, setMsgs] = useState<Msg[] | null>(null);
   const [people, setPeople] = useState<Record<string, Person>>({});
   const [members, setMembers] = useState<number>(0);
+  const [admins, setAdmins] = useState<Set<string>>(new Set());
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -131,6 +132,10 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
       need(list.map((m) => m.user_id));
       const { count } = await sb.from("chat_members").select("user_id", { count: "exact", head: true }).eq("chat_id", chat.id);
       setMembers(count || 0);
+      if (chat.kind === "group") {
+        const { data: a } = await sb.from("chat_members").select("user_id").eq("chat_id", chat.id).in("role", ["owner", "admin"]).limit(200);
+        setAdmins(new Set(((a || []) as any[]).map((x) => x.user_id)));
+      }
       await sb.from("chat_members").update({ last_read_at: new Date().toISOString() }).eq("chat_id", chat.id).eq("user_id", me);
     })();
     const ch = sb.channel(`chat-${chat.id}`).on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `chat_id=eq.${chat.id}` }, (p: any) => {
@@ -211,7 +216,7 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
               {showDay && <div className="ch-day"><span>{new Date(m.created_at).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}</span></div>}
               <div className={`ch-msg${mine ? " me" : ""}`}>
                 <div className="ch-bubble">
-                  {showName && <Link href={`/members/${m.user_id}`} className="ch-from"><Name p={people[m.user_id]} small /></Link>}
+                  {showName && <Link href={`/members/${m.user_id}`} className="ch-from"><Name p={people[m.user_id]} small admin={admins.has(m.user_id)} />{admins.has(m.user_id) && <em className="ch-role">admin</em>}</Link>}
                   {m.deleted ? <i className="muted">Message removed</i> : <>
                     {m.image_url && <a href={m.image_url} target="_blank" rel="noopener noreferrer"><img src={m.image_url} alt="Photo" className="ch-img" /></a>}
                     {m.body && <span className="ch-text">{m.body}</span>}
@@ -239,14 +244,21 @@ function GroupPeople({ sb, chat, me, role }: { sb: any; chat: Chat; me: string; 
   const [list, setList] = useState<{ role: string; p: Person }[]>([]);
   const [adding, setAdding] = useState(false);
   const load = useCallback(async () => {
-    const { data } = await sb.from("chat_members").select(`role,p:profiles(${PERSON})`).eq("chat_id", chat.id).limit(chat.is_default ? 60 : 300);
+    const { data } = await sb.from("chat_members").select(`role,p:profiles(${PERSON})`).eq("chat_id", chat.id).order("role").limit(chat.is_default ? 60 : 300);
     setList(((data || []) as any[]).filter((r) => r.p));
   }, [sb, chat.id, chat.is_default]);
   useEffect(() => { load(); }, [load]);
   return (
     <div className="stack" style={{ gap: 6 }}>
       <small className="muted">Members{chat.is_default ? " (latest)" : ""}</small>
-      <div className="ch-people">{list.map(({ role: r, p }) => <span key={p.id}><Face p={p} size={24} /> <Name p={p} small />{r !== "member" && <em>{r}</em>}</span>)}</div>
+      <div className="ch-people">{list.map(({ role: r, p }) => (
+        <span key={p.id}>
+          <Face p={p} size={24} /> <Name p={p} small admin={r !== "member"} />{r !== "member" && <em>{r}</em>}
+          {(role === "owner" || role === "admin") && p.id !== me && r !== "owner" && (
+            <button type="button" className="ch-mini" onClick={async () => { await sb.rpc("set_chat_role", { p_chat: chat.id, p_user: p.id, p_role: r === "admin" ? "member" : "admin" }); load(); }}>{r === "admin" ? "Remove admin" : "Make admin"}</button>
+          )}
+        </span>
+      ))}</div>
       {(role === "owner" || role === "admin") && !chat.is_default && (adding
         ? <PickPeople sb={sb} me={me} cta="Add to group" onPick={async (ids) => { await sb.rpc("add_to_group", { p_chat: chat.id, p_members: ids }); setAdding(false); load(); }} />
         : <button type="button" className="btn small" onClick={() => setAdding(true)}>+ Add people you follow</button>)}
