@@ -3,10 +3,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { Face, Name, PERSON, type Person } from "./names";
+import { EmojiTray, VoiceButton } from "./Extras";
 
 type Chat = { id: string; kind: "dm" | "group"; name: string | null; about: string | null; is_public: boolean; is_default: boolean; last_at: string; last_text: string | null };
 type Row = { chat: Chat; role: string; last_read_at: string; other?: Person | null };
-type Msg = { id: number; chat_id: string; user_id: string; body: string | null; image_url: string | null; created_at: string; deleted: boolean };
+type Msg = { id: number; chat_id: string; user_id: string; body: string | null; image_url: string | null; created_at: string; deleted: boolean; kind?: string; media_url?: string | null; media_secs?: number | null };
 
 const time = (iso: string) => {
   const d = new Date(iso), now = new Date();
@@ -116,6 +117,10 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
   const [info, setInfo] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const [tray, setTray] = useState(false);
+  const [typing, setTyping] = useState<Record<string, number>>({});
+  const typingCh = useRef<any>(null);
+  const lastTyped = useRef(0);
 
   const need = useCallback(async (ids: string[]) => {
     const missing = [...new Set(ids)].filter((id) => !people[id]);
@@ -144,14 +149,24 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
       need([m.user_id]);
       sb.from("chat_members").update({ last_read_at: new Date().toISOString() }).eq("chat_id", chat.id).eq("user_id", me).then(() => {});
     }).subscribe();
-    return () => { sb.removeChannel(ch); };
+    // "… is typing", like WhatsApp (sent between members, never stored).
+    const tc = sb.channel(`typing-${chat.id}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "typing" }, (p: any) => { const u = String(p.payload?.u || ""); if (u && u !== me) { setTyping((t) => ({ ...t, [u]: Date.now() })); need([u]); } })
+      .subscribe();
+    typingCh.current = tc;
+    const tick = setInterval(() => setTyping((t) => Object.fromEntries(Object.entries(t).filter(([, at]) => Date.now() - at < 4000))), 1500);
+    return () => { sb.removeChannel(ch); sb.removeChannel(tc); clearInterval(tick); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.id]);
+  function typed(v: string) {
+    setText(v);
+    if (Date.now() - lastTyped.current > 2000 && v.trim()) { lastTyped.current = Date.now(); typingCh.current?.send({ type: "broadcast", event: "typing", payload: { u: me } }); }
+  }
   useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [msgs?.length]);
 
-  async function send(body: string | null, image: string | null) {
+  async function send(body: string | null, image: string | null, extra: { kind?: string; media_url?: string; media_secs?: number } = {}) {
     setBusy(true); setErr("");
-    const { data, error } = await sb.from("chat_messages").insert({ chat_id: chat.id, body, image_url: image }).select("*").single();
+    const { data, error } = await sb.from("chat_messages").insert({ chat_id: chat.id, body, image_url: image, kind: extra.kind ?? (image ? "image" : "text"), ...(extra.media_url ? { media_url: extra.media_url, media_secs: extra.media_secs ?? null } : {}) }).select("*").single();
     setBusy(false);
     if (error) { setErr(/Slow down/.test(error.message) ? "Slow down a little: too many messages in a minute." : "Couldn't send. Try again."); return false; }
     setMsgs((cur) => (cur && !cur.some((x) => x.id === data.id) ? [...cur, data] : cur));
@@ -174,6 +189,16 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
     if (error) { setErr("Couldn't upload that picture."); return; }
     await send(null, sb.storage.from("chat-images").getPublicUrl(path).data.publicUrl);
   }
+  async function voice(blob: Blob, secs: number, type: string) {
+    if (blob.size > 5_000_000) { setErr("That voice note is too long."); return; }
+    setBusy(true);
+    const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+    const path = `${me}/voice-${Date.now()}.${ext}`;
+    const { error } = await sb.storage.from("chat-media").upload(path, blob, { contentType: type.split(";")[0] });
+    setBusy(false);
+    if (error) { setErr("Couldn't send the voice note. Try again."); return; }
+    await send(null, null, { kind: "voice", media_url: sb.storage.from("chat-media").getPublicUrl(path).data.publicUrl, media_secs: secs });
+  }
   async function leave() {
     if (chat.is_default) return;
     await sb.from("chat_members").delete().eq("chat_id", chat.id).eq("user_id", me);
@@ -193,7 +218,9 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
         {head ? <Face p={head} size={38} /> : <Face group={chat.is_default ? "AU" : chat.name} size={38} />}
         <button type="button" className="ch-head-t" onClick={() => setInfo(!info)}>
           {head ? <Name p={head} /> : <span className={`ch-name${chat.is_default ? " team" : ""}`}>{chat.name}{chat.is_default && <i className="ch-tick team">✓</i>}</span>}
-          <small>{head ? (head.handle ? `@${head.handle}` : "Chat") : `${members} member${members === 1 ? "" : "s"}${chat.is_public ? " · public group" : " · private group"}`}</small>
+          <small className={Object.keys(typing).length ? "ch-typing" : ""}>{Object.keys(typing).length
+            ? (head ? "typing…" : `${Object.keys(typing).map((u) => people[u]?.alias ?? "Someone").slice(0, 2).join(", ")} ${Object.keys(typing).length > 1 ? "are" : "is"} typing…`)
+            : head ? (head.handle ? `@${head.handle}` : "Chat") : `${members} member${members === 1 ? "" : "s"}${chat.is_public ? " · public group" : " · private group"}`}</small>
         </button>
         {head && <Link className="ch-ic" href={`/members/${head.id}`} title="Profile" aria-label="Open profile">👤</Link>}
       </header>
@@ -210,15 +237,18 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
           const day = new Date(m.created_at).toDateString();
           const showDay = day !== lastDay; lastDay = day;
           const prev = msgs[i - 1];
-          const showName = chat.kind === "group" && !mine && (!prev || prev.user_id !== m.user_id || showDay);
+          // In groups every sender's name shows (yours too), like WhatsApp.
+          const showName = chat.kind === "group" && (!prev || prev.user_id !== m.user_id || showDay);
           return (
             <div key={m.id}>
               {showDay && <div className="ch-day"><span>{new Date(m.created_at).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}</span></div>}
               <div className={`ch-msg${mine ? " me" : ""}`}>
-                <div className="ch-bubble">
+                <div className={`ch-bubble${m.kind === "sticker" && !m.deleted ? " sticker" : ""}`}>
                   {showName && <Link href={`/members/${m.user_id}`} className="ch-from"><Name p={people[m.user_id]} small admin={admins.has(m.user_id)} />{admins.has(m.user_id) && <em className="ch-role">admin</em>}</Link>}
                   {m.deleted ? <i className="muted">Message removed</i> : <>
                     {m.image_url && <a href={m.image_url} target="_blank" rel="noopener noreferrer"><img src={m.image_url} alt="Photo" className="ch-img" /></a>}
+                    {m.kind === "voice" && m.media_url && <span className="ch-voice">🎤 <audio controls preload="none" src={m.media_url} /> <small>{m.media_secs ? `${Math.floor(m.media_secs / 60)}:${String(m.media_secs % 60).padStart(2, "0")}` : ""}</small></span>}
+                    {m.kind === "sticker" && m.media_url && <img src={m.media_url} alt="Sticker" className="ch-sticker" />}
                     {m.body && <span className="ch-text">{m.body}</span>}
                   </>}
                   <small className="ch-time">{time(m.created_at)}{mine && !m.deleted && <button type="button" className="ch-unsend" onClick={() => unsend(m)} title="Remove for everyone">✕</button>}</small>
@@ -230,11 +260,13 @@ function Conversation({ sb, me, row, onBack, onChanged }: { sb: any; me: string;
         <div ref={end} />
       </div>
       {err && <p className="ch-err" role="alert">{err}</p>}
+      {tray && <EmojiTray sb={sb} me={me} onEmoji={(e) => typed(text + e)} onSticker={(url) => { setTray(false); send(null, null, { kind: "sticker", media_url: url }); }} onClose={() => setTray(false)} />}
       <form className="ch-compose" onSubmit={submit}>
         <input ref={file} type="file" accept="image/*" hidden onChange={(e) => { photo(e.target.files?.[0]); e.target.value = ""; }} />
+        <button type="button" className="ch-ic" onClick={() => setTray(!tray)} aria-label="Emojis and stickers" aria-pressed={tray}>😊</button>
         <button type="button" className="ch-ic" onClick={() => file.current?.click()} disabled={busy} aria-label="Send a photo">📷</button>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(e as any); } }} placeholder="Message" rows={1} maxLength={2000} aria-label="Message" />
-        <button type="submit" className="ch-send" disabled={busy || !text.trim()} aria-label="Send">➤</button>
+        <textarea value={text} onChange={(e) => typed(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(e as any); } }} placeholder="Message" rows={1} maxLength={2000} aria-label="Message" />
+        {text.trim() ? <button type="submit" className="ch-send" disabled={busy} aria-label="Send">➤</button> : <VoiceButton disabled={busy} onDone={voice} onError={setErr} />}
       </form>
     </div>
   );
