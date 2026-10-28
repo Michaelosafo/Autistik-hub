@@ -4378,3 +4378,4 @@ html,body{overflow-x:clip}
 :root[data-theme="dark"] .scan-form.pro input,:root[data-theme="dark"] .net-pill{color:#F4F1FA !important;background:#1C1828 !important}
 :root[data-theme="dark"] .scan-form.pro input::placeholder{color:#B6ADCC !important}
 :root[data-theme="dark"] .scan-err{color:#FF9C92 !important}
+:root[data-theme="dark"] .net-pill.on,:root[data-theme="light"] .net-pill.on{background:linear-gradient(135deg,#FFD84D,#F0B90B) !important;color:#16111F !important;border-color:#F0B90B !important}
