@@ -4364,3 +4364,17 @@ html,body{overflow-x:clip}
   .dash-act{justify-content:flex-start}
 }
 @media (min-width:821px){ .susu-tr{grid-template-columns:1.3fr .8fr 1fr 1fr .9fr auto} }
+
+/* ---------- Scanner paste box: always readable (dark text on light, light text on dark) ---------- */
+.scan-form.pro input,.an-hero .scan-form.pro input,.ga-hero .scan-form.pro input{background:var(--surface) !important;color:var(--ink) !important;border:1.5px solid var(--line) !important;font-weight:600;font-size:.95em}
+.scan-form.pro input:focus{border-color:#F0B90B !important;outline:none;box-shadow:0 0 0 3px rgba(240,185,11,.2)}
+.scan-form.pro input::placeholder{color:var(--muted) !important;opacity:1}
+.net-pill,.an-hero .net-pill,.ga-hero .net-pill{background:var(--surface) !important;color:var(--ink) !important;border:1.5px solid var(--line) !important;font-size:.82em;font-weight:800;padding:6px 13px}
+.net-pill:hover{border-color:#F0B90B !important}
+.net-pill.on,.an-hero .net-pill.on,.ga-hero .net-pill.on{background:linear-gradient(135deg,#FFD84D,#F0B90B) !important;border-color:#F0B90B !important;color:#16111F !important}
+.scan-err,.an-hero .scan-err{color:#C0354D !important;font-weight:700}
+:root[data-theme="light"] .scan-form.pro input,:root[data-theme="light"] .net-pill{color:#16111F !important}
+:root[data-theme="light"] .scan-form.pro input::placeholder{color:#5A5170 !important}
+:root[data-theme="dark"] .scan-form.pro input,:root[data-theme="dark"] .net-pill{color:#F4F1FA !important;background:#1C1828 !important}
+:root[data-theme="dark"] .scan-form.pro input::placeholder{color:#B6ADCC !important}
+:root[data-theme="dark"] .scan-err{color:#FF9C92 !important}
