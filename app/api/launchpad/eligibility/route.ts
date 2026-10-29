@@ -1,10 +1,10 @@
 import { rateLimit } from "@/lib/ratelimit";
 import { namesTaken, takenError } from "@/lib/launch-names";
-import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http, keccak256, parseAbi } from "viem";
+import { createPublicClient, encodeAbiParameters, formatUnits, getAddress, http, keccak256, parseAbi, toHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { json } from "@/lib/ai";
 import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
-import { padOn, padVersion } from "@/lib/launchpad-server";
+import { instantOn, padOn, padVersion } from "@/lib/launchpad-server";
 import { vanitySalt } from "@/lib/evm-vanity";
 import { getMarkets } from "@/lib/market";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
@@ -37,7 +37,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const chain = CHAINS[body?.chain as ChainKey];
   const wallet = String(body?.wallet || "");
-  const pad = chain ? await padOn(chain.key) : null;
+  // Instant launch (no liquidity, no bonding curve) has its own contract; any random salt works there.
+  const instant = body?.style === "instant";
+  const pad = chain ? await (instant ? instantOn(chain.key) : padOn(chain.key)) : null;
   if (!chain || !pad) return json({ error: "That chain isn't open for launches." }, 400);
   if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return json({ error: "That isn't a wallet address." }, 400);
   const creator = getAddress(wallet);
@@ -49,8 +51,8 @@ export async function POST(req: Request) {
 
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
   // Launch Pad v3: the salt that gives this launch a token address ending in "aaaaa" (taken only when it's needed).
-  const version = await padVersion(chain.key);
-  const salt = async () => (version >= 3 ? await vanitySalt(chain.key, pad, version) : null);
+  const version = instant ? 0 : await padVersion(chain.key);
+  const salt = async () => (instant ? { salt: toHex(crypto.getRandomValues(new Uint8Array(32))), token: null } : version >= 3 ? await vanitySalt(chain.key, pad, version) : null);
   // Not set up yet: the contract's eligibilitySigner should also be the zero address, so no check happens.
   if (!key) {
     const s = await salt();

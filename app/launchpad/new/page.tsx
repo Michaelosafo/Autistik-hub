@@ -9,6 +9,8 @@ import { adminState, launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import PadDeploy from "@/components/PadDeploy";
 import PadTestnetTrial from "@/components/PadTestnetTrial";
+import LaunchChoice from "@/components/InstantLaunch";
+import InstantAdmin from "@/components/InstantAdmin";
 import AdminListTokens from "@/components/AdminListTokens";
 import VideoButton from "@/components/VideoButton";
 
@@ -16,14 +18,14 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
 
 export default async function NewLaunchPage() {
-  const [user, board, { pads, versions }, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
+  const [user, board, { pads, versions, instants }, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
       <header className="bd-top ln-top">
         <div>
           <h1>Create a coin</h1>
-          <p className="muted">Free to launch. Liquidity locked or burned so it can&apos;t be pulled. Live in a few minutes.{!access.public ? " Coming soon." : ""}</p>
+          <p className="muted">Free to launch. Go instant with no liquidity and no bonding curve (live on PancakeSwap straight away), or add your own liquidity and lock or burn it.{!access.public ? " Coming soon." : ""}</p>
         </div>
         <div className="ln-top-r">
           <VideoButton label="Watch how" title="Launch your coin, step by step" src="/videos/launch-your-coin.mp4" poster="/videos/launch-your-coin.jpg" captions="/videos/launch-your-coin.vtt" minutes={5} />
@@ -32,7 +34,7 @@ export default async function NewLaunchPage() {
       </header>
       <ol className="ln-steps" aria-label="How it works">
         <li><i>1</i><span><b>Pick a network and a name</b><small>BNB Chain, Ethereum, Solana and more. Add a picture.</small></span></li>
-        <li><i>2</i><span><b>Set your liquidity</b><small>Choose how much goes into the pool, then lock it or burn it.</small></span></li>
+        <li><i>2</i><span><b>Instant or add liquidity</b><small>Instant needs no liquidity. Or put your own in, then lock it or burn it.</small></span></li>
         <li><i>3</i><span><b>Sign once, you&apos;re live</b><small>Your coin appears on the Board right away.</small></span></li>
       </ol>
       <div className="ln-facts">
@@ -47,7 +49,7 @@ export default async function NewLaunchPage() {
         <>
           {!access.public && <div className="notice warn">Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Remove <span className="mono">LAUNCH_PUBLIC=0</span> in Vercel to open it to all.</div>}
           <p className="ln-alt">Already made your token, here or anywhere else? <Link href="/liquidity">Add liquidity by pasting its address</Link></p>
-          <Launchpad signedIn={!!user} pads={pads} versions={versions} admin={admin} />
+          <LaunchChoice instant={instants.bsc ?? null} admin={admin}><Launchpad signedIn={!!user} pads={pads} versions={versions} admin={admin} /></LaunchChoice>
           <AddLiquidity pads={pads} />
         </>
       )}
@@ -55,6 +57,7 @@ export default async function NewLaunchPage() {
       {admin && <AdminListTokens />}
       {admin && <PadDeploy />}
       {admin && <PadTestnetTrial />}
+      {admin && <InstantAdmin />}
       <p className="muted" style={{ fontSize: ".9em" }}>Already launched, or launched somewhere else? See the <Link href="/launchpad">Trending</Link> tab to get your token listed and promoted.</p>
     </div>
   );
