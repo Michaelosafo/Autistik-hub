@@ -16,6 +16,7 @@ import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import VerifySource from "@/components/VerifySource";
 import { SolanaClaim, SolanaHolderRewards } from "@/components/SolanaLaunch";
+import { InstantFees } from "@/components/InstantLaunch";
 
 export const dynamic = "force-dynamic";
 
@@ -46,8 +47,10 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   const promotedUntil = promo?.ends_at ?? null;
   const swap = c.swapUrl(token);
   const listed = launch.source === "listed";
+  // Instant coins: no liquidity from the creator, no bonding curve, the supply sits in a PancakeSwap v3 pool forever.
+  const instant = launch.style === "instant";
   const lock = isLock(launch.lp_lock) ? launch.lp_lock : "burn";
-  const lockNote = listed ? "" : lock === "burn" ? "burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "lock ended";
+  const lockNote = listed ? "" : instant ? "locked forever" : lock === "burn" ? "burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "lock ended";
 
   return (
     <div className="stack">
@@ -86,19 +89,21 @@ export default async function TokenPage({ params }: { params: { chain: string; t
               <a className="btn small" href={dexscreenerUrl(c, launch.pair, token)} target="_blank" rel="noopener noreferrer">DexScreener</a>
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>
-            {!listed && !sol && <VerifySource chain={c.key} token={token} />}
+            {!listed && !sol && !instant && <VerifySource chain={c.key} token={token} />}
             {listed ? (
               <p className="muted">Listed on {new Date(launch.created_at).toLocaleDateString()}. {String(launch.tx_hash || "").startsWith("liquidity:") ? <>Its liquidity was added through AUTISTIK, but the token wasn&apos;t made with the full Launch Pad flow, so we don&apos;t vouch for its tax, owner or liquidity lock.</> : <>This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock.</>} Check the contract on the explorer before buying.</p>
-            ) : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
+            ) : instant ? <p className="muted">Instant launch on {new Date(launch.created_at).toLocaleDateString()}: no bonding curve and no liquidity from the creator. All 1,000,000,000 coins went straight into a PancakeSwap v3 pool, and that pool position is held by the AUTISTIK Instant Launch contract forever, so the liquidity can&apos;t be removed by anyone. No tax, no owner, no minting.</p>
+            : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
           </div>
         </div>
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
-          {!listed && !sol && <HolderRewards chain={c.key} token={token as `0x${string}`} />}
-          {!listed && !sol && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
+          {instant && launch.pad && <InstantFees pad={launch.pad} token={token as `0x${string}`} creator={launch.creator} />}
+          {!listed && !sol && !instant && <HolderRewards chain={c.key} token={token as `0x${string}`} />}
+          {!listed && !sol && !instant && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
           {!listed && sol && <SolanaHolderRewards token={token} />}
           {!listed && sol && lock !== "burn" && <SolanaClaim token={token} pair={launch.pair} creator={launch.creator} unlockAt={launch.lp_unlock_at} />}
-          {access.allowed && (c.router || sol) && <AddLiquidity pads={{}} chain={c.key} token={token} pair={launch.pair} />}
+          {access.allowed && !instant && (c.router || sol) && <AddLiquidity pads={{}} chain={c.key} token={token} pair={launch.pair} />}
           <div className="notice warn" style={{ fontSize: ".86em" }}>{listed ? "Listed by a paid promotion, not checked by the AUTISTIK team." : "Made by a community member, not the AUTISTIK team."} Token prices can go to zero. Nothing here is financial advice.</div>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { json } from "@/lib/ai";
 import { logActivity } from "@/lib/activity";
 import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCHPAD_V4_ABI, deployable, viemChain, type ChainKey } from "@/lib/launchpad";
 import { padInfo } from "@/lib/launchpad-server";
+import { INSTANT_ABI, PANCAKE_V3 } from "@/lib/instant";
 import { lockerOn } from "@/lib/locker-server";
 import { getMarkets } from "@/lib/market";
 import { TREASURY } from "@/lib/trending";
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
   return json({
     chain, coin: c.coin, priceUsd: price, router: c.router, stablecoin: c.stablecoin, team: TREASURY ?? null, autistik: AUTISTIK,
     locker: locker?.address ?? null, signer: key ? privateKeyToAccount(key as `0x${string}`).address : "0x0000000000000000000000000000000000000000",
-    pad: info.pads[chain] ?? null, padVersion: info.pads[chain] ? info.versions[chain] ?? 2 : null, burner: info.burners[chain] ?? null,
+    pad: info.pads[chain] ?? null, padVersion: info.pads[chain] ? info.versions[chain] ?? 2 : null, burner: info.burners[chain] ?? null, instant: info.instants[chain] ?? null,
   });
 }
 
@@ -59,7 +60,15 @@ export async function POST(req: Request) {
   if (!code || code === "0x") return json({ error: `There's no contract at ${at} on ${c.name} yet. Wait a few seconds and try again.` }, 400);
   const sb = supabaseService();
   try {
-    if (kind === "burner") {
+    if (kind === "instant") {
+      if (chain !== "bsc") return json({ error: "Instant launch is only for BNB Chain (PancakeSwap v3)." }, 400);
+      const [positions, owner, feeTo] = await Promise.all(["positions", "owner", "feeTo"].map((functionName) => pub.readContract({ address: at, abi: INSTANT_ABI, functionName })));
+      if (getAddress(positions) !== getAddress(PANCAKE_V3.positions)) return json({ error: "That contract doesn't use PancakeSwap v3." }, 400);
+      if (!TREASURY || getAddress(owner) !== getAddress(TREASURY) || getAddress(feeTo) !== getAddress(TREASURY)) return json({ error: "That Instant Launch isn't owned by (and paying) the AUTISTIK team wallet." }, 400);
+      const { data: row } = await sb.from("launchpad_contracts").select("chain").eq("chain", chain).maybeSingle();
+      if (row) await sb.from("launchpad_contracts").update({ instant: at }).eq("chain", chain);
+      else await sb.from("launchpad_contracts").insert({ chain, address: "0x0000000000000000000000000000000000000000", instant: at });
+    } else if (kind === "burner") {
       if (chain !== "bsc") return json({ error: "The AUTISTIK burner is only for BNB Chain." }, 400);
       const [router, autistik] = await Promise.all([pub.readContract({ address: at, abi: BURNER_ABI, functionName: "router" }), pub.readContract({ address: at, abi: BURNER_ABI, functionName: "autistik" })]);
       if (getAddress(router) !== getAddress(c.router!) || getAddress(autistik) !== getAddress(AUTISTIK)) return json({ error: "That contract isn't the AUTISTIK burner for PancakeSwap." }, 400);
@@ -85,6 +94,6 @@ export async function POST(req: Request) {
     return json({ error: "That contract doesn't look like the AUTISTIK launchpad. Check the address." }, 400);
   }
   await padInfo(true);
-  logActivity((await currentUser())?.id, "launchpad", `${kind === "burner" ? "Burner" : "Launchpad"} deployed on ${c.name}`, "/launchpad/new");
+  logActivity((await currentUser())?.id, "launchpad", `${kind === "burner" ? "Burner" : kind === "instant" ? "Instant Launch" : "Launchpad"} deployed on ${c.name}`, "/launchpad/new");
   return json({ ok: true, address: at });
 }

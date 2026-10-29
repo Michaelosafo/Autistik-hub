@@ -7,7 +7,8 @@ import { CHAINS, ERC20_META_ABI, LAUNCHPAD_ABI, LAUNCH_TOKEN_ABI, LOCK_SECONDS, 
 import { SOL_ADDR, connection, verifyLaunch } from "@/lib/solana-launch";
 import { lockPda, lockerId, readLock } from "@/lib/solana-locker";
 import { PublicKey } from "@solana/web3.js";
-import { padOn } from "@/lib/launchpad-server";
+import { instantOn, padOn } from "@/lib/launchpad-server";
+import { INSTANT_ABI } from "@/lib/instant";
 import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
   const txHash = String(body?.txHash || "");
   if (!chain) return json({ error: "Unknown chain." }, 400);
   if (isSolana(chain)) return recordSolana(body);
+  if (body?.style === "instant") return recordInstant(chain.key, txHash, body);
   const pad = await padOn(chain.key);
   if (!pad) return json({ error: `${chain.name} launches aren't open yet.` }, 400);
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
@@ -131,5 +133,34 @@ async function recordSolana(body: any) {
   await supabaseService().from("sol_reward_coins").update({ active: true, pool }).eq("mint", mint).eq("active", false);
   if (isAChain("solana")) await scanToken("solana", mint, { dev: v.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Launched ${row.symbol || mint} on Solana`, `/launchpad/solana/${mint}`);
+  return json({ launch: row });
+}
+
+/** Instant launch: the coin, its PancakeSwap v3 pool and its creator are read from the Launched event of our contract. */
+async function recordInstant(chainKey: ChainKey, txHash: string, body: any) {
+  const chain = CHAINS[chainKey];
+  const pad = await instantOn(chainKey);
+  if (!pad) return json({ error: `Instant launches aren't open on ${chain.name} yet.` }, 400);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return json({ error: "That isn't a transaction hash." }, 400);
+  const client = createPublicClient({ transport: http(chain.rpc) });
+  let receipt;
+  try { receipt = await client.waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 45_000 }); }
+  catch { return json({ error: "Couldn't find that transaction yet. Try again in a minute." }, 404); }
+  if (receipt.status !== "success") return json({ error: "That transaction failed on-chain." }, 400);
+  const event = parseEventLogs({ abi: INSTANT_ABI, logs: receipt.logs, eventName: "Launched" }).find((l) => getAddress(l.address) === pad);
+  if (!event) return json({ error: "That transaction isn't an AUTISTIK Instant launch." }, 400);
+  const { token, pool, creator, name, symbol } = event.args;
+  const owner = await ownerOf(getAddress(creator), false);
+  const row = {
+    chain: chainKey, token: getAddress(token), pair: getAddress(pool), creator: getAddress(creator),
+    name: String(name).slice(0, 64), symbol: String(symbol).slice(0, 24), supply: "1000000000",
+    tx_hash: txHash.toLowerCase(), lp_lock: "burn", lp_unlock_at: null, user_id: owner, pad, style: "instant",
+  };
+  const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
+  if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your coin launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on PancakeSwap." : "Your coin launched, but we couldn't add it to the list. It's still live on PancakeSwap." }, 500);
+  const user = await currentUser();
+  await saveLogo(chainKey, row.token, body?.logo, user?.id ?? null).catch(() => {});
+  if (isAChain(chainKey)) await scanToken(chainKey, row.token, { dev: row.creator, userId: owner }).catch(() => null);
+  logActivity(owner, "launch", `Instant-launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chainKey}/${row.token}`);
   return json({ launch: row });
 }
