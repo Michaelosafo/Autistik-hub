@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAddress, isAddress } from "viem";
 import AdBar from "@/components/AdBar";
+import ThemedChart from "@/components/ThemedChart";
 import TrendingPay from "@/components/TrendingPay";
 import TokenLogo from "@/components/TokenLogo";
 import TokenControls from "@/components/TokenControls";
@@ -105,7 +106,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
       <div className="kai lp">
         <div className="stack">
           {c.dexscreener && launch.pair ? (
-            <iframe className="chart" title={`${launch.symbol} price chart`} src={`https://dexscreener.com/${c.dexscreener}/${launch.pair}?embed=1&theme=dark&trades=0&info=0`} loading="lazy" />
+            <ThemedChart title={`${launch.symbol} price chart`} src={`https://dexscreener.com/${c.dexscreener}/${launch.pair}?embed=1&theme=dark&trades=0&info=0`} />
           ) : <div className="empty">Charts for {c.name} open on DexScreener.</div>}
           <div className="card stack" style={{ fontSize: ".9em" }}>
             <div className="field"><span>Contract address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{token}</span></div>
