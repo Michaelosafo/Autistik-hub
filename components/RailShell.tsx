@@ -7,6 +7,7 @@
  */
 import LogoMark from "@/components/LogoMark";
 import Link from "next/link";
+import TrendingButton from "@/components/TrendingButton";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
 import { useRouter } from "next/navigation";
@@ -18,7 +19,7 @@ type Item = { href: string; name: string; icon: string; match?: string[]; member
 // One list like X's: the pages people use most. Everything else is behind More.
 const MAIN: Item[] = [
   { href: "/", name: "Home", icon: "i-home" },
-  { href: "/launchpad", name: "Trending", icon: "i-fire", match: ["/launchpad", "/momentum"] },
+  { href: "/board?tab=trending", name: "Trending", icon: "i-fire", match: ["/board", "/launchpad", "/momentum"] },
   { href: "/companions", name: "Chat", icon: "i-kai" },
   { href: "/community", name: "Community", icon: "i-com", match: ["/community", "/sessions"] },
   { href: "/live", name: "Live", icon: "i-ses" },
@@ -112,6 +113,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
         {path !== "/" && <header className="nx-top">
           <b>{section?.name ?? "AUTISTIK Hub"}</b>
           <div className="nx-top-r">
+            <TrendingButton />
             <LangPicker />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}

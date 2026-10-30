@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import TrendingButton from "@/components/TrendingButton";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
 import { usePathname } from "next/navigation";
@@ -23,7 +24,8 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
     { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
     { href: "/launchpad/new", name: "Create a coin", note: "Pick a network, 3 simple steps, sign once", icon: "i-rocket" },
     { href: "/liquidity", name: "Add liquidity", note: "Paste your token address: add to its pool or create one", icon: "i-swap" },
-    { href: "/launchpad", name: "Trending", note: "What people are buying", icon: "i-trend" },
+    { href: "/board?tab=trending", name: "Trending", note: "Coins trending on the Board now", icon: "i-trend" },
+    { href: "/board?tab=listed", name: "Listed tokens", note: "Coins listed on AUTISTIK", icon: "i-star" },
     { href: "/momentum", name: "Momentum", note: "New coins picking up speed", icon: "i-bolt" },
   ] },
   { name: "Trade", icon: "i-swap", tip: "Swap any token", match: ["/swap", "/perps", "/trade"], items: [
@@ -167,6 +169,7 @@ export default function AppShell({ admin, me, onMe, children }: {
           ))}
         </nav>
         <div className="ax-right">
+          <TrendingButton />
           <LangPicker />
           <ThemeToggle />
           <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>

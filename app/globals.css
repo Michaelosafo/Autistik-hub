@@ -4398,3 +4398,21 @@ html,body{overflow-x:clip}
 .lc-facts{margin:0;padding:12px 14px 12px 30px;border-radius:14px;background:var(--surface-2);display:grid;gap:5px;font-size:.9em;color:var(--ink)}
 .lc-done{border:2px solid #0E8A4F}
 @media (max-width:640px){.lc-pick{grid-template-columns:1fr}}
+
+/* Small 🔥 Trending pill in every menu (components/TrendingButton.tsx) */
+.trend-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;font-weight:800;font-size:.8em;line-height:1.2;white-space:nowrap;text-decoration:none;color:#3A1500;background:linear-gradient(135deg,#FFD84D,#FF8A3D);box-shadow:0 2px 8px rgba(255,138,61,.28)}
+.trend-btn:hover{filter:brightness(1.05)}
+.trend-btn:focus-visible{outline:3px solid var(--violet,#8E7CC3);outline-offset:2px}
+@media (max-width:420px){ .trend-btn{padding:5px 8px} .trend-btn span+span{display:none} }
+
+/* The Board's "Trending now" strip */
+.bd-hot{display:flex;align-items:center;gap:10px;margin:0 0 14px;padding:8px 10px;border-radius:16px;border:1px solid var(--line);background:var(--surface,var(--surface-2));min-width:0}
+.bd-hot-h{all:unset;cursor:pointer;flex:none;font-weight:900;font-size:.86em;padding:6px 10px;border-radius:999px;color:#3A1500;background:linear-gradient(135deg,#FFD84D,#FF8A3D)}
+.bd-hot-h:focus-visible{outline:3px solid var(--violet,#8E7CC3)}
+.bd-hot-row{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;min-width:0;-webkit-mask-image:linear-gradient(90deg,#000 92%,transparent)}
+.bd-hot-row::-webkit-scrollbar{display:none}
+.bd-hot-chip{flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;border:1px solid var(--line);text-decoration:none;color:var(--ink);font-size:.85em}
+.bd-hot-chip:hover{border-color:#FF8A3D}
+.bd-hot-chip:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}
+.bd-hot-chip .bd-logo{width:24px;height:24px;border-radius:999px;font-size:.55em}
+.bd-hot-n{font-weight:900;font-size:.8em;opacity:.6;padding-left:4px}
