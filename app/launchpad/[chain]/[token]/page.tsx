@@ -63,7 +63,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   const lockNote = listed ? "" : instant ? "locked forever" : lock === "burn" ? "burned forever" : launch.lp_unlock_at && Date.parse(launch.lp_unlock_at) > Date.now() ? `locked until ${new Date(launch.lp_unlock_at).toLocaleDateString()}` : "lock ended";
 
   return (
-    <div className="stack">
+    <div className="stack tk-page">
       <AdBar ads={toAds(ads(board)).filter((a) => a.token !== token)} />
       <Link href="/board?tab=trending" className="muted" style={{ fontSize: ".9em" }}>← Trending</Link>
       {/* eslint-disable-next-line @next/next/no-img-element */}
