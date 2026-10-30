@@ -142,3 +142,59 @@ export async function getCandles(chain: string, pool: string | null | undefined,
       .sort((a, b) => a.t - b.t);
   } catch { return []; }
 }
+
+/** What DexScreener shows about a token: its picture, banner, links and deepest pool. Null when DexScreener doesn't list it. */
+export type DexProfile = {
+  pair: string | null;
+  name: string | null;
+  symbol: string | null;
+  imageUrl: string | null;
+  /** The wide banner the project uploaded to DexScreener. */
+  header: string | null;
+  websites: { label: string; url: string }[];
+  socials: { label: string; url: string }[];
+  url: string | null;
+  dex: string | null;
+  pairCreatedAt: number | null;
+};
+
+const safeUrl = (u: unknown) => (typeof u === "string" && /^https:\/\/[^\s"'<>]+$/.test(u) && u.length < 600 ? u : null);
+const SOCIAL_BASE: Record<string, string> = { twitter: "https://x.com/", x: "https://x.com/", telegram: "https://t.me/", discord: "https://discord.gg/", tiktok: "https://www.tiktok.com/@", instagram: "https://www.instagram.com/", youtube: "https://www.youtube.com/@" };
+const titleCase = (s: string) => (s === "twitter" ? "X" : s.charAt(0).toUpperCase() + s.slice(1));
+
+/** Cached for 5 minutes. Takes the picture, banner and links from whichever of the token's pools has them. */
+export async function getDexProfile(chain: ChainKey, token: string): Promise<DexProfile | null> {
+  const slug = CHAINS[chain]?.dexscreener;
+  if (!slug) return null;
+  try {
+    const r = await fetch(`${API}/tokens/v1/${slug}/${token}`, { next: { revalidate: 300 }, signal: AbortSignal.timeout(6000) });
+    const all: any[] = r.ok ? await r.json() : [];
+    const pairs = (Array.isArray(all) ? all : [])
+      .filter((p) => String(p?.baseToken?.address || "").toLowerCase() === token.toLowerCase())
+      .sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0));
+    if (!pairs.length) return null;
+    const top = pairs[0];
+    const info = pairs.map((p) => p?.info).find((i) => i && (i.imageUrl || i.header || i.websites?.length || i.socials?.length)) || {};
+    const websites = (Array.isArray(info.websites) ? info.websites : [])
+      .map((w: any) => ({ label: String(w?.label || "Website").slice(0, 24), url: safeUrl(w?.url) }))
+      .filter((w: any) => w.url).slice(0, 4) as { label: string; url: string }[];
+    const socials = (Array.isArray(info.socials) ? info.socials : [])
+      .map((s: any) => {
+        const kind = String(s?.type || s?.platform || "").toLowerCase();
+        const url = safeUrl(s?.url) || (s?.handle && SOCIAL_BASE[kind] ? safeUrl(SOCIAL_BASE[kind] + String(s.handle).replace(/^@/, "")) : null);
+        return { label: titleCase(kind || "Link").slice(0, 16), url };
+      })
+      .filter((s: any) => s.url).slice(0, 6) as { label: string; url: string }[];
+    return {
+      pair: top?.pairAddress ? String(top.pairAddress) : null,
+      name: top?.baseToken?.name ? String(top.baseToken.name).slice(0, 64) : null,
+      symbol: top?.baseToken?.symbol ? String(top.baseToken.symbol).slice(0, 24) : null,
+      imageUrl: safeUrl(info.imageUrl),
+      header: safeUrl(info.header),
+      websites, socials,
+      url: typeof top?.url === "string" && top.url.startsWith("https://dexscreener.com/") ? top.url : null,
+      dex: top?.dexId ? String(top.dexId) : null,
+      pairCreatedAt: num(top?.pairCreatedAt),
+    };
+  } catch { return null; }
+}
