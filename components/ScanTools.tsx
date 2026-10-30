@@ -1,4 +1,5 @@
 "use client";
+import RecentDevs from "@/components/RecentDevs";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -63,6 +64,7 @@ function DevScan() {
         <button className="btn primary" type="submit" disabled={busy || !wallet.trim()}>{busy ? "Checking their history…" : "Check dev"}</button>
       </div>
       {err && <p className="scan-err" role="alert">{err}</p>}
+      <RecentDevs names={{ ...Object.fromEntries(EVM_NETS.map((n) => [n.k, n.n])), solana: "Solana" }} />
     </form>
   );
 }

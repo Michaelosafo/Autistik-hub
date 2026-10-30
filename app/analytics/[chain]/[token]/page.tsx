@@ -49,7 +49,7 @@ function status(h: any, last: any) {
 const VIEWS = [["overview", "Overview"], ["chess", "Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
 type View = (typeof VIEWS)[number][0];
 
-export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string } }) {
+export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string; dev?: string } }) {
   const view: View = (VIEWS.find(([k]) => k === searchParams.view)?.[0]) ?? "overview";
   if (!isAChain(params.chain) || !isChainAddress(params.chain, params.token)) notFound();
   // The game arena is its own page now, apart from the scanner; old links still land there.
@@ -137,10 +137,14 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const topSells24 = (events || []).filter((e: any) => e.kind !== "buy" && day(e.created_at)).length;
   const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
+  // Opened from a dev wallet page: a way back to that wallet, kept while switching tabs.
+  const backDev = searchParams.dev && isChainAddress(chain, searchParams.dev) ? searchParams.dev : null;
+  const withDev = (href: string) => (backDev && href.startsWith(`/analytics/${chain}/`) ? href + (href.includes("?") ? "&" : "?") + "dev=" + backDev : href);
   return (
     <div className="stack scan-page" style={{ maxWidth: 1080 }}>
       <AutoRefresh seconds={60} />
       <div className="token-search">
+        {backDev && <Link href={`/analytics/dev/${chain}/${backDev}`} className="back-btn">← Back to dev wallet {short(backDev)}</Link>}
         <Link href="/analytics" className="muted">← My tokens</Link>
         <AnalyticsScan signedIn={!!user} label="Search" />
       </div>
@@ -178,13 +182,13 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
       <nav className="scan-tabs" aria-label="Sections">
         {([
           ["overview", "Overview", `/analytics/${chain}/${t.token}`],
-          ["dev", "Dev wallet", t.dev ? `/analytics/dev/${chain}/${t.dev}` : null],
+          ["dev", "Dev wallet", t.dev ? `/analytics/dev/${chain}/${t.dev}?from=${t.token}` : null],
           ["wallets", "Wallets", `/analytics/${chain}/${t.token}?view=wallets`],
           ["trades", "Trades", `/analytics/${chain}/${t.token}?view=trades`],
           ["safety", "Safety", `/analytics/${chain}/${t.token}?view=safety`],
           ["chess", "Game arena", `/arena/${chain}/${t.token}`],
         ] as const).filter(([, , href]) => href).map(([k, name, href]) => (
-          <Link key={k} href={href!} aria-current={view === k ? "page" : undefined} scroll={false}>{name}</Link>
+          <Link key={k} href={withDev(href!)} aria-current={view === k ? "page" : undefined} scroll={false}>{name}</Link>
         ))}
       </nav>
 
@@ -192,7 +196,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
       {view === "safety" && <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />}
 
       {view === "overview" && t.dev && (
-        <Link href={`/analytics/dev/${chain}/${t.dev}`} className="card dev-link">
+        <Link href={`/analytics/dev/${chain}/${t.dev}?from=${t.token}`} className="card dev-link">
           <span className="grow"><small>Dev wallet</small><b className="mono">{short(t.dev)}</b></span>
           <span className="dev-link-cta">See their earlier tokens, how many bonded, and the chance this one does well →</span>
         </Link>
