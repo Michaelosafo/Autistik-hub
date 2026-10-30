@@ -117,7 +117,7 @@ export async function getPairStats(slug: string, token: string): Promise<PairSta
 }
 
 // GeckoTerminal's names for our chains (free price history, no key).
-const GT: Record<string, string> = {
+export const GT: Record<string, string> = {
   bsc: "bsc", ethereum: "eth", base: "base", robinhood: "robinhood", solana: "solana", arbitrum: "arbitrum", polygon: "polygon_pos",
   avalanche: "avax", optimism: "optimism", sonic: "sonic", berachain: "berachain", monad: "monad", unichain: "unichain",
   abstract: "abstract", linea: "linea", blast: "blast",

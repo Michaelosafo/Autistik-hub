@@ -15,6 +15,7 @@
 import { getAddress, isAddress } from "viem";
 import { supabaseService } from "@/lib/supabase/server";
 import { ACHAINS, type AChain } from "@/lib/analytics";
+import { GT } from "@/lib/market";
 
 const ETHERSCAN = "https://api.etherscan.io/v2/api";
 const DEX = process.env.DEXSCREENER_API || "https://api.dexscreener.com";
@@ -31,6 +32,8 @@ export type DevToken = {
   status: "bonded" | "alive" | "curve" | "dead" | "unknown"; dex: string | null;
   liquidityUsd: number | null; marketCap: number | null; volume24h: number | null; change24h: number | null;
   launchedHere: boolean;
+  /** Highest market cap the token ever reached (from its full price history), when known. */
+  athCap?: number | null;
 };
 export type DevReport = {
   chain: AChain; wallet: string; tokens: DevToken[]; scannedAt: string;
@@ -82,7 +85,7 @@ async function evmCreated(chain: AChain, wallet: string): Promise<{ list: { toke
   return { list: [...out].map(([token, at]) => ({ token, at })) };
 }
 
-type PumpCoin = { mint: string; name?: string; symbol?: string; image_uri?: string; created_timestamp?: number; complete?: boolean; usd_market_cap?: number };
+type PumpCoin = { mint: string; name?: string; symbol?: string; image_uri?: string; created_timestamp?: number; complete?: boolean; usd_market_cap?: number; ath_market_cap?: number };
 /** Solana: coins the wallet created on pump.fun (with whether each bonded). */
 async function pumpCreated(wallet: string): Promise<PumpCoin[] | null> {
   for (const base of ["https://frontend-api-v3.pump.fun", "https://frontend-api.pump.fun"]) {
@@ -110,7 +113,7 @@ async function dexInfo(chain: AChain, tokens: string[]) {
   return by;
 }
 
-function judge(pairs: any[] | undefined, createdAt: string | null, bondedFlag?: boolean): Pick<DevToken, "status" | "dex" | "liquidityUsd" | "marketCap" | "volume24h" | "change24h"> & { name?: string; symbol?: string; logo?: string } {
+function judge(pairs: any[] | undefined, createdAt: string | null, bondedFlag?: boolean): Pick<DevToken, "status" | "dex" | "liquidityUsd" | "marketCap" | "volume24h" | "change24h"> & { name?: string; symbol?: string; logo?: string; pair?: string; price?: number | null } {
   const list = (pairs ?? []).slice().sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0));
   const best = list[0];
   const liq = list.reduce((s, p) => s + (num(p?.liquidity?.usd) ?? 0), 0);
@@ -127,6 +130,7 @@ function judge(pairs: any[] | undefined, createdAt: string | null, bondedFlag?: 
   return {
     status, dex: realDex?.dexId ?? best?.dexId ?? null, liquidityUsd: list.length ? liq : null, marketCap: cap, volume24h: list.length ? vol : null,
     change24h: best ? num(best?.priceChange?.h24) : null,
+    pair: best?.pairAddress ? String(best.pairAddress) : undefined, price: best ? num(best.priceUsd) : null,
     name: best?.baseToken?.name, symbol: best?.baseToken?.symbol, logo: list.map((p) => p?.info?.imageUrl).find((u) => typeof u === "string" && u.startsWith("https://")),
   };
 }
@@ -171,7 +175,7 @@ export async function devReport(chain: AChain, walletIn: string, fresh = false):
   }
   const sources: string[] = [];
   let limited: string | undefined;
-  const found = new Map<string, { at: string | null; bonded?: boolean; name?: string; symbol?: string; logo?: string; here?: boolean }>();
+  const found = new Map<string, { at: string | null; bonded?: boolean; name?: string; symbol?: string; logo?: string; here?: boolean; ath?: number }>();
 
   // Coins this wallet launched on AUTISTIK.
   const { data: ours } = await sb.from("launches").select("token,name,symbol,created_at").eq("chain", chain).eq("creator", wallet).limit(200);
@@ -182,7 +186,7 @@ export async function devReport(chain: AChain, walletIn: string, fresh = false):
     const pump = await pumpCreated(wallet);
     if (pump) {
       sources.push("pump.fun");
-      for (const c of pump) if (c.mint) found.set(c.mint, { ...found.get(c.mint), at: c.created_timestamp ? new Date(c.created_timestamp).toISOString() : null, bonded: !!c.complete, name: c.name, symbol: c.symbol, logo: c.image_uri });
+      for (const c of pump) if (c.mint) found.set(c.mint, { ...found.get(c.mint), at: c.created_timestamp ? new Date(c.created_timestamp).toISOString() : null, bonded: !!c.complete, name: c.name, symbol: c.symbol, logo: c.image_uri, ath: num(c.ath_market_cap) ?? undefined });
     } else limited = "pump.fun didn't answer, so Solana history may be missing tokens.";
   } else {
     // BNB Chain: tokens this wallet created on four.meme (our own index of its launches), with whether each bonded.
@@ -200,17 +204,91 @@ export async function devReport(chain: AChain, walletIn: string, fresh = false):
   const addrs = [...found.keys()].slice(0, 120);
   const dex = await dexInfo(chain, addrs);
   if (addrs.length) sources.push("DexScreener");
+  const pools = new Map<string, { pair: string; price: number | null }>();
   const tokens: DevToken[] = addrs.map((token) => {
     const f = found.get(token)!;
     const j = judge(dex.get(token.toLowerCase()), f.at, f.bonded);
+    if (j.pair) pools.set(token, { pair: j.pair, price: j.price ?? null });
     return {
       token, name: f.name ?? j.name ?? null, symbol: f.symbol ?? j.symbol ?? null, logo: j.logo ?? (f.logo && f.logo.startsWith("https://") ? f.logo : null),
       createdAt: f.at, status: j.status, dex: j.dex, liquidityUsd: j.liquidityUsd, marketCap: j.marketCap, volume24h: j.volume24h, change24h: j.change24h,
-      launchedHere: !!f.here,
+      launchedHere: !!f.here, athCap: f.ath ?? null,
     };
   }).sort((a, b) => Date.parse(b.createdAt ?? "0") - Date.parse(a.createdAt ?? "0"));
 
+  if (await addAth(chain, tokens, pools)) sources.push("GeckoTerminal");
   const report: DevReport = { chain, wallet, tokens, scannedAt: new Date().toISOString(), ...score(tokens), sources, ...(limited ? { limited } : {}) };
   await sb.from("dev_scans").upsert({ chain, wallet, report, scanned_at: report.scannedAt }, { onConflict: "chain,wallet" });
   return report;
+}
+
+// ---------------------------------------------------------------- all-time highs
+
+/**
+ * The highest market cap each earlier token reached: its highest daily price (GeckoTerminal, free) times today's
+ * market cap over today's price. Only the 15 biggest tokens with a pool, five at a time, to stay within free limits.
+ */
+async function addAth(chain: AChain, tokens: DevToken[], pools: Map<string, { pair: string; price: number | null }>) {
+  const net = GT[chain];
+  if (!net) return false;
+  const todo = tokens.filter((t) => pools.get(t.token)?.price && t.marketCap).sort((a, b) => (b.marketCap ?? 0) - (a.marketCap ?? 0)).slice(0, 15);
+  let got = false;
+  for (let i = 0; i < todo.length; i += 5) {
+    await Promise.all(todo.slice(i, i + 5).map(async (t) => {
+      const p = pools.get(t.token)!;
+      try {
+        // Short timeout: the page has a time limit, and a missing peak only means one less figure.
+        const res = await fetch(`https://api.geckoterminal.com/api/v2/networks/${net}/pools/${p.pair}/ohlcv/day?limit=1000&currency=usd&token=base`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(6000), cache: "no-store" });
+        if (!res.ok) return;
+        const j = await res.json();
+        const list: any[] = j?.data?.attributes?.ohlcv_list || [];
+        const high = Math.max(0, ...list.map((c) => Number(c[2])).filter((v) => isFinite(v) && v > 0));
+        if (high > 0 && p.price) {
+          const ath = (t.marketCap! * high) / p.price;
+          // Keep the bigger of this and any figure we already had (pump.fun's own ATH), but never below today's cap.
+          t.athCap = Math.max(ath, t.athCap ?? 0, t.marketCap ?? 0);
+          got = true;
+        }
+      } catch { /* no history for this one */ }
+    }));
+  }
+  return got;
+}
+
+// ---------------------------------------------------------------- can this dev push a project?
+
+export type DevVerdict = { kind: "push" | "careful" | "avoid" | "unknown"; title: string; good: string[]; bad: string[] };
+const money = (n: number) => "$" + Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+
+/** Works on any report, including ones saved before all-time highs were recorded. */
+export function devVerdict(r: DevReport): DevVerdict {
+  const t = r.tokens, n = t.length;
+  if (!n) return { kind: "unknown", title: "New dev: no track record", good: [], bad: ["No earlier tokens found, so there's nothing to judge them on. Not advisable to buy big."] };
+  const bonded = r.stats.bonded, rate = bonded / n;
+  const withAth = t.filter((x) => (x.athCap ?? 0) > 0);
+  const best = withAth.sort((a, b) => (b.athCap ?? 0) - (a.athCap ?? 0))[0];
+  const big = t.filter((x) => (x.athCap ?? x.marketCap ?? 0) >= 100_000).length;
+  const crashed = t.filter((x) => (x.athCap ?? 0) >= 50_000 && (x.marketCap ?? 0) < (x.athCap ?? 0) * 0.1).length;
+  const good: string[] = [], bad: string[] = [];
+
+  if (bonded >= 2 && rate >= 0.4) good.push(`${bonded} of ${n} launches bonded (${Math.round(rate * 100)}%).`);
+  else if (bonded >= 1) (rate >= 0.25 ? good : bad).push(`${bonded} of ${n} launches bonded (${Math.round(rate * 100)}%).`);
+  else bad.push(`None of their ${n} launches bonded.`);
+  if (best?.athCap && best.athCap >= 1_000_000) good.push(`Took $${best.symbol ?? "?"} to about ${money(best.athCap)} at its peak.`);
+  else if (best?.athCap && best.athCap >= 250_000) good.push(`Best peak: $${best.symbol ?? "?"} at about ${money(best.athCap)}.`);
+  else if (best?.athCap) bad.push(`Best peak only about ${money(best.athCap)} ($${best.symbol ?? "?"}).`);
+  if (big >= 2) good.push(`${big} of their tokens passed $100K market cap.`);
+  if (r.stats.alive > 0) good.push(`${r.stats.alive} earlier token${r.stats.alive > 1 ? "s are" : " is"} still trading well today.`);
+  if (crashed >= 2 || (crashed >= 1 && crashed / Math.max(1, withAth.length) >= 0.5)) bad.push(`${crashed} token${crashed > 1 ? "s" : ""} fell more than 90% from the peak (possible dumps).`);
+  if (r.stats.last30d > 10) bad.push(`${r.stats.last30d} launches in the last 30 days: a serial launcher.`);
+  if (n >= 3 && r.stats.dead / n > 0.7) bad.push(`${r.stats.dead} of ${n} earlier tokens are dead.`);
+
+  const serial = r.stats.last30d > 10;
+  const pumps = (best?.athCap ?? 0) >= 300_000 || bonded >= 2;
+  let kind: DevVerdict["kind"];
+  if (serial || (n >= 3 && rate < 0.2) || crashed >= Math.max(2, Math.ceil(withAth.length / 2)) || r.label === "Risky") kind = "avoid";
+  else if (r.score >= 60 && pumps && good.length > bad.length) kind = "push";
+  else kind = "careful";
+  const title = kind === "push" ? "This dev has pushed projects before" : kind === "avoid" ? "Not advisable to buy" : "Be careful: mixed history";
+  return { kind, title, good, bad };
 }
