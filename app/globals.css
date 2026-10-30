@@ -4433,3 +4433,25 @@ html,body{overflow-x:clip}
 :root[data-theme="light"] .tk-page .card,:root[data-theme="light"] .tk-page .tk-about,:root[data-theme="light"] .tk-page .stats>div{background:#FFFFFF;box-shadow:0 1px 2px rgba(40,28,80,.05),0 8px 24px rgba(40,28,80,.08)}
 :root[data-theme="dark"] .tk-page .card,:root[data-theme="dark"] .tk-page .tk-about,:root[data-theme="dark"] .tk-page .stats>div{background:var(--surface)}
 .tk-page .tk-about b{color:var(--ink)}
+
+/* ---------- AI chat (CompanionChat .chat.lux): light mode = white panel like the home page; dark mode unchanged ---------- */
+:root[data-theme="light"] .chat.lux{color:var(--ink);background:radial-gradient(120% 60% at 0% 100%,rgba(233,160,60,.08),transparent 55%),radial-gradient(90% 50% at 100% 0%,rgba(123,85,224,.07),transparent 60%),#FFFFFF;
+  border-color:var(--line);box-shadow:0 1px 2px rgba(40,28,80,.05),0 8px 24px rgba(40,28,80,.08)}
+:root[data-theme="light"] .chat.lux .msg.ai,:root[data-theme="light"] .chat.lux .msg.ai.paper,:root[data-theme="light"] .chat.lux .msg.sys{color:var(--ink)}
+:root[data-theme="light"] .gpt .msg.me{background:#F1EDF9 !important;color:var(--ink) !important}
+:root[data-theme="light"] .lux-who button[aria-selected="true"],:root[data-theme="light"] .lux-moods button[aria-checked="true"],
+:root[data-theme="light"] .lux-chips button:hover,:root[data-theme="light"] .lux-chips a:hover{color:var(--ink)}
+:root[data-theme="light"] .chat.lux .lux-who button{color:var(--ink)}
+:root[data-theme="light"] .lux-icon,:root[data-theme="light"] .lux-mic{color:var(--ink);background:var(--surface-2);border-color:var(--line)}
+:root[data-theme="light"] .lux-composer{background:#FFFFFF;border-color:rgba(201,138,42,.55);box-shadow:0 2px 12px rgba(40,28,80,.08)}
+:root[data-theme="light"] .gpt .lux-composer{background:#FFFFFF;border-color:var(--line)}
+:root[data-theme="light"] .lux-composer textarea{color:var(--ink)}
+:root[data-theme="light"] .lux-composer textarea::placeholder{color:var(--muted)}
+:root[data-theme="light"] .gpt .lux-send{background:var(--ink);color:#FFFFFF}
+:root[data-theme="light"] .gpt-starters button{color:var(--ink);background:#FFFFFF;border-color:var(--line);box-shadow:0 1px 2px rgba(40,28,80,.05)}
+:root[data-theme="light"] .gpt-starters button:hover{background:#FBF8FF;border-color:rgba(201,138,42,.55)}
+:root[data-theme="light"] .gpt-mood select{color:var(--ink);background-color:var(--surface-2);border-color:var(--line)}
+:root[data-theme="light"] .lux-moods button,:root[data-theme="light"] .lux-chips button,:root[data-theme="light"] .lux-chips a,:root[data-theme="light"] .lux-here,:root[data-theme="light"] .lux-online{color:var(--ink)}
+:root[data-theme="light"] .chat.lux .muted{color:var(--muted)}
+:root[data-theme="light"] .gpt-empty h2{color:var(--ink)}
+:root[data-theme="light"] .gpt-empty p{color:var(--muted)}
