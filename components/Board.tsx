@@ -158,6 +158,7 @@ export default function Board({ initial, initialTab = "trending" }: { initial: B
                   <span className="bd-sym">${t.symbol} <NetIcon n={net(t.chain) as any} size={13} /></span>
                   <span className="bd-mc">MC <b>{usd(t.market?.marketCap)}</b> <Change v={t.market?.change24h} /></span>
                   <small className="muted">Vol {usd(t.market?.volume24h)}{t.promotedUntil ? " · Promoted" : ""}</small>
+                  {t.about && <small className="bd-about">{t.about.split("\n")[0]}</small>}
                   <small className="bd-when" title={ago(t.created_at) + " ago"}>{t.source === "listed" ? "Listed" : "Launched"} {listedAt(t.created_at)}</small>
                 </div>
               </Link>

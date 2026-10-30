@@ -198,3 +198,28 @@ export async function getDexProfile(chain: ChainKey, token: string): Promise<Dex
     };
   } catch { return null; }
 }
+
+/**
+ * The project's own write-up on DexScreener (what its token page shows under "Info"). Comes from DexScreener's
+ * website feed (pair-details), which isn't part of their documented API, so it's best-effort: null whenever it's
+ * missing or the feed changes. `pair` is the pool address. Cached for an hour.
+ */
+export async function getDexAbout(chain: ChainKey, pair: string | null | undefined): Promise<string | null> {
+  const slug = CHAINS[chain]?.dexscreener;
+  if (!slug || !pair || !/^[0-9A-Za-z]{20,90}$/.test(pair)) return null;
+  try {
+    const r = await fetch(`https://io.dexscreener.com/dex/pair-details/v4/${slug}/${pair}`, {
+      next: { revalidate: 3600 }, signal: AbortSignal.timeout(5000),
+      headers: { accept: "application/json", "user-agent": "Mozilla/5.0 (compatible; AUTISTIK Hub)", origin: "https://dexscreener.com" },
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    const text = typeof d?.cms?.description === "string" ? d.cms.description : "";
+    // Plain text only, tidy line breaks, kept short.
+    const clean = text.replace(/[<>]/g, "").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
+    return clean ? clean.slice(0, 1200) : null;
+  } catch { return null; }
+}
+
+/** The pool address in a DexScreener pair link (https://dexscreener.com/bsc/0x…). */
+export const pairFromUrl = (u: string | null | undefined) => (u ? u.split("/").pop() || null : null);
