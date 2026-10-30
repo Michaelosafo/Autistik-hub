@@ -88,6 +88,8 @@ export async function lookupToken(chain: ChainKey, token: string): Promise<{ pai
 export type PairStats = {
   priceUsd: number | null; m5: number | null; h1: number | null; h6: number | null; h24: number | null;
   buysH1: number; sellsH1: number; buysH24: number | null; sellsH24: number | null; volumeH24: number | null; liquidityUsd: number | null; marketCap: number | null; imageUrl: string | null;
+  /** When the deepest pool was created (ms), and how many pools the token has. */
+  pairCreatedAt?: number | null; pools?: number;
 };
 
 /** Adds one 24-hour figure up across pools; null when no pool reports it. */
@@ -110,6 +112,7 @@ export async function getPairStats(slug: string, token: string): Promise<PairSta
       // All buys and sells over the last 24 hours across the token's pools, as chart sites count them.
       buysH24: sum24(pairs, (x) => x?.txns?.h24?.buys), sellsH24: sum24(pairs, (x) => x?.txns?.h24?.sells), volumeH24: sum24(pairs, (x) => x?.volume?.h24),
       liquidityUsd: num(p.liquidity?.usd), marketCap: num(p.marketCap) ?? num(p.fdv),
+      pairCreatedAt: num(p.pairCreatedAt), pools: pairs.length,
       // The token's logo, when the project added one on DexScreener.
       imageUrl: (pairs as any[]).map((x) => x?.info?.imageUrl).find((u) => typeof u === "string" && u.startsWith("https://") && u.length < 600) ?? null,
     };

@@ -24,6 +24,9 @@ import { walletUrl } from "@/lib/explorer";
 import AutoRefresh from "@/components/AutoRefresh";
 import TrustScore from "@/components/TrustScore";
 import { trustScore } from "@/lib/trust-score";
+import { audit } from "@/lib/analytics-audit";
+import { simulateHoneypot } from "@/lib/honeypot-sim";
+import AuditCard from "@/components/AuditCard";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +88,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   }
 
   const movePromise = getPairStats(c.dex, t.token);
+  const simPromise = c.kind === "evm" ? simulateHoneypot(chain, t.token) : Promise.resolve(null);
   const candlePromise = getCandles(chain, t.pair);
   const lockPromise = Promise.all([locksFor(chain, t.token, t.pair), lockerOn(chain)]).catch(() => [[], null] as [LockView[], null]);
   const pinPromise = user ? sb.from("token_pins").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] });
@@ -135,7 +139,11 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
     ? { buys: move.buysH24 ?? 0, sells: move.sellsH24 }
     : hasLiveTrades(chain) && t.pair ? { buys: ours24.filter((x: any) => x.side === "buy").length, sells: ours24.filter((x: any) => x.side === "sell").length } : null;
   const topSells24 = (events || []).filter((e: any) => e.kind !== "buy" && day(e.created_at)).length;
-  const trust = trustScore({ security: s, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
+  const sim = await simPromise;
+  // A honeypot found by either test counts; the simulation's measured taxes win over GoPlus's estimate.
+  const sec = { ...s, honeypot: s.honeypot === true || sim?.honeypot === true ? true : s.honeypot ?? sim?.honeypot ?? null, buyTax: sim?.buyTax ?? s.buyTax, sellTax: sim?.sellTax ?? s.sellTax };
+  const report = audit({ security: sec, sim, move, topShare: top.length ? topShare : null, devPct: dev ? Number(dev.pct) || 0 : null, solana: c.kind === "solana" });
+  const trust = trustScore({ security: sec, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
   // Opened from a dev wallet page: a way back to that wallet, kept while switching tabs.
   const backDev = searchParams.dev && isChainAddress(chain, searchParams.dev) ? searchParams.dev : null;
@@ -192,6 +200,8 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         ))}
       </nav>
 
+      {view === "overview" && <AuditCard a={report} compact more={withDev(`/analytics/${chain}/${t.token}?view=safety`)} />}
+      {view === "safety" && <AuditCard a={report} />}
       {view === "safety" && <BundleCard b={bundle} explorer={c.explorer} token={t.token} />}
       {view === "safety" && <LockCard lp={s.lp ?? null} locks={myLocks} chain={chain} token={t.token} lockerLive={!!locker} />}
 
