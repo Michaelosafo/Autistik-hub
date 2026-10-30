@@ -13,6 +13,7 @@ import MePanel from "@/components/MePanel";
 import Avatar from "@/components/Avatar";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
+import TrendingButton from "@/components/TrendingButton";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Art from "@/components/Art";
@@ -272,7 +273,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
 
         <main>
           <div className="topbar mini">
-
+            <TrendingButton />
             <LangPicker />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}

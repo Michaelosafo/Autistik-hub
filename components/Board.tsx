@@ -2,7 +2,8 @@
 /**
  * The Board: every token launched (or listed) on AUTISTIK, live. Refreshes every few seconds; when the ranking
  * changes, cards glide to their new place, so you can watch coins climb to #1. King of the Hill is the top coin.
- * Tabs: Trending, New, Market cap, Gainers. Filter by network. Create (top right) opens the launch page.
+ * A strip at the top shows the coins trending on the Board right now. Tabs: Trending, Listed, New, Market cap, Gainers
+ * (open one directly with ?tab=listed and so on). Filter by network. Create (top right) opens the launch page.
  */
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -11,8 +12,8 @@ import { CHAINS } from "@/lib/launchpad";
 import { NETWORKS } from "@/lib/connect";
 import NetIcon from "@/components/connect/NetIcon";
 
-type Tab = "trending" | "new" | "mcap" | "gainers";
-const TABS: [Tab, string][] = [["trending", "Trending"], ["new", "New"], ["mcap", "Market cap"], ["gainers", "Gainers"]];
+export type Tab = "trending" | "listed" | "new" | "mcap" | "gainers";
+const TABS: [Tab, string][] = [["trending", "🔥 Trending"], ["listed", "Listed tokens"], ["new", "New"], ["mcap", "Market cap"], ["gainers", "Gainers"]];
 const REFRESH = 8000;
 
 const usd = (n: number | null | undefined) => n == null ? "–" : n >= 1e9 ? `$${(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `$${(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(n < 1 ? 4 : 0)}`;
@@ -24,15 +25,18 @@ const heat = (t: BoardToken) => (t.market?.volume24h ?? 0) + (t.market?.txns24h 
 
 function rank(list: BoardToken[], tab: Tab) {
   const l = [...list];
+  if (tab === "listed") return rank(l.filter((t) => t.source === "listed"), "trending");
   if (tab === "new") return l.sort((a, b) => b.created_at.localeCompare(a.created_at));
   if (tab === "mcap") return l.sort((a, b) => (b.market?.marketCap ?? 0) - (a.market?.marketCap ?? 0));
   if (tab === "gainers") return l.filter((t) => t.market?.change24h != null).sort((a, b) => (b.market!.change24h ?? 0) - (a.market!.change24h ?? 0));
   return l.sort((a, b) => (!!a.promotedUntil !== !!b.promotedUntil ? (a.promotedUntil ? -1 : 1) : heat(b) - heat(a)));
 }
 
-export default function Board({ initial }: { initial: BoardToken[] }) {
+export default function Board({ initial, initialTab = "trending" }: { initial: BoardToken[]; initialTab?: Tab }) {
   const [tokens, setTokens] = useState(initial);
-  const [tab, setTab] = useState<Tab>("trending");
+  const [tab, setTabState] = useState<Tab>(initialTab);
+  // Keep the tab in the address, so the menu's Trending button and shared links open the same view.
+  const setTab = (t: Tab) => { setTabState(t); try { const u = new URL(location.href); u.searchParams.set("tab", t); history.replaceState(null, "", u); } catch {} };
   const [chain, setChain] = useState<string>("all");
   const [q, setQ] = useState("");
   const [live, setLive] = useState(true);
@@ -62,6 +66,8 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
     return rank(tokens.filter((t) => (chain === "all" || t.chain === chain) && (!s || t.name.toLowerCase().includes(s) || t.symbol.toLowerCase().includes(s) || t.token.toLowerCase() === s)), tab);
   }, [tokens, tab, chain, q]);
   const king = useMemo(() => rank(tokens, "trending")[0], [tokens]);
+  const hot = useMemo(() => rank(tokens, "trending").slice(0, 10), [tokens]);
+  const listedCount = useMemo(() => tokens.filter((t) => t.source === "listed").length, [tokens]);
 
   // Cards glide from their old place to their new one when the ranking changes (FLIP).
   const grid = useRef<HTMLDivElement>(null);
@@ -94,6 +100,19 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
         <Link href="/launchpad/new" className="bd-create">Create coin</Link>
       </header>
 
+      {hot.length > 0 && (
+        <section className="bd-hot" aria-label="Trending on the Board now">
+          <button type="button" className="bd-hot-h" onClick={() => setTab("trending")}>🔥 Trending now</button>
+          <div className="bd-hot-row">
+            {hot.map((t, i) => (
+              <Link key={t.chain + t.token} href={`/launchpad/${t.chain}/${t.token}`} className="bd-hot-chip">
+                <span className="bd-hot-n">#{i + 1}</span><Logo t={t} /><b>${t.symbol}</b><Change v={t.market?.change24h} />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {king && (
         <Link href={`/launchpad/${king.chain}/${king.token}`} className="bd-king">
           <span className="bd-crown" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" fill="currentColor"/></svg></span>
@@ -110,7 +129,7 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
 
       <div className="bd-bar">
         <div className="bd-tabs" role="tablist">
-          {TABS.map(([k, l]) => <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}
+          {TABS.map(([k, l]) => <button key={k} role="tab" type="button" aria-selected={tab === k} onClick={() => setTab(k)}>{l}{k === "listed" && listedCount > 0 ? ` (${listedCount})` : ""}</button>)}
         </div>
         <input className="bd-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, ticker or address" aria-label="Search coins" />
         <button type="button" className="bd-pause" onClick={() => setLive(!live)} aria-pressed={!live}>{live ? "Pause" : "Resume"}</button>
@@ -121,7 +140,9 @@ export default function Board({ initial }: { initial: BoardToken[] }) {
       </div>
 
       {shown.length === 0 ? (
-        <div className="bd-empty">No coins here yet. <Link href="/launchpad/new">Be the first: create one →</Link></div>
+        tab === "listed"
+          ? <div className="bd-empty">No listed tokens{chain !== "all" ? " on this network" : ""} yet.</div>
+          : <div className="bd-empty">No coins here yet. <Link href="/launchpad/new">Be the first: create one →</Link></div>
       ) : (
         <div className="bd-grid" ref={grid}>
           {shown.map((t, i) => {

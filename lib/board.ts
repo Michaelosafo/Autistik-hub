@@ -1,6 +1,7 @@
 import { CHAINS, type ChainKey } from "@/lib/launchpad";
 import { getMarkets, type Market } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
+import { HIDDEN, LISTINGS } from "@/lib/listings";
 
 export type BoardToken = {
   chain: ChainKey;
@@ -45,8 +46,14 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
   const { data: older } = missing.length
     ? await onChain(sb.from("launches").select("*")).in("token", [...new Set(missing.map((p: any) => p.token))])
     : { data: [] };
-  const rows = [...(launches || []), ...(older || []).filter((l: any) => !seen.has(key(l.chain, l.token)) && until.has(key(l.chain, l.token)))]
-    .filter((l: any) => CHAINS[l.chain as ChainKey]);
+  const rows = [...(launches || []), ...(older || []).filter((l: any) => !seen.has(key(l.chain, l.token)) && until.has(key(l.chain, l.token)))];
+  // The whitelist (lib/listings.ts): listed coins that were never launched or paid for here still show, as Listed.
+  for (const l of LISTINGS) {
+    if ((chain && l.chain !== chain) || rows.some((r: any) => key(r.chain, r.token) === key(l.chain, l.token))) continue;
+    rows.push({ chain: l.chain, token: l.token, pair: "", name: l.name, symbol: l.symbol, created_at: l.since, source: "listed" });
+  }
+  const visible = rows.filter((l: any) => CHAINS[l.chain as ChainKey] && !HIDDEN.has(String(l.token).toLowerCase()));
+  rows.length = 0; rows.push(...visible);
   const watchers = new Map<string, number>((counts || []).map((c: any) => [key(c.chain, c.token), c.watchers as number]));
   const [markets, { data: logos }] = await Promise.all([
     getMarkets(rows.map((r: any) => ({ chain: r.chain, token: r.token }))),
