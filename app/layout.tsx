@@ -1,5 +1,7 @@
 import "./globals.css";
 import BotFab from "@/components/BotFab";
+import { Suspense } from "react";
+import { NavTrail } from "@/components/BackButton";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
 import Welcome from "@/components/Welcome";
@@ -49,6 +51,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {user && needWallet && <WalletGate uid={user.id} />}
         <Shell me={me}>{children}</Shell>
         <BotFab />
+        {/* Remembers the pages visited in this tab, for the "← Back" buttons. */}
+        <Suspense fallback={null}><NavTrail /></Suspense>
       </body>
     </html>
   );
