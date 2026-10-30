@@ -4423,3 +4423,7 @@ html,body{overflow-x:clip}
 .bd-when{display:block;font-size:.74em;font-weight:700;opacity:.75;margin-top:2px}
 /* Google's own sign-in button (components/GoogleSignIn.tsx) */
 .gsi-box{display:flex;justify-content:center;min-height:44px;width:100%}
+/* DexScreener write-up: token page (full) and Board cards (two lines) */
+.tk-about{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:var(--surface,var(--surface-2))}
+.tk-about p{margin:0;line-height:1.5;white-space:pre-line}
+.bd-about{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:.76em;line-height:1.35;opacity:.85;margin-top:3px}

@@ -1,5 +1,5 @@
 import { CHAINS, type ChainKey } from "@/lib/launchpad";
-import { getMarkets, type Market } from "@/lib/market";
+import { getDexAbout, getMarkets, pairFromUrl, type Market } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
 import { HIDDEN, LISTINGS, TRENDING_ONLY } from "@/lib/listings";
 
@@ -20,6 +20,8 @@ export type BoardToken = {
   logo: string | null;
   /** Allowed on Trending (lib/listings.ts TRENDING_ONLY; every coin when that list is empty). */
   trend: boolean;
+  /** Listed coins: the project's write-up from DexScreener, when it has one. */
+  about: string | null;
 };
 
 const key = (chain: string, token: string) => `${chain}:${token.toLowerCase()}`;
@@ -61,6 +63,9 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
     getMarkets(rows.map((r: any) => ({ chain: r.chain, token: r.token }))),
     rows.length ? sb.from("token_logos").select("chain,token,url").in("token", rows.map((r: any) => r.token)) : Promise.resolve({ data: [] as any[] }),
   ]);
+  // Write-ups for listed coins only (a handful), so the Board stays fast.
+  const abouts = new Map<string, string | null>(await Promise.all(rows.filter((r: any) => r.source === "listed").map(async (r: any) =>
+    [key(r.chain, r.token), await getDexAbout(r.chain, r.pair || pairFromUrl(markets[r.token.toLowerCase()]?.url))] as [string, string | null])));
   const logoOf = new Map<string, string>((logos || []).map((l: any) => [key(l.chain, l.token), l.url]));
   return rows.map((r: any) => ({
     // Only the public fields: rows are read with * so the board keeps working before new columns exist.
@@ -70,6 +75,7 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
     promotedUntil: until.get(key(r.chain, r.token)) ?? null,
     market: markets[r.token.toLowerCase()] ?? null,
     logo: logoOf.get(key(r.chain, r.token)) ?? markets[r.token.toLowerCase()]?.imageUrl ?? null,
+    about: abouts.get(key(r.chain, r.token)) ?? null,
     trend: !TRENDING_ONLY.size || TRENDING_ONLY.has(String(r.token).toLowerCase()),
   }));
 }

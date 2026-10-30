@@ -10,7 +10,7 @@ import WatchButton from "@/components/WatchButton";
 import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { CHAINS, LOCKS, dexscreenerUrl, isLock, isSolana, type ChainKey } from "@/lib/launchpad";
-import { getDexProfile, getMarkets, usd } from "@/lib/market";
+import { getDexAbout, getDexProfile, getMarkets, usd } from "@/lib/market";
 import { HIDDEN, LISTINGS, listedAt } from "@/lib/listings";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
@@ -53,6 +53,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
     sb.from("launch_promotions").select("ends_at").eq("chain", c.key).eq("token", token).gt("ends_at", now).order("ends_at", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const m = markets[token.toLowerCase()];
+  const about = await getDexAbout(c.key, launch.pair);
   const promotedUntil = promo?.ends_at ?? null;
   const swap = c.swapUrl(token);
   const listed = launch.source === "listed";
@@ -78,6 +79,13 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         <WatchButton uid={user?.id ?? null} chain={c.key} token={token} watching={!!mine} count={count?.watchers ?? 0} />
       </div>
 
+      {about && (
+        <section className="tk-about" aria-label={`About ${launch.name}`}>
+          <b>About {launch.name}</b>
+          {about.split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>)}
+          <small className="muted">Written by the project on DexScreener, not by AUTISTIK.</small>
+        </section>
+      )}
       {dex && (dex.websites.length > 0 || dex.socials.length > 0) && (
         <nav className="tk-links" aria-label={`${launch.symbol} links`}>
           {[...dex.websites, ...dex.socials].map((l) => <a key={l.url} className="btn small" href={l.url} target="_blank" rel="noopener noreferrer nofollow">{l.label} ↗</a>)}
