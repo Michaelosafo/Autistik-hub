@@ -4561,3 +4561,24 @@ html[data-calm="on"] .ai-mic.rec{animation:none}
 .dev-verdict li{padding-left:22px;position:relative;line-height:1.4}
 .dev-verdict ul.good li::before{content:"✓";position:absolute;left:2px;color:#2EBD85;font-weight:900}
 .dev-verdict ul.bad li::before{content:"✗";position:absolute;left:2px;color:#F6465D;font-weight:900}
+
+/* Scanner: advanced audit (components/AuditCard.tsx) */
+.audit{display:flex;flex-direction:column;gap:12px;border-width:2px}
+.audit-head{display:flex;align-items:center;gap:14px}
+.audit-head .grow{display:flex;flex-direction:column;gap:3px;min-width:0}
+.audit-head small{font-size:.74em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.audit-head b{font-size:1.08em}
+.audit-grade{flex:none;display:grid;place-items:center;width:58px;height:58px;border-radius:16px;font-family:var(--f-display);font-size:2em;font-weight:900;color:#fff}
+.grade-A .audit-grade{background:#1FA971}.grade-B .audit-grade{background:#56B55E}.grade-C .audit-grade{background:#E0A100}.grade-D .audit-grade{background:#E2701F}.grade-F .audit-grade{background:#E03A4E}.grade-\? .audit-grade{background:#8C8AA0}
+.grade-A{border-color:rgba(31,169,113,.5)}.grade-B{border-color:rgba(86,181,94,.45)}.grade-C{border-color:rgba(224,161,0,.5)}.grade-D{border-color:rgba(226,112,31,.5)}.grade-F{border-color:rgba(224,58,78,.55)}
+.audit-counts{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.audit-counts i{font-style:normal;font-size:.76em;font-weight:800;padding:2px 9px;border-radius:999px}
+.audit-counts .bad{background:rgba(224,58,78,.12);color:#E03A4E}.audit-counts .warn{background:rgba(224,161,0,.14);color:#B98500}.audit-counts .ok{background:rgba(31,169,113,.12);color:#1FA971}
+.audit-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px 22px}
+.audit-group h3{margin:0 0 6px;font-size:.92em}
+.audit-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.audit-list li{display:flex;gap:9px;align-items:flex-start;line-height:1.4;font-size:.92em}
+.audit-list li>span:first-child{flex:none;display:grid;place-items:center;width:20px;height:20px;border-radius:50%;font-size:.72em;font-weight:900;color:#fff;margin-top:1px}
+.audit-list li.ok>span:first-child{background:#1FA971}.audit-list li.warn>span:first-child{background:#E0A100}.audit-list li.bad>span:first-child{background:#E03A4E}.audit-list li.unknown>span:first-child{background:#8C8AA0}
+.audit-list li b{margin-right:2px}
+.audit-more{font-weight:800;font-size:.9em;align-self:flex-start}

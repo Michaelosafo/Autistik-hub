@@ -113,6 +113,18 @@ async function goplus(chain: AChain, token: string): Promise<GoPlus | null> {
         honeypot: flag(x.is_honeypot), buyTax: x.buy_tax === "" ? null : num(x.buy_tax) * 100, sellTax: x.sell_tax === "" ? null : num(x.sell_tax) * 100,
         mintable: flag(x.is_mintable), openSource: flag(x.is_open_source), canTakeBack: flag(x.can_take_back_ownership),
         hiddenOwner: flag(x.hidden_owner), holderCount: x.holder_count ? num(x.holder_count) : null,
+        // The rest of GoPlus's contract checks (used by the advanced audit, lib/analytics-audit.ts).
+        ownerRenounced: typeof x.owner_address === "string" ? (x.owner_address === "" || /^0x0{40}$/i.test(x.owner_address) || /^0x0{36}dead$/i.test(x.owner_address)) : null,
+        blacklist: flag(x.is_blacklisted), whitelist: flag(x.is_whitelisted), pausable: flag(x.transfer_pausable), cooldown: flag(x.trading_cooldown),
+        taxChangeable: flag(x.slippage_modifiable), personalTax: flag(x.personal_slippage_modifiable), changeBalance: flag(x.owner_change_balance),
+        selfdestruct: flag(x.selfdestruct), externalCall: flag(x.external_call), proxy: flag(x.is_proxy),
+        antiWhale: flag(x.is_anti_whale), antiWhaleChange: flag(x.anti_whale_modifiable), cannotBuy: flag(x.cannot_buy), cannotSellAll: flag(x.cannot_sell_all),
+        airdropScam: flag(x.is_airdrop_scam), fakeToken: x.fake_token && typeof x.fake_token === "object" ? x.fake_token.value === 1 || x.fake_token.value === "1" : null,
+        sameCreatorHoneypot: x.honeypot_with_same_creator === "1" ? true : x.honeypot_with_same_creator === "0" ? false : null,
+        trusted: x.trust_list === "1" ? true : null, inDex: flag(x.is_in_dex), dexCount: Array.isArray(x.dex) ? x.dex.length : null,
+        creatorPct: x.creator_percent === undefined || x.creator_percent === "" ? null : num(x.creator_percent) * 100,
+        ownerPct: x.owner_percent === undefined || x.owner_percent === "" ? null : num(x.owner_percent) * 100,
+        risks: [x.note, ...(Array.isArray(x.other_potential_risks) ? x.other_potential_risks : [x.other_potential_risks])].filter((v) => typeof v === "string" && v.trim()).map((v: string) => v.trim().slice(0, 200)).slice(0, 4),
         // How much of the pool's liquidity is locked or burned.
         lp: lpLockOf(x.lp_holders, ours),
       },
