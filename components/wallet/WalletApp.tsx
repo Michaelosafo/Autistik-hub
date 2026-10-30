@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ThemedChart from "@/components/ThemedChart";
 import { WCHAINS, WCHAIN_LIST, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import type { Member, Signer } from "./types";
@@ -155,7 +156,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
         <div className="tx-panel tx-chart">
           <div className="tx-chart-head"><b>Chart</b><button type="button" className="aw-link show-sm" onClick={() => setChart(!chart)}>{chart ? "Hide" : "Show"}</button></div>
           {chart && (mkt?.pair
-            ? <iframe key={mkt.pair} title={`${base?.symbol || ""} price chart`} src={`https://dexscreener.com/${c.key}/${mkt.pair}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15`} loading="lazy" referrerPolicy="no-referrer" />
+            ? <ThemedChart key={mkt.pair} title={`${base?.symbol || ""} price chart`} src={`https://dexscreener.com/${c.key}/${mkt.pair}?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15`} className="" />
             : <div className="tx-nochart tx-dim">{mkt ? "No chart for this token yet." : "Loading chart…"}</div>)}
         </div>
 
