@@ -4416,3 +4416,7 @@ html,body{overflow-x:clip}
 .bd-hot-chip:focus-visible{outline:3px solid var(--sun-bright,#FFD84D)}
 .bd-hot-chip .bd-logo{width:24px;height:24px;border-radius:999px;font-size:.55em}
 .bd-hot-n{font-weight:900;font-size:.8em;opacity:.6;padding-left:4px}
+
+/* Token page: DexScreener banner and links (lib/market.ts getDexProfile) */
+.tk-banner{display:block;width:100%;aspect-ratio:3/1;max-height:260px;object-fit:cover;border-radius:18px;border:1px solid var(--line);background:var(--surface-2,rgba(127,127,127,.08))}
+.tk-links{display:flex;flex-wrap:wrap;gap:6px}
