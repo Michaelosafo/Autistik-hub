@@ -11,7 +11,7 @@ import { ads, getBoard } from "@/lib/board";
 import { toAds } from "@/lib/ads";
 import { CHAINS, LOCKS, dexscreenerUrl, isLock, isSolana, type ChainKey } from "@/lib/launchpad";
 import { getDexProfile, getMarkets, usd } from "@/lib/market";
-import { HIDDEN, LISTINGS } from "@/lib/listings";
+import { HIDDEN, LISTINGS, listedAt } from "@/lib/listings";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
@@ -71,7 +71,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         <div className="row" style={{ gap: 14 }}>
           <TokenLogo src={logoRow?.url || dex?.imageUrl || m?.imageUrl} symbol={launch.symbol} big />
           <div className="page-head" style={{ gap: 2 }}>
-            <div className="label">{c.name} · {c.dex}{promotedUntil && <> · <span className="badge">Promoted</span></>}</div>
+            <div className="label">{c.name} · {c.dex} · {listed ? "Listed" : "Launched"} {listedAt(launch.created_at)}{promotedUntil && <> · <span className="badge">Promoted</span></>}</div>
             <h1 style={{ margin: 0 }}>{launch.name} <span className="muted">${launch.symbol}</span></h1>
           </div>
         </div>
@@ -109,9 +109,9 @@ export default async function TokenPage({ params }: { params: { chain: string; t
             </div>
             {!listed && !sol && !instant && <VerifySource chain={c.key} token={token} />}
             {listed ? (
-              <p className="muted">{row ? <>Listed on {new Date(launch.created_at).toLocaleDateString()}. </> : <>Listed by the AUTISTIK team. </>} {String(launch.tx_hash || "").startsWith("liquidity:") ? <>Its liquidity was added through AUTISTIK, but the token wasn&apos;t made with the full Launch Pad flow, so we don&apos;t vouch for its tax, owner or liquidity lock.</> : <>This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock.</>} Check the contract on the explorer before buying.</p>
-            ) : instant ? <p className="muted">Instant launch on {new Date(launch.created_at).toLocaleDateString()}: no bonding curve and no liquidity from the creator. All 1,000,000,000 coins went straight into a PancakeSwap v3 pool, and that pool position is held by the AUTISTIK Instant Launch contract forever, so the liquidity can&apos;t be removed by anyone. No tax, no owner, no minting.</p>
-            : <p className="muted">Launched {new Date(launch.created_at).toLocaleDateString()} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
+              <p className="muted"><>Listed {listedAt(launch.created_at)}{row ? "" : " by the AUTISTIK team"}. </> {String(launch.tx_hash || "").startsWith("liquidity:") ? <>Its liquidity was added through AUTISTIK, but the token wasn&apos;t made with the full Launch Pad flow, so we don&apos;t vouch for its tax, owner or liquidity lock.</> : <>This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock.</>} Check the contract on the explorer before buying.</p>
+            ) : instant ? <p className="muted">Instant launch on {listedAt(launch.created_at)}: no bonding curve and no liquidity from the creator. All 1,000,000,000 coins went straight into a PancakeSwap v3 pool, and that pool position is held by the AUTISTIK Instant Launch contract forever, so the liquidity can&apos;t be removed by anyone. No tax, no owner, no minting.</p>
+            : <p className="muted">Launched {listedAt(launch.created_at)} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
           </div>
         </div>
         <div className="stack">

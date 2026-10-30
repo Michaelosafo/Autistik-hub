@@ -11,6 +11,7 @@ import type { BoardToken } from "@/lib/board";
 import { CHAINS } from "@/lib/launchpad";
 import { NETWORKS } from "@/lib/connect";
 import NetIcon from "@/components/connect/NetIcon";
+import { listedAt } from "@/lib/listings";
 
 export type Tab = "trending" | "listed" | "new" | "mcap" | "gainers";
 const TABS: [Tab, string][] = [["trending", "🔥 Trending"], ["listed", "Listed tokens"], ["new", "New"], ["mcap", "Market cap"], ["gainers", "Gainers"]];
@@ -29,7 +30,7 @@ function rank(list: BoardToken[], tab: Tab) {
   if (tab === "new") return l.sort((a, b) => b.created_at.localeCompare(a.created_at));
   if (tab === "mcap") return l.sort((a, b) => (b.market?.marketCap ?? 0) - (a.market?.marketCap ?? 0));
   if (tab === "gainers") return l.filter((t) => t.market?.change24h != null).sort((a, b) => (b.market!.change24h ?? 0) - (a.market!.change24h ?? 0));
-  return l.sort((a, b) => (!!a.promotedUntil !== !!b.promotedUntil ? (a.promotedUntil ? -1 : 1) : heat(b) - heat(a)));
+  return l.filter((t) => t.trend).sort((a, b) => (!!a.promotedUntil !== !!b.promotedUntil ? (a.promotedUntil ? -1 : 1) : heat(b) - heat(a)));
 }
 
 export default function Board({ initial, initialTab = "trending" }: { initial: BoardToken[]; initialTab?: Tab }) {
@@ -156,7 +157,8 @@ export default function Board({ initial, initialTab = "trending" }: { initial: B
                   <b>{t.name}</b>
                   <span className="bd-sym">${t.symbol} <NetIcon n={net(t.chain) as any} size={13} /></span>
                   <span className="bd-mc">MC <b>{usd(t.market?.marketCap)}</b> <Change v={t.market?.change24h} /></span>
-                  <small className="muted">{ago(t.created_at)} ago · Vol {usd(t.market?.volume24h)}{t.promotedUntil ? " · Promoted" : ""}{t.source === "listed" ? " · Listed" : ""}</small>
+                  <small className="muted">Vol {usd(t.market?.volume24h)}{t.promotedUntil ? " · Promoted" : ""}</small>
+                  <small className="bd-when" title={ago(t.created_at) + " ago"}>{t.source === "listed" ? "Listed" : "Launched"} {listedAt(t.created_at)}</small>
                 </div>
               </Link>
               <Link href={`/swap?chain=${t.chain}&buy=${t.token}`} className="bd-buy" aria-label={`Buy ${t.symbol}`}>Buy</Link>

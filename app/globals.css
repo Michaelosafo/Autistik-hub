@@ -4420,3 +4420,4 @@ html,body{overflow-x:clip}
 /* Token page: DexScreener banner and links (lib/market.ts getDexProfile) */
 .tk-banner{display:block;width:100%;aspect-ratio:3/1;max-height:260px;object-fit:cover;border-radius:18px;border:1px solid var(--line);background:var(--surface-2,rgba(127,127,127,.08))}
 .tk-links{display:flex;flex-wrap:wrap;gap:6px}
+.bd-when{display:block;font-size:.74em;font-weight:700;opacity:.75;margin-top:2px}
