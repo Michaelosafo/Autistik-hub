@@ -29,12 +29,6 @@ type Conv = { id: string; who: CompanionId; title: string; at: number; msgs: Msg
 const VOICES: Record<CompanionId, { rate: number; pitch: number }> = { believer: { rate: 0.92, pitch: 0.95 }, purity: { rate: 1.08, pitch: 1.12 } };
 const STORE = "companion-chats-v1";
 const KEEP = 30;
-const STARTERS: [string, string][] = [
-  ["Plan my day", "Can you help me plan my day in small, easy steps?"],
-  ["Explain a situation", "Can you help me understand a social situation that confused me?"],
-  ["I feel overwhelmed", "I feel overwhelmed right now. Can you help me calm down?"],
-  ["Draw a picture", ""],
-];
 
 const newId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 const blank = (who: CompanionId): Conv => ({ id: newId(), who, title: "New chat", at: Date.now(), msgs: [], turns: [] });
@@ -337,13 +331,6 @@ export default function CompanionChat({ signedIn, start }: { signedIn: boolean; 
 
           <div className="ai-dock">
             {composer}
-            {empty && (
-              <div className="ai-starters">
-                {STARTERS.map(([t, q]) => (
-                  <button key={t} type="button" disabled={busy} onClick={() => (q ? send(q) : (setDraw(true), field.current?.focus()))}>{t}</button>
-                ))}
-              </div>
-            )}
             <p className="ai-note">{c.name} is an AI assistant and can make mistakes. Not a doctor or therapist.</p>
           </div>
         </section>

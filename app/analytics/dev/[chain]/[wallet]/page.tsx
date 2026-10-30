@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import TokenLogo from "@/components/TokenLogo";
 import { ACHAINS, isAChain, isChainAddress } from "@/lib/analytics";
-import { devReport, type DevReport, type DevToken } from "@/lib/dev-history";
+import { devReport, devVerdict, type DevReport, type DevToken } from "@/lib/dev-history";
 import { currentUser, supabaseService } from "@/lib/supabase/server";
 import { RememberDev } from "@/components/RecentDevs";
 
@@ -41,6 +41,10 @@ export default async function DevPage({ params, searchParams }: { params: { chai
   const keep = from ? `from=${from}` : "";
   const base = `/analytics/dev/${chain}/${params.wallet}`;
   const at = (q: string) => base + (q || keep ? "?" + [q, keep].filter(Boolean).join("&") : "");
+  const v = r ? devVerdict(r) : null;
+  const peaks = (r?.tokens ?? []).filter((t) => (t.athCap ?? 0) > 0);
+  const bestAth = peaks.slice().sort((a, b) => (b.athCap ?? 0) - (a.athCap ?? 0))[0];
+  const crashed = (r?.tokens ?? []).filter((t) => (t.athCap ?? 0) >= 50_000 && (t.marketCap ?? 0) < (t.athCap ?? 0) * 0.1).length;
   const tone = !r ? "" : r.label === "Strong" ? "ok" : r.label === "Mixed" ? "mid" : "bad";
 
   return (
@@ -57,6 +61,29 @@ export default async function DevPage({ params, searchParams }: { params: { chai
         </div>
         {user && r && <div className="ln-top-r"><Link className="ln-ghost" href={at("fresh=1")} prefetch={false}>↻ Check again</Link></div>}
       </header>
+
+      {from && (
+        <nav className="scan-tabs" aria-label="Sections">
+          {([
+            ["Overview", `/analytics/${chain}/${from}`], ["Dev wallet", null], ["Wallets", `/analytics/${chain}/${from}?view=wallets`],
+            ["Trades", `/analytics/${chain}/${from}?view=trades`], ["Safety", `/analytics/${chain}/${from}?view=safety`], ["Game arena", `/arena/${chain}/${from}`],
+          ] as const).map(([name, href]) => href
+            ? <Link key={name} href={href} scroll={false}>{name}</Link>
+            : <Link key={name} href={at("")} aria-current="page" scroll={false}>{name}</Link>)}
+        </nav>
+      )}
+
+      {r && v && (
+        <section className={`card dev-verdict ${v.kind}`} aria-label="Can this dev push a project?">
+          <small>Can this dev push a project?</small>
+          <b className="dev-verdict-t">{v.kind === "push" ? "✅ " : v.kind === "avoid" ? "⛔ " : "⚠️ "}{v.title}</b>
+          <div className="dev-verdict-cols">
+            {v.good.length > 0 && <ul className="good">{v.good.map((x) => <li key={x}>{x}</li>)}</ul>}
+            {v.bad.length > 0 && <ul className="bad">{v.bad.map((x) => <li key={x}>{x}</li>)}</ul>}
+          </div>
+          <small className="muted">Based on their past launches only. A good past doesn&apos;t promise a good next token. Not financial advice.</small>
+        </section>
+      )}
 
       {!r ? (
         <div className="card stack" style={{ gap: 8 }}>
@@ -82,7 +109,8 @@ export default async function DevPage({ params, searchParams }: { params: { chai
               <Link href={at("show=alive")} replace scroll={false} aria-current={show === "alive" ? "page" : undefined}><small>Still doing well</small><b className="up">{r.stats.alive}</b></Link>
               <Link href={at("show=dead")} replace scroll={false} aria-current={show === "dead" ? "page" : undefined}><small>Dead</small><b className="down">{r.stats.dead}</b></Link>
               <div><small>Launched last 30 days</small><b>{r.stats.last30d}</b></div>
-              <div><small>Best market cap</small><b>{usd(r.stats.bestCap)}{r.stats.bestSymbol ? <small> ${r.stats.bestSymbol}</small> : null}</b></div>
+              <div><small>Best all-time high</small><b>{usd(bestAth?.athCap ?? r.stats.bestCap)}{(bestAth?.symbol ?? r.stats.bestSymbol) ? <small> ${bestAth?.symbol ?? r.stats.bestSymbol}</small> : null}</b></div>
+              <div><small>Fell 90%+ from peak</small><b className={crashed ? "down" : ""}>{peaks.length ? crashed : "–"}</b></div>
             </section>
           </div>
 
@@ -106,7 +134,7 @@ export default async function DevPage({ params, searchParams }: { params: { chai
                   <Link key={t.token} href={`/analytics/${chain}/${t.token}?dev=${params.wallet}`} className="dev-token">
                     <TokenLogo src={t.logo} symbol={t.symbol || "?"} />
                     <span className="grow"><b>{t.symbol ? `$${t.symbol}` : short(t.token)}</b><small>{t.name || short(t.token)} · {ago(t.createdAt)}{t.launchedHere ? " · AUTISTIK" : ""}</small></span>
-                    <span className="dev-nums"><b>{usd(t.marketCap)}</b><small>liq {usd(t.liquidityUsd)}</small></span>
+                    <span className="dev-nums"><b>{usd(t.marketCap)}</b><small>{t.athCap ? <>ATH {usd(t.athCap)}</> : <>liq {usd(t.liquidityUsd)}</>}</small></span>
                     <span className={`dev-st ${st.c}`}>{st.t}</span>
                   </Link>
                 );

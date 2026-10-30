@@ -4548,3 +4548,16 @@ html[data-calm="on"] .ai-mic.rec{animation:none}
 .recent-dev:hover{border-color:var(--gold,#F0B90B)}
 .recent-dev small{flex:1;font-size:.8em;opacity:.75;text-transform:none;letter-spacing:0;font-weight:600}
 .recent-dev-score{font-weight:900;font-size:.85em;padding:2px 8px;border-radius:999px;background:var(--surface-2)}
+
+/* Dev wallet: "Can this dev push a project?" verdict */
+.dev-verdict{display:flex;flex-direction:column;gap:8px;border-width:2px}
+.dev-verdict>small:first-child{font-size:.74em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+.dev-verdict-t{font-family:var(--f-display);font-size:1.3em}
+.dev-verdict.push{border-color:#2EBD85;background:linear-gradient(135deg,rgba(46,189,133,.10),transparent 60%),var(--surface)}
+.dev-verdict.avoid{border-color:#F6465D;background:linear-gradient(135deg,rgba(246,70,93,.10),transparent 60%),var(--surface)}
+.dev-verdict.careful,.dev-verdict.unknown{border-color:#F0B90B;background:linear-gradient(135deg,rgba(240,185,11,.10),transparent 60%),var(--surface)}
+.dev-verdict-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:4px 18px}
+.dev-verdict ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.dev-verdict li{padding-left:22px;position:relative;line-height:1.4}
+.dev-verdict ul.good li::before{content:"✓";position:absolute;left:2px;color:#2EBD85;font-weight:900}
+.dev-verdict ul.bad li::before{content:"✗";position:absolute;left:2px;color:#F6465D;font-weight:900}
