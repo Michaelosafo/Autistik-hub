@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackButton from "@/components/BackButton";
 import { notFound, redirect } from "next/navigation";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import WatchButton from "@/components/WatchButton";
@@ -151,9 +152,10 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   return (
     <div className="stack scan-page" style={{ maxWidth: 1080 }}>
       <AutoRefresh seconds={60} />
-      <div className="token-search">
+      <div className="token-search back-links">
+        <BackButton fallback="/analytics" />
         {backDev && <Link href={`/analytics/dev/${chain}/${backDev}`} className="back-btn">← Back to dev wallet {short(backDev)}</Link>}
-        <Link href="/analytics" className="muted">← My tokens</Link>
+        <Link href="/analytics" className="muted">My tokens</Link>
         <AnalyticsScan signedIn={!!user} label="Search" />
       </div>
       <div className="card stack an-head">

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackButton from "@/components/BackButton";
 import TokenLogo from "@/components/TokenLogo";
 import AnalyticsScan from "@/components/AnalyticsScan";
 import PinButton from "@/components/PinButton";
@@ -17,7 +18,7 @@ export default async function PinsPage() {
   const user = await currentUser();
   if (!user) return (
     <div className="stack" style={{ maxWidth: 720 }}>
-      <Link href="/analytics" className="muted">← Stats</Link>
+      <div className="back-links"><BackButton fallback="/analytics" /><Link href="/analytics" className="muted">Stats</Link></div>
       <div className="card stack"><h1>My pins</h1><p className="muted">Sign in to pin tokens and get an alert when they enter the buy range or reach the sell range.</p>
         <Link className="btn primary" href="/login?next=/analytics/pins">Sign in</Link></div>
     </div>
@@ -31,7 +32,7 @@ export default async function PinsPage() {
 
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
-      <Link href="/analytics" className="muted">← Stats</Link>
+      <div className="back-links"><BackButton fallback="/analytics" /><Link href="/analytics" className="muted">Stats</Link></div>
       <div className="page-head">
         <h1>My pins</h1>
         <p className="muted">Pin a token and we&apos;ll tell you when it enters the buy range or reaches the sell range, using what buyers are feeling, the chart and the project itself. Checked every 10 minutes.</p>

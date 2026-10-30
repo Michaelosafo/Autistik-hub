@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackButton from "@/components/BackButton";
 import { notFound } from "next/navigation";
 import TokenLogo from "@/components/TokenLogo";
 import { ACHAINS, isAChain, isChainAddress } from "@/lib/analytics";
@@ -52,8 +53,9 @@ export default async function DevPage({ params, searchParams }: { params: { chai
   return (
     <div className="stack scan-page dev-page" style={{ maxWidth: 1080 }}>
       <div className="token-search back-links">
+        <BackButton fallback="/analytics" />
         {from && <Link href={`/analytics/${chain}/${from}`} className="back-btn">← Back to {fromSym ? `$${fromSym}` : short(from)}</Link>}
-        <Link href="/analytics" className="muted">← Scanner</Link>
+        <Link href="/analytics" className="muted">Scanner</Link>
       </div>
       {r && <RememberDev chain={chain} wallet={params.wallet} score={r.score ?? null} label={r.label ?? null} />}
       <header className="bd-top ln-top">

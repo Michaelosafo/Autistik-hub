@@ -1,4 +1,5 @@
 import Link from "next/link";
+import BackButton from "@/components/BackButton";
 import { notFound } from "next/navigation";
 import Arena from "@/components/Arena";
 import AnalyticsScan from "@/components/AnalyticsScan";
@@ -27,7 +28,7 @@ export default async function ArenaMatch({ params }: { params: { chain: string; 
 
   if (!data) return (
     <div className="stack" style={{ maxWidth: 720 }}>
-      <Link href="/arena" className="muted">← Game arena</Link>
+      <div className="back-links"><BackButton fallback="/arena" /><Link href="/arena" className="muted">Game arena</Link></div>
       <section className="ga-hero">
         <div className="ga-kicker">{c.name.toUpperCase()} · {short(params.token)}</div>
         <h1>⚽ This match hasn&apos;t kicked off yet</h1>
@@ -42,7 +43,8 @@ export default async function ArenaMatch({ params }: { params: { chain: string; 
     <div className="stack" style={{ maxWidth: 1080 }}>
       <AutoRefresh seconds={60} />
       <div className="ga-matchbar">
-        <Link href="/arena" className="ga-back">← Lobby</Link>
+        <BackButton fallback="/arena" />
+        <Link href="/arena" className="ga-back">Lobby</Link>
         <TokenLogo src={t.image_url} symbol={t.symbol || "?"} />
         <span className="grow"><b>${t.symbol || short(t.token)}</b><small>{t.name || short(t.token)} · {c.name}</small></span>
         <Link href={`/analytics/${chain}/${t.token}`} className="wg-btn">📊 Scanner view</Link>
