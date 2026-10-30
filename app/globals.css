@@ -4427,3 +4427,9 @@ html,body{overflow-x:clip}
 .tk-about{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:16px;border:1px solid var(--line);background:var(--surface,var(--surface-2))}
 .tk-about p{margin:0;line-height:1.5;white-space:pre-line}
 .bd-about{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:.76em;line-height:1.35;opacity:.85;margin-top:3px}
+/* Token pages: every box is a plain card like the home page: white in light mode, dark in dark mode */
+.tk-page .card,.tk-page .tk-about,.tk-page .stats>div{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.tk-page .stats>div{border-radius:12px}
+:root[data-theme="light"] .tk-page .card,:root[data-theme="light"] .tk-page .tk-about,:root[data-theme="light"] .tk-page .stats>div{background:#FFFFFF;box-shadow:0 1px 2px rgba(40,28,80,.05),0 8px 24px rgba(40,28,80,.08)}
+:root[data-theme="dark"] .tk-page .card,:root[data-theme="dark"] .tk-page .tk-about,:root[data-theme="dark"] .tk-page .stats>div{background:var(--surface)}
+.tk-page .tk-about b{color:var(--ink)}
