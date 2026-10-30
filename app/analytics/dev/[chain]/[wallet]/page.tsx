@@ -4,6 +4,7 @@ import TokenLogo from "@/components/TokenLogo";
 import { ACHAINS, isAChain, isChainAddress } from "@/lib/analytics";
 import { devReport, type DevReport, type DevToken } from "@/lib/dev-history";
 import { currentUser, supabaseService } from "@/lib/supabase/server";
+import { RememberDev } from "@/components/RecentDevs";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -20,7 +21,7 @@ const STATUS: Record<DevToken["status"], { t: string; c: string }> = {
   alive: { t: "Doing well", c: "ok" }, bonded: { t: "Bonded", c: "good" }, curve: { t: "Not bonded", c: "mid" }, dead: { t: "Dead", c: "bad" }, unknown: { t: "No data", c: "mid" },
 };
 
-export default async function DevPage({ params, searchParams }: { params: { chain: string; wallet: string }; searchParams: { show?: string; fresh?: string } }) {
+export default async function DevPage({ params, searchParams }: { params: { chain: string; wallet: string }; searchParams: { show?: string; fresh?: string; from?: string } }) {
   if (!isAChain(params.chain) || !isChainAddress(params.chain, params.wallet)) notFound();
   const chain = params.chain, c = ACHAINS[chain];
   const user = await currentUser();
@@ -34,18 +35,27 @@ export default async function DevPage({ params, searchParams }: { params: { chai
   }
   const show = (["all", "bonded", "alive", "dead"] as const).find((k) => k === searchParams.show) ?? "all";
   const list = (r?.tokens ?? []).filter((t) => show === "all" || (show === "bonded" ? t.status === "bonded" || t.status === "alive" : t.status === show));
+  // Opened from a token's scanner page: keep a way back to it, and to this wallet from any of its tokens.
+  const from = searchParams.from && isChainAddress(chain, searchParams.from) ? searchParams.from : null;
+  const fromSym = from ? r?.tokens.find((t) => t.token.toLowerCase() === from.toLowerCase())?.symbol : null;
+  const keep = from ? `from=${from}` : "";
   const base = `/analytics/dev/${chain}/${params.wallet}`;
+  const at = (q: string) => base + (q || keep ? "?" + [q, keep].filter(Boolean).join("&") : "");
   const tone = !r ? "" : r.label === "Strong" ? "ok" : r.label === "Mixed" ? "mid" : "bad";
 
   return (
     <div className="stack scan-page dev-page" style={{ maxWidth: 1080 }}>
-      <div className="token-search"><Link href="/analytics" className="muted">← Scanner</Link></div>
+      <div className="token-search back-links">
+        {from && <Link href={`/analytics/${chain}/${from}`} className="back-btn">← Back to {fromSym ? `$${fromSym}` : short(from)}</Link>}
+        <Link href="/analytics" className="muted">← Scanner</Link>
+      </div>
+      {r && <RememberDev chain={chain} wallet={params.wallet} score={r.score ?? null} label={r.label ?? null} />}
       <header className="bd-top ln-top">
         <div>
           <h1>Dev wallet</h1>
           <p className="muted">{c.name} · <a className="mono" href={`${c.explorer}/${chain === "solana" ? "account" : "address"}/${params.wallet}`} target="_blank" rel="noopener noreferrer">{short(params.wallet)}</a> · their earlier tokens and how they did.</p>
         </div>
-        {user && r && <div className="ln-top-r"><Link className="ln-ghost" href={`${base}?fresh=1`} prefetch={false}>↻ Check again</Link></div>}
+        {user && r && <div className="ln-top-r"><Link className="ln-ghost" href={at("fresh=1")} prefetch={false}>↻ Check again</Link></div>}
       </header>
 
       {!r ? (
@@ -67,10 +77,10 @@ export default async function DevPage({ params, searchParams }: { params: { chai
               {r.tokens.length > 0 && <div className="dev-chance"><span>Chance a new token from this dev bonds</span><b>≈{r.bondChance}%</b></div>}
             </section>
             <section className="card dev-stats" aria-label="Overview">
-              <Link href={`${base}`} scroll={false} aria-current={show === "all" ? "page" : undefined}><small>Tokens launched</small><b>{r.stats.launched}</b></Link>
-              <Link href={`${base}?show=bonded`} scroll={false} aria-current={show === "bonded" ? "page" : undefined}><small>Bonded / on a DEX</small><b className="up">{r.stats.bonded}</b></Link>
-              <Link href={`${base}?show=alive`} scroll={false} aria-current={show === "alive" ? "page" : undefined}><small>Still doing well</small><b className="up">{r.stats.alive}</b></Link>
-              <Link href={`${base}?show=dead`} scroll={false} aria-current={show === "dead" ? "page" : undefined}><small>Dead</small><b className="down">{r.stats.dead}</b></Link>
+              <Link href={at("")} replace scroll={false} aria-current={show === "all" ? "page" : undefined}><small>Tokens launched</small><b>{r.stats.launched}</b></Link>
+              <Link href={at("show=bonded")} replace scroll={false} aria-current={show === "bonded" ? "page" : undefined}><small>Bonded / on a DEX</small><b className="up">{r.stats.bonded}</b></Link>
+              <Link href={at("show=alive")} replace scroll={false} aria-current={show === "alive" ? "page" : undefined}><small>Still doing well</small><b className="up">{r.stats.alive}</b></Link>
+              <Link href={at("show=dead")} replace scroll={false} aria-current={show === "dead" ? "page" : undefined}><small>Dead</small><b className="down">{r.stats.dead}</b></Link>
               <div><small>Launched last 30 days</small><b>{r.stats.last30d}</b></div>
               <div><small>Best market cap</small><b>{usd(r.stats.bestCap)}{r.stats.bestSymbol ? <small> ${r.stats.bestSymbol}</small> : null}</b></div>
             </section>
@@ -93,7 +103,7 @@ export default async function DevPage({ params, searchParams }: { params: { chai
               {list.map((t) => {
                 const st = STATUS[t.status];
                 return (
-                  <Link key={t.token} href={`/analytics/${chain}/${t.token}`} className="dev-token">
+                  <Link key={t.token} href={`/analytics/${chain}/${t.token}?dev=${params.wallet}`} className="dev-token">
                     <TokenLogo src={t.logo} symbol={t.symbol || "?"} />
                     <span className="grow"><b>{t.symbol ? `$${t.symbol}` : short(t.token)}</b><small>{t.name || short(t.token)} · {ago(t.createdAt)}{t.launchedHere ? " · AUTISTIK" : ""}</small></span>
                     <span className="dev-nums"><b>{usd(t.marketCap)}</b><small>liq {usd(t.liquidityUsd)}</small></span>
