@@ -4455,3 +4455,83 @@ html,body{overflow-x:clip}
 :root[data-theme="light"] .chat.lux .muted{color:var(--muted)}
 :root[data-theme="light"] .gpt-empty h2{color:var(--ink)}
 :root[data-theme="light"] .gpt-empty p{color:var(--muted)}
+
+/* ---------- AI chat app layout (components/CompanionChat.tsx): sidebar + big conversation + one composer ---------- */
+.chat.lux.gpt.ai-app{display:grid;grid-template-columns:260px minmax(0,1fr);padding:0;overflow:hidden;position:relative;height:calc(100dvh - 96px);min-height:480px}
+.ai-side{display:flex;flex-direction:column;gap:12px;min-height:0;padding:12px;border-right:1px solid rgba(var(--wc),.08);background:rgba(var(--wc),.025)}
+.ai-new{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;font-weight:800;border:1px solid rgba(var(--wc),.14);background:rgba(var(--wc),.04)}
+.ai-new:hover{background:rgba(var(--wc),.08)}
+.ai-new svg,.ai-menu svg,.ai-tool svg,.ai-send svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.ai-who{display:flex;flex-direction:column;gap:2px}
+.ai-who button{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:10px;font-weight:700;font-size:.92em}
+.ai-who button:hover{background:rgba(var(--wc),.06)}
+.ai-who button[aria-checked="true"]{background:rgba(var(--wc),.1);box-shadow:inset 0 0 0 1px rgba(233,182,90,.45)}
+.ai-who .av,.ai-title .av{width:26px;height:26px;flex:none}
+.ai-recent{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:0 -4px;padding:0 4px}
+.ai-recent>small{font-size:.72em;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.6;padding:4px 8px}
+.ai-recent>p{font-size:.82em;padding:4px 8px;margin:0}
+.ai-conv{display:flex;align-items:center;border-radius:10px}
+.ai-conv:hover,.ai-conv.on{background:rgba(var(--wc),.08)}
+.ai-conv>button:first-child{all:unset;cursor:pointer;flex:1;min-width:0;display:flex;flex-direction:column;padding:7px 10px}
+.ai-conv>button:first-child span{font-size:.88em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-conv>button:first-child small{font-size:.72em;opacity:.6}
+.ai-del{all:unset;cursor:pointer;opacity:0;padding:6px 10px;font-size:.8em;border-radius:8px}
+.ai-conv:hover .ai-del,.ai-conv.on .ai-del,.ai-del:focus-visible{opacity:.6}
+.ai-del:hover{opacity:1;background:rgba(229,72,77,.15)}
+.ai-foot{display:flex;flex-direction:column;gap:2px;border-top:1px solid rgba(var(--wc),.08);padding-top:8px}
+.ai-foot button,.ai-foot a{all:unset;cursor:pointer;padding:7px 10px;border-radius:10px;font-size:.84em;font-weight:700}
+.ai-foot button:hover,.ai-foot a:hover{background:rgba(var(--wc),.06)}
+.ai-foot [data-hot="1"]{box-shadow:inset 0 0 0 1px var(--gold,#E9B65A)}
+.ai-new:focus-visible,.ai-who button:focus-visible,.ai-conv button:focus-visible,.ai-foot button:focus-visible,.ai-foot a:focus-visible,.ai-menu:focus-visible,.ai-tool:focus-visible,.ai-send:focus-visible,.ai-starters button:focus-visible{outline:3px solid var(--gold,#E9B65A);outline-offset:1px}
+
+.ai-main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.ai-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid rgba(var(--wc),.06)}
+.ai-title{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-menu{all:unset;cursor:pointer;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;visibility:hidden}
+.ai-menu:hover{background:rgba(var(--wc),.08)}
+.chat.lux.gpt.ai-app .msgs{flex:1;min-height:0}
+.ai-main.empty .msgs{flex:1 1 0}
+.ai-main.empty .ai-dock{flex:1 1 0;justify-content:flex-start}
+.ai-dock{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 16px 12px}
+.ai-composer{width:100%;max-width:780px;display:flex;flex-direction:column;gap:6px;padding:12px 12px 8px 16px;border-radius:22px;border:1px solid rgba(var(--wc),.16);background:rgba(var(--wc),.05);box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.ai-composer:focus-within{border-color:rgba(233,182,90,.6)}
+.ai-composer textarea{width:100%;min-height:52px;max-height:220px;resize:none;border:0;background:transparent;color:inherit;font:inherit;font-size:1.02em;line-height:1.5;outline:none;padding:2px 0}
+.ai-tools{display:flex;align-items:center;gap:6px}
+.ai-grow{flex:1}
+.ai-tool{all:unset;cursor:pointer;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;border:1px solid rgba(var(--wc),.14)}
+.ai-tool:hover{background:rgba(var(--wc),.08)}
+.ai-tool.on{background:var(--gold,#E9B65A);color:#1B1206;border-color:transparent}
+.ai-mic.rec{background:#E5484D;color:#fff;border-color:#E5484D;animation:aiRec 1.2s ease-in-out infinite}
+@keyframes aiRec{50%{box-shadow:0 0 0 6px rgba(229,72,77,.25)}}
+.ai-tool:disabled{opacity:.5;cursor:default}
+.ai-mode{font-size:.8em;font-weight:800;opacity:.8}
+.ai-send{all:unset;cursor:pointer;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#F7D27A,#E0952B);color:#1B1206}
+.ai-send:disabled{opacity:.4;cursor:default}
+.ai-starters{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:780px}
+.ai-starters button{all:unset;cursor:pointer;padding:7px 14px;border-radius:999px;font-size:.86em;font-weight:700;border:1px solid rgba(var(--wc),.14);background:rgba(var(--wc),.04)}
+.ai-starters button:hover{background:rgba(var(--wc),.08);border-color:rgba(233,182,90,.5)}
+.ai-note{margin:0;font-size:.72em;opacity:.55;text-align:center}
+html[data-calm="on"] .ai-mic.rec{animation:none}
+@media (prefers-reduced-motion:reduce){.ai-mic.rec{animation:none}}
+
+/* Phones and narrow screens: the chat list slides in from the left. */
+@media (max-width:860px){
+  .chat.lux.gpt.ai-app{grid-template-columns:minmax(0,1fr);height:calc(100dvh - 150px - env(safe-area-inset-bottom));min-height:380px}
+  .ai-side{position:absolute;inset:0 auto 0 0;width:min(84%,300px);z-index:3;transform:translateX(-102%);transition:transform .22s ease;background:#0E0D16}
+  .ai-app.side-open .ai-side{transform:none;box-shadow:12px 0 40px rgba(0,0,0,.35)}
+  .ai-scrim{all:unset;position:absolute;inset:0;z-index:2;background:rgba(0,0,0,.35)}
+  .ai-menu{visibility:visible}
+  .ai-composer textarea{min-height:44px}
+}
+
+/* Light mode: white like the home page. */
+:root[data-theme="light"] .ai-side{background:#FBFAFE;border-right-color:var(--line)}
+:root[data-theme="light"] .ai-head{border-bottom-color:var(--line)}
+:root[data-theme="light"] .ai-new{background:#FFFFFF;border-color:var(--line);box-shadow:0 1px 2px rgba(40,28,80,.05)}
+:root[data-theme="light"] .ai-composer{background:#FFFFFF;border-color:var(--line);box-shadow:0 1px 2px rgba(40,28,80,.05),0 8px 24px rgba(40,28,80,.08)}
+:root[data-theme="light"] .ai-composer:focus-within{border-color:rgba(201,138,42,.6)}
+:root[data-theme="light"] .ai-tool{border-color:var(--line);color:var(--ink)}
+:root[data-theme="light"] .ai-tool.on{color:#1B1206}
+:root[data-theme="light"] .ai-starters button{background:#FFFFFF;border-color:var(--line);color:var(--ink)}
+:root[data-theme="light"] .ai-who button,:root[data-theme="light"] .ai-conv button,:root[data-theme="light"] .ai-foot button,:root[data-theme="light"] .ai-foot a,:root[data-theme="light"] .ai-new{color:var(--ink)}
+@media (max-width:860px){ :root[data-theme="light"] .ai-side{background:#FFFFFF} }
