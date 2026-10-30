@@ -1,7 +1,7 @@
 import { CHAINS, type ChainKey } from "@/lib/launchpad";
 import { getMarkets, type Market } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
-import { HIDDEN, LISTINGS } from "@/lib/listings";
+import { HIDDEN, LISTINGS, TRENDING_ONLY } from "@/lib/listings";
 
 export type BoardToken = {
   chain: ChainKey;
@@ -18,6 +18,8 @@ export type BoardToken = {
   market: Market | null;
   /** The picture chosen at launch (falls back to DexScreener's). */
   logo: string | null;
+  /** Allowed on Trending (lib/listings.ts TRENDING_ONLY; every coin when that list is empty). */
+  trend: boolean;
 };
 
 const key = (chain: string, token: string) => `${chain}:${token.toLowerCase()}`;
@@ -68,11 +70,16 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
     promotedUntil: until.get(key(r.chain, r.token)) ?? null,
     market: markets[r.token.toLowerCase()] ?? null,
     logo: logoOf.get(key(r.chain, r.token)) ?? markets[r.token.toLowerCase()]?.imageUrl ?? null,
+    trend: !TRENDING_ONLY.size || TRENDING_ONLY.has(String(r.token).toLowerCase()),
   }));
 }
 
 /** Paid slots first (newest purchase ending last first), then the busiest tokens by 24h volume and trades. */
 export function trending(list: BoardToken[]) {
+  return byHeat(list.filter((t) => t.trend));
+}
+
+function byHeat(list: BoardToken[]) {
   const organic = (t: BoardToken) => (t.market?.volume24h ?? 0) + (t.market?.txns24h ?? 0) * 10;
   return [...list].sort((a, b) => {
     if (!!a.promotedUntil !== !!b.promotedUntil) return a.promotedUntil ? -1 : 1;
@@ -84,4 +91,4 @@ export function trending(list: BoardToken[]) {
 export const mostWatched = (list: BoardToken[]) => [...list].filter((t) => t.watchers > 0).sort((a, b) => b.watchers - a.watchers);
 
 /** Tokens currently paying to trend; shown as ads around the Launch Pad. */
-export const ads = (list: BoardToken[]) => trending(list).filter((t) => t.promotedUntil);
+export const ads = (list: BoardToken[]) => byHeat(list).filter((t) => t.promotedUntil);
