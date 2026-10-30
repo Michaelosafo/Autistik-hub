@@ -15,6 +15,8 @@ const usd = (n: number | null) => n == null ? "–" : "$" + Intl.NumberFormat("e
 const ago = (iso: string | null) => {
   if (!iso) return "";
   const d = (Date.now() - Date.parse(iso)) / 86_400_000;
+  // A missing date can come back as 1970: say nothing rather than "56y ago".
+  if (!isFinite(d) || d > 365 * 20 || Date.parse(iso) < Date.parse("2015-01-01")) return "";
   return d < 1 ? "today" : d < 30 ? `${Math.floor(d)}d ago` : d < 365 ? `${Math.floor(d / 30)}mo ago` : `${Math.floor(d / 365)}y ago`;
 };
 const STATUS: Record<DevToken["status"], { t: string; c: string }> = {
@@ -133,7 +135,7 @@ export default async function DevPage({ params, searchParams }: { params: { chai
                 return (
                   <Link key={t.token} href={`/analytics/${chain}/${t.token}?dev=${params.wallet}`} className="dev-token">
                     <TokenLogo src={t.logo} symbol={t.symbol || "?"} />
-                    <span className="grow"><b>{t.symbol ? `$${t.symbol}` : short(t.token)}</b><small>{t.name || short(t.token)} · {ago(t.createdAt)}{t.launchedHere ? " · AUTISTIK" : ""}</small></span>
+                    <span className="grow"><b>{t.symbol ? `$${t.symbol}` : short(t.token)}</b><small>{t.name || short(t.token)}{ago(t.createdAt) ? ` · ${ago(t.createdAt)}` : ""}{t.launchedHere ? " · AUTISTIK" : ""}</small></span>
                     <span className="dev-nums"><b>{usd(t.marketCap)}</b><small>{t.athCap ? <>ATH {usd(t.athCap)}</> : <>liq {usd(t.liquidityUsd)}</>}</small></span>
                     <span className={`dev-st ${st.c}`}>{st.t}</span>
                   </Link>
