@@ -45,9 +45,15 @@ function addRoad(e,h,l,curve,height){const sy=lastY(),ey=sy+height*SEG,t=e+h+l;
 function buildTrack(){
   segments=[];trackR=mulberry(2026);const r=trackR;
   addRoad(0,60,0,0,0);
+  // the 3D road heads where the bends point; bends are chosen to lean back toward the main direction,
+  // so the course winds forward and never loops back across itself
+  const K3=0.0032,head=()=>{let a=0;for(const s of segments)a-=s.curve*K3;return a;};
   while(segments.length<4400){const hill=Math.round((r()-0.5)*70-lastY()/SEG*0.35);
-    if(r()<0.22)addRoad(25,30+Math.floor(r()*40),25,0,hill);
-    else addRoad(20+Math.floor(r()*40),25+Math.floor(r()*70),20+Math.floor(r()*40),[2,3,4,5,6][Math.floor(r()*5)]*(r()<0.5?-1:1),hill);}
+    if(r()<0.22){r();r();addRoad(25,30+Math.floor(r()*40),25,0,hill);}
+    else{const e=20+Math.floor(r()*40);let hh=25+Math.floor(r()*70);const l=20+Math.floor(r()*40),c=[2,3,4,5,6][Math.floor(r()*5)],a=head(),q=r();
+      const back=Math.abs(a)>1.0||q<0.5+Math.min(0.45,Math.abs(a)/1.4),sg=back?(a>0?1:-1):(a>0?-1:1);
+      const maxTurn=Math.max(0.35,1.25-(back?0:Math.abs(a)));hh=Math.max(0,Math.min(hh,Math.floor(maxTurn/(c*K3)-(e+l)/2)));
+      addRoad(e,hh,l,c*sg,hill);}}
   addRoad(40,40,40,0,Math.round(-lastY()/SEG));
   FIN=segments.length;addRoad(0,DRAW+80,0,0,0);
   for(let i=FIN;i<FIN+3;i++)segments[i].color=ROAD_F;for(let i=8;i<10;i++)segments[i].color=ROAD_F;
@@ -228,11 +234,18 @@ function updMe(h,dt){
   if(i.brake)h.speed-=BASE*(fun?1.3:0.9)*dt;
   else if(h.speed<maxS)h.speed=Math.min(maxS,h.speed+BASE/(boosting?2.4:4.2)*dt);
   else h.speed=Math.max(maxS,h.speed-BASE/3*dt);
-  const sp=h.speed/BASE,dx=dt*2.1*st.handle*Math.max(0.35,Math.min(1,sp));
-  if(i.left)h.x-=dx;if(i.right)h.x+=dx;
-  if(tiltOn&&!i.left&&!i.right&&Math.abs(tiltVal)>0.08)h.x+=dx*tiltVal*1.15;
-  h.x-=dx*Math.min(1,sp)*seg.curve*0.28;h.x=clamp(h.x,-2.3,2.3);
-  if(Math.abs(h.x)>1.05&&h.speed>BASE*0.3)h.speed-=BASE*1.1*st.off*dt;
+  // smooth steering: the wheel turns in quickly but not instantly, the car carries sideways momentum,
+  // the bend pushes it outward, and the guard rails stop it (with a scrape) instead of letting it through
+  const sp=h.speed/BASE,grip=2.1*st.handle*Math.max(0.35,Math.min(1,sp));
+  let tgt=(i.left?-1:0)+(i.right?1:0);
+  if(!tgt&&tiltOn&&Math.abs(tiltVal)>0.08)tgt=clamp(tiltVal*1.15,-1,1);
+  h.steer=(h.steer||0)+(tgt-(h.steer||0))*Math.min(1,dt*(tgt?7:10));
+  const want=h.steer*grip-grip*Math.min(1,sp)*seg.curve*0.28;
+  h.vx=(h.vx||0)+(want-(h.vx||0))*Math.min(1,dt*(fun?7:8));
+  h.x+=h.vx*dt;
+  if(Math.abs(h.x)>1.11){h.x=Math.sign(h.x)*1.11;h.vx=-h.vx*0.25;if(h.speed>BASE*0.35){h.speed-=BASE*0.9*dt;h.shake=Math.max(h.shake||0,0.12);h.scrape=0.2;}}
+  if(h.scrape>0)h.scrape-=dt;
+  if(Math.abs(h.x)>1.0&&h.speed>BASE*0.3)h.speed-=BASE*0.6*st.off*dt;
   h.speed=clamp(h.speed,0,BASE*2.4);
   const prev=Math.floor(h.pos/SEG);h.pos+=h.speed*dt;const cur=Math.floor(h.pos/SEG);
   h.skyOff+=seg.curve*Math.min(1,sp)*dt*30;
@@ -481,8 +494,25 @@ function terrainH(i,side){
   if(WORLD==='canyon'&&!valley)return [0,0,0.05,h1*0.35,h1*1.3,h1*2.6,h2*1.25,h2*1.45,h2*1.55];
   return valley?[0,0,0.05,-1.2,-5,-11,-18,-22,-24]:[0,0,0.05,h1*0.16,h1*0.55,h1,h2*0.75,h2*1.1,h2*1.4];
 }
-function hAt(i,side,off){const H=terrainH(i,side),o=off-RW;for(let k=1;k<TOFF.length;k++){if(o<=TOFF[k]){const t=(o-TOFF[k-1])/(TOFF[k]-TOFF[k-1]);return lerp(H[k-1],H[k],clamp(t,0,1));}}return H[H.length-1];}
+function hAt(i,side,off){if(CAP&&off>CAP[side>0?1:0][Math.min(i,CAP[0].length-1)])return -999;const H=terrainH(i,side),o=off-RW;for(let k=1;k<TOFF.length;k++){if(o<=TOFF[k]){const t=(o-TOFF[k-1])/(TOFF[k]-TOFF[k-1]);return lerp(H[k-1],H[k],clamp(t,0,1));}}return H[H.length-1];}
+/* Where the track bends back on itself, the land beside one stretch of road must not reach over another stretch.
+   CAP holds, per segment and side, how far out the land may go; offRoad() drops scenery that would land on a road. */
+let CAP=null,ROADG=null;const RCELL=24;
+function roadNear(x,z){let best=1e9,bi=-1;const cx=Math.floor(x/RCELL),cz=Math.floor(z/RCELL);
+  for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const L=ROADG.get((cx+a)*100003+(cz+b));if(L)for(const i of L){const d=Math.hypot(C3[i].x-x,C3[i].z-z);if(d<best){best=d;bi=i;}}}return [best,bi];}
+function computeCaps(){
+  ROADG=new Map();C3.forEach((c,i)=>{const k=Math.floor(c.x/RCELL)*100003+Math.floor(c.z/RCELL);if(!ROADG.has(k))ROADG.set(k,[]);ROADG.get(k).push(i);});
+  const n=C3.length,raw=[new Float32Array(n),new Float32Array(n)];
+  for(let i=0;i<n;i++){const c=C3[i],rx=-Math.cos(c.ang),rz=Math.sin(c.ang);
+    [-1,1].forEach((sd,si)=>{let cap=RW+TOFF[TOFF.length-1];
+      for(let o=RW+1;o<=cap;o+=2){const [d,j]=roadNear(c.x+rx*sd*o,c.z+rz*sd*o);if(Math.abs(j-i)>14&&d<RW+8){cap=o-8;break;}}
+      raw[si][i]=Math.max(RW+0.5,cap);});}
+  CAP=[new Float32Array(n),new Float32Array(n)];
+  for(let si=0;si<2;si++)for(let i=0;i<n;i++){let m=1e9;for(let k=Math.max(0,i-5);k<=Math.min(n-1,i+5);k++)m=Math.min(m,raw[si][k]);CAP[si][i]=m;}
+}
+function offRoad(x,z,n){if(!ROADG)return true;const [d,j]=roadNear(x,z);return !(d<RW+3&&Math.abs(j-n)>14);}
 function addChunked(geo,mat,list,opt){
+  list=list.filter(e=>offRoad(e.m.elements[12],e.m.elements[14],e.n));
   // splits instances into stretches of road so only nearby ones are drawn
   const SPAN=260,M=new THREE.Matrix4(),byChunk=new Map();
   list.forEach(e=>{const c=Math.floor(e.n/SPAN);if(!byChunk.has(c))byChunk.set(c,[]);byChunk.get(c).push(e);});
@@ -494,7 +524,7 @@ function addChunked(geo,mat,list,opt){
 }
 function buildGLTrack(){
   if(!G||G.track)return;
-  computeC3();
+  computeC3();computeCaps();
   // remember what the world adds, so switching worlds can take it down again
   const added=[],sceneAdd=G.scene.add.bind(G.scene);G.trackObjs=added;G.scene.add=(...o)=>{added.push(...o);return sceneAdd(...o);};
   try{buildWorld();}finally{G.scene.add=sceneAdd;}
@@ -509,7 +539,7 @@ function buildWorld(){
   [-1,1].forEach(side=>{
     const pos=[],col=[],idx=[],uv=[],K=TOFF.length;
     for(let i=0;i<=n;i++){const H=terrainH(Math.min(i,n-1),side);
-      for(let k=0;k<K;k++){const p=lat(Math.min(i,n),side*(RW+TOFF[k]),H[k]-(k<2?0.02:0));pos.push(p[0],p[1],p[2]);uv.push(i*SEG*SC/(canyon?14:9),canyon?H[k]/13:TOFF[k]/9);
+      const cap=CAP[side>0?1:0][Math.min(i,n-1)];for(let k=0;k<K;k++){const o=Math.min(RW+TOFF[k],cap),p=lat(Math.min(i,n),side*o,(RW+TOFF[k]>cap?Math.min(H[k],H[1]+(cap-RW)*0.6):H[k])-(k<2?0.02:0));pos.push(p[0],p[1],p[2]);uv.push(i*SEG*SC/(canyon?14:9),canyon?H[k]/13:TOFF[k]/9);
         tc.set(TCOL[k]);const j=0.92+tr()*0.16;col.push(tc.r*j,tc.g*j,tc.b*j);}}
     for(let i=0;i<n;i++)for(let k=0;k<K-1;k++){const a=i*K+k,b=a+1,c=a+K,d=c+1;if(side<0)idx.push(a,c,b,b,c,d);else idx.push(a,b,c,b,d,c);}
     const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
@@ -595,7 +625,7 @@ function buildWorld(){
   // a few AUTISTIK billboards on the hillsides
   const ADS=[['$AUTISTIK','#ffd23f','#ff7a2f'],['HYPERFOCUS GP','#2fd0c9','#a27dff'],['DIAMOND HANDS ONLY','#7aa9ff','#2fd0c9'],['BUY · HOLD · RACE','#9be36b','#ffd23f'],['AUTISTIK.IO','#ff4fa0','#ffd23f'],['NO PAPER HANDS','#ff7a2f','#ff4fa0'],['LOCK IN','#ffd23f','#9be36b']];
   const bpost=new THREE.BoxGeometry(0.5,9,0.5),bpm=new THREE.MeshStandardMaterial({color:0x3a3a44,metalness:0.6,roughness:0.5});
-  for(let k=0,i=120;i<n-60;i+=280,k++){const c=C3[i],sd=k%2?1:-1,rx=-Math.cos(c.ang),rz=Math.sin(c.ang),off=sd*(RAIL+9),y=hAt(i,sd,RAIL+9);
+  for(let k=0,i=120;i<n-60;i+=280,k++){const c=C3[i],sd=k%2?1:-1,rx=-Math.cos(c.ang),rz=Math.sin(c.ang),off=sd*(RAIL+9),y=hAt(i,sd,RAIL+9);if(y<-100||!offRoad(c.x+rx*off,c.z+rz*off,i))continue;
     const cv=document.createElement('canvas');cv.width=512;cv.height=192;const x=cv.getContext('2d'),[t,c1,c2]=ADS[k%ADS.length];
     const gr=x.createLinearGradient(0,0,512,192);gr.addColorStop(0,'#120c26');gr.addColorStop(1,'#1d1238');x.fillStyle=gr;x.fillRect(0,0,512,192);
     x.strokeStyle=c2;x.lineWidth=8;x.strokeRect(8,8,496,176);x.shadowColor=c1;x.shadowBlur=24;x.fillStyle=c1;
@@ -880,9 +910,9 @@ function renderGL(pl,others,dt,showMe){
   const look=me.color+'|'+me.car+'|'+me.helmet;
   if(!G.me||G.me.userData.look!==look){if(G.me)G.scene.remove(G.me);G.me=makeCar(me.color,me.car,me.helmet,true);}
   G.me.visible=showMe;
-  const stv=pl.inp&&pl.inp.left?1:pl.inp&&pl.inp.right?-1:(tiltOn&&S?-tiltVal:0);
+  const stv=pl.steer!=null?-pl.steer:pl.inp&&pl.inp.left?1:pl.inp&&pl.inp.right?-1:(tiltOn&&S?-tiltVal:0);
   const spd=clamp((pl.speed||0)/BASE,0,2),cv0=segAt(pl.pos).curve;
-  G.yaw=(G.yaw||0)+(((stv*0.32)+cv0*0.03)*Math.min(1,spd)-(G.yaw||0))*Math.min(1,dt*4.5);
+  G.yaw=(G.yaw||0)+(((stv*0.26)-(pl.vx||0)*0.06+cv0*0.03)*Math.min(1,spd)-(G.yaw||0))*Math.min(1,dt*5);
   if(showMe){placeCar(G.me,pl,{boost:pl.boosting&&!pl.finished,brake:pl.inp&&pl.inp.brake,steer:stv},_o);G.me.rotation.y+=G.yaw;G.me.rotation.z=-G.yaw*0.14;
     if(Math.abs(G.yaw)>0.13&&spd>0.45&&!reduce)smoke(G.me,SHAPES[me.car]||SHAPES.street,Math.abs(G.yaw));}
   smokeTick(dt);
