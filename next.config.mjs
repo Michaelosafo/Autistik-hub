@@ -21,6 +21,7 @@ const nextConfig = {
       { source: "/how-to-buy", destination: "/buy", permanent: true },
       // The game arena is now Hyperfocus GP (app/hyperfocus). Old arena links land there.
       { source: "/arena", destination: "/hyperfocus", permanent: false },
+      { source: "/arena/:chain/:token", destination: "/hyperfocus?chain=:chain&ca=:token", permanent: false },
       { source: "/arena/:path*", destination: "/hyperfocus", permanent: false },
     ];
   },
