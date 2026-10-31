@@ -1,20 +1,5 @@
 // The Content Security Policy is set per request in middleware.ts (lib/csp.ts), so scripts can carry a nonce.
 
-const sbOrigin = (() => { try { let u = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim().replace(/^["']|["']$/g, ""); if (u && !/^https?:\/\//i.test(u)) u = "https://" + u; return u ? new URL(u).origin : ""; } catch { return ""; } })();
-const HYPERFOCUS_CSP = [
-  "default-src 'self'",
-  "script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com",
-  "img-src 'self' data: blob:",
-  `connect-src 'self' https://*.supabase.co wss://*.supabase.co${sbOrigin ? ` ${sbOrigin} ${sbOrigin.replace(/^https:/, "wss:")}` : ""}`,
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'none'",
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-].join("; ");
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -34,7 +19,7 @@ const nextConfig = {
       { source: "/privacy.html", destination: "/safety", permanent: true },
       { source: "/autism.html", destination: "/autism", permanent: true },
       { source: "/how-to-buy", destination: "/buy", permanent: true },
-      // The game arena is now Hyperfocus GP (public/hyperfocus). Old arena links land there.
+      // The game arena is now Hyperfocus GP (app/hyperfocus). Old arena links land there.
       { source: "/arena", destination: "/hyperfocus", permanent: false },
       { source: "/arena/:path*", destination: "/hyperfocus", permanent: false },
     ];
@@ -44,8 +29,6 @@ const nextConfig = {
     return [
       { source: "/@:handle", destination: "/u/:handle" },
       { source: "/.well-known/assetlinks.json", destination: "/api/assetlinks" },
-      // Hyperfocus GP, the game arena, is a static page with its own scripts.
-      { source: "/hyperfocus", destination: "/hyperfocus/index.html" },
     ];
   },
   async headers() {
@@ -62,16 +45,6 @@ const nextConfig = {
         // Files served without the middleware (the offline page) get a strict policy: no scripts at all.
         source: "/offline.html",
         headers: [{ key: "Content-Security-Policy", value: "default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" }],
-      },
-      {
-        // Hyperfocus GP runs without the middleware, so it gets its own strict policy: its own scripts plus
-        // three.js, QR and Supabase from two public CDNs, and live race rooms over Supabase Realtime.
-        source: "/hyperfocus/:path*",
-        headers: [{ key: "Content-Security-Policy", value: HYPERFOCUS_CSP }],
-      },
-      {
-        source: "/hyperfocus",
-        headers: [{ key: "Content-Security-Policy", value: HYPERFOCUS_CSP }],
       },
       {
         source: "/(.*)",

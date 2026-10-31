@@ -1,4 +1,4 @@
-/* Hyperfocus GP: offline swap and demo wallet. Built from the game source; edit both together. */
+/* Hyperfocus GP: offline swap, demo wallet and the link to the site wallet. Built from the game source. */
 /* ================= offline swap + demo wallet ================= */
 (function(){
 const $=s=>document.querySelector(s);
@@ -174,6 +174,13 @@ window.PRWallet={
   logRaceSwap(from,to,usd){if(!W)return;act(`In-race offline swap ${from} → ${to} ($${usd.toFixed(2)}).`);save();}
 };
 
+/* ---- the site's real wallet (only on autistik.io) ---- */
+if(window.HFWallet){
+  $('#siteWallet').hidden=false;
+  $('#bConnect').onclick=()=>{try{window.HFWallet.connect();}catch(e){}};
+  const upd=async()=>{let t='';try{t=await window.HFWallet.label();}catch(e){}$('#swStatus').textContent=t?'Connected: '+t:'Not connected';$('#bConnect').textContent=t?'Switch wallet':'Connect a wallet';};
+  try{window.HFWallet.subscribe(upd);}catch(e){}upd();
+}
 let s0='A';try{s0=localStorage.getItem('pr-wallet-slot')||'A';}catch(e){}
 switchTo(s0==='B'?'B':'A').then(net);
 net();

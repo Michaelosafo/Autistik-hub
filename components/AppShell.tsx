@@ -14,7 +14,7 @@ import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/app", "/mood", "/chats", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena"];
+export const APP_PATHS = ["/app", "/mood", "/chats", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena", "/hyperfocus"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string; icon?: string };
@@ -33,7 +33,7 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
   // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
-  { name: "Wallet", icon: "i-wallet", tip: "Your coins", match: ["/wallet", "/arena", "/analytics", "/pro"], items: [
+  { name: "Wallet", icon: "i-wallet", tip: "Your coins", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"], items: [
     { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade", icon: "i-wallet" },
     { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
     { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
@@ -77,7 +77,7 @@ const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/susu", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
-  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/analytics", "/pro"] },
+  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"] },
 ];
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
