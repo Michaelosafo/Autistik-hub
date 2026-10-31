@@ -320,7 +320,7 @@ function disp(r){
   }
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];return {label:r.ref,sub:c.rugged?'RUG':fmtM(c.m),subCol:c.rugged?COL.dim:c.m>=50?COL.moon:c.mom>=0?COL.up:COL.down,color:r.color,moon:c.m>=50,rug:c.rugged};}
   const h=r.ref,recent=h.act&&S.w.wt-h.actT<1.8;
-  if(S.w.mode==='real')return {label:h.label,sub:recent?h.act.t:h.out?'SOLD ALL':fmtX(h.x)+(h.est&&h.x!=null?'~':''),subCol:recent?h.act.c:h.out?COL.dim:h.x>=100?COL.moon:h.x>=1?COL.up:COL.down,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,moon:(h.x||0)>=100&&!h.out,mono:true};
+  if(S.w.mode==='real')return {label:h.label,sub:recent?h.act.t:h.out?'SOLD ALL':h.x==null?fmtK(h.amt*S.w.mk.P):fmtX(h.x)+(h.est?'~':''),subCol:recent?h.act.c:h.out?COL.dim:h.x==null?COL.ink:h.x>=100?COL.moon:h.x>=1?COL.up:COL.down,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,moon:(h.x||0)>=100&&!h.out,mono:true};
   return {label:h.label,sub:recent?h.act.t:h.out?'SOLD OUT':fmtK(h.amt*S.w.mk.P),subCol:recent?h.act.c:h.out?COL.dim:COL.ink,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,mono:true};
 }
 
@@ -1030,8 +1030,8 @@ function showReal(d,key){
         delete REAL[key];const nd=await loadReal(key);showReal(nd,key);renderLobby();if(isHost)lobbyPresence();}
       catch(e){$('#rKickMsg').textContent='Couldn’t reach the site. Try again.';}};
     return;}
-  const big=d.holders.filter(h=>(h.x||0)>=100).length,ch=d.ch24;
-  el.innerHTML=`<span class="rtok">${img}<b>$${esc(d.symbol||'TOKEN')}</b> ${fmtPrice(d.price)}${ch!=null?` <span class="${ch>=0?'ok':'bad'}">${ch>=0?'+':''}${ch.toFixed(1)}% 24h</span>`:''}</span> ${d.holders.length} holder cars · ${d.trades.length} real trades in the last day${big?` · ${big} wallet${big>1?'s':''} up 100x or more`:''}.`;
+  const big=d.holders.filter(h=>(h.x||0)>=100).length,known=d.holders.filter(h=>h.x!=null).length,ch=d.ch24;
+  el.innerHTML=`<span class="rtok">${img}<b>$${esc(d.symbol||'TOKEN')}</b> ${fmtPrice(d.price)}${ch!=null?` <span class="${ch>=0?'ok':'bad'}">${ch>=0?'+':''}${ch.toFixed(1)}% 24h</span>`:''}</span> ${d.holders.length} holder cars · ${d.trades.length} real trades in the last day${big?` · ${big} wallet${big>1?'s':''} up 100x or more`:''}${known<d.holders.length?` · gains known for ${known} of them (the rest show their bag)`:''}.`;
   showMine();
 }
 async function pickReal(chain,token){
