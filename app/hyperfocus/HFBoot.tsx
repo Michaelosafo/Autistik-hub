@@ -8,6 +8,7 @@ const SCRIPTS = [
   "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
   "/hyperfocus/swap.js",
   "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
+  "/hyperfocus/fx.js",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js",
   "/hyperfocus/net.js",
   "/hyperfocus/game.js",
