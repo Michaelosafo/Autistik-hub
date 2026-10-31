@@ -86,7 +86,8 @@ export async function GET(req: Request) {
     .slice(0, 40)
     .map((x) => {
       const w = String(x.wallet);
-      const got = Date.parse(x.acquired_at || "") || firstBuy.get(w.toLowerCase()) || Date.parse(x.first_seen_at || "") || 0;
+      // Only a real buy time counts (when it acquired the coin, or its first buy we saw). "First seen by us" is not a buy.
+      const got = Date.parse(x.acquired_at || "") || firstBuy.get(w.toLowerCase()) || 0;
       const entry = got ? priceAt(h, got) : null;
       const mult = price && entry ? Math.max(0.01, Math.min(100000, price / entry)) : null;
       const bal = Number(x.balance) || 0, peak = Number(x.peak_balance) || bal;
