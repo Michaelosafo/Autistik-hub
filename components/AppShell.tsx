@@ -37,7 +37,7 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
     { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade", icon: "i-wallet" },
     { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
     { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
-    { href: "/arena", name: "Game arena", note: "Every holder on a pitch: join the match", icon: "i-ball" },
+    { href: "/hyperfocus", name: "Hyperfocus GP", note: "Game arena: race every holder in 3D, with friends", icon: "i-ball" },
   ] },
   { name: "Earn", icon: "i-rew", tip: "Stake, Susu savings and rewards", match: ["/stake", "/susu", "/rewards"], items: [
     { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
