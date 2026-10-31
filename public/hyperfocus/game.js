@@ -13,7 +13,7 @@ const wgauss=()=>{let u=0,v=0;while(!u)u=wr();while(!v)v=wr();return Math.sqrt(-
 function hash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
 const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const COL={night:css('--night'),ink:css('--ink'),dim:css('--dim'),hot:css('--hot'),gas:css('--gas'),up:css('--up'),down:css('--down'),moon:css('--moon'),line:css('--line'),panel:css('--panel')};
+const COL={night:'#0d0b1f',ink:'#f1edff',dim:'#9890c4',hot:'#ff7a2f',gas:'#ffd23f',up:'#43d18a',down:'#ff5a5a',moon:'#c08bff',line:'#2f2a5a',panel:'#18152f'};
 const F_RACE="'Russo One','Arial Black',sans-serif",F_MONO="'IBM Plex Mono',monospace";
 function rgba(h,a){const n=parseInt(h.replace('#',''),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -66,7 +66,8 @@ const sky={stars:[],city:[]};
 
 /* ================= race state ================= */
 let S=null;           // current race
-let menuMode='token',menuTok='SOL',menuBuy=25;
+let menuMode='token',menuTok='SOL',menuBuy=25,menuReal=null;
+const REAL={},LOADING=new Set(),REAL_RE=/^(bsc|ethereum|base|solana):(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
 try{const b=parseFloat(localStorage.getItem('hf-buyin'));if(b>=1&&b<=100000)menuBuy=b;}catch(e){}
 const BUYS=[10,25,50,100,250],SWAP_CHAIN={SOL:'solana',ETH:'ethereum',BNB:'bsc'};
 let me={nick:'',color:PAL[Math.floor(Math.random()*PAL.length)]};
@@ -93,6 +94,21 @@ function newWorld(mode,tok,seedStr){
     W0.coins={};COINS.forEach(c=>W0.coins[c.k]={...c,m:1,mom:0,pump:0,rate:0,rugged:false,mooned:false});
     const memes=COINS.filter(c=>!c.major);W0.coins[memes[Math.floor(wr()*memes.length)].k].shot=true;
     COINS.forEach((c,i)=>W0.ai.push({id:'ai'+i,ai:true,type:CAR_KEYS[(i+1)%4],ref:c.k,color:c.color,pos:startZ+(i-3)*SEG*4.5+wr()*SEG,x:[-0.6,0,0.6][i%3],tx:[-0.6,0,0.6][i%3],speed:BASE*0.5,laneT:wrng(2,5),finished:false,ft:0}));
+  } else if(mode==='real'){
+    const d=REAL[tok],P=d.price||1,mine=(me.wallet||'').toLowerCase();
+    W0.mk={P,p0:P,wave:0,waveDir:0,hist:[P],sym:d.symbol||'TOKEN',real:true,chain:d.chain,token:d.token};
+    W0.holders=[];W0.byW=new Map();W0.mine=null;
+    const tierCol=x=>x==null?null:x>=100?'#c08bff':x>=10?'#43d18a':x>=2?'#2fd0c9':x>=1?'#7aa9ff':'#ff5a5a';
+    let k=0;
+    d.holders.forEach((r,i)=>{
+      const h={label:r.lbl||(r.w.slice(0,6)+'…'+r.w.slice(-4)),w:r.w,x:r.x,est:r.est,dev:r.dev,amt:r.bal,out:!!r.out,boost:0,drag:0,act:null,actT:-9};
+      W0.byW.set(r.w.toLowerCase(),h);
+      if(mine&&r.w.toLowerCase()===mine){W0.mine=h;return;}
+      W0.holders.push(h);
+      W0.ai.push({id:'h'+i,ai:true,type:CAR_KEYS[i%4],ref:h,color:tierCol(r.x)||PAL[i%PAL.length],pos:startZ+(k-5)*SEG*3.2+wr()*SEG,x:[-0.6,0,0.6][k%3],tx:[-0.6,0,0.6][k%3],speed:BASE*0.5,laneT:wrng(2,5),finished:false,ft:0});k++;
+    });
+    const tr=d.trades||[],t0=tr.length?tr[0].at:0,t1=tr.length?tr[tr.length-1].at:1,span=Math.max(1,t1-t0);
+    W0.replay=tr.map(t=>({...t,rt:4+(t.at-t0)/span*140}));W0.ri=0;
   } else {
     const T=TOK[tok];W0.mk={P:T.p0,p0:T.p0,wave:0,waveDir:0,hist:[T.p0]};
     W0.holders=[];
@@ -145,10 +161,27 @@ function tokTick(){
   const ch=mk.P/mk.p0;
   [1.5,2,3].forEach(lv=>{if(before/mk.p0<lv&&ch>=lv){wtoast(`${w.tok} +${Math.round((lv-1)*100)}% · FIELD SPEEDING UP`,COL.up);wfeed(`<b>${w.tok}</b> is up ${Math.round((lv-1)*100)}%. Every holder is driving faster.`);}});
 }
+function realTick(){
+  const w=S.w,mk=w.mk;
+  w.holders.forEach(h=>{h.boost=Math.max(0,h.boost-0.2);h.drag=Math.max(0,h.drag-0.2);});
+  while(w.ri<w.replay.length&&w.replay[w.ri].rt<=w.wt){
+    const t=w.replay[w.ri++],h=w.byW.get(String(t.w).toLowerCase()),usd=t.amt*mk.P;
+    mk.P=clamp(mk.P*(1+t.s*Math.min(0.012,0.0015+usd/2e6)),mk.p0*0.3,mk.p0*6);
+    if(!h)continue;
+    if(t.s>0){h.amt+=t.amt;h.out=false;h.boost=Math.min(4,h.boost+2+usd/5000);h.drag=0;h.act={t:'BUY '+fmtK(usd),c:COL.up};}
+    else{h.amt=t.left!=null?t.left:Math.max(0,h.amt-t.amt);h.drag=3+Math.min(4,usd/3000);h.boost=0;if(h.amt<=0){h.out=true;h.act={t:'SOLD ALL',c:COL.down};}else h.act={t:'SELL '+fmtK(usd),c:COL.down};}
+    h.actT=w.wt;
+    if(usd>=300||h.out)wfeed(`<b>${esc(h.label)}</b> ${t.s>0?'bought':h.out?'sold everything,':'sold'} ${fmtK(usd)} of $${esc(mk.sym)}.`);
+  }
+}
+const fmtX=x=>x==null?'?':x>=1000?Math.round(x).toLocaleString('en-US')+'x':x>=10?x.toFixed(0)+'x':x.toFixed(x>=1?1:2)+'x';
+const fmtPrice=p=>!p?'$0':p>=1?fmtUsd(p):'$'+Number(p.toPrecision(3)).toString();
+function tokLabel(){return S&&S.w.mk&&S.w.mk.sym?'$'+S.w.mk.sym:(S?S.tok:'');}
 function priceFactor(){const mk=S.w.mk;return clamp(1+1.3*Math.log(mk.P/mk.p0),0.45,1.9);}
 function aiTarget(r){
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];if(c.rugged)return BASE*0.05;return BASE*clamp(0.7+0.11*Math.log(c.m)+c.mom*8,0.32,1.5)*(c.m>=50?1.22:1);}
-  const h=r.ref;return BASE*0.8*priceFactor()*(h.boost>0?1.4:1)*(h.drag>0?0.5:1)*(h.out?0.32:1);
+  const h=r.ref,xf=S.w.mode==='real'?clamp(1+0.2*Math.log10(Math.max(h.x||1,0.02)),0.5,1.65):1;
+  return BASE*0.8*xf*priceFactor()*(h.boost>0?1.4:1)*(h.drag>0?0.5:1)*(h.out?0.32:1);
 }
 function gatePicks(g){
   const cs=S.w.coins,live=COINS.filter(c=>!cs[c.k].rugged);
@@ -159,7 +192,7 @@ function gatePicks(g){
 }
 function worldStep(dt){
   const w=S.w;w.wt+=dt;w.tickAcc+=dt;
-  while(w.tickAcc>=0.2-1e-9){w.tickAcc-=0.2;w.mode==='fun'?funTick():tokTick();}
+  while(w.tickAcc>=0.2-1e-9){w.tickAcc-=0.2;w.mode==='fun'?funTick():w.mode==='real'?realTick():tokTick();}
   w.histAcc+=dt;if(w.histAcc>=1){w.histAcc-=1;if(w.mk){w.mk.hist.push(w.mk.P);if(w.mk.hist.length>60)w.mk.hist.shift();}}
   if(w.mode==='fun')GATES.forEach(g=>{if(!g.frozen&&w.wt>=g.freezeT){g.coins=gatePicks(g);g.frozen=true;}});
   for(const r of w.ai){
@@ -189,7 +222,7 @@ function updMe(h,dt){
     if(i.gas&&h.tradeT<=0){if(h.cash>=1){const u=Math.min(15,h.cash);h.cash-=u;h.amt+=u/P;h.boostT=0.8;h.tradeT=0.35;}else{if(!h.warned){h.toasts.push({txt:'OUT OF CASH · BRAKE SELLS',color:COL.down,t:2});h.warned=true;}}}
     if(i.brake&&h.tradeT<=0&&h.amt*P>=1){const u=Math.min(15,h.amt*P);h.amt-=u/P;h.cash+=u;h.tradeT=0.35;h.warned=false;}
     h.boostT=Math.max(0,h.boostT-dt);boosting=h.boostT>0;
-    maxS=BASE*priceFactor()*engine(h)*st.speed*(boosting?1+0.4*st.boost:1);
+    maxS=BASE*priceFactor()*engine(h)*st.speed*(boosting?1+0.4*st.boost:1)*(h.realX?clamp(1+0.08*Math.log10(Math.max(h.realX,0.1)),0.92,1.2):1);
   }
   h.boosting=boosting;
   if(i.brake)h.speed-=BASE*(fun?1.3:0.9)*dt;
@@ -227,6 +260,7 @@ function doGate(h,g){
 
 /* ================= racing session ================= */
 function startRace(mode,tok,go,seedStr){
+  if(mode==='real'&&!REAL[tok]){loadReal(tok).then(d=>{if(d&&d.tracked)startRace(mode,tok,go,seedStr);});return;}
   lastGo=go;
   const w=newWorld(mode,tok,seedStr);
   const startZ=playerZ+SEG*14;
@@ -234,7 +268,9 @@ function startRace(mode,tok,go,seedStr){
   const buy=menuBuy;h.buy=buy;
   if(mode==='fun'){h.coin=tok;h.amt=buy/w.coins[tok].p0;h.gas=60;h.swaps=0;h.start=buy;}
   else{h.cash=Math.round(buy*50)/100;h.amt=buy/w.mk.p0;h.tradeT=0;h.boostT=0;h.start=buy+h.cash;}
-  w.feed.unshift(`<b>${esc(h.name)}</b> bought in with ${fmtUsd(buy)} of ${tok}.`);
+  if(mode==='real'&&w.mine){h.realX=w.mine.x;h.name=(me.nick||'You');}
+  w.feed.unshift(`<b>${esc(h.name)}</b> bought in with ${fmtUsd(buy)} of ${mode==='real'?'$'+esc(w.mk.sym):tok}.`);
+  if(mode==='real'&&w.mine)w.feed.unshift(`Your wallet is in this race: up ${fmtX(w.mine.x)} on your real bag. Engine boosted.`);
   S={w,me:h,go,mode,tok,remotes:[],feedDirty:true,endShown:false,pubT:0,steps:0};
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);
   if(!immersive())enterImmersive(false);
@@ -242,7 +278,7 @@ function startRace(mode,tok,go,seedStr){
   $('#pads').hidden=false;
   $('#padGas').textContent=mode==='fun'?'GAS':'BUY';$('#padBrake').textContent=mode==='fun'?'BRAKE':'SELL';
   $('#keyHint').innerHTML=mode==='fun'?'<b>← →</b> steer · <b>Space / ↑</b> GAS · <b>↓</b> brake':'<b>← →</b> steer · <b>Space / ↑</b> buy (boost) · <b>↓</b> sell';
-  $('#wireH').textContent=mode==='fun'?'Market wire':`${tok} onchain wire`;
+  $('#wireH').textContent=mode==='fun'?'Market wire':mode==='real'?`$${w.mk.sym} live trades`:`${tok} onchain wire`;
   state='race';
   publish(true);
 }
@@ -267,7 +303,7 @@ function readRemotes(){
 function publish(force){
   if(!nr||!S)return;
   const h=S.me;
-  nr.presence({n:me.nick||'Friend',c:me.color,st:'race',go:S.go,p:Math.round(h.pos),x:+h.x.toFixed(3),s:Math.round(h.speed),f:h.finished?1:0,ft:+h.ft.toFixed(2),v:+myValue(h).toFixed(2),b:h.buy||0,g:h.boosting?1:0,k:S.mode==='fun'?h.coin:S.tok,t:me.car,hc:me.helmet}).catch(()=>{});
+  nr.presence({n:me.nick||'Friend',c:me.color,st:'race',go:S.go,p:Math.round(h.pos),x:+h.x.toFixed(3),s:Math.round(h.speed),f:h.finished?1:0,ft:+h.ft.toFixed(2),v:+myValue(h).toFixed(2),b:h.buy||0,g:h.boosting?1:0,k:S.mode==='fun'?h.coin:S.mode==='real'?tokLabel():S.tok,t:me.car,hc:me.helmet}).catch(()=>{});
 }
 
 /* ---------- standings ---------- */
@@ -284,6 +320,7 @@ function disp(r){
   }
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];return {label:r.ref,sub:c.rugged?'RUG':fmtM(c.m),subCol:c.rugged?COL.dim:c.m>=50?COL.moon:c.mom>=0?COL.up:COL.down,color:r.color,moon:c.m>=50,rug:c.rugged};}
   const h=r.ref,recent=h.act&&S.w.wt-h.actT<1.8;
+  if(S.w.mode==='real')return {label:h.label,sub:recent?h.act.t:h.out?'SOLD ALL':fmtX(h.x)+(h.est&&h.x!=null?'~':''),subCol:recent?h.act.c:h.out?COL.dim:h.x>=100?COL.moon:h.x>=1?COL.up:COL.down,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,moon:(h.x||0)>=100&&!h.out,mono:true};
   return {label:h.label,sub:recent?h.act.t:h.out?'SOLD OUT':fmtK(h.amt*S.w.mk.P),subCol:recent?h.act.c:h.out?COL.dim:COL.ink,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,mono:true};
 }
 
@@ -307,13 +344,13 @@ function initGL(){
   _v=new THREE.Vector3();_v2=new THREE.Vector3();
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x0b0820);scene.fog=new THREE.FogExp2(0x24163f,0.0056);
   const camera=new THREE.PerspectiveCamera(66,16/9,0.3,1600);
-  scene.add(new THREE.HemisphereLight(0x8a7cff,0x0a0a14,0.75));
+  const hemi=new THREE.HemisphereLight(0x8a7cff,0x0a0a14,0.75);scene.add(hemi);
   const moon=new THREE.DirectionalLight(0xb8c4ff,0.5);moon.position.set(-60,120,-40);scene.add(moon);
-  scene.add(new THREE.AmbientLight(0x3a3460,0.5));
+  const amb=new THREE.AmbientLight(0x3a3460,0.5);scene.add(amb);
   // sky dome with gradient + stars, follows the camera
-  const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:{},
+  const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,uniforms:{top:{value:new THREE.Color(0x07061a)},mid:{value:new THREE.Color(0x1a0f36)},hz:{value:new THREE.Color(0x24163f)},glow:{value:new THREE.Color(0x6b2b33)}},
     vertexShader:'varying vec3 vP;void main(){vP=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-    fragmentShader:'varying vec3 vP;void main(){float h=clamp(vP.y,-0.1,1.0);vec3 top=vec3(0.027,0.024,0.10);vec3 mid=vec3(0.10,0.06,0.21);vec3 hz=vec3(0.141,0.086,0.247);vec3 glow=vec3(0.42,0.17,0.20);vec3 c=mix(hz,glow,smoothstep(0.0,0.04,h)*(1.0-smoothstep(0.04,0.14,h)));c=mix(c,mid,smoothstep(0.08,0.2,h));c=mix(c,top,smoothstep(0.2,0.65,h));gl_FragColor=vec4(c,1.0);}'});
+    fragmentShader:'uniform vec3 top;uniform vec3 mid;uniform vec3 hz;uniform vec3 glow;varying vec3 vP;void main(){float h=clamp(vP.y,-0.1,1.0);vec3 c=mix(hz,glow,smoothstep(0.0,0.04,h)*(1.0-smoothstep(0.04,0.14,h)));c=mix(c,mid,smoothstep(0.08,0.2,h));c=mix(c,top,smoothstep(0.2,0.65,h));gl_FragColor=vec4(c,1.0);}'});
   const sky=new THREE.Mesh(new THREE.SphereGeometry(1200,32,16),skyMat);scene.add(sky);
   const sg=new THREE.BufferGeometry(),sp=[],sr=mulberry(11);
   for(let i=0;i<900;i++){const th=sr()*Math.PI*2,ph=Math.acos(0.15+sr()*0.85);sp.push(1100*Math.sin(ph)*Math.cos(th),1100*Math.cos(ph),1100*Math.sin(ph)*Math.sin(th));}
@@ -322,13 +359,31 @@ function initGL(){
   const moonDisc=new THREE.Mesh(new THREE.CircleGeometry(40,32),new THREE.MeshBasicMaterial({color:0xfff2d6,fog:false}));scene.add(moonDisc);
   const head=new THREE.SpotLight(0xfff0d0,2.2,140,0.42,0.55,1);scene.add(head);scene.add(head.target);
   const lampLights=[];for(let i=0;i<4;i++){const l=new THREE.PointLight(0xffa850,1.6,46,2);scene.add(l);lampLights.push(l);}
-  const g={renderer,scene,camera,sky,stars,moonDisc,head,lampLights,cars:new Map(),labelCache:new Map(),camInit:false,lookAt:new THREE.Vector3(),tmp:{},
+  const g={renderer,scene,camera,sky,skyMat,stars,moonDisc,head,lampLights,hemi,moon,amb,cars:new Map(),labelCache:new Map(),camInit:false,lookAt:new THREE.Vector3(),tmp:{},
     geo:{body:new THREE.BoxGeometry(3.6,1.0,7.4),cabin:new THREE.BoxGeometry(3.0,0.95,3.6),wheel:new THREE.CylinderGeometry(0.66,0.66,0.62,14),light:new THREE.BoxGeometry(0.95,0.26,0.1),spoiler:new THREE.BoxGeometry(3.5,0.14,0.8),post:new THREE.BoxGeometry(0.14,0.5,0.2),flame:new THREE.ConeGeometry(0.34,2.4,10),shadow:new THREE.PlaneGeometry(5.2,8.6)},
     mat:{glass:new THREE.MeshPhongMaterial({color:0x0b0a18,shininess:120,specular:0x8888aa}),tire:new THREE.MeshLambertMaterial({color:0x08080c}),tail:new THREE.MeshBasicMaterial({color:0xff2a3a}),head:new THREE.MeshBasicMaterial({color:0xfff6e0}),
       flameB:new THREE.MeshBasicMaterial({color:0x7ad7ff,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false}),flameM:new THREE.MeshBasicMaterial({color:0xff9a2f,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false}),
       shadow:new THREE.MeshBasicMaterial({map:shadowTex(),transparent:true,depthWrite:false})}};
   return g;
 }
+/* The race world follows the page theme: daytime in light mode, night city in dark mode. */
+function pageDark(){const t=document.documentElement.getAttribute('data-theme');if(t==='dark')return true;if(t==='light')return false;return !!(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);}
+function applySceneTheme(){
+  if(!G)return;const day=!pageDark(),u=G.skyMat.uniforms;G.day=day;
+  if(day){u.top.value.set(0x2f6fd0);u.mid.value.set(0x7fb2e6);u.hz.value.set(0xd4e2f0);u.glow.value.set(0xf2dcc0);
+    G.scene.background.set(0xbcd4ec);G.scene.fog.color.set(0xc9d9ea);G.scene.fog.density=0.0042;
+    G.hemi.color.set(0xe6f0ff);G.hemi.groundColor.set(0x5a6a4a);G.hemi.intensity=1.05;G.moon.color.set(0xfff4e0);G.moon.intensity=1.15;G.amb.color.set(0x8a8aa0);G.amb.intensity=0.55;
+    G.stars.visible=false;G.moonDisc.material.color.set(0xfff8e6);G.moonDisc.scale.setScalar(0.8);G.lampLights.forEach(l=>l.intensity=0);G.head.intensity=0.6;
+    if(G.bMat){G.bMat.color.set(0x8a90a6);G.bMat.emissiveIntensity=0.06;}}
+  else{u.top.value.set(0x07061a);u.mid.value.set(0x1a0f36);u.hz.value.set(0x24163f);u.glow.value.set(0x6b2b33);
+    G.scene.background.set(0x0b0820);G.scene.fog.color.set(0x24163f);G.scene.fog.density=0.0056;
+    G.hemi.color.set(0x8a7cff);G.hemi.groundColor.set(0x0a0a14);G.hemi.intensity=0.75;G.moon.color.set(0xb8c4ff);G.moon.intensity=0.5;G.amb.color.set(0x3a3460);G.amb.intensity=0.5;
+    G.stars.visible=true;G.moonDisc.material.color.set(0xfff2d6);G.moonDisc.scale.setScalar(1);G.lampLights.forEach(l=>l.intensity=1.6);G.head.intensity=2.2;
+    if(G.bMat){G.bMat.color.set(0x17122b);G.bMat.emissiveIntensity=0.55;}}
+}
+try{new MutationObserver(applySceneTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','class']});}catch(e){}
+addEventListener('autistik-theme',()=>setTimeout(applySceneTheme,0));
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applySceneTheme);}catch(e){}
 function shadowTex(){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),gr=x.createRadialGradient(32,32,4,32,32,32);gr.addColorStop(0,'rgba(0,0,0,0.7)');gr.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=gr;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c);}
 function computeC3(){
   C3=[];let ang=0,px=0,pz=0;
@@ -430,11 +485,11 @@ function buildGLTrack(){
   const br=mulberry(99),blds=[];
   for(let n=20;n<segments.length;n+=7){const side=br()<0.5?-1:1;blds.push({n,lat:side*(45+br()*140),h:14+br()*70,w:10+br()*22,d:10+br()*22});}
   const bG=new THREE.BoxGeometry(1,1,1);bG.translate(0,0.5,0);
-  const bMat=new THREE.MeshLambertMaterial({color:0x17122b,emissive:0xffffff,emissiveMap:windowTex(),emissiveIntensity:0.55});
+  const bMat=new THREE.MeshLambertMaterial({color:0x17122b,emissive:0xffffff,emissiveMap:windowTex(),emissiveIntensity:0.55});G.bMat=bMat;
   const bm=new THREE.InstancedMesh(bG,bMat,blds.length);
   blds.forEach((b,i)=>{const c=C3[b.n],rx=-Math.cos(c.ang),rz=Math.sin(c.ang);q.setFromAxisAngle(v.set(0,1,0),c.ang);sc.set(b.w,b.h,b.d);m4.compose(v.set(c.x+rx*b.lat,c.y-2,c.z+rz*b.lat),q,sc);bm.setMatrixAt(i,m4);});
   bm.frustumCulled=false;G.scene.add(bm);
-  G.track=true;
+  G.track=true;applySceneTheme();
 }
 function windowTex(){const c=document.createElement('canvas');c.width=64;c.height=128;const x=c.getContext('2d'),r=mulberry(5);x.fillStyle='#000';x.fillRect(0,0,64,128);
   for(let yy=4;yy<124;yy+=8)for(let xx=4;xx<60;xx+=8){if(r()<0.32){x.fillStyle=r()<0.7?'#ffc46b':'#9fb8ff';x.globalAlpha=0.5+r()*0.5;x.fillRect(xx,yy,4,4);}}
@@ -788,17 +843,20 @@ function drawHUD(pl,list){
     c.fillStyle=r.color;c.beginPath();c.arc(xx,ry+8,r.remote?6:4,0,7);c.fill();if(r.remote){c.strokeStyle=COL.ink;c.lineWidth=1.5;c.stroke();c.lineWidth=1;}}
   c.fillStyle=pl.color;c.fillRect(rx+rw/2-2,ry,4,16);
   c.textAlign='right';c.font=`48px ${F_RACE}`;c.fillStyle=COL.ink;c.fillText(Math.round(pl.speed/BASE*190),W-78,54);c.font=`14px ${F_RACE}`;c.fillStyle=COL.dim;c.fillText('KM/H',W-78,72);
-  const bx=W-292,by=84;c.textAlign='left';c.fillStyle='rgba(13,11,31,0.74)';rr(c,bx,by,276,60,8);c.fill();
-  if(fun){const cn=S.w.coins[pl.coin];c.fillStyle=cn.color;c.fillRect(bx,by,5,60);c.font=`18px ${F_RACE}`;c.fillText(pl.coin,bx+14,by+24);const cw=c.measureText(pl.coin).width;
+  const pw=320,bx=W-pw-16,by=84,ph=80;c.textAlign='left';c.fillStyle='rgba(13,11,31,0.74)';rr(c,bx,by,pw,ph,8);c.fill();
+  const eg=fun?engine(pl):priceFactor()*engine(pl);
+  if(fun){const cn=S.w.coins[pl.coin];c.fillStyle=cn.color;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillText(pl.coin,bx+14,by+24);const cw=c.measureText(pl.coin).width;
     c.font=`600 13px ${F_MONO}`;c.fillStyle=cn.rugged?COL.dim:cn.m>=50?COL.moon:cn.mom>=0?COL.up:COL.down;c.fillText(cn.rugged?'RUGGED':fmtM(cn.m),bx+22+cw,by+23);
     c.fillStyle=COL.ink;c.font=`600 15px ${F_MONO}`;c.fillText(fmtUsd(myValue(pl)),bx+14,by+47);
-  } else {const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100;c.fillStyle=TOK[S.tok].color;c.fillRect(bx,by,5,60);
-    c.font=`18px ${F_RACE}`;c.fillText(S.tok,bx+14,by+24);const cw=c.measureText(S.tok).width;
-    c.font=`600 13px ${F_MONO}`;c.fillStyle=COL.ink;c.fillText(fmtUsd(mk.P),bx+22+cw,by+23);c.fillStyle=ch>=0?COL.up:COL.down;c.fillText(`${ch>=0?'+':''}${ch.toFixed(1)}%`,bx+112+cw,by+23);
-    c.fillStyle=COL.ink;c.font=`600 13px ${F_MONO}`;c.fillText(`${fmtAmt(pl.amt)} ${S.tok} · cash ${fmtUsd(pl.cash)}`,bx+14,by+47);}
-  const eg=fun?engine(pl):priceFactor()*engine(pl);c.textAlign='right';c.font=`600 11px ${F_MONO}`;c.fillStyle=eg>=1?COL.up:COL.down;c.fillText(`${fun?'ENGINE':'SPEED'} ${(eg*100).toFixed(0)}%`,bx+268,by+24);
-  if(fun){const gx=W-292,gy=152;c.fillStyle='rgba(13,11,31,0.74)';rr(c,gx,gy,276,30,8);c.fill();c.fillStyle=COL.line;c.fillRect(gx+12,gy+9,190,12);c.fillStyle=pl.gas>15?COL.gas:COL.down;c.fillRect(gx+12,gy+9,190*pl.gas/100,12);
-    c.font=`16px ${F_RACE}`;c.fillStyle=pl.boosting?'#7ad7ff':COL.gas;c.textAlign='right';c.fillText('GAS',gx+266,gy+21);}
+  } else {const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100,tl=tokLabel();c.fillStyle=TOK[S.tok]?TOK[S.tok].color:COL.gas;c.fillRect(bx,by,5,ph);
+    c.font=`18px ${F_RACE}`;c.fillText(tl,bx+14,by+24);const cw=c.measureText(tl).width;
+    c.font=`600 13px ${F_MONO}`;c.fillStyle=COL.ink;const pt=fmtPrice(mk.P);c.fillText(pt,bx+22+cw,by+23);const ptw=c.measureText(pt).width;
+    c.fillStyle=ch>=0?COL.up:COL.down;c.fillText(`${ch>=0?'+':''}${ch.toFixed(1)}%`,bx+30+cw+ptw,by+23);
+    c.fillStyle=COL.ink;c.font=`600 12px ${F_MONO}`;c.fillText(`${fmtAmt(pl.amt)} ${tl.replace('$','')} · ${fmtUsd(myValue(pl))} · cash ${fmtUsd(pl.cash)}`,bx+14,by+46);}
+  c.font=`600 11px ${F_MONO}`;c.fillStyle=eg>=1?COL.up:COL.down;c.fillText(`${fun?'ENGINE':'SPEED'} ${(eg*100).toFixed(0)}%`,bx+14,by+68);
+  if(pl.realX){c.fillStyle=COL.moon;c.textAlign='right';c.fillText(`YOUR WALLET ${fmtX(pl.realX)}`,bx+pw-10,by+68);c.textAlign='left';}
+  if(fun){const gx=bx,gy=by+ph+8;c.fillStyle='rgba(13,11,31,0.74)';rr(c,gx,gy,pw,30,8);c.fill();c.fillStyle=COL.line;c.fillRect(gx+12,gy+9,pw-80,12);c.fillStyle=pl.gas>15?COL.gas:COL.down;c.fillRect(gx+12,gy+9,(pw-80)*pl.gas/100,12);
+    c.font=`16px ${F_RACE}`;c.fillStyle=pl.boosting?'#7ad7ff':COL.gas;c.textAlign='right';c.fillText('GAS',gx+pw-10,gy+21);}
   if(fun){const ng=GATES.find(g=>g.n*SEG>pl.pos);if(ng){const d=(ng.n*SEG-pl.pos)/SEG;if(d<70){c.textAlign='center';c.font=`16px ${F_RACE}`;c.fillStyle=COL.gas;c.fillText(`SWAP GATE ${Math.round(d*4)}m · pick a lane`,W/2,74);}}}
   c.textAlign='center';pl.toasts.forEach((t,i)=>{c.globalAlpha=Math.min(1,t.t*2);c.font=`26px ${F_RACE}`;c.fillStyle=t.color;c.fillText(t.txt,W/2,H*0.36+i*32);});c.globalAlpha=1;
   const left=(S.go-Date.now())/1000;
@@ -818,7 +876,7 @@ function renderBoard(list){
       tag=`<span class="tagc ${cls}">${esc(r.finished?'FIN':d.sub)}</span>`;}
     return `<li class="${r.me?'me':r.remote?'friend':''}"><span class="pl">${i+1}</span><span class="dot" style="background:${r.color}"></span>${nm}${tag}</li>`;}).join('');
   $('#lapInfo').textContent=`${Math.round(clamp(S.me.pos/(FIN*SEG),0,1)*100)}%`;
-  if(S.w.mode==='token'){const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100;$('#priceInfo').innerHTML=`<span style="color:${ch>=0?COL.up:COL.down}">${S.tok} ${fmtUsd(mk.P)} ${ch>=0?'+':''}${ch.toFixed(1)}%</span>`;}else $('#priceInfo').textContent='';
+  if(S.w.mode!=='fun'){const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100;$('#priceInfo').innerHTML=`<span style="color:${ch>=0?COL.up:COL.down}">${esc(tokLabel())} ${fmtPrice(mk.P)} ${ch>=0?'+':''}${ch.toFixed(1)}%</span>`;}else $('#priceInfo').textContent='';
 }
 function renderFeed(){if(!S)return;$('#feed').innerHTML=S.w.feed.slice(0,30).map(t=>`<li>${t}</li>`).join('')||'<li>Quiet so far.</li>';S.feedDirty=false;}
 function showEnd(){
@@ -863,7 +921,7 @@ async function enterRoom(c,host){
 }
 function lobbyPresence(){
   if(!nr)return;
-  nr.presence({n:me.nick,c:me.color,b:menuBuy,st:'lobby',host:isHost?1:0,mode:isHost?menuMode:null,tok:isHost?menuTok:null,go:isHost?hostGo:null,p:null,x:null,s:null,f:null,ft:null,v:null,g:null,k:null}).catch(()=>{});
+  nr.presence({n:me.nick,c:me.color,b:menuBuy,st:'lobby',host:isHost?1:0,mode:isHost?menuMode:null,tok:isHost?(menuMode==='real'?menuReal:menuTok):null,go:isHost?hostGo:null,p:null,x:null,s:null,f:null,ft:null,v:null,g:null,k:null}).catch(()=>{});
 }
 let knownPeers=new Map(),toastTimer=0;
 function peerDiff(){
@@ -883,8 +941,9 @@ function hostPeer(){if(!nr)return null;return nr.peers().filter(p=>p.presence&&p
 function checkHostGo(){
   if(isHost||!nr)return;
   const hp=hostPeer();if(!hp)return;const q=hp.presence;
+  if(q.mode==='real'&&REAL_RE.test(String(q.tok))&&!REAL[q.tok]&&!LOADING.has(q.tok)){loadReal(q.tok).then(()=>{if(state==='lobby')renderLobby();});}
   if(state==='lobby')renderLobby();
-  if(typeof q.go==='number'&&q.go!==lastGo&&Date.now()-q.go<180000&&(q.mode==='fun'||q.mode==='token')&&TOK[q.tok]){
+  if(typeof q.go==='number'&&q.go!==lastGo&&Date.now()-q.go<180000&&(((q.mode==='fun'||q.mode==='token')&&TOK[q.tok])||(q.mode==='real'&&REAL_RE.test(String(q.tok))))){
     if(state==='race'&&S&&!S.me.finished)return;
     startRace(q.mode,q.tok,q.go,`${code}|${q.go}|${q.mode}|${q.tok}`);
   }
@@ -905,27 +964,29 @@ function renderBuy(){
     $('#buyCustom').addEventListener('input',e=>{const v=parseFloat(e.target.value.replace(/[^0-9.]/g,''));if(v>=1&&v<=100000)setBuy(Math.round(v*100)/100,true);});}
   $('#buyRow').querySelectorAll('button[data-b]').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.b===menuBuy));
   if(custom&&document.activeElement!==$('#buyCustom'))$('#buyCustom').value=custom;
-  const hp=!isHost&&nr?hostPeer():null,mode=hp?hp.presence.mode:menuMode,tok=hp?hp.presence.tok:menuTok;
+  const hp=!isHost&&nr?hostPeer():null,mode=hp?hp.presence.mode:menuMode,tok=hp?hp.presence.tok:(menuMode==='real'?menuReal:menuTok);
+  const rd=mode==='real'?REAL[tok]:null,symTxt=rd&&rd.symbol?'$'+rd.symbol:tok;
   $('#buyNote').textContent=mode==='fun'?`You start with ${fmtUsd(menuBuy)} of ${tok||'SOL'} to race and swap at the gates. Play money.`
     :`You buy ${fmtUsd(menuBuy)} of ${tok||'SOL'} at the start, plus ${fmtUsd(menuBuy/2)} of cash to buy more mid-race for boosts. Play money.`;
-  const rb=$('#realBuy');rb.hidden=!(window.HFWallet&&mode!=='fun'&&SWAP_CHAIN[tok]);
-  if(!rb.hidden){rb.href='/swap?chain='+SWAP_CHAIN[tok];rb.textContent=`Buy real ${tok} on AUTISTIK Swap →`;}
+  const rb=$('#realBuy');rb.hidden=!(window.HFWallet&&((mode==='token'&&SWAP_CHAIN[tok])||(mode==='real'&&rd)));
+  if(!rb.hidden){if(mode==='real'){rb.href=`/swap?chain=${encodeURIComponent(rd.chain)}&buy=${encodeURIComponent(rd.token)}`;rb.textContent=`Join for real: buy ${symTxt} on AUTISTIK Swap →`;}else{rb.href='/swap?chain='+SWAP_CHAIN[tok];rb.textContent=`Buy real ${tok} on AUTISTIK Swap →`;}}
   $('#bStart').textContent=`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;
+  $('#bStart').disabled=menuMode==='real'&&!(menuReal&&REAL[menuReal]&&REAL[menuReal].tracked);
 }
 function setBuy(v,typed){menuBuy=v;try{localStorage.setItem('hf-buyin',String(v));}catch(e){}if(!typed)renderBuy();else{$('#buyRow').querySelectorAll('button[data-b]').forEach(b=>b.setAttribute('aria-pressed',false));$('#bStart').textContent=`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;}if(nr)lobbyPresence();}
 function renderLobby(){
   renderBuy();
   const hostView=!nr||isHost;
   $('#modeBox').hidden=!hostView;$('#bStart').hidden=!hostView;$('#guestMode').hidden=hostView;
-  $('#mTok').setAttribute('aria-pressed',menuMode==='token');$('#mFun').setAttribute('aria-pressed',menuMode==='fun');
+  $('#mTok').setAttribute('aria-pressed',menuMode==='token');$('#mFun').setAttribute('aria-pressed',menuMode==='fun');$('#mReal').setAttribute('aria-pressed',menuMode==='real');
+  $('#mReal').hidden=!window.HFWallet;$('#tokRow').hidden=menuMode==='real';$('#realBox').hidden=menuMode!=='real';
   $('#tokRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===menuTok));
-  $('#tokRow').previousElementSibling.previousElementSibling.textContent='Race type';
-  $('#modeDesc').textContent=menuMode==='token'?`You race the real-feel crowd of ${menuTok} holders. Buyers boost, sellers drop back, and a rising price speeds everyone up.`:`Nine coins race. Pumpers fly, rugs stall, and you can swap your coin offline at the gates.`;
+  $('#modeDesc').textContent=menuMode==='real'?'Every car is a real holder of this coin, shown by wallet. Each one drives as fast as that wallet is up since it bought in, so 100x wallets fly past you. The last day\'s real buys and sells replay as boosts and slowdowns.':menuMode==='token'?`You race the real-feel crowd of ${menuTok} holders. Buyers boost, sellers drop back, and a rising price speeds everyone up.`:`Nine coins race. Pumpers fly, rugs stall, and you can swap your coin offline at the gates.`;
   if(!nr){$('#players').innerHTML=`<li><span class="dot" style="background:${me.color}"></span>${esc(me.nick||'You')}<span class="t">you</span></li>`;return;}
   const ps=nr.peers();
   $('#players').innerHTML=ps.length?ps.map(p=>{const q=p.presence||{};const c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888';
     const bi=+q.b>0?` · $${Math.round(+q.b)} in`:'';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
-  if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a Fun race':'a Token race'}${hp.presence.tok?' with '+hp.presence.tok:''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
+  if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a Fun race':hp.presence.mode==='real'?'a real-token race':'a Token race'}${hp.presence.tok?' with '+(hp.presence.mode==='real'?(REAL[hp.presence.tok]&&REAL[hp.presence.tok].symbol?'$'+REAL[hp.presence.tok].symbol:'a pasted coin'):hp.presence.tok):''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
 }
 $('#nick').value=me.nick;
 function renderGarage(){
@@ -947,11 +1008,77 @@ $('#bCopy').onclick=()=>{const t=code||'';const done=()=>{$('#bCopy').textConten
   function sel(){const r=document.createRange();r.selectNodeContents($('#codeTxt'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
 $('#mTok').onclick=()=>{menuMode='token';renderLobby();if(isHost)lobbyPresence();};
 $('#mFun').onclick=()=>{menuMode='fun';renderLobby();if(isHost)lobbyPresence();};
+$('#mReal').onclick=()=>{menuMode='real';renderLobby();loadHot();fillMine();if(isHost)lobbyPresence();};
+/* ---------- real-token races (autistik.io) ---------- */
+function shortA(a){return a.length>12?a.slice(0,6)+'…'+a.slice(-4):a;}
+async function loadReal(key){
+  const m=REAL_RE.exec(key);if(!m)return null;
+  LOADING.add(key);setTimeout(()=>LOADING.delete(key),8000);
+  try{const r=await fetch(`/api/hyperfocus/race?chain=${encodeURIComponent(m[1])}&token=${encodeURIComponent(m[2])}`);const d=await r.json();if(r.ok){REAL[key]=d;}else d.error=d.error||'Couldn’t load that token.';return d;}
+  catch(e){return {error:'Couldn’t reach the race data. Try again.'};}
+}
+function showReal(d,key){
+  const el=$('#rInfo');
+  if(!d){el.textContent='Paste a token address, or pick a hot coin above.';return;}
+  if(d.error){el.innerHTML=`<span class="bad">${esc(d.error)}</span>`;return;}
+  const img=d.image?`<img src="${esc(d.image)}" alt="">`:'';
+  if(!d.tracked){el.innerHTML=`<span class="rtok">${img}<b>${esc(d.symbol?'$'+d.symbol:shortA(d.token))}</b></span> isn’t in the arena yet. <button id="rKick">Kick off this race</button> <span id="rKickMsg"></span>`;
+    $('#rKick').onclick=async()=>{$('#rKickMsg').textContent='Loading every holder… about a minute.';
+      try{const r=await fetch('/api/analytics/scan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chain:d.chain,token:d.token})});
+        if(r.status===401){$('#rKickMsg').innerHTML=`<a href="/login?next=${encodeURIComponent('/hyperfocus?chain='+d.chain+'&ca='+d.token)}">Sign in</a> to kick off a new race.`;return;}
+        const j=await r.json().catch(()=>({}));if(!r.ok){$('#rKickMsg').textContent=j.error||'Couldn’t start that race.';return;}
+        delete REAL[key];const nd=await loadReal(key);showReal(nd,key);renderLobby();if(isHost)lobbyPresence();}
+      catch(e){$('#rKickMsg').textContent='Couldn’t reach the site. Try again.';}};
+    return;}
+  const big=d.holders.filter(h=>(h.x||0)>=100).length,ch=d.ch24;
+  el.innerHTML=`<span class="rtok">${img}<b>$${esc(d.symbol||'TOKEN')}</b> ${fmtPrice(d.price)}${ch!=null?` <span class="${ch>=0?'ok':'bad'}">${ch>=0?'+':''}${ch.toFixed(1)}% 24h</span>`:''}</span> ${d.holders.length} holder cars · ${d.trades.length} real trades in the last day${big?` · ${big} wallet${big>1?'s':''} up 100x or more`:''}.`;
+  showMine();
+}
+async function pickReal(chain,token){
+  const key=`${chain}:${token}`;menuReal=key;$('#rChain').value=chain;$('#rCA').value=token;
+  $('#rInfo').textContent='Loading holders…';
+  const d=REAL[key]||await loadReal(key);if(menuReal!==key)return;
+  showReal(d,key);renderLobby();if(isHost)lobbyPresence();
+}
+$('#rLoad').onclick=()=>{const ca=$('#rCA').value.trim();let ch=$('#rChain').value;if(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(ca)&&!/^0x/i.test(ca))ch='solana';
+  if(!/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(ca)){$('#rInfo').innerHTML='<span class="bad">That doesn’t look like a token address.</span>';return;}pickReal(ch,ca);};
+$('#rCA').addEventListener('keydown',e=>{if(e.key==='Enter')$('#rLoad').click();});
+let hotLoaded=false;
+async function loadHot(){
+  if(hotLoaded||!window.HFWallet)return;hotLoaded=true;
+  try{const r=await fetch('/api/hyperfocus/hot');const list=r.ok?await r.json():[];
+    $('#hotRow').innerHTML=list.length?'<span class="mini">Hot now:</span>'+list.map((t,i)=>`<button data-i="${i}">${t.image?`<img src="${esc(t.image)}" alt="">`:''}$${esc(t.symbol||'?')}${t.h1!=null?` <small class="${t.h1>=0?'ok':'bad'}">${t.h1>=0?'+':''}${Number(t.h1).toFixed(0)}%</small>`:''}</button>`).join(''):'';
+    $('#hotRow').querySelectorAll('button').forEach(b=>b.onclick=()=>{const t=list[+b.dataset.i];pickReal(t.chain,t.token);});}catch(e){}
+}
+function showMine(){
+  const a=(me.wallet||'').toLowerCase(),d=menuReal&&REAL[menuReal];
+  if(!a){$('#myInfo').textContent='Optional: if your wallet holds this coin, your car is you, with your real gains.';return;}
+  if(!d||!d.tracked){$('#myInfo').textContent=`Racing as ${shortA(me.wallet)}.`;return;}
+  const h=d.holders.find(x=>x.w.toLowerCase()===a);
+  $('#myInfo').innerHTML=h?`<span class="ok">Found you:</span> ${shortA(me.wallet)} holds ${fmtK(h.usd||0)}${h.x!=null?`, up ${fmtX(h.x)}`:''}. Your car gets a boost for it.`:`${shortA(me.wallet)} isn’t one of the top holders of this coin. Buy in for real to get on the grid.`;
+}
+$('#myAddr').addEventListener('input',e=>{me.wallet=e.target.value.trim();showMine();});
+async function fillMine(){
+  if(me.wallet||!window.HFWallet||!window.HFWallet.addresses)return;
+  try{const a=await window.HFWallet.addresses();const d=menuReal&&REAL[menuReal];const pick=(d&&d.chain==='solana')?(a.sol||a.evm):(a.evm||a.sol);if(pick){me.wallet=pick;$('#myAddr').value=pick;showMine();}}catch(e){}
+}
+$('#useMine').onclick=async()=>{
+  if(!window.HFWallet){$('#myInfo').textContent='Paste your wallet address above.';return;}
+  let a=window.HFWallet.addresses?await window.HFWallet.addresses():{};
+  if(!a.evm&&!a.sol){try{await window.HFWallet.connect();}catch(e){}a=await window.HFWallet.addresses();}
+  const d=menuReal&&REAL[menuReal];const pick=(d&&d.chain==='solana')?(a.sol||a.evm):(a.evm||a.sol);
+  if(pick){me.wallet=pick;$('#myAddr').value=pick;showMine();}else $('#myInfo').textContent='No wallet connected yet. Connect one, or paste your address.';
+};
+/* links like /hyperfocus?chain=bsc&ca=0x… open that coin's race */
+(function(){try{const q=new URLSearchParams(location.search),ca=q.get('ca'),ch=q.get('chain')||'bsc';
+  if(ca&&window.HFWallet&&/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(ca)){menuMode='real';pickReal(/^(bsc|ethereum|base|solana)$/.test(ch)?ch:'bsc',ca);
+    const lc=document.querySelector('#launchOv .lcard p');if(lc)lc.textContent='Opening a real-token race. Tap play to pick your car and join.';}}catch(e){}})();
 $('#tokRow').querySelectorAll('button').forEach(b=>b.onclick=()=>{menuTok=b.dataset.t;renderLobby();if(isHost)lobbyPresence();});
 function hostStart(){
   const go=Date.now()+(nr?5000:3200);
-  if(nr){hostGo=go;lobbyPresence();startRace(menuMode,menuTok,go,`${code}|${go}|${menuMode}|${menuTok}`);}
-  else startRace(menuMode,menuTok,go,`solo|${go}|${Math.random()}`);
+  const tk=menuMode==='real'?menuReal:menuTok;if(menuMode==='real'&&!(tk&&REAL[tk]&&REAL[tk].tracked))return;
+  if(nr){hostGo=go;lobbyPresence();startRace(menuMode,tk,go,`${code}|${go}|${menuMode}|${tk}`);}
+  else startRace(menuMode,tk,go,`solo|${go}|${Math.random()}`);
 }
 $('#bStart').onclick=hostStart;
 $('#bAgain').onclick=hostStart;
@@ -1010,7 +1137,7 @@ function safeGL(pl,others,dt){try{renderGL(pl,others,dt,true);}catch(e){console.
 /* ================= loop ================= */
 let last=performance.now(),uiT=0,idleZ=0;
 buildTrack();
-try{G=initGL();}catch(e){console.error(e);G=null;}
+try{G=initGL();applySceneTheme();}catch(e){console.error(e);G=null;}
 if(!G)$('#gl').style.display='none';
 resize();
 function frame(now){

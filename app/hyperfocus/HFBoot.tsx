@@ -39,6 +39,13 @@ export default function HFBoot({ nonce }: { nonce?: string }) {
         }
         return parts.join(" · ");
       },
+      /** The connected wallet addresses, so a player can find their own car among a token's real holders. */
+      addresses: async () => {
+        const st = getState();
+        let evm = "";
+        try { const acc = await st.current?.provider?.request?.({ method: "eth_accounts" }); evm = (acc && acc[0]) || ""; } catch {}
+        return { evm, sol: String((st.sol?.account as any)?.address || "") };
+      },
     };
     let i = 0;
     const next = () => {
