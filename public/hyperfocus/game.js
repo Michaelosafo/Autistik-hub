@@ -1497,13 +1497,16 @@ $('#useMine').onclick=async()=>{
 const SCAN={view:null,wallet:null,back:null};
 const ONSITE=()=>!!window.HFWallet;
 /* the scanner lives in the game, and also docks into the Scanner tab of the page */
-const scanHome=()=>$('#scanOv').parentNode;let scanStageParent=null;
-function dockScanner(){const ov=$('#scanOv');if(ov.classList.contains('intab'))return;scanStageParent=ov.parentNode;$('#scanTabMount').appendChild(ov);ov.classList.add('intab');ov.hidden=false;
+const SCANOV=$('#scanOv'),scanHome=()=>SCANOV.parentNode;let scanStageParent=null;
+const scanMount=()=>document.getElementById('hfScanMount')||$('#scanTabMount');
+function dockScanner(){const ov=SCANOV,m=scanMount();if(ov.classList.contains('intab')){if(ov.parentNode!==m)m.appendChild(ov);return;}scanStageParent=ov.parentNode;m.appendChild(ov);ov.classList.add('intab');ov.hidden=false;
   if(!SCAN.view&&ONSITE()){const fill=async()=>{let a=me.wallet;if(!a&&window.HFWallet&&window.HFWallet.addresses){try{const x=await window.HFWallet.addresses();a=x.evm||x.sol;}catch(e){}}if(a&&!SCAN.view){$('#scanQ').value=a;runScan(a);}};fill();}
   else if(!ONSITE())$('#scanOut').innerHTML='<p class="mini">Wallet and token search runs on autistik.io/hyperfocus.</p>';}
-function undockScanner(){const ov=$('#scanOv');if(!ov.classList.contains('intab'))return;ov.classList.remove('intab');(scanStageParent||$('#view')).appendChild(ov);ov.hidden=true;}
-addEventListener('hf-tab',e=>{if(e.detail==='scanner')dockScanner();else undockScanner();});
-if(window.HFTab==='scanner')dockScanner();
+function undockScanner(){const ov=SCANOV;if(!ov.classList.contains('intab'))return;ov.classList.remove('intab');(scanStageParent||$('#view')).appendChild(ov);ov.hidden=true;}
+// the page's Scanner tab draws its mount a moment after the tab opens, so dock again shortly after
+const dockSoon=()=>[0,60,300,900].forEach(t=>setTimeout(()=>{if(window.HFTab==='scanner')dockScanner();},t));
+addEventListener('hf-tab',e=>{if(e.detail==='scanner')dockSoon();else undockScanner();});
+if(window.HFTab==='scanner')dockSoon();
 function openScan(q){
   undockScanner();
   $('#homeOv').hidden=true;$('#lobbyOv').hidden=true;$('#scanOv').hidden=false;
