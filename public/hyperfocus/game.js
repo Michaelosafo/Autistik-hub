@@ -249,7 +249,7 @@ function updMe(h,dt){
   const want=h.steer*grip-grip*Math.min(1,sp)*seg.curve*0.28;
   h.vx=(h.vx||0)+(want-(h.vx||0))*Math.min(1,dt*(fun?7:8));
   h.x+=h.vx*dt;
-  if(Math.abs(h.x)>1.11){h.x=Math.sign(h.x)*1.11;h.vx=-h.vx*0.25;if(h.speed>BASE*0.35){h.speed-=BASE*0.9*dt;h.shake=Math.max(h.shake||0,0.12);h.scrape=0.2;}}
+  if(Math.abs(h.x)>1.06){h.x=Math.sign(h.x)*1.06;h.vx=-h.vx*0.25;if(h.speed>BASE*0.35){h.speed-=BASE*0.9*dt;h.shake=Math.max(h.shake||0,0.12);h.scrape=0.2;}}
   if(h.scrape>0)h.scrape-=dt;
   if(Math.abs(h.x)>1.0&&h.speed>BASE*0.3)h.speed-=BASE*0.6*st.off*dt;
   h.speed=clamp(h.speed,0,BASE*2.4);
@@ -263,7 +263,10 @@ function updMe(h,dt){
     if(it.type==='gate'&&fun)doGate(h,it);
   }
   for(const r of S.w.ai){const gap=r.pos-h.pos;
-    if(gap>0&&gap<SEG*1.1&&Math.abs(r.x-h.x)<0.36&&h.speed>r.speed){h.speed=r.speed*0.8;h.pos=r.pos-SEG*1.1;h.shake=0.25;break;}}
+    if(gap>0&&gap<SEG*1.1&&Math.abs(r.x-h.x)<0.36&&h.speed>r.speed){
+      // a knock: you lose speed and slide off their bumper, no jump backwards
+      const fresh=!h.hitT||S.w.wt-h.hitT>0.6;h.speed=Math.min(h.speed,r.speed*0.9);h.vx=(h.vx||0)+(h.x<=r.x?-1:1)*0.9;if(gap<SEG*0.55)h.pos=r.pos-SEG*0.55;
+      if(fresh){h.hitT=S.w.wt;h.bump=(h.bump||0)+1;h.shake=Math.max(h.shake||0,0.18);}break;}}
   if(h.pos>=FIN*SEG){h.finished=true;h.ft=S.w.wt;h.toasts.push({txt:'FINISHED',color:COL.gas,t:3});
     S.w.feed.unshift(`<b>${esc(h.name)}</b> crossed the line${fun&&h.swaps?` and settled ${h.swaps} offline swap${h.swaps>1?'s':''}`:''}.`);S.feedDirty=true;}
 }
@@ -273,7 +276,7 @@ function doGate(h,g){
   const to=g.coins[h.x<-0.33?0:h.x>0.33?2:1];
   if(to===h.coin){h.toasts.push({txt:`HOLDING ${to}`,color:COL.dim,t:1.6});return;}
   const val=myValue(h)*0.997,from=h.coin;h.amt=val/coinPrice(to);h.coin=to;h.swaps++;
-  h.toasts.push({txt:`SWAPPED ${from} → ${to} · SIGNED OFFLINE`,color:S.w.coins[to].color,t:2.4});
+  h.toasts.push({txt:`SWAPPED ${from} → ${to}`,color:S.w.coins[to].color,t:2.4});
   S.w.feed.unshift(`<b>${esc(h.name)}</b> swapped ${from} → ${to} offline (${fmtUsd(val)}). Settles at the finish.`);S.feedDirty=true;
   if(window.PRWallet)window.PRWallet.logRaceSwap(from,to,val);
 }
@@ -350,7 +353,7 @@ function disp(r){
 }
 
 /* ================= rendering ================= */
-const cv=$('#screen'),dpr=Math.min(2,window.devicePixelRatio||1);const ctx=cv.getContext('2d');
+const cv=$('#screen'),dpr=Math.min(1.5,window.devicePixelRatio||1);const ctx=cv.getContext('2d');
 function resize(){
   const r=$('#view').getBoundingClientRect(),cw=Math.max(1,r.width),ch=Math.max(1,r.height),asp=cw/ch;
   W=Math.round(clamp(H*asp,720,1400));
@@ -915,7 +918,7 @@ function placeCar(g,r,d,o){
   if(u.arm){const wv=(r.waveT||0)>0;u.arm.visible=wv;if(wv)u.arm.rotation.z=-0.35-Math.max(0,Math.sin(tClock*12))*0.6;}
   if(u.wheels){const roll=Math.min(((r.speed||0)*SC)*(G.dt||0)/0.6,1.15),st=clamp(d.steer!=null?d.steer:(r.tx!=null?-(r.tx-r.x)*2.5:0),-1,1)*0.55;
     u.wheels.forEach(w=>{w.spin.rotation.x+=roll;if(w.front)w.steer.rotation.y+=(st-w.steer.rotation.y)*0.25;});}
-  if(d.label){const key=d.label+'|'+d.sub+'|'+d.color+'|'+d.subCol+'|'+(d.human?1:0);if(key!==u.key){u.key=key;u.label.material=labelSprite(key,d);}u.label.visible=true;}else u.label.visible=false;
+  if(d.label){const key=d.label+'|'+d.sub+'|'+d.color+'|'+d.subCol+'|'+(d.human?1:0);if(key!==u.key&&(!u.key||tClock-(u.keyT||0)>0.35)){u.key=key;u.keyT=tClock;u.label.material=labelSprite(key,d);}u.label.visible=true;}else u.label.visible=false;
 }
 const _o={},_o2={};let _v=null,_v2=null;
 function renderGL(pl,others,dt,showMe){
@@ -929,7 +932,7 @@ function renderGL(pl,others,dt,showMe){
   const stv=pl.steer!=null?-pl.steer:pl.inp&&pl.inp.left?1:pl.inp&&pl.inp.right?-1:(tiltOn&&S?-tiltVal:0);
   const spd=clamp((pl.speed||0)/BASE,0,2),cv0=segAt(pl.pos).curve;
   G.yaw=(G.yaw||0)+(((stv*0.26)-(pl.vx||0)*0.06+cv0*0.03)*Math.min(1,spd)-(G.yaw||0))*Math.min(1,dt*5);
-  if(showMe){placeCar(G.me,pl,{boost:pl.boosting&&!pl.finished,brake:pl.inp&&pl.inp.brake,steer:stv},_o);G.me.rotation.y+=G.yaw;G.me.rotation.z=-G.yaw*0.14;
+  if(showMe){placeCar(G.me,pl,{boost:pl.boosting&&!pl.finished,brake:pl.inp&&pl.inp.brake,steer:stv},_o);{const near=clamp((1.06-Math.abs(pl.x||0))/0.18,0.2,1);G.yaw*=near>=1?1:(0.85+0.15*near);}G.me.rotation.y+=G.yaw;G.me.rotation.z=-G.yaw*0.14;
     if(Math.abs(G.yaw)>0.13&&spd>0.45&&!reduce)smoke(G.me,SHAPES[me.car]||SHAPES.street,Math.abs(G.yaw));}
   smokeTick(dt);
   const seen=new Set();
@@ -1166,8 +1169,6 @@ function showEnd(){
   let sub=`Your bag: ${fmtUsd(v)} (${v>=start?'+':''}${((v/start-1)*100).toFixed(0)}%).`;
   if(humans.length>1){const ahead=humans.filter(h=>h!==S.me&&placeOf(h,list)<p).length;sub+=ahead?` ${ahead} friend${ahead>1?'s':''} beat you.`:' You beat every friend in the race.';}
   if(S.w.mode==='fun'&&S.me.swaps)sub+=` ${S.me.swaps} offline swap${S.me.swaps>1?'s':''} settled at the line.`;
-  if(!S.credited){S.credited=true;const prize=Math.max(0,(list.length+1-p))*0.5;if(window.PRWallet)window.PRWallet.creditRace((v-start)*0.1+prize,p);}
-  sub+=' Winnings go to your demo wallet in USDT.';
   $('#endSub').textContent=sub;
   $('#resTbl').innerHTML='<tr><th>Pos</th><th>Racer</th><th>Result</th><th>Bag / holding</th></tr>'+list.map((r,i)=>{
     const d=r.d||disp(r),human=r.me||r.remote;
@@ -1189,7 +1190,7 @@ function setNetStatus(t,ok){$('#netStatus').textContent=t;$('#bCreate').disabled
 function readNick(){const n=$('#nick').value.trim().replace(/\s+/g,' ').slice(0,16);me.nick=n||'Racer';try{localStorage.setItem('pumprally-nick',me.nick);}catch(e){}return me.nick;}
 function homeErr(t){const e=$('#homeErr');e.textContent=t||'';e.hidden=!t;}
 async function enterRoom(c,host){
-  homeErr('');readNick();
+  homeErr('');readNick();menuMode='fun';
   try{nr=await room.join(c);}catch(e){homeErr(e&&e.code==='not_permitted'?'You can’t join races from here.':'Couldn’t join that race. Check the code and try again.');return;}
   code=c;isHost=host;hostGo=null;
   if(peersUnsub)peersUnsub();
@@ -1248,8 +1249,8 @@ function renderBuy(){
     :`You buy ${fmtUsd(menuBuy)} of ${mode==='real'?symTxt:(tok||'SOL')} at the start, plus ${fmtUsd(menuBuy/2)} of cash to buy more mid-race for boosts. Play money.`;
   const rb=$('#realBuy');rb.hidden=!(window.HFWallet&&((mode==='token'&&SWAP_CHAIN[tok])||(mode==='real'&&rd)));
   if(!rb.hidden){if(mode==='real'){rb.href=`/swap?chain=${encodeURIComponent(rd.chain)}&buy=${encodeURIComponent(rd.token)}`;rb.textContent=`Join for real: buy ${symTxt} on AUTISTIK Swap →`;}else{rb.href='/swap?chain='+SWAP_CHAIN[tok];rb.textContent=`Buy real ${tok} on AUTISTIK Swap →`;}}
-  const realMode=menuMode==='real';document.querySelector('.buyin').hidden=realMode;
-  $('#bStart').textContent=realMode?(nr?'Start race':'Start race'):`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;
+  document.querySelector('.buyin').hidden=true;
+  $('#bStart').textContent=nr?'Start race':menuMode==='real'?'Start race':'Start solo race';
   $('#bStart').disabled=menuMode==='real'&&!(menuReal&&REAL[menuReal]&&REAL[menuReal].tracked);
 }
 function setBuy(v,typed){menuBuy=v;try{localStorage.setItem('hf-buyin',String(v));}catch(e){}if(!typed)renderBuy();else{$('#buyRow').querySelectorAll('button[data-b]').forEach(b=>b.setAttribute('aria-pressed',false));$('#bStart').textContent=`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;}if(nr)lobbyPresence();}
@@ -1258,7 +1259,9 @@ function renderLobby(){
   const hostView=!nr||isHost;
   $('#modeBox').hidden=!hostView;$('#bStart').hidden=!hostView;$('#guestMode').hidden=hostView;
   $('#mTok').setAttribute('aria-pressed',menuMode==='token');$('#mFun').setAttribute('aria-pressed',menuMode==='fun');$('#mReal').setAttribute('aria-pressed',menuMode==='real');
-  $('#mReal').hidden=!window.HFWallet;$('#tokRow').hidden=menuMode==='real';$('#realBox').hidden=menuMode!=='real';
+  $('#mReal').hidden=!window.HFWallet;$('#realBox').hidden=menuMode!=='real';
+  // the menu already chose the race: no race-type, coin or buy-in choices here
+  $('#modeBox').querySelector('.lbl').hidden=true;$('#modeBox').querySelector('.row[role=group]').hidden=true;$('#tokRow').hidden=true;
   $('#tokRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===menuTok));
   $('#modeDesc').textContent=menuMode==='real'?'Every car is a real holder of this coin, shown by wallet. Each one drives as fast as that wallet is up since it bought in, so 100x wallets fly past you. The last day\'s real buys and sells replay as boosts and slowdowns.':menuMode==='token'?`You race the real-feel crowd of ${menuTok} holders. Buyers boost, sellers drop back, and a rising price speeds everyone up.`:`Nine coins race. Pumpers fly, rugs stall, and you can swap your coin offline at the gates.`;
   if(!nr){$('#players').innerHTML=`<li><span class="dot" style="background:${me.color}"></span>${esc(me.nick||'You')}<span class="t">you</span></li>`;return;}
@@ -1283,7 +1286,7 @@ renderGarage();
 $('#bCreate').onclick=()=>{if(!room)return;const c=WORDS[Math.floor(Math.random()*WORDS.length)]+'-'+(1000+Math.floor(Math.random()*9000));enterRoom(c,true);};
 $('#bJoin').onclick=()=>{if(!room)return;const c=$('#joinCode').value.trim().toLowerCase().replace(/\s+/g,'-');if(!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(c)){homeErr('That code doesn’t look right. It should look like jollof-4821.');return;}enterRoom(c,false);};
 $('#joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#bJoin').click();});
-$('#bSolo').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;showLobby();};
+$('#bSolo').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;menuMode='fun';menuTok=Object.keys(TOK)[Math.floor(Math.random()*Object.keys(TOK).length)];hostStart();};
 $('#bCopy').onclick=()=>{const t=code||'';const done=()=>{$('#bCopy').textContent='Copied';setTimeout(()=>$('#bCopy').textContent='Copy code',1500);};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done).catch(sel);else sel();
   function sel(){const r=document.createRange();r.selectNodeContents($('#codeTxt'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
@@ -1461,6 +1464,14 @@ function wizShow(step){
   $('#wBack').hidden=step!=='settings'&&i<=0;
   if(step==='name'){$('#nameHint').textContent=wizFlow==='join'?`You’re joining race ${pendingRoom||''}. Everyone sees this name.`:'Everyone in the race sees this name.';setTimeout(()=>{try{$('#nick').focus();}catch(e){}},60);}
   if(step==='paid')pdOpen();
+  if(step==='mode')paidCard();
+}
+/* the paid card says live whether paid races are open and how many racers are waiting */
+async function paidCard(){
+  const el=$('#paidCardTxt');if(!el)return;
+  if(!ONSITE()){el.textContent='Enter with $0.50 of AUTISTIK. 10 racers, 5 minutes, the top 5 split the pot. On autistik.io.';return;}
+  try{const st=await (await fetch('/api/hyperfocus/paid/status')).json();
+    el.innerHTML=st.enabled?`Enter with ${fmtUsd(st.entryUsd)} of AUTISTIK. 10 racers, 5 minutes, the top 5 split the pot.${st.open&&st.open.players?` <b>${st.open.players}/10 waiting now.</b>`:''}`:'Enter with $0.50 of AUTISTIK, top 5 win. <b>Opening soon.</b>';}catch(e){}
 }
 function wizNext(){const fl=FLOWS[wizFlow]||[],i=fl.indexOf(wizAt);if(i<0)return;if(i>=fl.length-1){wizDone();return;}wizShow(fl[i+1]);}
 function wizDone(){
@@ -1712,9 +1723,24 @@ addEventListener('keydown',e=>{if(e.code==='KeyH'&&S&&state==='race'&&!(e.target
   if(ca&&window.HFWallet&&/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(ca)){menuMode='real';pickReal(/^(bsc|ethereum|base|solana)$/.test(ch)?ch:'bsc',ca);
     const lc=document.querySelector('#launchOv .lcard p');if(lc)lc.textContent='Opening a real-token race. Tap play to pick your car and join.';}}catch(e){}})();
 $('#tokRow').querySelectorAll('button').forEach(b=>b.onclick=()=>{menuTok=b.dataset.t;renderLobby();if(isHost)lobbyPresence();});
-function hostStart(){
-  const go=Date.now()+(nr?5000:3200);
+const NETS={bsc:['BNB Chain','BNB'],base:['Base','ETH'],ethereum:['Ethereum','ETH'],solana:['Solana','SOL']};
+/* a real-token race needs a wallet on that coin's network with some of the network's coin to trade */
+async function realReady(tk){
+  const d=REAL[tk],ch=d.chain,[net,nat]=NETS[ch]||['that network','coin'],info=t=>$('#myInfo').innerHTML=t,need=ch==='solana'?'sol':'evm';
+  if(!window.HFWallet){info('Real token races run on autistik.io.');return false;}
+  let a=await window.HFWallet.addresses();
+  if(!a[need]){info(`Connect a ${net} wallet to race this coin…`);try{await window.HFWallet.connect();}catch(e){}a=await window.HFWallet.addresses();
+    if(!a[need]){info(`<span class="bad">Connect a ${net} wallet (${ch==='solana'?'Phantom, Solflare…':'MetaMask, Trust…'}) to race this coin.</span>`);return false;}}
+  info(`Checking your ${nat} on ${net}…`);
+  try{const r=await fetch('/api/hyperfocus/lookup?q='+encodeURIComponent(a[need]));const w=await r.json();const nb=(w.holdings||[]).find(h=>h.native&&h.chain===ch);
+    if(!nb||!(nb.amount>0)){info(`<span class="bad">Your wallet has no ${nat} on ${net}. Add a little ${nat} to buy and sell in this race.</span>`);return false;}
+    me.wallet=a[need];$('#myAddr').value=me.wallet;info(`<span class="ok">Ready:</span> ${shortA(me.wallet)} · ${fmtAmt(nb.amount)} ${nat}${nb.valueUsd!=null?' ('+fmtUsd(nb.valueUsd)+')':''}`);return true;
+  }catch(e){info('<span class="bad">Couldn’t check your balance. Try again.</span>');return false;}
+}
+async function hostStart(){
   const tk=menuMode==='real'?menuReal:menuTok;if(menuMode==='real'&&!(tk&&REAL[tk]&&REAL[tk].tracked))return;
+  if(menuMode==='real'&&!(await realReady(tk)))return;
+  const go=Date.now()+(nr?5000:3200);
   if(nr){hostGo=go;lobbyPresence();startRace(menuMode,tk,go,`${code}|${go}|${menuMode}|${tk}`);}
   else startRace(menuMode,tk,go,`solo|${go}|${Math.random()}`);
 }
@@ -1786,7 +1812,7 @@ function safeGL(pl,others,dt){try{renderGL(pl,others,dt,true);}catch(e){console.
 const Sound=(()=>{
   let ac=null,master,sfx,mus,engA,engB,engF,engG,windF,windG,sqF,sqG,scF,scG,noiseBuf,nextNote=0,step=0;
   let mode='all';try{const m=localStorage.getItem('hf-sound');if(m==='all'||m==='sfx'||m==='off')mode=m;}catch(e){}
-  let lastToasts=0,lastShake=0,lastCd=99,wasBoost=false,lastPl=null,gearPrev=0;
+  let lastToasts=0,lastShake=0,lastCd=99,wasBoost=false,lastPl=null,gearPrev=0,lastBump=0;
   function noise(){const b=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;return b;}
   function loopNoise(){const s=ac.createBufferSource();s.buffer=noiseBuf;s.loop=true;s.start();return s;}
   function init(){
@@ -1854,7 +1880,7 @@ const Sound=(()=>{
     const sq=Math.max(0,Math.abs(pl.steer||0)*sp-0.75)*0.35+(pl.inp&&pl.inp.brake&&sp>0.7?0.08:0);
     sqF.frequency.setTargetAtTime(1900+Math.random()*500,t,0.05);sqG.gain.setTargetAtTime(Math.min(0.16,sq),t,0.05);
     scG.gain.setTargetAtTime(pl.scrape>0?0.12:0,t,0.03);
-    if((pl.shake||0)>lastShake+0.15)fx.bump();lastShake=pl.shake||0;
+    if((pl.bump||0)!==lastBump){if(lastBump||pl.bump)fx.bump();lastBump=pl.bump||0;}else if((pl.shake||0)>lastShake+0.15)fx.bump();lastShake=pl.shake||0;
     if(pl.boosting&&!wasBoost)fx.nitro();wasBoost=!!pl.boosting;
     if(pl.toasts.length>lastToasts){for(let i=lastToasts;i<pl.toasts.length;i++){const x=String(pl.toasts[i].txt||'');
       if(/GAS|AIRDROP/.test(x))fx.coin();else if(/^SWAPPED/.test(x))fx.swap();else if(/FINISHED/.test(x))fx.finish();else if(/JOINED/.test(x))fx.join();else if(/MISSED|OUT OF/.test(x))fx.miss();else if(/RUG/.test(x))fx.rug();}}
@@ -1872,9 +1898,14 @@ buildTrack();
 try{G=initGL();applySceneTheme();setupFX();loadPhotoEnv();}catch(e){console.error(e);G=null;}
 if(!G)$('#gl').style.display='none';
 resize();
+/* if racing runs below ~38 frames a second, step the graphics down once so it stays smooth */
+const PERF={acc:0,n:0,done:{}};
+function perfWatch(dt){if(!G||!S||state!=='race'||document.hidden)return;PERF.acc+=dt;PERF.n++;if(PERF.n<240)return;const avg=PERF.acc/PERF.n;PERF.acc=0;PERF.n=0;
+  if(avg>1/38&&GFX!=='low'&&!PERF.done[GFX]){PERF.done[GFX]=1;setGFX(GFX==='ultra'?'high':'low');try{renderGfx();}catch(e){}S.me.toasts.push({txt:'GRAPHICS LOWERED FOR SMOOTHER RACING',color:COL.gas,t:2.4});}}
 function frame(now){
   if(!cv.isConnected)return; // the page was left (in-site navigation): stop the loop
   const dt=Math.min(0.05,(now-last)/1000);last=now;tClock+=dt;
+  perfWatch(dt);
   if(G)ctx.clearRect(0,0,W,H);else{ctx.fillStyle=COL.night;ctx.fillRect(0,0,W,H);}
   if(S&&state==='race'){
     if(S.mode==='paid'){stepPaid(dt);readRemotes();}else{stepWorld();readRemotes();if(racing())updMe(S.me,dt);}
