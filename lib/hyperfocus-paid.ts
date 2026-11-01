@@ -388,8 +388,9 @@ export async function processTransfers() {
 async function settleTransfer(t: any, status: "confirmed" | "failed") {
   if (status === "failed") {
     // A reverted transfer moved no tokens, so it is safe to sign again (up to 3 tries, then a person checks).
+    // Its old nonce stays on the row so the nonce floor never falls back.
     const retry = (t.attempts || 0) < 2;
-    await must(sb().from("hf_transfers").update(retry ? { status: "queued", nonce: null, hash: null, raw: null, attempts: (t.attempts || 0) + 1, error: "reverted on-chain, retrying", updated_at: new Date().toISOString() }
+    await must(sb().from("hf_transfers").update(retry ? { status: "queued", hash: null, raw: null, attempts: (t.attempts || 0) + 1, error: "reverted on-chain, retrying", updated_at: new Date().toISOString() }
       : { status: "failed", error: "reverted on-chain 3 times", updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash));
     if (!retry && t.room_id) await sb().from("hf_rooms").update({ error: `A ${t.kind} transfer failed on-chain` }).eq("id", t.room_id);
     return;
