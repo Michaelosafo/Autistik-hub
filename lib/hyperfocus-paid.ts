@@ -111,7 +111,8 @@ async function entryFor(id: string, secret: string): Promise<Entry | null> {
 async function seat(e: Entry): Promise<{ roomId?: string; error?: string; retry?: boolean }> {
   if (await activeSeat(e.wallet, e.id)) {
     // Paid twice from the same wallet: send this payment straight back.
-    await sb().from("hf_entries").update({ status: "left" }).eq("id", e.id).eq("status", "paid");
+    const moved = await must(sb().from("hf_entries").update({ status: "left" }).eq("id", e.id).eq("status", "paid").is("room_id", null).select("id"));
+    if (!moved?.length) { const again = await sb().from("hf_entries").select("room_id,status").eq("id", e.id).maybeSingle(); return again.data?.room_id && again.data.status === "paid" ? { roomId: again.data.room_id } : { error: "That entry is closed." }; }
     await queueRefund(e.id);
     await processTransfers().catch(() => null);
     return { error: "This wallet is already in a race, so this payment is being sent back to you." };
@@ -119,6 +120,9 @@ async function seat(e: Entry): Promise<{ roomId?: string; error?: string; retry?
   const { data, error } = await sb().rpc("hf_join", { p_entry: e.id });
   if (error || !data?.[0]) return { error: "Paid, but couldn't seat you yet. Trying again…", retry: true };
   if (data[0].room_status === "duplicate" || !data[0].room_id) {
+    // hf_join marked the entry 'left' in the same transaction; refund only if that is what the row says now.
+    const now = await sb().from("hf_entries").select("status").eq("id", e.id).maybeSingle();
+    if (now.data?.status !== "left") return { error: "Paid, but couldn't seat you yet. Trying again…", retry: true };
     await queueRefund(e.id);
     await processTransfers().catch(() => null);
     return { error: "This wallet is already in a race, so this payment is being sent back to you." };
@@ -139,7 +143,8 @@ export async function join(id: string, secret: string, txHashIn: string): Promis
   const p = pub();
   let tx: any, receipt: any, block: any;
   try {
-    receipt = await p.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 });
+    receipt = await p.waitForTransactionReceipt({ hash: txHash, timeout: 40_000, checkReplacement: false });
+    if (String(receipt.transactionHash).toLowerCase() !== txHash) throw new Error("different transaction");
     [tx, block] = await Promise.all([p.getTransaction({ hash: txHash }), p.getBlock({ blockNumber: receipt.blockNumber })]);
   } catch { return { error: "Couldn't find that payment on BNB Chain yet. Trying again…", retry: true }; }
   if (receipt.status !== "success") return { error: "That payment failed on-chain." };
@@ -320,17 +325,31 @@ export async function processTransfers() {
     const signed = await must(sb().from("hf_transfers").select("*").eq("status", "signed").order("nonce", { ascending: true }).limit(20));
     if (signed?.length) {
       const latest = BigInt(await p.getTransactionCount({ address: account.address, blockTag: "latest" }));
+      const head = BigInt(await p.getBlockNumber());
       for (const t of signed) {
         if (!time()) return;
         let rc: any = null, missing = false;
         try { rc = await p.getTransactionReceipt({ hash: t.hash }); }
         catch (err: any) { if (err?.name === "TransactionReceiptNotFoundError") missing = true; else continue; /* node hiccup: look again next time */ }
-        if (rc) { await settleTransfer(t, rc.status === "success" ? "confirmed" : "failed"); continue; }
+        if (rc) {
+          if (String(rc.transactionHash).toLowerCase() !== String(t.hash).toLowerCase()) continue;
+          // Only act once the block is final enough that a reorg can't undo it (BNB Chain: 15 blocks ≈ 45 s).
+          if (head - BigInt(rc.blockNumber) < 15n) continue;
+          if (rc.status !== "success") { await settleTransfer(t, "failed"); continue; }
+          const moved = parseEventLogs({ abi: erc20Abi, eventName: "Transfer", logs: rc.logs }).some((l: any) =>
+            getAddress(l.address) === getAddress(PRO_TOKEN) && getAddress(l.args.from) === getAddress(account.address) && getAddress(l.args.to) === getAddress(t.to_wallet));
+          if (!moved) { await must(sb().from("hf_transfers").update({ status: "failed", error: "needs a manual check: succeeded but no Transfer log", updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash)); if (t.room_id) await sb().from("hf_rooms").update({ error: "A transfer needs a manual check" }).eq("id", t.room_id); continue; }
+          await settleTransfer(t, "confirmed");
+          continue;
+        }
         if (!missing) continue;
         if (BigInt(t.nonce) < latest) {
           // Its nonce has been used but its receipt isn't found. That shouldn't happen with one sender; it may still have
           // landed on a slow node, so it is never signed again automatically: it waits for a person to check.
-          if (Date.now() - Date.parse(t.updated_at) > 10 * 60_000) await must(sb().from("hf_transfers").update({ status: "failed", error: "needs a manual check: nonce used, no receipt", updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash));
+          if (Date.now() - Date.parse(t.updated_at) > 10 * 60_000) {
+            await must(sb().from("hf_transfers").update({ status: "failed", error: "needs a manual check: nonce used, no receipt", updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash));
+            if (t.room_id) await sb().from("hf_rooms").update({ error: "A transfer needs a manual check" }).eq("id", t.room_id);
+          }
         } else {
           await p.sendRawTransaction({ serializedTransaction: t.raw }).catch(() => null);
         }
@@ -339,9 +358,11 @@ export async function processTransfers() {
     // 2. New transfers, oldest first.
     const queued = await must(sb().from("hf_transfers").select("*").eq("status", "queued").order("created_at", { ascending: true }).limit(8));
     if (!queued?.length) return;
-    const stillSigned = await must(sb().from("hf_transfers").select("nonce").eq("status", "signed").order("nonce", { ascending: false }).limit(1));
+    if (!time()) return;
+    // Never go below a nonce this wallet already used or signed (a lagging node can report an old count).
+    const highest = await must(sb().from("hf_transfers").select("nonce").not("nonce", "is", null).order("nonce", { ascending: false }).limit(1));
     let nonce = BigInt(await p.getTransactionCount({ address: account.address, blockTag: "pending" }));
-    if (stillSigned?.[0]?.nonce != null && BigInt(stillSigned[0].nonce) + 1n > nonce) nonce = BigInt(stillSigned[0].nonce) + 1n;
+    if (highest?.[0]?.nonce != null && BigInt(highest[0].nonce) + 1n > nonce) nonce = BigInt(highest[0].nonce) + 1n;
     const gasPrice = await p.getGasPrice();
     for (const t of queued) {
       if (!time()) break;
@@ -355,8 +376,6 @@ export async function processTransfers() {
       if (!saved?.length) continue;
       nonce += 1n;
       await p.sendRawTransaction({ serializedTransaction: raw }).catch(() => null);
-      const rc = time() ? await p.waitForTransactionReceipt({ hash, timeout: 12_000, retryCount: 0 }).catch(() => null) : null;
-      if (rc) await settleTransfer({ ...t, hash }, rc.status === "success" ? "confirmed" : "failed");
     }
   } catch (err: any) {
     console.error("hyperfocus transfers", err?.shortMessage || err?.message);
