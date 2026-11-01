@@ -109,3 +109,7 @@ alter table public.hf_transfers enable row level security;
 create table if not exists public.hf_sender_lock (id integer primary key check (id = 1), holder text, until timestamptz not null default 'epoch');
 insert into public.hf_sender_lock (id) values (1) on conflict do nothing;
 alter table public.hf_sender_lock enable row level security;
+
+-- Added after the second review: transfer retry count; one seat per wallet checked inside hf_join (see migration
+-- hyperfocus_paid_review2 for the current hf_join body: a duplicate entry is marked 'left' and refunded).
+alter table public.hf_transfers add column if not exists attempts integer not null default 0;

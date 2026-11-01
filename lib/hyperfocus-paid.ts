@@ -31,8 +31,8 @@ export const SPLIT = [35n, 25n, 18n, 12n, 10n];
 const SLACK = 92n;
 /** A price quote is good for 15 minutes. */
 const QUOTE_MS = 15 * 60_000;
-/** Buttons must reach the server within 45 s of being pressed, and can't be ahead of the clock by more than 3 s. */
-const LATE_STEPS = 45 * 30, EARLY_STEPS = 3 * 30;
+/** Buttons must reach the server within 20 s of being pressed, and can't be ahead of the clock by more than 3 s. */
+const LATE_STEPS = 20 * 30, EARLY_STEPS = 3 * 30;
 /** After the 5 minutes, a minute for the last buttons to arrive. */
 const GRACE_MS = 60_000;
 /** The course is revealed 8 seconds before the start (time to build it on a phone). */
@@ -50,7 +50,8 @@ export function marketingWallet() {
   return a && isAddress(a) ? getAddress(a) : null;
 }
 export const enabled = () => !!gameAccount() && !!marketingWallet();
-const pub = () => createPublicClient({ chain: bsc, transport: http(CHAINS.bsc.rpc, { timeout: 15_000 }) }) as any;
+const rpc = () => http(CHAINS.bsc.rpc, { timeout: 8_000, retryCount: 0 });
+const pub = () => createPublicClient({ chain: bsc, transport: rpc() }) as any;
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 const sb = () => supabaseService();
 /** Supabase reports errors in the result; this turns them into thrown errors so nothing fails silently. */
@@ -68,7 +69,7 @@ export async function tokenDecimals() {
 }
 
 export type Entry = {
-  id: string; room_id: string | null; wallet: string; name: string; car: string; color: string | null; nonce: string; secret_hash: string;
+  id: string; room_id: string | null; paid_at?: string | null; wallet: string; name: string; car: string; color: string | null; nonce: string; secret_hash: string;
   amount: string; received: string | null; tx_hash: string | null; status: string; created_at: string; inputs: string | null; steps: number;
   pos: number | null; finished: boolean | null; ft: number | null; place: number | null; payout: string | null; payout_tx: string | null; refund_tx: string | null;
 };
@@ -76,7 +77,7 @@ export type Room = { id: string; status: string; seed: number; start_at: string 
 
 async function activeSeat(wallet: string, exceptId?: string) {
   const { data } = await sb().from("hf_entries").select("id,hf_rooms!inner(status)").ilike("wallet", wallet).eq("status", "paid")
-    .in("hf_rooms.status", ["waiting", "racing", "settling"]).limit(3);
+    .in("hf_rooms.status", ["waiting", "racing"]).limit(3);
   return (data || []).some((x: any) => x.id !== exceptId);
 }
 
@@ -117,6 +118,11 @@ async function seat(e: Entry): Promise<{ roomId?: string; error?: string; retry?
   }
   const { data, error } = await sb().rpc("hf_join", { p_entry: e.id });
   if (error || !data?.[0]) return { error: "Paid, but couldn't seat you yet. Trying again…", retry: true };
+  if (data[0].room_status === "duplicate" || !data[0].room_id) {
+    await queueRefund(e.id);
+    await processTransfers().catch(() => null);
+    return { error: "This wallet is already in a race, so this payment is being sent back to you." };
+  }
   return { roomId: data[0].room_id as string };
 }
 
@@ -209,7 +215,7 @@ export async function inputs(id: string, secret: string, fromIn: unknown, chunk:
   if (!add || !add.length) return { error: "Those race inputs don't look right.", steps: e.steps };
   const to = from + add.length, elapsed = Math.floor(((now - t0) / 1000) / HFSim.STEP);
   if (to > HFSim.STEPS || to > elapsed + EARLY_STEPS) return { error: "Too early.", steps: e.steps };
-  // Every run must begin within 45 s of real time (so a whole race can't be sent in one go at the end).
+  // Every run must begin within 20 s of real time (so a whole race can't be sent in one go at the end).
   if (from < Math.min(elapsed, HFSim.STEPS) - LATE_STEPS || add.length > LATE_STEPS) return { error: "Too late: your connection dropped for too long.", steps: e.steps };
   const all = (e.inputs ? HFSim.decode(e.inputs) || [] : []).concat(add);
   const { data: upd } = await sb().from("hf_entries").update({ inputs: HFSim.encode(all), steps: to, submitted_at: new Date().toISOString() })
@@ -223,7 +229,8 @@ export async function leave(id: string, secret: string) {
   const e = await entryFor(id, secret);
   if (!e) return { error: "That entry wasn't found." };
   if (e.status === "quoted") return { ok: true, refunded: false };
-  if (e.status === "left" || e.status === "refunded") return { ok: true, refunded: true };
+  if (e.status === "refunded") return { ok: true, refunded: true };
+  if (e.status === "left") { await queueRefund(e.id); await processTransfers().catch(() => null); return { ok: true, refunded: true }; }
   const { data: ok } = await sb().rpc("hf_leave", { p_entry: e.id });
   if (!ok) return { error: "The race has already started, so this entry can't be refunded." };
   await queueRefund(e.id);
@@ -235,7 +242,12 @@ async function queueRefund(entryId: string) {
   const { data: e } = await sb().from("hf_entries").select("wallet,received").eq("id", entryId).maybeSingle();
   if (!e || !(BigInt(e.received || "0") > 0n)) return;
   // The unique index (kind, entry) makes this a no-op if the refund is already queued.
-  await sb().from("hf_transfers").insert({ kind: "refund", entry_id: entryId, to_wallet: e.wallet, amount: e.received });
+  await queueTransfer({ kind: "refund", entry_id: entryId, to_wallet: e.wallet, amount: e.received });
+}
+/** Adds a transfer to the queue. The unique index (kind, entry or room) makes a repeat a no-op; any other error throws. */
+async function queueTransfer(row: { kind: string; entry_id?: string; room_id?: string; to_wallet: string; amount: string }) {
+  const { error } = await sb().from("hf_transfers").insert(row);
+  if (error && error.code !== "23505") throw new Error(error.message || "couldn't queue transfer");
 }
 
 /** Ranks the room and queues the payouts once the race is over. Safe to call many times. */
@@ -250,6 +262,9 @@ async function maybeSettle(room: Room) {
     const claimed = await must(sb().from("hf_rooms").update({ status: "settling", settled_at: new Date().toISOString() }).eq("id", room.id).eq("status", "racing").select("id"));
     if (!claimed?.length) return;
     await rank(room);
+  } else if (room.status === "settling" && room.pot == null) {
+    // A ranking that stopped halfway: run it again (same replay, same places, repeats are no-ops).
+    await rank(room);
   }
   await processTransfers();
 }
@@ -262,8 +277,9 @@ async function rank(room: Room) {
     const r = x.steps > 0 && x.inputs ? HFSim.replay(T, x.car, x.inputs) : null;
     return { x, r: r ? { pos: r.pos, finished: r.finished, ft: r.ft } : null };
   });
-  const done = results.filter((d) => d.r && d.r.pos > HFSim.SEG * 25).sort((a: any, b: any) => HFSim.better(a.r, b.r));
-  const rest = results.filter((d) => !done.includes(d));
+  const tie = (a: any, b: any) => (Date.parse(a.x.paid_at || a.x.created_at) - Date.parse(b.x.paid_at || b.x.created_at)) || (a.x.id < b.x.id ? -1 : 1);
+  const done = results.filter((d) => d.r && d.r.pos > HFSim.SEG * 25).sort((a: any, b: any) => HFSim.better(a.r, b.r) || tie(a, b));
+  const rest = results.filter((d) => !done.includes(d)).sort(tie);
   const pot = rows.reduce((a, x) => a + BigInt(x.received || "0"), 0n);
   const winners = pot - (pot * MARKETING_PCT) / 100n;
   let prizes = 0n;
@@ -273,12 +289,14 @@ async function rank(room: Room) {
     const share = eligible ? (winners * SPLIT[i]) / 100n : 0n;
     prizes += share;
     await must(sb().from("hf_entries").update({ place: i + 1, payout: share.toString(), pos: d.r?.pos ?? 0, finished: !!d.r?.finished, ft: d.r?.ft || null }).eq("id", d.x.id));
-    if (share > 0n) await sb().from("hf_transfers").insert({ kind: "prize", room_id: room.id, entry_id: d.x.id, to_wallet: d.x.wallet, amount: share.toString() });
+    if (share > 0n) await queueTransfer({ kind: "prize", room_id: room.id, entry_id: d.x.id, to_wallet: d.x.wallet, amount: share.toString() });
   }
   // Marketing gets 30%, plus any prize with no eligible winner and the rounding dust.
   const mk = pot - prizes, to = marketingWallet();
-  if (mk > 0n && to) await sb().from("hf_transfers").insert({ kind: "marketing", room_id: room.id, to_wallet: to, amount: mk.toString() });
-  await must(sb().from("hf_rooms").update({ pot: pot.toString(), error: to ? null : "No marketing wallet set" }).eq("id", room.id));
+  if (!to) throw new Error("No marketing wallet set");
+  if (mk > 0n) await queueTransfer({ kind: "marketing", room_id: room.id, to_wallet: to, amount: mk.toString() });
+  // Written last: a room only counts as ranked (and can only be marked paid) once every transfer above is queued.
+  await must(sb().from("hf_rooms").update({ pot: pot.toString(), error: null }).eq("id", room.id));
 }
 
 /**
@@ -294,18 +312,25 @@ export async function processTransfers() {
     .eq("id", 1).lt("until", new Date().toISOString()).select("id"));
   if (!got?.length) return;
   const p = pub();
-  const w = createWalletClient({ account, chain: bsc, transport: http(CHAINS.bsc.rpc, { timeout: 15_000 }) }) as any;
+  const w = createWalletClient({ account, chain: bsc, transport: rpc() }) as any;
+  // Stop starting chain calls well before the 58 s lock runs out, so two senders never overlap.
+  const time = () => Date.now() - started < 32_000;
   try {
     // 1. Transfers already signed: did they land?
     const signed = await must(sb().from("hf_transfers").select("*").eq("status", "signed").order("nonce", { ascending: true }).limit(20));
     if (signed?.length) {
       const latest = BigInt(await p.getTransactionCount({ address: account.address, blockTag: "latest" }));
       for (const t of signed) {
-        const rc = await p.getTransactionReceipt({ hash: t.hash }).catch(() => null);
+        if (!time()) return;
+        let rc: any = null, missing = false;
+        try { rc = await p.getTransactionReceipt({ hash: t.hash }); }
+        catch (err: any) { if (err?.name === "TransactionReceiptNotFoundError") missing = true; else continue; /* node hiccup: look again next time */ }
         if (rc) { await settleTransfer(t, rc.status === "success" ? "confirmed" : "failed"); continue; }
+        if (!missing) continue;
         if (BigInt(t.nonce) < latest) {
-          // Its nonce was used by something else, so it can never land: sign it again with a fresh nonce.
-          await must(sb().from("hf_transfers").update({ status: "queued", nonce: null, hash: null, raw: null, updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed"));
+          // Its nonce has been used but its receipt isn't found. That shouldn't happen with one sender; it may still have
+          // landed on a slow node, so it is never signed again automatically: it waits for a person to check.
+          if (Date.now() - Date.parse(t.updated_at) > 10 * 60_000) await must(sb().from("hf_transfers").update({ status: "failed", error: "needs a manual check: nonce used, no receipt", updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash));
         } else {
           await p.sendRawTransaction({ serializedTransaction: t.raw }).catch(() => null);
         }
@@ -319,7 +344,7 @@ export async function processTransfers() {
     if (stillSigned?.[0]?.nonce != null && BigInt(stillSigned[0].nonce) + 1n > nonce) nonce = BigInt(stillSigned[0].nonce) + 1n;
     const gasPrice = await p.getGasPrice();
     for (const t of queued) {
-      if (Date.now() - started > 40_000) break;
+      if (!time()) break;
       const data = encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [getAddress(t.to_wallet), BigInt(t.amount)] });
       let gas = 150_000n;
       try { gas = ((await p.estimateGas({ account: account.address, to: PRO_TOKEN, data })) * 13n) / 10n; } catch { /* keep the safe default */ }
@@ -330,7 +355,7 @@ export async function processTransfers() {
       if (!saved?.length) continue;
       nonce += 1n;
       await p.sendRawTransaction({ serializedTransaction: raw }).catch(() => null);
-      const rc = await p.waitForTransactionReceipt({ hash, timeout: 20_000 }).catch(() => null);
+      const rc = time() ? await p.waitForTransactionReceipt({ hash, timeout: 12_000, retryCount: 0 }).catch(() => null) : null;
       if (rc) await settleTransfer({ ...t, hash }, rc.status === "success" ? "confirmed" : "failed");
     }
   } catch (err: any) {
@@ -342,8 +367,16 @@ export async function processTransfers() {
 }
 
 async function settleTransfer(t: any, status: "confirmed" | "failed") {
-  await must(sb().from("hf_transfers").update({ status, error: status === "failed" ? "reverted on-chain" : null, updated_at: new Date().toISOString() }).eq("id", t.id));
-  if (status !== "confirmed") { if (t.room_id) await sb().from("hf_rooms").update({ error: `A ${t.kind} transfer failed on-chain` }).eq("id", t.room_id); return; }
+  if (status === "failed") {
+    // A reverted transfer moved no tokens, so it is safe to sign again (up to 3 tries, then a person checks).
+    const retry = (t.attempts || 0) < 2;
+    await must(sb().from("hf_transfers").update(retry ? { status: "queued", nonce: null, hash: null, raw: null, attempts: (t.attempts || 0) + 1, error: "reverted on-chain, retrying", updated_at: new Date().toISOString() }
+      : { status: "failed", error: "reverted on-chain 3 times", updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash));
+    if (!retry && t.room_id) await sb().from("hf_rooms").update({ error: `A ${t.kind} transfer failed on-chain` }).eq("id", t.room_id);
+    return;
+  }
+  const done = await must(sb().from("hf_transfers").update({ status: "confirmed", error: null, updated_at: new Date().toISOString() }).eq("id", t.id).eq("status", "signed").eq("hash", t.hash).select("id"));
+  if (!done?.length) return;
   if (t.kind === "prize") await must(sb().from("hf_entries").update({ payout_tx: t.hash }).eq("id", t.entry_id));
   else if (t.kind === "refund") await must(sb().from("hf_entries").update({ refund_tx: t.hash, status: "refunded" }).eq("id", t.entry_id));
   else if (t.kind === "marketing") await must(sb().from("hf_rooms").update({ marketing_tx: t.hash }).eq("id", t.room_id));
@@ -351,10 +384,10 @@ async function settleTransfer(t: any, status: "confirmed" | "failed") {
 
 /** A settling room is paid once every one of its transfers has confirmed. */
 async function finishRooms() {
-  const rooms = await must(sb().from("hf_rooms").select("id").eq("status", "settling").limit(10));
+  const rooms = await must(sb().from("hf_rooms").select("id,pot").eq("status", "settling").not("pot", "is", null).limit(10));
   for (const r of rooms || []) {
     const ts = await must(sb().from("hf_transfers").select("status").eq("room_id", r.id));
-    if ((ts || []).every((t: any) => t.status === "confirmed")) await sb().from("hf_rooms").update({ status: "paid", settled_at: new Date().toISOString() }).eq("id", r.id).eq("status", "settling");
+    if (BigInt(r.pot || "0") > 0n && ts?.length && ts.every((t: any) => t.status === "confirmed")) await sb().from("hf_rooms").update({ status: "paid", settled_at: new Date().toISOString() }).eq("id", r.id).eq("status", "settling");
   }
 }
 
@@ -363,6 +396,10 @@ export async function sweep() {
   const cutoff = new Date(Date.now() - (HFSim.RACE_SECS * 1000 + GRACE_MS)).toISOString();
   const { data: stale } = await sb().from("hf_rooms").select("*").eq("status", "racing").lt("start_at", cutoff).limit(3);
   for (const r of stale || []) await maybeSettle(r as Room).catch(() => null);
+  const { data: unranked } = await sb().from("hf_rooms").select("*").eq("status", "settling").is("pot", null).limit(3);
+  for (const r of unranked || []) await maybeSettle(r as Room).catch(() => null);
+  const { data: unseated } = await sb().from("hf_entries").select("*").eq("status", "paid").is("room_id", null).lt("paid_at", new Date(Date.now() - 60_000).toISOString()).limit(5);
+  for (const e of unseated || []) await seat(e as Entry).catch(() => null);
   const { count } = await sb().from("hf_transfers").select("id", { count: "exact", head: true }).in("status", ["queued", "signed"]);
   if (count) await processTransfers().catch(() => null);
 }
