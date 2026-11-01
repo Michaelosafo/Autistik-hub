@@ -187,7 +187,7 @@ function tokLabel(){return S&&S.w.mk&&S.w.mk.sym?'$'+S.w.mk.sym:(S?S.tok:'');}
 function priceFactor(){const mk=S.w.mk;return clamp(1+1.3*Math.log(mk.P/mk.p0),0.45,1.9);}
 function aiTarget(r){
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];if(c.rugged)return BASE*0.05;return BASE*clamp(0.7+0.11*Math.log(c.m)+c.mom*8,0.32,1.5)*(c.m>=50?1.22:1);}
-  const h=r.ref,xf=S.w.mode==='real'?clamp(1+0.2*Math.log10(Math.max(h.x||1,0.02)),0.5,1.65):1;
+  const h=r.ref,xf=S.w.mode==='real'?((h.x||0)>=5?clamp(1.24+0.14*Math.log10(h.x/5),1.24,1.75):clamp(1+0.2*Math.log10(Math.max(h.x||1,0.02)),0.5,1.12)):1;
   return BASE*0.8*xf*priceFactor()*(h.boost>0?1.4:1)*(h.drag>0?0.5:1)*(h.out?0.32:h.sold&&!h.boost?0.72:1);
 }
 function gatePicks(g){
@@ -215,15 +215,20 @@ function worldStep(dt){
 }
 
 /* ---------- local driver ---------- */
-function myValue(h){return S.w.mode==='fun'?h.amt*coinPrice(h.coin):h.cash+h.amt*S.w.mk.P;}
+function myValue(h){return S.w.mode==='paid'?0:S.w.mode==='real'?h.amt*S.w.mk.P:S.w.mode==='fun'?h.amt*coinPrice(h.coin):h.cash+h.amt*S.w.mk.P;}
+/* the more your real bag is up, the faster you go */
+function realEngine(h){const v=h.amt*S.w.mk.P;return h.start>0?clamp(1+0.3*Math.log10(Math.max(0.01,v/h.start)),0.8,1.6):1;}
+/* +$40 MADE / −$20 LOST pops up as your bag moves */
+function profitFlash(h,dt){h.flashT=(h.flashT||0)+dt;if(h.flash)h.flash.t-=dt;if(h.flashT<3)return;h.flashT=0;const v=h.amt*S.w.mk.P;if(h.flashV==null){h.flashV=v;return;}const d=v-h.flashV;if(Math.abs(d)>=Math.max(0.5,h.flashV*0.01)){h.flash={txt:`${d>0?'+':'−'}${fmtUsd(Math.abs(d)).replace('−','')} ${d>0?'MADE':'LOST'}`,col:d>0?COL.up:COL.down,t:1.6};h.flashV=v;}}
 function engine(h){const st=h.start||100;return S.w.mode==='fun'?clamp(1+0.15*Math.log(Math.max(0.01,myValue(h))/st),0.65,1.4):clamp(1+0.12*Math.log(Math.max(0.01,myValue(h))/st),0.75,1.3);}
 function updMe(h,dt){
   h.toasts.forEach(t=>t.t-=dt);h.toasts=h.toasts.filter(t=>t.t>0).slice(-3);h.shake=Math.max(0,h.shake-dt);
   if(h.finished){h.speed=Math.max(0,h.speed-BASE*0.6*dt);h.pos+=h.speed*dt;return;}
-  const fun=S.w.mode==='fun',seg=segAt(h.pos),i=h.inp;
+  const fun=S.w.mode==='fun',real=S.w.mode==='real',seg=segAt(h.pos),i=h.inp;
   let boosting=false,maxS;
   const st=statOf();
-  if(fun){boosting=i.gas&&h.gas>0;if(boosting)h.gas=Math.max(0,h.gas-26*dt);maxS=BASE*engine(h)*st.speed*(boosting?1+0.45*st.boost:1);}
+  if(fun||real){boosting=i.gas&&h.gas>0;if(boosting)h.gas=Math.max(0,h.gas-26*dt);else if(real)h.gas=Math.min(100,h.gas+3*dt);maxS=BASE*(real?realEngine(h):engine(h))*st.speed*(boosting?1+0.45*st.boost:1)*(real?priceFactor():1);
+    if(real)profitFlash(h,dt);}
   else{
     const P=S.w.mk.P;h.tradeT-=dt;
     if(i.gas&&h.tradeT<=0){if(h.cash>=1){const u=Math.min(15,h.cash);h.cash-=u;h.amt+=u/P;h.boostT=0.8;h.tradeT=0.35;}else{if(!h.warned){h.toasts.push({txt:'OUT OF CASH · BRAKE SELLS',color:COL.down,t:2});h.warned=true;}}}
@@ -253,6 +258,7 @@ function updMe(h,dt){
   for(let n=prev+1;n<=cur&&n<segments.length;n++)for(const it of segments[n].items){
     if(it.type==='can'&&!it.taken&&Math.abs(it.off-h.x)<0.32){it.taken=true;
       if(fun){h.gas=Math.min(100,h.gas+38);h.toasts.push({txt:'+ GAS',color:COL.gas,t:1.8});}
+      else if(real){h.gas=Math.min(100,h.gas+38);h.toasts.push({txt:'+ NITRO',color:COL.gas,t:1.8});}
       else{h.cash+=10;h.toasts.push({txt:'AIRDROP +$10',color:COL.gas,t:1.8});}}
     if(it.type==='gate'&&fun)doGate(h,it);
   }
@@ -277,21 +283,22 @@ function startRace(mode,tok,go,seedStr){
   if(mode==='real'&&!REAL[tok]){loadReal(tok).then(d=>{if(d&&d.tracked)startRace(mode,tok,go,seedStr);});return;}
   lastGo=go;
   const w=newWorld(mode,tok,seedStr);
+  if(paidTrackOn){paidTrackOn=false;if(G)rebuildWorld();}
   const startZ=playerZ+SEG*14;
   const h={me:true,name:me.nick||'You',color:me.color,type:me.car,helmet:me.helmet,pos:startZ+SEG*2+Math.random()*SEG*1.5,x:(Math.random()-0.5)*1.2,speed:0,inp:{left:0,right:0,gas:0,brake:0},toasts:[],shake:0,skyOff:0,finished:false,ft:0,boosting:false};
   const buy=menuBuy;h.buy=buy;
   if(mode==='fun'){h.coin=tok;h.amt=buy/w.coins[tok].p0;h.gas=60;h.swaps=0;h.start=buy;}
   else{h.cash=Math.round(buy*50)/100;h.amt=buy/w.mk.p0;h.tradeT=0;h.boostT=0;h.start=buy+h.cash;}
-  if(mode==='real'&&w.mine){h.realX=w.mine.x;h.name=(me.nick||'You');}
-  w.feed.unshift(`<b>${esc(h.name)}</b> bought in with ${fmtUsd(buy)} of ${mode==='real'?'$'+esc(w.mk.sym):tok}.`);
+  if(mode==='real'){h.cash=0;h.amt=w.mine?w.mine.amt:0;h.start=h.amt*w.mk.p0;h.gas=60;h.buy=0;h.flashV=null;h.waveT=0;if(w.mine){h.realX=w.mine.x;h.name=(me.nick||'You');}}
+  if(mode!=='real')w.feed.unshift(`<b>${esc(h.name)}</b> bought in with ${fmtUsd(buy)} of ${tok}.`);
   if(mode==='real'&&w.mine)w.feed.unshift(`Your wallet is in this race: up ${fmtX(w.mine.x)} on your real bag. Engine boosted.`);
   S={w,me:h,go,mode,tok,remotes:[],feedDirty:true,endShown:false,pubT:0,steps:0};
   if(G){G.camInit=false;G.lookAt.set(0,0,0);}
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);
   if(!immersive())enterImmersive(false);
   document.body.classList.add('racing');
-  $('#pads').hidden=false;
-  $('#padGas').textContent=mode==='fun'?'GAS':'BUY';$('#padBrake').textContent=mode==='fun'?'BRAKE':'SELL';
+  $('#pads').hidden=false;$('#tradePads').hidden=mode!=='real';
+  $('#padGas').textContent=mode==='token'?'BUY':mode==='real'?'NITRO':'GAS';$('#padBrake').textContent=mode==='token'?'SELL':'BRAKE';
   $('#keyHint').innerHTML=mode==='fun'?'<b>← →</b> steer · <b>Space / ↑</b> GAS · <b>↓</b> brake':'<b>← →</b> steer · <b>Space / ↑</b> buy (boost) · <b>↓</b> sell';
   $('#wireH').textContent=mode==='fun'?'Market wire':mode==='real'?`$${w.mk.sym} live trades`:`${tok} onchain wire`;
   state='race';
@@ -309,20 +316,23 @@ function readRemotes(){
   if(!S)return;
   if(!nr){S.remotes=[];return;}
   const now=Date.now();
-  S.remotes=nr.peers().filter(p=>!p.sameTab&&p.presence&&p.presence.st==='race'&&p.presence.go===S.go&&typeof p.presence.p==='number').map(p=>{
+  S.waves=S.waves||new Map();
+  S.remotes=nr.peers().filter(p=>!p.sameTab&&p.presence&&p.presence.st==='race'&&p.presence.go===(S.goKey||S.go)&&typeof p.presence.p==='number').map(p=>{
     const q=p.presence,fin=!!q.f;
     const pos=fin?q.p:Math.min(q.p+(q.s||0)*Math.min(1.5,(now-p.updatedAt)/1000),FIN*SEG+SEG*40);
-    return {remote:true,id:p.peer,name:String(q.n||'Friend').slice(0,16),color:typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#ffffff',pos,x:clamp(+q.x||0,-2.3,2.3),speed:+q.s||0,finished:fin,ft:+q.ft||0,value:+q.v||0,boost:!!q.g,coin:q.k,type:CARS[q.t]?q.t:'street',helmet:typeof q.hc==='string'&&/^#[0-9a-f]{6}$/i.test(q.hc)?q.hc:'#f1edff'};
+    const wv=+q.wv||0,seen=S.waves.get(p.peer);if(wv&&(!seen||seen.ts!==wv)){S.waves.set(p.peer,{ts:wv,at:now});if(seen&&S.me)S.me.toasts.push({txt:`👋 ${String(q.n||'A FRIEND').toUpperCase()} WAVES`,color:COL.gas,t:1.8});}
+    const wa=S.waves.get(p.peer);
+    return {remote:true,id:p.peer,waveT:wa&&wa.ts&&now-wa.at<2600&&seen?1:0,name:String(q.n||'Friend').slice(0,16),color:typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#ffffff',pos,x:clamp(+q.x||0,-2.3,2.3),speed:+q.s||0,finished:fin,ft:+q.ft||0,value:+q.v||0,boost:!!q.g,coin:q.k,type:CARS[q.t]?q.t:'street',helmet:typeof q.hc==='string'&&/^#[0-9a-f]{6}$/i.test(q.hc)?q.hc:'#f1edff'};
   });
 }
 function publish(force){
   if(!nr||!S)return;
   const h=S.me;
-  nr.presence({n:me.nick||'Friend',c:me.color,st:'race',go:S.go,p:Math.round(h.pos),x:+h.x.toFixed(3),s:Math.round(h.speed),f:h.finished?1:0,ft:+h.ft.toFixed(2),v:+myValue(h).toFixed(2),b:h.buy||0,g:h.boosting?1:0,k:S.mode==='fun'?h.coin:S.mode==='real'?tokLabel():S.tok,t:me.car,hc:me.helmet}).catch(()=>{});
+  nr.presence({n:me.nick||'Friend',c:me.color,st:'race',go:S.goKey||S.go,wv:S.me.waveAt||0,p:Math.round(h.pos),x:+h.x.toFixed(3),s:Math.round(h.speed),f:h.finished?1:0,ft:+h.ft.toFixed(2),v:+myValue(h).toFixed(2),b:h.buy||0,g:h.boosting?1:0,k:S.mode==='fun'?h.coin:S.mode==='real'?tokLabel():S.tok,t:me.car,hc:me.helmet}).catch(()=>{});
 }
 
 /* ---------- standings ---------- */
-function allRacers(){return S?[...S.w.ai,S.me,...S.remotes]:[];}
+function allRacers(){return S?[...S.w.ai.filter(r=>!(S.w.mode==='real'&&r.ref&&r.ref.out&&S.w.wt-r.ref.actT>4)),S.me,...S.remotes]:[];}
 function ranked(){
   return allRacers().slice().sort((a,b)=>{
     if(a.finished&&b.finished)return a.ft-b.ft;if(a.finished)return -1;if(b.finished)return 1;return b.pos-a.pos;});
@@ -330,8 +340,8 @@ function ranked(){
 function placeOf(r,list){return list.indexOf(r)+1;}
 function disp(r){
   if(r.me||r.remote){
-    const sub=r.me?fmtUsd(myValue(r)):fmtUsd(r.value);
-    return {label:r.me?(S.remotes.length?r.name:'YOU'):r.name,sub,subCol:COL.gas,color:r.color,boost:r.me?r.boosting:r.boost,human:true};
+    const sub=S.mode==='paid'?((r.pos/SEG*2/1000).toFixed(2)+' km'):r.me?fmtUsd(myValue(r)):fmtUsd(r.value);
+    return {label:(r.waveT>0?'👋 ':'')+(r.me?(S.remotes.length?r.name:'YOU'):r.name),sub,subCol:COL.gas,color:r.color,boost:r.me?r.boosting:r.boost,human:true};
   }
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];return {label:r.ref,sub:c.rugged?'RUG':fmtM(c.m),subCol:c.rugged?COL.dim:c.m>=50?COL.moon:c.mom>=0?COL.up:COL.down,color:r.color,moon:c.m>=50,rug:c.rugged};}
   const h=r.ref,recent=h.act&&S.w.wt-h.actT<1.8;
@@ -871,6 +881,10 @@ function makeCar(color,type,helmet,human){
   const hm=new THREE.MeshStandardMaterial({color:new THREE.Color(helmet||'#f1edff'),metalness:0.3,roughness:0.2,envMap:G.env});
   if(!G.geo.helm){G.geo.helm=new THREE.SphereGeometry(0.42,18,14);}
   const head=new THREE.Mesh(G.geo.helm,hm);head.position.set(0.62,p.roof-0.58,(p.roofF+p.roofR)/2+0.25);g.add(head);
+  // an arm that waves out of the window when the driver says hi
+  let arm=null;if(human){arm=new THREE.Group();arm.position.set(p.bw/2-0.02,p.roof-0.7,(p.roofF+p.roofR)/2+0.25);
+    const fore=new THREE.Mesh(G.geo.arm||(G.geo.arm=new THREE.CylinderGeometry(0.09,0.11,0.85,8)),G.mat.dark);fore.position.y=0.42;arm.add(fore);
+    const glove=new THREE.Mesh(G.geo.glove||(G.geo.glove=new THREE.SphereGeometry(0.16,10,8)),hm);glove.position.y=0.9;arm.add(glove);arm.visible=false;g.add(arm);}
   // boost flames from the exhausts, soft contact shadow, night underglow, name tag
   const flames=[-0.78,0.78].map(x=>{const f=new THREE.Mesh(G.geo.flame,G.mat.flameB);f.rotation.x=-Math.PI/2;f.position.set(x,p.ground+0.24,-h-0.95);f.visible=false;g.add(f);return f;});
   const shd=new THREE.Mesh(G.geo.shadow,G.mat.shadow);shd.rotation.x=-Math.PI/2;shd.position.y=0.03;shd.scale.set(p.bw/4.2,p.L/8.2,1);g.add(shd);
@@ -878,7 +892,7 @@ function makeCar(color,type,helmet,human){
   if(human){const gm=new THREE.MeshBasicMaterial({map:_glowT,color:col,transparent:true,opacity:0.7,blending:THREE.AdditiveBlending,depthWrite:false});
     glow=new THREE.Mesh(G.geo.glow||(G.geo.glow=new THREE.PlaneGeometry(6.4,10.4)),gm);glow.rotation.x=-Math.PI/2;glow.position.y=0.05;g.add(glow);}
   const label=new THREE.Sprite();label.position.set(0,p.roof+2.2,0);label.scale.set(9.2,2,1);g.add(label);
-  g.userData={bodyM,flames,tails,tglow,hglow,beams,glow,wheels,label,key:'',baseColor:color,look:color+'|'+type+'|'+helmet,rug:false};
+  g.userData={bodyM,flames,tails,tglow,hglow,beams,glow,wheels,label,arm,key:'',baseColor:color,look:color+'|'+type+'|'+helmet,rug:false};
   G.scene.add(g);return g;
 }
 function smoke(car,p,amt){
@@ -898,6 +912,7 @@ function placeCar(g,r,d,o){
   u.tails.forEach(t=>t.scale.set(d.brake?1.15:1,d.brake?1.5:1,1));
   u.tglow.forEach(t=>{t.visible=night||!!d.brake;t.scale.set(d.brake?2.2:1.6,d.brake?1.3:1,1);});
   u.beams.forEach(b=>b.visible=night);if(u.glow)u.glow.visible=night;
+  if(u.arm){const wv=(r.waveT||0)>0;u.arm.visible=wv;if(wv)u.arm.rotation.z=-0.35-Math.max(0,Math.sin(tClock*12))*0.6;}
   if(u.wheels){const roll=Math.min(((r.speed||0)*SC)*(G.dt||0)/0.6,1.15),st=clamp(d.steer!=null?d.steer:(r.tx!=null?-(r.tx-r.x)*2.5:0),-1,1)*0.55;
     u.wheels.forEach(w=>{w.spin.rotation.x+=roll;if(w.front)w.steer.rotation.y+=(st-w.steer.rotation.y)*0.25;});}
   if(d.label){const key=d.label+'|'+d.sub+'|'+d.color+'|'+d.subCol+'|'+(d.human?1:0);if(key!==u.key){u.key=key;u.label.material=labelSprite(key,d);}u.label.visible=true;}else u.label.visible=false;
@@ -1069,7 +1084,7 @@ function drawGauge(c,cx,cy,r,speed,boost){
 }
 function drawHUD(pl,list){
   if(G&&!reduce)drawSpeedFx(ctx,G.speedFx||0,pl.boosting);
-  const c=ctx,fun=S.w.mode==='fun',place=placeOf(pl,list);
+  const c=ctx,paid=S.mode==='paid',real=S.w.mode==='real',fun=S.w.mode==='fun'||paid||real,place=placeOf(pl,list);
   const shadow=on=>{c.shadowColor=on?'rgba(0,0,0,0.55)':'transparent';c.shadowBlur=on?8:0;c.shadowOffsetY=on?2:0;};
   // progress, top left
   const prog=clamp(pl.pos/(FIN*SEG),0,1);
@@ -1087,7 +1102,7 @@ function drawHUD(pl,list){
     c.fillText((r.me?'YOU':d.name||d.label).slice(0,12),68,y);
     c.textAlign='right';c.font=`600 11px ${F_MONO}`;c.fillStyle=(r.me||r.remote)?COL.gas:d.subCol;c.fillText(r.finished?'FIN':String(d.sub).slice(0,9),244,y);c.textAlign='left';});
   // position and race time, top right (left of the exit button)
-  const xr=W-76,t=pl.finished?pl.ft:Math.max(0,S.w.wt);
+  const xr=W-76,t=paid?Math.max(0,HFSim.RACE_SECS-S.w.wt):pl.finished?pl.ft:Math.max(0,S.w.wt);
   shadow(true);c.textAlign='right';c.font=`600 11px ${F_MONO}`;c.fillStyle=COL.gas;c.fillText('POS',xr,26);
   c.font=`40px ${F_RACE}`;c.fillStyle=COL.ink;c.fillText(`${place}/${list.length}`,xr,64);
   c.font=`600 15px ${F_MONO}`;c.fillStyle=COL.ink;c.fillText(fmtRaceTime(t),xr,86);shadow(false);
@@ -1103,20 +1118,24 @@ function drawHUD(pl,list){
   c.fillStyle=COL.gas;c.fillRect(rx+rw/2-2,ry-3,4,16);
   // your bag
   const pw=300,bx=W-pw-16,by=100,ph=74;c.textAlign='left';c.fillStyle='rgba(13,11,31,0.66)';rr(c,bx,by,pw,ph,8);c.fill();
-  const eg=fun?engine(pl):priceFactor()*engine(pl);
-  if(fun){const cn=S.w.coins[pl.coin];c.fillStyle=cn.color;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillText(pl.coin,bx+14,by+24);const cw=c.measureText(pl.coin).width;
+  const eg=paid?1:real?realEngine(pl)*priceFactor():fun?engine(pl):priceFactor()*engine(pl);
+  if(paid){const P=PD.view,pot=P?P.entryUsd*P.players.length:0;c.fillStyle=COL.up;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillStyle=COL.ink;c.fillText('PRIZE POOL',bx+14,by+24);
+    c.font=`600 14px ${F_MONO}`;c.fillStyle=COL.gas;c.fillText(`${fmtUsd(pot*0.7)} to the top 5`,bx+14,by+46);c.font=`600 11px ${F_MONO}`;c.fillStyle=place<=5?COL.up:COL.dim;c.fillText(place<=5?`IN THE MONEY: ${ordinal(place).toUpperCase()} WINS ${fmtUsd(pot*0.7*PD_SPLIT[place-1]/100)}`:'GET INTO THE TOP 5 TO WIN',bx+14,by+64);
+  } else if(S.w.mode==='fun'){const cn=S.w.coins[pl.coin];c.fillStyle=cn.color;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillText(pl.coin,bx+14,by+24);const cw=c.measureText(pl.coin).width;
     c.font=`600 13px ${F_MONO}`;c.fillStyle=cn.rugged?COL.dim:cn.m>=50?COL.moon:cn.mom>=0?COL.up:COL.down;c.fillText(cn.rugged?'RUGGED':fmtM(cn.m),bx+22+cw,by+23);
     c.fillStyle=COL.ink;c.font=`600 15px ${F_MONO}`;c.fillText(fmtUsd(myValue(pl)),bx+14,by+46);
   } else {const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100,tl=tokLabel();c.fillStyle=TOK[S.tok]?TOK[S.tok].color:COL.gas;c.fillRect(bx,by,5,ph);
     c.font=`18px ${F_RACE}`;c.fillText(tl,bx+14,by+24);const cw=c.measureText(tl).width;
     c.font=`600 13px ${F_MONO}`;c.fillStyle=COL.ink;const pt=fmtPrice(mk.P);c.fillText(pt,bx+22+cw,by+23);const ptw=c.measureText(pt).width;
     c.fillStyle=ch>=0?COL.up:COL.down;c.fillText(`${ch>=0?'+':''}${ch.toFixed(1)}%`,bx+30+cw+ptw,by+23);
-    c.fillStyle=COL.ink;c.font=`600 12px ${F_MONO}`;c.fillText(`${fmtAmt(pl.amt)} ${tl.replace('$','')} · ${fmtUsd(myValue(pl))} · cash ${fmtUsd(pl.cash)}`,bx+14,by+45);}
-  c.font=`600 11px ${F_MONO}`;c.fillStyle=eg>=1?COL.up:COL.down;c.fillText(`${fun?'ENGINE':'SPEED'} ${(eg*100).toFixed(0)}%`,bx+14,by+64);
+    c.fillStyle=COL.ink;c.font=`600 12px ${F_MONO}`;if(real){const v=myValue(pl),pnl=v-(pl.start||0);c.fillText(`${fmtAmt(pl.amt)} ${tl.replace('$','')} · ${fmtUsd(v)}`,bx+14,by+45);if(pl.start>0){const tw=c.measureText(`${fmtAmt(pl.amt)} ${tl.replace('$','')} · ${fmtUsd(v)}`).width;c.fillStyle=pnl>=0?COL.up:COL.down;c.fillText(` ${pnl>=0?'+':'−'}${fmtUsd(Math.abs(pnl)).replace('−','')}`,bx+14+tw,by+45);}else{c.fillStyle=COL.dim;c.fillText(' · tap BUY to get in',bx+14+c.measureText(`${fmtAmt(pl.amt)} ${tl.replace('$','')} · ${fmtUsd(v)}`).width,by+45);}}
+    else c.fillText(`${fmtAmt(pl.amt)} ${tl.replace('$','')} · ${fmtUsd(myValue(pl))} · cash ${fmtUsd(pl.cash)}`,bx+14,by+45);}
+  if(!paid){c.font=`600 11px ${F_MONO}`;c.fillStyle=eg>=1?COL.up:COL.down;c.fillText(`${fun?'ENGINE':'SPEED'} ${(eg*100).toFixed(0)}%`,bx+14,by+64);}
   if(pl.realX){c.fillStyle=COL.moon;c.textAlign='right';c.fillText(`YOUR WALLET ${fmtX(pl.realX)}`,bx+pw-10,by+64);c.textAlign='left';}
   // speedometer, right side above the pedals
   drawGauge(c,W-112,H-238,58,pl.speed,pl.boosting);
-  if(fun){const ng=GATES.find(g=>g.n*SEG>pl.pos);if(ng){const d=(ng.n*SEG-pl.pos)/SEG;if(d<70){shadow(true);c.textAlign='center';c.font=`16px ${F_RACE}`;c.fillStyle=COL.gas;c.fillText(`SWAP GATE ${Math.round(d*4)}m · pick a lane`,W/2,84);shadow(false);}}}
+  if(S.w.mode==='fun'){const ng=GATES.find(g=>g.n*SEG>pl.pos);if(ng){const d=(ng.n*SEG-pl.pos)/SEG;if(d<70){shadow(true);c.textAlign='center';c.font=`16px ${F_RACE}`;c.fillStyle=COL.gas;c.fillText(`SWAP GATE ${Math.round(d*4)}m · pick a lane`,W/2,84);shadow(false);}}}
+  if(pl.flash&&pl.flash.t>0){c.save();shadow(true);c.textAlign='center';c.globalAlpha=Math.min(1,pl.flash.t*1.6);c.font=`34px ${F_RACE}`;c.fillStyle=pl.flash.col;c.fillText(pl.flash.txt,W/2,H*0.25);shadow(false);c.restore();}
   c.textAlign='center';shadow(true);pl.toasts.forEach((tt,i)=>{c.globalAlpha=Math.min(1,tt.t*2);c.font=`26px ${F_RACE}`;c.fillStyle=tt.color;c.fillText(tt.txt,W/2,H*0.36+i*32);});c.globalAlpha=1;
   const left=(S.go-Date.now())/1000;
   if(left>0){c.font=`120px ${F_RACE}`;c.fillStyle=COL.gas;c.fillText(Math.ceil(left),W/2,H*0.56);c.font=`18px ${F_RACE}`;c.fillStyle=COL.ink;c.fillText(S.remotes.length?`${S.remotes.length+1} RACERS ON THE GRID`:'GET READY',W/2,H*0.64);}
@@ -1135,7 +1154,7 @@ function renderBoard(list){
       tag=`<span class="tagc ${cls}">${esc(r.finished?'FIN':d.sub)}</span>`;}
     return `<li class="${r.me?'me':r.remote?'friend':''}"><span class="pl">${i+1}</span><span class="dot" style="background:${r.color}"></span>${nm}${tag}</li>`;}).join('');
   $('#lapInfo').textContent=`${Math.round(clamp(S.me.pos/(FIN*SEG),0,1)*100)}%`;
-  if(S.w.mode!=='fun'){const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100;$('#priceInfo').innerHTML=`<span style="color:${ch>=0?COL.up:COL.down}">${esc(tokLabel())} ${fmtPrice(mk.P)} ${ch>=0?'+':''}${ch.toFixed(1)}%</span>`;}else $('#priceInfo').textContent='';
+  if(S.w.mode!=='fun'&&S.w.mk){const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100;$('#priceInfo').innerHTML=`<span style="color:${ch>=0?COL.up:COL.down}">${esc(tokLabel())} ${fmtPrice(mk.P)} ${ch>=0?'+':''}${ch.toFixed(1)}%</span>`;}else $('#priceInfo').textContent='';
 }
 function renderFeed(){if(!S)return;$('#feed').innerHTML=S.w.feed.slice(0,30).map(t=>`<li>${t}</li>`).join('')||'<li>Quiet so far.</li>';S.feedDirty=false;}
 function showEnd(){
@@ -1212,7 +1231,7 @@ function showLobby(){
   ['homeOv','endOv','launchOv'].forEach(id=>$('#'+id).hidden=true);$('#lobbyOv').hidden=false;$('#pads').hidden=true;document.body.classList.remove('racing');
   if(!immersive()){$('#lobbyOv').hidden=true;$('#launchOv').hidden=false;}
   $('#codeTxt').textContent=nr?code:'Solo';$('#lobbyLbl').textContent=nr?'Race code':'Mode';
-  $('#bCopy').hidden=!nr;$('#lobbyHint').hidden=!nr;
+  $('#bCopy').hidden=!nr;$('#lobbyHint').hidden=!nr;$('#shareRow').hidden=!nr;$('#shareLink').value=nr&&code?inviteLink(code):'';
   renderLobby();
 }
 function renderBuy(){
@@ -1229,7 +1248,8 @@ function renderBuy(){
     :`You buy ${fmtUsd(menuBuy)} of ${mode==='real'?symTxt:(tok||'SOL')} at the start, plus ${fmtUsd(menuBuy/2)} of cash to buy more mid-race for boosts. Play money.`;
   const rb=$('#realBuy');rb.hidden=!(window.HFWallet&&((mode==='token'&&SWAP_CHAIN[tok])||(mode==='real'&&rd)));
   if(!rb.hidden){if(mode==='real'){rb.href=`/swap?chain=${encodeURIComponent(rd.chain)}&buy=${encodeURIComponent(rd.token)}`;rb.textContent=`Join for real: buy ${symTxt} on AUTISTIK Swap →`;}else{rb.href='/swap?chain='+SWAP_CHAIN[tok];rb.textContent=`Buy real ${tok} on AUTISTIK Swap →`;}}
-  $('#bStart').textContent=`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;
+  const realMode=menuMode==='real';document.querySelector('.buyin').hidden=realMode;
+  $('#bStart').textContent=realMode?(nr?'Start race':'Start race'):`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;
   $('#bStart').disabled=menuMode==='real'&&!(menuReal&&REAL[menuReal]&&REAL[menuReal].tracked);
 }
 function setBuy(v,typed){menuBuy=v;try{localStorage.setItem('hf-buyin',String(v));}catch(e){}if(!typed)renderBuy();else{$('#buyRow').querySelectorAll('button[data-b]').forEach(b=>b.setAttribute('aria-pressed',false));$('#bStart').textContent=`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;}if(nr)lobbyPresence();}
@@ -1255,9 +1275,9 @@ function renderGarage(){renderWorld();renderGfx();
   $('#carPick').innerHTML=CAR_KEYS.map(k=>{const c=CARS[k];return `<button data-c="${k}" aria-pressed="${me.car===k}"><b>${c.name}</b><span class="bars"><small>SPD</small>${bar(c.speed)}<small>GRIP</small>${bar(c.handle)}<small>BOOST</small>${bar(c.boost)}</span></button>`;}).join('');
   $('#paintPick').innerHTML=PAINTS.map(c=>`<button data-v="${c}" aria-pressed="${me.color===c}" aria-label="Paint ${c}" style="background:${c}"></button>`).join('');
   $('#helmPick').innerHTML=HELMS.map(c=>`<button data-v="${c}" aria-pressed="${me.helmet===c}" aria-label="Helmet ${c}" style="background:${c}"></button>`).join('');
-  $('#carPick').querySelectorAll('button').forEach(b=>b.onclick=()=>{me.car=b.dataset.c;saveLook();renderGarage();});
+  $('#carPick').querySelectorAll('button').forEach(b=>b.onclick=()=>{me.car=b.dataset.c;saveLook();renderGarage();if(wizAt==='car')setTimeout(wizNext,180);});
   $('#paintPick').querySelectorAll('button').forEach(b=>b.onclick=()=>{me.color=b.dataset.v;saveLook();renderGarage();});
-  $('#helmPick').querySelectorAll('button').forEach(b=>b.onclick=()=>{me.helmet=b.dataset.v;saveLook();renderGarage();});
+  $('#helmPick').querySelectorAll('button').forEach(b=>b.onclick=()=>{me.helmet=b.dataset.v;saveLook();renderGarage();if(wizAt==='look')setTimeout(wizNext,180);});
 }
 renderGarage();
 $('#bCreate').onclick=()=>{if(!room)return;const c=WORDS[Math.floor(Math.random()*WORDS.length)]+'-'+(1000+Math.floor(Math.random()*9000));enterRoom(c,true);};
@@ -1342,7 +1362,7 @@ function openScan(q){
   if(q){$('#scanQ').value=q;runScan(q);}else if(!SCAN.view&&me.wallet){$('#scanQ').value=me.wallet;runScan(me.wallet);}
   setTimeout(()=>{try{$('#scanQ').focus();}catch(e){}},50);
 }
-function closeScan(){$('#scanOv').hidden=true;if(state==='lobby')$('#lobbyOv').hidden=false;else $('#homeOv').hidden=false;}
+function closeScan(){$('#scanOv').hidden=true;if(state==='lobby')$('#lobbyOv').hidden=false;else{$('#homeOv').hidden=false;wizHome();}}
 const xTier=x=>x==null?'':x>=1000?'x1000':x>=100?'x100':x>=25?'x25':x>=10?'x10':x>=1?'x1':'xdn';
 const xBadge=(x,est)=>x==null?'<span class="xb xq">entry ?</span>':`<span class="xb ${xTier(x)}">${fmtX(x)}${est?'~':''}</span>`;
 async function runScan(q){
@@ -1429,9 +1449,251 @@ $('#scanMine').onclick=async()=>{
   if(a.evm&&a.sol)$('#scanMsg').textContent='Showing your EVM wallet. Paste your Solana address to see that one.';
   $('#scanQ').value=pick;runScan(pick);
 };
-$('#bFunPlay').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;menuMode='fun';showLobby();renderLobby();};
-$('#bWalletPlay').onclick=()=>openScan();
 $('#bScanL').onclick=()=>openScan();
+/* ---------- step-by-step menu: each choice moves straight on to the next question ---------- */
+const FLOWS={friends:['mode','name','car','look','friends'],paid:['mode','name','car','look','paid'],real:['mode','name','car','look'],join:['name']};
+let wizFlow='friends',wizAt='mode',wizPrev=null,pendingRoom=null;
+(function(){try{const r=new URLSearchParams(location.search).get('room');if(r&&/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(r))pendingRoom=r;}catch(e){}})();
+function wizShow(step){
+  wizAt=step;$('#homeOv').querySelectorAll('.step').forEach(x=>x.hidden=x.dataset.step!==step);
+  const fl=FLOWS[wizFlow]||FLOWS.friends,i=fl.indexOf(step);
+  $('#wDots').innerHTML=step==='settings'?'':fl.map((_,k)=>`<i class="${k<=i?'on':''}"></i>`).join('');
+  $('#wBack').hidden=step!=='settings'&&i<=0;
+  if(step==='name'){$('#nameHint').textContent=wizFlow==='join'?`You’re joining race ${pendingRoom||''}. Everyone sees this name.`:'Everyone in the race sees this name.';setTimeout(()=>{try{$('#nick').focus();}catch(e){}},60);}
+  if(step==='paid')pdOpen();
+}
+function wizNext(){const fl=FLOWS[wizFlow]||[],i=fl.indexOf(wizAt);if(i<0)return;if(i>=fl.length-1){wizDone();return;}wizShow(fl[i+1]);}
+function wizDone(){
+  if(wizFlow==='real'){openScan();return;}
+  if(wizFlow==='join'&&pendingRoom){const c=pendingRoom;pendingRoom=null;joinWhenReady(c);}
+}
+function wizHome(){state='home';wizFlow='friends';$('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(x=>x.setAttribute('aria-pressed','false'));wizShow('mode');}
+$('#wBack').onclick=()=>{if(wizAt==='settings'){wizShow(wizPrev||'mode');return;}const fl=FLOWS[wizFlow],i=fl.indexOf(wizAt);if(i>0)wizShow(fl[i-1]);};
+$('#wGear').onclick=()=>{if(wizAt!=='settings'){wizPrev=wizAt;wizShow('settings');}else wizShow(wizPrev||'mode');};
+$('#wSetDone').onclick=()=>wizShow(wizPrev||'mode');
+$('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(b=>b.onclick=()=>{wizFlow=b.dataset.flow;$('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));setTimeout(wizNext,140);});
+$('#wNameNext').onclick=()=>{if(!$('#nick').value.trim()&&(wizFlow==='paid'||wizFlow==='join')){$('#nameHint').innerHTML='<span class="bad">Add your name to join.</span>';return;}readNick();wizNext();};
+$('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wNameNext').click();});
+/* friends join by tapping a link: /hyperfocus?room=jollof-4821 */
+function inviteLink(c){const u=new URL(location.href);u.search='';u.hash='';u.searchParams.set('room',c);return u.toString();}
+async function joinWhenReady(c){
+  for(let k=0;k<20&&!room;k++)await new Promise(r=>setTimeout(r,250));
+  if(!room){wizFlow='friends';wizShow('friends');homeErr('Racing with friends isn’t available right now. Try again in a moment.');return;}
+  enterRoom(c,false);
+}
+$('#bShare').onclick=async()=>{const url=$('#shareLink').value;if(!url)return;
+  try{if(navigator.share){await navigator.share({title:'Hyperfocus GP',text:`Race me in Hyperfocus GP (code ${code})`,url});return;}}catch(e){if(e&&e.name==='AbortError')return;}
+  try{await navigator.clipboard.writeText(url);$('#bShare').textContent='Link copied';setTimeout(()=>$('#bShare').textContent='Share link',1600);}catch(e){$('#shareLink').select();}};
+
+/* ---------- paid races: $0.50 of AUTISTIK, rooms of 10, 5 minutes, top 5 paid ---------- */
+const PD={st:null,entry:null,view:null,offset:0,poll:0,busy:false,dec:null,price:null};
+try{const e=JSON.parse(localStorage.getItem('hf-paid-entry')||'null');if(e&&e.id&&e.secret)PD.entry=e;}catch(e){}
+const PD_SPLIT=[35,25,18,12,10];
+function pdSave(){try{if(PD.entry)localStorage.setItem('hf-paid-entry',JSON.stringify(PD.entry));else localStorage.removeItem('hf-paid-entry');}catch(e){}}
+function pdSplitHtml(pot){return PD_SPLIT.map((p,i)=>`<div><b>${ordinal(i+1)}</b>${pot?fmtUsd(pot*0.7*p/100):(0.7*p).toFixed(1)+'%'}</div>`).join('');}
+async function pdApi(action,body){try{const r=await fetch('/api/hyperfocus/paid/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {ok:r.ok,status:r.status,j:await r.json().catch(()=>({}))};}catch(e){return {ok:false,status:0,j:{error:'Couldn’t reach the site. Try again.'}};}}
+async function pdOpen(){
+  if(!ONSITE()){$('#pdInfo').textContent='Paid races run on autistik.io/hyperfocus. Free play works here.';$('#pdPay').disabled=true;$('#pdSplit').innerHTML=pdSplitHtml(0);return;}
+  if(PD.entry&&PD.entry.room){pdWait();return;}
+  if(PD.entry&&PD.entry.tx&&!PD.entry.room){$('#pdMsg').textContent='Finishing your last entry…';pdJoin();return;}
+  try{const r=await fetch('/api/hyperfocus/paid/status');PD.st=await r.json();}catch(e){PD.st=null;}
+  const st=PD.st;
+  if(!st||!st.enabled){$('#pdInfo').textContent='Paid races open soon. Free play and real token races work now.';$('#pdPay').disabled=true;$('#pdSplit').innerHTML=pdSplitHtml(0);return;}
+  PD.dec=st.decimals??PD.dec;
+  const n=st.open?st.open.players:0;
+  $('#pdInfo').innerHTML=`Entry ${fmtUsd(st.entryUsd)} of $AUTISTIK · ${st.roomSize} racers · 5 minutes. ${n?`<b>${n}/${st.roomSize}</b> racers are waiting now.`:'Be the first in the next room.'} The top 5 share 70% of the pot; 30% goes to AUTISTIK marketing.`;
+  $('#pdSplit').innerHTML=pdSplitHtml(st.entryUsd*st.roomSize);
+  $('#pdPay').textContent=`Pay ${fmtUsd(st.entryUsd)} in AUTISTIK & join`;$('#pdPay').disabled=false;
+  try{const a=window.HFWallet.addresses?await window.HFWallet.addresses():{};$('#pdWallet').textContent=a.evm?`Paying from ${shortA(a.evm)} on BNB Chain.`:'You’ll be asked to connect a BNB Chain wallet.';}catch(e){}
+}
+const transferData=(to,amount,nonce)=>'0xa9059cbb'+to.toLowerCase().replace(/^0x/,'').padStart(64,'0')+BigInt(amount).toString(16).padStart(64,'0')+nonce;
+$('#pdPay').onclick=async()=>{
+  if(PD.busy)return;PD.busy=true;const msg=t=>$('#pdMsg').innerHTML=t;
+  try{
+    let a=await window.HFWallet.addresses();
+    if(!a.evm){msg('Pick a wallet to connect…');try{await window.HFWallet.connect();}catch(e){}a=await window.HFWallet.addresses();}
+    if(!a.evm){msg('<span class="bad">Connect a BNB Chain wallet (MetaMask, Trust…) to pay.</span>');return;}
+    readNick();msg('Getting today’s $AUTISTIK price…');
+    const q=await pdApi('quote',{wallet:a.evm,name:me.nick,car:me.car,color:me.color});
+    if(!q.ok){msg(`<span class="bad">${esc(q.j.error||'Couldn’t start your entry.')}</span>`);return;}
+    PD.dec=q.j.decimals;PD.price=q.j.priceUsd;
+    const toks=Number(BigInt(q.j.amount)/10n**BigInt(Math.max(0,q.j.decimals-4)))/1e4;
+    msg(`Confirm ${toks.toLocaleString('en-US',{maximumFractionDigits:2})} AUTISTIK (${fmtUsd(q.j.usd)}) in your wallet…`);
+    const sent=await window.HFWallet.sendTokenTx(56,q.j.token,transferData(q.j.gameWallet,q.j.amount,q.j.nonce));
+    PD.entry={id:q.j.entryId,secret:q.j.secret,tx:sent.hash};pdSave();
+    msg('Payment sent. Checking it on BNB Chain…');
+    await pdJoin();
+  }catch(e){msg(`<span class="bad">${esc((e&&e.message)||'Payment cancelled.')}</span>`);}
+  finally{PD.busy=false;}
+};
+async function pdJoin(){
+  for(let k=0;k<14;k++){
+    const r=await pdApi('join',{entryId:PD.entry.id,secret:PD.entry.secret,txHash:PD.entry.tx});
+    if(r.ok&&r.j.roomId){PD.entry.room=r.j.roomId;pdSave();pdWait();return;}
+    if(r.status!==409&&r.status!==0&&r.status!==429){$('#pdMsg').innerHTML=`<span class="bad">${esc(r.j.error||'Couldn’t confirm your entry.')}</span>`;PD.entry=null;pdSave();return;}
+    $('#pdMsg').textContent='Waiting for BNB Chain to confirm your payment…';await new Promise(res=>setTimeout(res,5000));
+  }
+  $('#pdMsg').textContent='Still confirming. Open this screen again in a minute: your entry is saved.';
+}
+function pdWait(){['homeOv','lobbyOv','scanOv','endOv'].forEach(id=>$('#'+id).hidden=true);$('#paidOv').hidden=false;state='paid-wait';pdPoll();}
+async function pdPoll(){
+  clearTimeout(PD.poll);if(!PD.entry||!PD.entry.room)return;
+  let v=null;
+  try{const r=await fetch(`/api/hyperfocus/paid/room?id=${encodeURIComponent(PD.entry.room)}&entry=${encodeURIComponent(PD.entry.id)}&secret=${encodeURIComponent(PD.entry.secret)}`);
+    if(r.ok)v=await r.json();else if(r.status===404){PD.entry=null;pdSave();$('#paidOv').hidden=true;wizHome();$('#homeOv').hidden=false;return;}}catch(e){}
+  if(v){PD.view=v;PD.offset=v.now-Date.now();if(v.decimals!=null)PD.dec=v.decimals;if(v.priceUsd)PD.price=v.priceUsd;}
+  const st=v&&v.room.status;
+  if(v&&!v.players.some(p=>p.me)){PD.entry=null;pdSave();return;}
+  if(v&&state==='paid-wait')pdRender(v);
+  if(st==='racing'&&v.room.seed&&!(S&&S.mode==='paid')&&Date.now()+PD.offset<v.room.startAt+v.room.raceSecs*1000)startPaidRace(v);
+  if(st==='paid'){pdResults(v);return;}
+  PD.poll=setTimeout(pdPoll,S&&S.mode==='paid'&&state==='race'?6000:2000);
+}
+function pdRender(v){
+  const n=v.players.length,size=v.size,wait=v.room.status==='waiting';
+  $('#pwH').textContent=wait?`Waiting for racers · ${n}/${size}`:v.room.status==='racing'?'Race starting!':'Race finished';
+  $('#pwSub').textContent=wait?`The race starts as soon as ${size-n} more racer${size-n===1?' joins':'s join'}. Send friends the game to fill it faster.`:'Get ready: the countdown has started.';
+  $('#pwFill').style.width=Math.round(n/size*100)+'%';
+  $('#pwList').innerHTML=v.players.map(p=>`<li><span class="dot" style="background:${/^#[0-9a-f]{6}$/i.test(p.color||'')?p.color:'#ffd23f'}"></span>${esc(p.name)}<span class="t">${esc(p.wallet)}${p.me?' · you':''}</span></li>`).join('');
+  $('#pwSplit').innerHTML=pdSplitHtml(v.entryUsd*size);
+  $('#pwLeave').hidden=!wait;
+}
+$('#pwLeave').onclick=async()=>{
+  if(!PD.entry)return;$('#pwMsg').textContent='Leaving and sending your entry back…';
+  const r=await pdApi('leave',{entryId:PD.entry.id,secret:PD.entry.secret});
+  if(!r.ok){$('#pwMsg').innerHTML=`<span class="bad">${esc(r.j.error||'Couldn’t leave.')}</span>`;return;}
+  clearTimeout(PD.poll);PD.entry=null;pdSave();
+  $('#pwMsg').textContent=r.j.refunded?'Your entry is on its way back to your wallet.':(r.j.error||'You left the room.');
+  setTimeout(()=>{$('#paidOv').hidden=true;$('#homeOv').hidden=false;wizHome();},1800);
+};
+let paidTrackOn=false;
+function buildPaidTrack(T){
+  segments=[];let k=0;
+  for(const [e,h,l,,hill] of T.pieces){const sy=lastY(),ey=sy+(hill-Math.round(sy/SEG*0.35))*SEG,t=e+h+l;for(let n=0;n<t;n++)addSeg(T.curve[k++],easeInOut(sy,ey,n/t));}
+  FIN=T.fin;for(let i=FIN;i<FIN+3;i++)segments[i].color=ROAD_F;for(let i=22;i<24;i++)segments[i].color=ROAD_F;
+  GATES=[];const r=mulberry(T.seed);
+  for(let n=12;n<FIN;n++)if(n%9===4&&r()<0.6)segments[n].items.push({type:'lamp',off:(n%18<9?-1:1)*1.15});
+  T.cans.forEach((off,n)=>{if(segments[n])segments[n].items.push({type:'can',off,taken:false});});
+  paidTrackOn=true;
+}
+async function startPaidRace(v){
+  const T=HFSim.track(v.room.seed);
+  buildPaidTrack(T);if(G)rebuildWorld();
+  const h={me:true,name:me.nick||'You',color:me.color,type:me.car,helmet:me.helmet,pos:HFSim.SEG*20,x:0,speed:0,inp:{left:0,right:0,gas:0,brake:0},toasts:[],shake:0,skyOff:0,finished:false,ft:0,gas:60,boosting:false,steer:0,vx:0,waveT:0};
+  S={w:{mode:'paid',ai:[],aiFin:[],feed:[],events:[],wt:0},me:h,go:v.room.startAt-PD.offset,goKey:v.room.startAt,mode:'paid',tok:'AUTISTIK',remotes:[],feedDirty:true,endShown:false,pubT:0,steps:0,
+    paid:{T,sim:HFSim.start(me.car),inputs:[],steps:0,sent:false,room:v.room.id,lastPlace:0,players:v.players.length}};
+  S.w.feed.unshift(`Paid race: ${v.players.length} racers, 5 minutes. The top 5 split the pot.`);
+  if(G){G.camInit=false;G.lookAt.set(0,0,0);}
+  ['homeOv','lobbyOv','endOv','paidOv','scanOv'].forEach(id=>$('#'+id).hidden=true);
+  if(!immersive())enterImmersive(false);
+  document.body.classList.add('racing');$('#pads').hidden=false;$('#tradePads').hidden=true;
+  $('#padGas').textContent='NITRO';$('#padBrake').textContent='BRAKE';
+  state='race';
+  try{if(nr){nr.leave().catch(()=>{});nr=null;}if(room)nr=await room.join('paid-'+v.room.id);}catch(e){nr=null;}
+  publish(true);
+}
+function stepPaid(dt){
+  const P=S.paid,h=S.me;
+  h.toasts.forEach(t=>t.t-=dt);h.toasts=h.toasts.filter(t=>t.t>0).slice(-3);h.shake=Math.max(0,h.shake-dt);
+  const el=(Date.now()-S.go)/1000,target=Math.min(HFSim.STEPS,Math.floor(Math.max(0,el)/HFSim.STEP));let n=0;
+  while(P.steps<target&&n<400){
+    const i=h.inp;let b=(i.left?1:0)|(i.right?2:0)|(i.gas?4:0)|(i.brake?8:0);
+    if(!(b&3)&&tiltOn&&Math.abs(tiltVal)>0.25)b|=tiltVal<0?1:2;
+    const c0=P.sim.cans,s0=Math.floor(P.sim.pos/SEG),sc0=P.sim.scrape;
+    HFSim.step(P.T,P.sim,b);P.inputs.push(b);P.steps++;n++;
+    if(P.sim.cans>c0){for(let k=s0;k<=Math.floor(P.sim.pos/SEG);k++)for(const it of (segments[k]?segments[k].items:[]))if(it.type==='can')it.taken=true;h.toasts.push({txt:'+ NITRO',color:COL.gas,t:1.4});}
+    if(P.sim.scrape===6&&sc0!==6)h.shake=Math.max(h.shake,0.12);
+  }
+  if(n>45&&G)G.camInit=false; // caught up on a race already running: put the camera straight behind the car
+  const s=P.sim,fr=clamp(Math.max(0,el)/HFSim.STEP-P.steps,0,1);
+  h.pos=s.pos+(P.steps<HFSim.STEPS?s.speed*HFSim.STEP*fr:0);h.x=s.x;h.speed=s.speed;h.boosting=s.boosting;h.steer=s.steer;h.vx=s.vx;h.gas=s.nitro;h.scrape=s.scrape>0?0.1:0;
+  if(s.finished&&!h.finished){h.finished=true;h.ft=s.ft*HFSim.STEP;h.toasts.push({txt:'FINISHED',color:COL.gas,t:3});}
+  S.w.wt=Math.max(0,el);
+  if(P.steps>=HFSim.STEPS&&!P.sent){P.sent=true;h.finished=true;h.ft=h.ft||HFSim.RACE_SECS;pdFinish();}
+  const list=ranked(),pl=placeOf(h,list);
+  if(P.lastPlace&&pl!==P.lastPlace&&el>3&&P.steps<HFSim.STEPS){
+    const o=pl<P.lastPlace?list[pl]:list[pl-2];
+    if(o)h.toasts.push(pl<P.lastPlace?{txt:`YOU PASSED ${String(o.name||'').toUpperCase()} · ${ordinal(pl).toUpperCase()}`,color:COL.up,t:2}:{txt:`${String(o.name||'').toUpperCase()} PASSED YOU · ${ordinal(pl).toUpperCase()}`,color:COL.down,t:2});
+  }
+  P.lastPlace=pl;
+}
+async function pdFinish(){
+  const enc=HFSim.encode(S.paid.inputs);
+  S.me.toasts.push({txt:'TIME! CHECKING EVERY RACE…',color:COL.gas,t:4});
+  setTimeout(()=>{if(S&&S.mode==='paid'){$('#endH').textContent='Time! Checking every race…';$('#endSub').textContent='The server replays all the races to decide the places, then pays the top 5 automatically.';$('#resTbl').innerHTML='';$('#bAgain').hidden=true;$('#bLobby').textContent='Back to menu';$('#endOv').hidden=false;}},1500);
+  for(let k=0;k<6;k++){const r=await pdApi('finish',{entryId:PD.entry.id,secret:PD.entry.secret,inputs:enc});if(r.ok||(r.status===400&&!/reach/.test(r.j.error||'')))break;await new Promise(res=>setTimeout(res,3000));}
+  clearTimeout(PD.poll);PD.poll=setTimeout(pdPoll,2500);
+}
+function pdTok(x){if(!x||x==='0')return '—';const d=PD.dec??18;const n=Number(BigInt(x)/10n**BigInt(Math.max(0,d-2)))/100;const u=PD.price?n*PD.price:null;return n.toLocaleString('en-US',{maximumFractionDigits:2})+' AUTISTIK'+(u!=null?` (${u<0.01?'<$0.01':fmtUsd(u)})`:'');}
+function pdResults(v){
+  clearTimeout(PD.poll);
+  const mine=v.players.find(p=>p.me),list=v.players.slice().sort((a,b)=>(a.place||99)-(b.place||99));
+  $('#endH').textContent=mine&&mine.place?(mine.place<=5&&mine.payout&&mine.payout!=='0'?`You placed ${ordinal(mine.place)}. You won!`:`You placed ${ordinal(mine.place)} of ${list.length}`):'Race results';
+  $('#endSub').textContent=mine&&mine.payout&&mine.payout!=='0'?`${pdTok(mine.payout)} ${mine.payoutTx?'was sent':'is being sent'} to your wallet.`:'The top 5 wallets were paid automatically.';
+  $('#resTbl').innerHTML='<tr><th>Pos</th><th>Racer</th><th>Wallet</th><th>Distance</th><th>Prize</th></tr>'+list.map(p=>`<tr class="${p.me?'me':''}"><td>${p.place||'—'}</td><td>${esc(p.name)}${p.me?' (you)':''}</td><td>${esc(p.walletFull?shortA(p.walletFull):p.wallet)}</td><td>${p.submitted?(p.finished?'finished':((p.pos||0)/SEG*2/1000).toFixed(2)+' km'):'no result'}</td><td>${p.payout&&p.payout!=='0'?(p.payoutTx?`<a href="https://bscscan.com/tx/${esc(p.payoutTx)}" target="_blank" rel="noopener">${pdTok(p.payout)}</a>`:pdTok(p.payout)+' · sending'):'—'}</td></tr>`).join('');
+  $('#bAgain').hidden=true;$('#bLobby').textContent='Back to menu';$('#endOv').hidden=false;$('#paidOv').hidden=true;
+  PD.entry=null;pdSave();
+}
+
+/* ---------- real token races: real buys, sell everything on exit, balances, wave ---------- */
+const TR={side:null,nat:0};
+async function trBalances(){
+  const out=[];
+  try{const a=window.HFWallet&&window.HFWallet.addresses?await window.HFWallet.addresses():{};
+    for(const w of [a.evm,a.sol].filter(Boolean)){const r=await fetch('/api/hyperfocus/lookup?q='+encodeURIComponent(w));const d=await r.json().catch(()=>({}));if(d.kind==='wallet')out.push(...d.holdings);}}catch(e){}
+  return out;
+}
+async function openTrade(side){
+  if(!S||S.mode!=='real'||!window.HFWallet)return;
+  const mk=S.w.mk,sym='$'+mk.sym;
+  if(mk.chain==='solana'){
+    window.open(side==='buy'?`/swap?chain=solana&buy=${encodeURIComponent(mk.token)}`:'/swap?chain=solana','_blank','noopener');
+    S.me.toasts.push({txt:side==='buy'?'BUY IN AUTISTIK SWAP (NEW TAB)':'SELL IN AUTISTIK SWAP (NEW TAB)',color:COL.gas,t:2.4});
+    if(side==='sell')setTimeout(exitRace,600);return;}
+  TR.side=side;$('#tSheet').hidden=false;$('#tsMsg').textContent='';$('#tsAmt').value='';
+  $('#tsH').textContent=side==='buy'?`Buy ${sym}`:`Sell all ${sym} and exit`;
+  $('#tsAmtRow').hidden=$('#tsPct').hidden=side!=='buy';
+  $('#tsGo').textContent=side==='buy'?`Buy ${sym}`:'Sell all & exit';
+  $('#tsUnit').textContent={bsc:'BNB',base:'ETH',ethereum:'ETH'}[mk.chain]||'';
+  $('#tsNote').textContent=side==='buy'?'Paid from your connected wallet through AUTISTIK Swap: you approve it in your wallet and the coins come straight back to you.':'Sells your whole balance of this coin through AUTISTIK Swap (you approve it in your wallet), then you leave the race. This is a real sale.';
+  $('#tsBal').textContent='Loading your balances…';
+  const bals=await trBalances();
+  const natB=bals.find(b=>b.native&&b.chain===mk.chain),tokB=bals.find(b=>!b.native&&String(b.address).toLowerCase()===String(mk.token).toLowerCase());
+  TR.nat=natB?natB.amount:0;
+  const nat=bals.filter(b=>b.native).map(b=>`<b>${esc(b.symbol)}</b> ${fmtAmt(b.amount)}${b.valueUsd!=null?` (${fmtUsd(b.valueUsd)})`:''} <small>${esc(b.chainName)}</small>`).join(' · ');
+  $('#tsBal').innerHTML=(nat||'Connect a wallet to see your balances.')+(tokB?` · <b>${esc(sym)}</b> ${fmtAmt(tokB.amount)}${tokB.valueUsd!=null?` (${fmtUsd(tokB.valueUsd)})`:''}`:'');
+}
+$('#tsPct').querySelectorAll('button').forEach(b=>b.onclick=()=>{const p=+b.dataset.p,max=Math.max(0,(TR.nat||0)-(p===100?0.004:0));$('#tsAmt').value=String(+(max*p/100).toFixed(5));});
+$('#tsCancel').onclick=()=>{$('#tSheet').hidden=true;};
+$('#tsGo').onclick=async()=>{
+  const mk=S&&S.w&&S.w.mk;if(!mk)return;const msg=t=>$('#tsMsg').innerHTML=t,h=S.me;
+  $('#tsGo').disabled=true;
+  try{
+    if(TR.side==='buy'){
+      const v=parseFloat(String($('#tsAmt').value).replace(/[^0-9.]/g,''));
+      if(!(v>0)){msg('<span class="bad">Enter how much to spend.</span>');return;}
+      if(TR.nat&&v>TR.nat){msg('<span class="bad">That’s more than your balance.</span>');return;}
+      msg('Confirm the buy in your wallet…');
+      const r=await window.HFWallet.swap({chain:mk.chain,side:'buy',token:mk.token,amount:(BigInt(Math.round(v*1e9))*10n**9n).toString()});
+      const usd=r.inUsd||0,got=r.outUsd&&mk.P?r.outUsd/mk.P:0;
+      h.amt+=got;h.start=(h.start||0)+usd;h.gas=100;h.flash={txt:`BOUGHT ${fmtUsd(usd)}`,col:COL.up,t:1.8};h.flashV=h.amt*mk.P;
+      S.w.feed.unshift(`<b>${esc(h.name)}</b> bought ${fmtUsd(usd)} of $${esc(mk.sym)} for real.`);S.feedDirty=true;
+      msg('Bought. Your car gets a nitro refill.');setTimeout(()=>{$('#tSheet').hidden=true;},900);
+    }else{
+      msg('Confirm the sale in your wallet (an approval may come first)…');
+      const r=await window.HFWallet.swap({chain:mk.chain,side:'sell',token:mk.token,amount:'all'});
+      msg(r.skipped?'You don’t hold this coin. Leaving the race.':`Sold for about ${fmtUsd(r.outUsd||0)}. Leaving the race.`);
+      setTimeout(()=>{$('#tSheet').hidden=true;exitRace();},1200);
+    }
+  }catch(e){msg(`<span class="bad">${esc((e&&e.message)||'Cancelled.')}</span>`);}
+  finally{$('#tsGo').disabled=false;}
+};
+function exitRace(){if(nr)lobbyPresence();showLobby();}
+$('#bBuyReal').onclick=()=>openTrade('buy');
+$('#bExitReal').onclick=()=>openTrade('sell');
+function wave(){if(!S||state!=='race')return;S.me.waveT=2.6;S.me.waveAt=Date.now();S.me.toasts.push({txt:'👋 YOU WAVED TO EVERYONE',color:COL.gas,t:1.6});publish(true);try{Sound.fx.join();}catch(e){}}
+$('#bWave').onclick=wave;
+addEventListener('keydown',e=>{if(e.code==='KeyH'&&S&&state==='race'&&!(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)))wave();});
 /* links like /hyperfocus?chain=bsc&ca=0x… open that coin's race */
 (function(){try{const q=new URLSearchParams(location.search),ca=q.get('ca'),ch=q.get('chain')||'bsc';
   if(ca&&window.HFWallet&&/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(ca)){menuMode='real';pickReal(/^(bsc|ethereum|base|solana)$/.test(ch)?ch:'bsc',ca);
@@ -1445,8 +1707,8 @@ function hostStart(){
 }
 $('#bStart').onclick=hostStart;
 $('#bAgain').onclick=hostStart;
-$('#bLobby').onclick=()=>{if(nr)lobbyPresence();showLobby();};
-$('#bLeave').onclick=()=>{if(nr){nr.leave().catch(()=>{});nr=null;}code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;renderBoard([]);$('#feed').innerHTML='';};
+$('#bLobby').onclick=()=>{if(S&&S.mode==='paid'||state==='paid-wait'){if(nr){nr.leave().catch(()=>{});nr=null;}S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();$('#bLobby').textContent='Back to lobby';return;}if(nr)lobbyPresence();showLobby();};
+$('#bLeave').onclick=()=>{if(nr){nr.leave().catch(()=>{});nr=null;}code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;wizHome();renderBoard([]);$('#feed').innerHTML='';};
 
 /* ================= input ================= */
 const KEYS={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',Space:'gas',ArrowUp:'gas',KeyW:'gas',ShiftLeft:'gas',ShiftRight:'gas',ArrowDown:'brake',KeyS:'brake'};
@@ -1473,7 +1735,9 @@ function exitImmersive(){
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);$('#launchOv').hidden=false;
   requestAnimationFrame(resize);
 }
-$('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby')showLobby();else{state='home';$('#homeOv').hidden=false;}};
+$('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
+  if(pendingRoom){if(me.nick&&me.nick!=='Racer'){const c=pendingRoom;pendingRoom=null;wizHome();joinWhenReady(c);}else{state='home';wizFlow='join';wizShow('name');}return;}
+  wizHome();};
 $('#bExit').onclick=exitImmersive;
 addEventListener('resize',()=>requestAnimationFrame(resize));
 if(window.ResizeObserver)new ResizeObserver(()=>resize()).observe($('#view'));
@@ -1600,15 +1864,15 @@ function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;tClock+=dt;
   if(G)ctx.clearRect(0,0,W,H);else{ctx.fillStyle=COL.night;ctx.fillRect(0,0,W,H);}
   if(S&&state==='race'){
-    stepWorld();readRemotes();
-    if(racing())updMe(S.me,dt);
+    if(S.mode==='paid'){stepPaid(dt);readRemotes();}else{stepWorld();readRemotes();if(racing())updMe(S.me,dt);}
+    if(S.me.waveT>0)S.me.waveT-=dt;
     S.pubT-=dt;if(S.pubT<=0){S.pubT=0.1;publish();}
     const list=ranked();list.forEach((r,i)=>{r.d=disp(r);if(!r.me){r.d.name=r.d.label;r.d.label=ordinal(i+1)+'  '+r.d.label;}});
     const others=list.filter(r=>r!==S.me);
     if(G)safeGL(S.me,others,dt);else renderView(S.me,others);
     drawHUD(S.me,list);
     uiT-=dt;if(uiT<=0){uiT=0.25;renderBoard(list);if(S.feedDirty)renderFeed();if(!$('#endOv').hidden)showEnd();}
-    if(S.me.finished&&!S.endShown&&S.w.wt-S.me.ft>1.8){S.endShown=true;showEnd();}
+    if(S.mode!=='paid'&&S.me.finished&&!S.endShown&&S.w.wt-S.me.ft>1.8){S.endShown=true;showEnd();}
   } else {
     idleZ+=BASE*0.55*dt;if(idleZ>SEG*(FIN-400))idleZ=0;
     const ghost={pos:playerZ+SEG*8+idleZ,x:Math.sin(tClock*0.3)*0.35,skyOff:idleZ*0.002,shake:0,inp:{},boosting:false,finished:true,color:me.color,speed:BASE*0.55};
