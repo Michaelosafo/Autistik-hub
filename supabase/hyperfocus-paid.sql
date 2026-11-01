@@ -88,3 +88,24 @@ revoke all on function public.hf_join(uuid) from public, anon, authenticated;
 revoke all on function public.hf_leave(uuid) from public, anon, authenticated;
 grant execute on function public.hf_join(uuid) to service_role;
 grant execute on function public.hf_leave(uuid) to service_role;
+
+-- Added after review: live input count, and the checked queue for every transfer out of the game wallet.
+alter table public.hf_entries add column if not exists steps integer not null default 0;
+create table if not exists public.hf_transfers (
+  id uuid primary key default gen_random_uuid(),
+  kind text not null check (kind in ('prize', 'marketing', 'refund')),
+  room_id uuid references public.hf_rooms(id) on delete set null,
+  entry_id uuid references public.hf_entries(id) on delete set null,
+  to_wallet text not null,
+  amount text not null,
+  status text not null default 'queued' check (status in ('queued', 'signed', 'confirmed', 'failed')),
+  nonce bigint, hash text, raw text, error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists hf_transfers_once on public.hf_transfers (kind, coalesce(entry_id, room_id));
+create index if not exists hf_transfers_open on public.hf_transfers (status) where status in ('queued', 'signed');
+alter table public.hf_transfers enable row level security;
+create table if not exists public.hf_sender_lock (id integer primary key check (id = 1), holder text, until timestamptz not null default 'epoch');
+insert into public.hf_sender_lock (id) values (1) on conflict do nothing;
+alter table public.hf_sender_lock enable row level security;

@@ -1491,7 +1491,7 @@ try{const e=JSON.parse(localStorage.getItem('hf-paid-entry')||'null');if(e&&e.id
 const PD_SPLIT=[35,25,18,12,10];
 function pdSave(){try{if(PD.entry)localStorage.setItem('hf-paid-entry',JSON.stringify(PD.entry));else localStorage.removeItem('hf-paid-entry');}catch(e){}}
 function pdSplitHtml(pot){return PD_SPLIT.map((p,i)=>`<div><b>${ordinal(i+1)}</b>${pot?fmtUsd(pot*0.7*p/100):(0.7*p).toFixed(1)+'%'}</div>`).join('');}
-async function pdApi(action,body){try{const r=await fetch('/api/hyperfocus/paid/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});return {ok:r.ok,status:r.status,j:await r.json().catch(()=>({}))};}catch(e){return {ok:false,status:0,j:{error:'Couldn’t reach the site. Try again.'}};}}
+async function pdApi(action,body){try{const hd={'content-type':'application/json'};if(PD.entry&&PD.entry.secret&&action!=='quote')hd['x-hf-secret']=PD.entry.secret;const r=await fetch('/api/hyperfocus/paid/'+action,{method:'POST',headers:hd,body:JSON.stringify(body)});return {ok:r.ok,status:r.status,j:await r.json().catch(()=>({}))};}catch(e){return {ok:false,status:0,j:{error:'Couldn’t reach the site. Try again.'}};}}
 async function pdOpen(){
   if(!ONSITE()){$('#pdInfo').textContent='Paid races run on autistik.io/hyperfocus. Free play works here.';$('#pdPay').disabled=true;$('#pdSplit').innerHTML=pdSplitHtml(0);return;}
   if(PD.entry&&PD.entry.room){pdWait();return;}
@@ -1528,7 +1528,7 @@ $('#pdPay').onclick=async()=>{
 };
 async function pdJoin(){
   for(let k=0;k<14;k++){
-    const r=await pdApi('join',{entryId:PD.entry.id,secret:PD.entry.secret,txHash:PD.entry.tx});
+    const r=await pdApi('join',{entryId:PD.entry.id,txHash:PD.entry.tx});
     if(r.ok&&r.j.roomId){PD.entry.room=r.j.roomId;pdSave();pdWait();return;}
     if(r.status!==409&&r.status!==0&&r.status!==429){$('#pdMsg').innerHTML=`<span class="bad">${esc(r.j.error||'Couldn’t confirm your entry.')}</span>`;PD.entry=null;pdSave();return;}
     $('#pdMsg').textContent='Waiting for BNB Chain to confirm your payment…';await new Promise(res=>setTimeout(res,5000));
@@ -1539,7 +1539,7 @@ function pdWait(){['homeOv','lobbyOv','scanOv','endOv'].forEach(id=>$('#'+id).hi
 async function pdPoll(){
   clearTimeout(PD.poll);if(!PD.entry||!PD.entry.room)return;
   let v=null;
-  try{const r=await fetch(`/api/hyperfocus/paid/room?id=${encodeURIComponent(PD.entry.room)}&entry=${encodeURIComponent(PD.entry.id)}&secret=${encodeURIComponent(PD.entry.secret)}`);
+  try{const r=await fetch(`/api/hyperfocus/paid/room?id=${encodeURIComponent(PD.entry.room)}`,{headers:{'x-hf-entry':PD.entry.id,'x-hf-secret':PD.entry.secret}});
     if(r.ok)v=await r.json();else if(r.status===404){PD.entry=null;pdSave();$('#paidOv').hidden=true;wizHome();$('#homeOv').hidden=false;return;}}catch(e){}
   if(v){PD.view=v;PD.offset=v.now-Date.now();if(v.decimals!=null)PD.dec=v.decimals;if(v.priceUsd)PD.price=v.priceUsd;}
   const st=v&&v.room.status;
@@ -1560,7 +1560,7 @@ function pdRender(v){
 }
 $('#pwLeave').onclick=async()=>{
   if(!PD.entry)return;$('#pwMsg').textContent='Leaving and sending your entry back…';
-  const r=await pdApi('leave',{entryId:PD.entry.id,secret:PD.entry.secret});
+  const r=await pdApi('leave',{entryId:PD.entry.id});
   if(!r.ok){$('#pwMsg').innerHTML=`<span class="bad">${esc(r.j.error||'Couldn’t leave.')}</span>`;return;}
   clearTimeout(PD.poll);PD.entry=null;pdSave();
   $('#pwMsg').textContent=r.j.refunded?'Your entry is on its way back to your wallet.':(r.j.error||'You left the room.');
@@ -1609,6 +1609,7 @@ function stepPaid(dt){
   h.pos=s.pos+(P.steps<HFSim.STEPS?s.speed*HFSim.STEP*fr:0);h.x=s.x;h.speed=s.speed;h.boosting=s.boosting;h.steer=s.steer;h.vx=s.vx;h.gas=s.nitro;h.scrape=s.scrape>0?0.1:0;
   if(s.finished&&!h.finished){h.finished=true;h.ft=s.ft*HFSim.STEP;h.toasts.push({txt:'FINISHED',color:COL.gas,t:3});}
   S.w.wt=Math.max(0,el);
+  pdStream(false);
   if(P.steps>=HFSim.STEPS&&!P.sent){P.sent=true;h.finished=true;h.ft=h.ft||HFSim.RACE_SECS;pdFinish();}
   const list=ranked(),pl=placeOf(h,list);
   if(P.lastPlace&&pl!==P.lastPlace&&el>3&&P.steps<HFSim.STEPS){
@@ -1617,12 +1618,24 @@ function stepPaid(dt){
   }
   P.lastPlace=pl;
 }
+/* the buttons go to the server every few seconds while you drive (the server only accepts them close to real time) */
+async function pdStream(force){
+  const P=S&&S.paid;if(!P||!PD.entry||P.flight)return;
+  const now=Date.now();if(!force&&now-(P.lastSend||0)<4000)return;
+  if(P.sentSteps==null)P.sentSteps=0;if(P.steps<=P.sentSteps)return;
+  P.flight=true;P.lastSend=now;
+  try{
+    const from=P.sentSteps,to=P.steps,r=await pdApi('inputs',{entryId:PD.entry.id,from,chunk:HFSim.encode(P.inputs.slice(from,to))});
+    if(r.ok)P.sentSteps=r.j.steps;
+    else if(typeof r.j.steps==='number'&&r.j.steps!==from&&r.j.steps<=P.steps)P.sentSteps=r.j.steps;
+    else if(/too late|closed|isn’t running|isn't running/i.test(r.j.error||'')){P.dead=true;if(!P.warned){P.warned=true;S.me.toasts.push({txt:'CONNECTION LOST: RESULT STOPS HERE',color:COL.down,t:3});}}
+  }finally{P.flight=false;}
+}
 async function pdFinish(){
-  const enc=HFSim.encode(S.paid.inputs);
   S.me.toasts.push({txt:'TIME! CHECKING EVERY RACE…',color:COL.gas,t:4});
-  setTimeout(()=>{if(S&&S.mode==='paid'){$('#endH').textContent='Time! Checking every race…';$('#endSub').textContent='The server replays all the races to decide the places, then pays the top 5 automatically.';$('#resTbl').innerHTML='';$('#bAgain').hidden=true;$('#bLobby').textContent='Back to menu';$('#endOv').hidden=false;}},1500);
-  for(let k=0;k<6;k++){const r=await pdApi('finish',{entryId:PD.entry.id,secret:PD.entry.secret,inputs:enc});if(r.ok||(r.status===400&&!/reach/.test(r.j.error||'')))break;await new Promise(res=>setTimeout(res,3000));}
-  clearTimeout(PD.poll);PD.poll=setTimeout(pdPoll,2500);
+  setTimeout(()=>{if(S&&S.mode==='paid'){$('#endH').textContent='Time! Checking every race…';$('#endSub').textContent='The server replays all the races to decide the places, then pays the top 5 automatically. This takes about a minute.';$('#resTbl').innerHTML='';$('#bAgain').hidden=true;$('#bLobby').textContent='Back to menu';$('#endOv').hidden=false;}},1500);
+  for(let k=0;k<12&&S&&S.paid&&!S.paid.dead&&S.paid.sentSteps<S.paid.steps;k++){await pdStream(true);if(S.paid.sentSteps<S.paid.steps)await new Promise(res=>setTimeout(res,1500));}
+  clearTimeout(PD.poll);PD.poll=setTimeout(pdPoll,4000);
 }
 function pdTok(x){if(!x||x==='0')return '—';const d=PD.dec??18;const n=Number(BigInt(x)/10n**BigInt(Math.max(0,d-2)))/100;const u=PD.price?n*PD.price:null;return n.toLocaleString('en-US',{maximumFractionDigits:2})+' AUTISTIK'+(u!=null?` (${u<0.01?'<$0.01':fmtUsd(u)})`:'');}
 function pdResults(v){
