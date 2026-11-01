@@ -1361,13 +1361,22 @@ $('#useMine').onclick=async()=>{
 // with Buy (AUTISTIK Swap, your own wallet) and Race buttons. Read-only public data, not financial advice.
 const SCAN={view:null,wallet:null,back:null};
 const ONSITE=()=>!!window.HFWallet;
+/* the scanner lives in the game, and also docks into the Scanner tab of the page */
+const scanHome=()=>$('#scanOv').parentNode;let scanStageParent=null;
+function dockScanner(){const ov=$('#scanOv');if(ov.classList.contains('intab'))return;scanStageParent=ov.parentNode;$('#scanTabMount').appendChild(ov);ov.classList.add('intab');ov.hidden=false;
+  if(!SCAN.view&&ONSITE()){const fill=async()=>{let a=me.wallet;if(!a&&window.HFWallet&&window.HFWallet.addresses){try{const x=await window.HFWallet.addresses();a=x.evm||x.sol;}catch(e){}}if(a&&!SCAN.view){$('#scanQ').value=a;runScan(a);}};fill();}
+  else if(!ONSITE())$('#scanOut').innerHTML='<p class="mini">Wallet and token search runs on autistik.io/hyperfocus.</p>';}
+function undockScanner(){const ov=$('#scanOv');if(!ov.classList.contains('intab'))return;ov.classList.remove('intab');(scanStageParent||$('#view')).appendChild(ov);ov.hidden=true;}
+addEventListener('hf-tab',e=>{if(e.detail==='scanner')dockScanner();else undockScanner();});
+if(window.HFTab==='scanner')dockScanner();
 function openScan(q){
+  undockScanner();
   $('#homeOv').hidden=true;$('#lobbyOv').hidden=true;$('#scanOv').hidden=false;
   if(!ONSITE()){$('#scanOut').innerHTML='<p class="mini">Wallet and token search runs on autistik.io/hyperfocus. Fun races work here.</p>';return;}
   if(q){$('#scanQ').value=q;runScan(q);}else if(!SCAN.view&&me.wallet){$('#scanQ').value=me.wallet;runScan(me.wallet);}
   setTimeout(()=>{try{$('#scanQ').focus();}catch(e){}},50);
 }
-function closeScan(){$('#scanOv').hidden=true;if(state==='lobby')$('#lobbyOv').hidden=false;else{$('#homeOv').hidden=false;wizHome();}}
+function closeScan(){if($('#scanOv').classList.contains('intab')){if(window.HFShowTab)window.HFShowTab('wallet');return;}$('#scanOv').hidden=true;if(state==='lobby')$('#lobbyOv').hidden=false;else{$('#homeOv').hidden=false;wizHome();}}
 const xTier=x=>x==null?'':x>=1000?'x1000':x>=100?'x100':x>=25?'x25':x>=10?'x10':x>=1?'x1':'xdn';
 const xBadge=(x,est)=>x==null?'<span class="xb xq">entry ?</span>':`<span class="xb ${xTier(x)}">${fmtX(x)}${est?'~':''}</span>`;
 async function runScan(q){
@@ -1438,6 +1447,7 @@ async function showTokenView(chain,token){
 const backBtn=()=>SCAN.back==='wallet'&&SCAN.wallet?'<button class="sback" id="scanBack">← Back to wallet</button>':'';
 function wireBack(){const b=$('#scanBack');if(b)b.onclick=()=>{SCAN.view='wallet';showWalletView(SCAN.wallet);};}
 function raceFromScan(chain,token){
+  if($('#scanOv').classList.contains('intab')){undockScanner();try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');enterImmersive(true);}
   $('#scanOv').hidden=true;
   if(state!=='lobby'){readNick();if(nr){nr.leave().catch(()=>{});nr=null;forgetRoom();}isHost=false;showLobby();}
   menuMode='real';renderLobby();loadHot();pickReal(chain,token);if(isHost)lobbyPresence();
@@ -1790,7 +1800,7 @@ $('#bExit').onclick=exitImmersive;
 const toRace=()=>{try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');};
 $('#bPlayTop').onclick=()=>{toRace();$('#bLaunch').click();};
 /* the scanner from the Wallet tab opens in the game */
-function scanFromWallet(){const q=$('#wsQ').value.trim();toRace();enterImmersive(true);openScan(q||undefined);}
+function scanFromWallet(){const q=$('#wsQ').value.trim();if(window.HFShowTab)window.HFShowTab('scanner');try{history.replaceState(null,'','#scanner');}catch(e){}if(q){$('#scanQ').value=q;runScan(q);}}
 $('#wsGo').onclick=scanFromWallet;$('#wsQ').addEventListener('keydown',e=>{if(e.key==='Enter')scanFromWallet();});
 addEventListener('resize',()=>requestAnimationFrame(resize));
 if(window.ResizeObserver)new ResizeObserver(()=>resize()).observe($('#view'));
