@@ -112,6 +112,9 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
         {busy && <p className="hfd-muted">Updating balances…</p>}
       </section>
 
+      {/* Race a friend: the game fills this with its invite card (copy link, see who joined, start) */}
+      <div id="hfInviteMount" className="hf hfd-invite" />
+
       <div className="hfd-grid">
         <section className="card">
           <h3 className="hfd-h">Your coins</h3>
@@ -194,6 +197,7 @@ const CSS = `
 .hfd-pts small{opacity:.75;font-size:.85em}
 .hfd-bar{height:8px;border-radius:4px;background:color-mix(in srgb,currentColor 12%,transparent);margin:10px 0;overflow:hidden}
 .hfd-bar span{display:block;height:100%;background:#ffb300}
+.hfd-invite.hf{padding:0;background:transparent}
 .hfd-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
 .hfd-tile{display:flex;flex-direction:column;gap:3px;text-align:left;padding:12px;border-radius:14px;border:1px solid color-mix(in srgb,currentColor 14%,transparent);background:none;color:inherit;text-decoration:none;cursor:pointer;font:inherit}
 .hfd-tile b{font-size:.98em}.hfd-tile small{opacity:.72;font-size:.8em;line-height:1.3}

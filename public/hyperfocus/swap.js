@@ -46,7 +46,8 @@ function showTab(name){if(!['race','swap','wallet','scanner'].includes(name))nam
   window.HFTab=name;try{window.dispatchEvent(new CustomEvent('hf-tab',{detail:name}));}catch(e){}}
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{location.hash=b.dataset.tab;showTab(b.dataset.tab);});
 addEventListener('hashchange',()=>showTab(location.hash.slice(1)));
-showTab(location.hash.slice(1)||(/[?&](room|ca)=/.test(location.search)?'race':'wallet'));
+const _resumeAt=(()=>{try{const r=JSON.parse(localStorage.getItem('hf-resume')||'null');return r&&Date.now()-r.at<20*60e3?r.at:0;}catch(e){return 0;}})();
+showTab(location.hash.slice(1)||(/[?&](room|ca)=/.test(location.search)||_resumeAt?'race':'wallet'));
 window.HFShowTab=showTab;
 
 /* ---- connection chip ---- */
