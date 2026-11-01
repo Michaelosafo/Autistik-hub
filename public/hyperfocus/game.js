@@ -1786,6 +1786,12 @@ $('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby'){showLobb
   if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('name');}return;}
   wizHome();};
 $('#bExit').onclick=exitImmersive;
+/* PLAY GAME at the top of the page: straight into the full-screen game */
+const toRace=()=>{try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');};
+$('#bPlayTop').onclick=()=>{toRace();$('#bLaunch').click();};
+/* the scanner from the Wallet tab opens in the game */
+function scanFromWallet(){const q=$('#wsQ').value.trim();toRace();enterImmersive(true);openScan(q||undefined);}
+$('#wsGo').onclick=scanFromWallet;$('#wsQ').addEventListener('keydown',e=>{if(e.key==='Enter')scanFromWallet();});
 addEventListener('resize',()=>requestAnimationFrame(resize));
 if(window.ResizeObserver)new ResizeObserver(()=>resize()).observe($('#view'));
 
