@@ -37,7 +37,7 @@ const LATE_STEPS = 20 * 30, EARLY_STEPS = 3 * 30;
 const GRACE_MS = 60_000;
 /** The course is revealed 8 seconds before the start (time to build it on a phone). */
 const REVEAL_MS = 8_000;
-const CARS = new Set(["street", "muscle", "super", "rally", "hatch", "truck", "classic", "hyper"]);
+const CARS = new Set(["street", "muscle", "super", "rally", "hatch", "truck", "classic", "hyper", "rig"]);
 
 export function gameAccount() {
   const k = (process.env.HYPERFOCUS_GAME_KEY || "").trim();

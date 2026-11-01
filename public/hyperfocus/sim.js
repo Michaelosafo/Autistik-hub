@@ -14,6 +14,7 @@ const HFSim = (() => {
     truck: { speed: 0.98, handle: 0.85, boost: 1.1, off: 0.4 },
     classic: { speed: 1.03, handle: 0.95, boost: 1.05, off: 1.05 },
     hyper: { speed: 1.12, handle: 1.0, boost: 0.85, off: 1.35 },
+    rig: { speed: 0.94, handle: 0.9, boost: 1.05, off: 0.5 },
   };
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   function rng(seed) {
