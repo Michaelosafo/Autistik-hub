@@ -29,8 +29,8 @@ async function isSolMint(a: string) {
 /** Tokens this wallet holds that Hyperfocus already races (from the tracked holder lists). */
 async function racedTokens(owner: string, sol: boolean) {
   try {
-    const q = supabaseServer().from("token_holders").select("chain,token").gt("balance", 0).limit(60);
-    const { data } = await (sol ? q.eq("wallet", owner) : q.ilike("wallet", owner));
+    const base = supabaseServer().from("token_holders").select("chain,token").gt("balance", 0);
+    const { data } = await (sol ? base.eq("wallet", owner) : base.ilike("wallet", owner)).limit(60);
     return (data || []) as { chain: string; token: string }[];
   } catch { return []; }
 }
