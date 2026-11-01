@@ -77,7 +77,9 @@ export async function GET(req: Request) {
       }));
     } catch { return []; }
   }));
-  const holdings = lists.flat().sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
-  const total = holdings.reduce((s, h) => s + (h.valueUsd || 0), 0);
-  return out({ kind: "wallet", address: owner, chains: keys, total, holdings });
+  const all = lists.flat().sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
+  const total = all.reduce((s, h) => s + (h.valueUsd || 0), 0);
+  // Airdropped spam and dust: no price, or worth less than a cent. Kept only when Hyperfocus races that coin.
+  const holdings = all.filter((h) => h.native || h.raced || (h.valueUsd ?? 0) >= 0.01).slice(0, 40);
+  return out({ kind: "wallet", address: owner, chains: keys, total, holdings, hidden: all.length - holdings.length });
 }

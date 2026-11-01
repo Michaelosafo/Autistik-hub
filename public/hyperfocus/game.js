@@ -1361,7 +1361,7 @@ function showWalletView(d){
       <span class="sl">${h.logo?`<img src="${esc(h.logo)}" alt="">`:'<i class="ph"></i>'}<b>${esc(h.symbol||'?')}</b><small>${esc(h.chainName)}${h.raced?' · racing':''}</small></span>
       <span class="sr"><b>${h.valueUsd!=null?fmtUsd(h.valueUsd):'—'}</b><small>${fmtAmt(h.amount)} ${esc(h.symbol||'')}</small></span></button>`).join('');
   $('#scanOut').innerHTML=`<div class="shead"><div><div class="lbl">Wallet</div><b class="mono">${esc(shortA(d.address))}</b></div><div class="sr"><div class="lbl">Total</div><b class="big">${fmtUsd(d.total||0)}</b></div></div>
-    ${d.holdings.length?`<div class="slist">${rows}</div><p class="mini">Tap a token to see its holders and race it.${d.chains.length>1?' Shows the main coins on BNB Chain, Base and Ethereum, plus any coin Hyperfocus races.':''}</p>`:'<p class="mini">No balances found for this wallet.</p>'}`;
+    ${d.holdings.length?`<div class="slist">${rows}</div><p class="mini">Tap a token to see its holders and race it.${d.chains.length>1?' Shows the main coins on BNB Chain, Base and Ethereum, plus any coin Hyperfocus races.':''}${d.hidden?` ${d.hidden} tiny or unpriced token${d.hidden>1?'s':''} hidden.`:''}</p>`:'<p class="mini">No balances found for this wallet.</p>'}`;
   $('#scanOut').querySelectorAll('.srow').forEach(b=>b.onclick=()=>{const h=d.holdings[+b.dataset.i];SCAN.back='wallet';showTokenView(h.chain,h.address);});
 }
 async function showTokenView(chain,token){
