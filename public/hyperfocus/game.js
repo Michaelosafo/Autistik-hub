@@ -1185,6 +1185,8 @@ function setNetStatus(t,ok){$('#netStatus').textContent=t;$('#bCreate').disabled
 (window.claude&&window.claude.use?window.claude.use('room'):window.RallyNet?window.RallyNet():Promise.resolve(null)).then(r=>{room=r;
   if(room)setNetStatus('Get a code to share with a friend.',true);
   else setNetStatus('Racing with friends isn’t available right now. Solo still works.',false);
+  // your own room after the phone reloaded the page, or a friend's link when you already have a name: join straight away
+  if(room&&pendingRoom&&(pendingHost||(me.nick&&me.nick!=='Racer'))){const c=pendingRoom,h=pendingHost;pendingRoom=null;joinWhenReady(c,h);}
 }).catch(()=>setNetStatus('Racing with friends isn’t available right now. Solo still works.',false));
 
 function readNick(){const n=$('#nick').value.trim().replace(/\s+/g,' ').slice(0,16);me.nick=n||'Racer';try{localStorage.setItem('pumprally-nick',me.nick);}catch(e){}return me.nick;}
@@ -1192,7 +1194,7 @@ function homeErr(t){const e=$('#homeErr');e.textContent=t||'';e.hidden=!t;}
 async function enterRoom(c,host){
   homeErr('');readNick();menuMode='fun';
   try{nr=await room.join(c);}catch(e){homeErr(e&&e.code==='not_permitted'?'You can’t join races from here.':'Couldn’t join that race. Check the code and try again.');return;}
-  code=c;isHost=host;hostGo=null;
+  code=c;isHost=host;hostGo=null;saveRoom(c,host);
   if(peersUnsub)peersUnsub();
   knownPeers=new Map();
   peersUnsub=nr.onPeers(()=>{peerDiff();if(state==='lobby')renderLobby();checkHostGo();},()=>{});
@@ -1267,7 +1269,7 @@ function renderLobby(){
   if(!nr){$('#players').innerHTML=`<li><span class="dot" style="background:${me.color}"></span>${esc(me.nick||'You')}<span class="t">you</span></li>`;return;}
   const ps=nr.peers();
   $('#players').innerHTML=ps.length?ps.map(p=>{const q=p.presence||{};const c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888';
-    const bi=+q.b>0?` · $${Math.round(+q.b)} in`:'';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
+    const bi='';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
   if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a Fun race':hp.presence.mode==='real'?'a real-token race':'a Token race'}${hp.presence.tok?' with '+(hp.presence.mode==='real'?(REAL[hp.presence.tok]&&REAL[hp.presence.tok].symbol?'$'+REAL[hp.presence.tok].symbol:'a pasted coin'):hp.presence.tok):''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
 }
 $('#nick').value=me.nick;
@@ -1286,7 +1288,7 @@ renderGarage();
 $('#bCreate').onclick=()=>{if(!room)return;const c=WORDS[Math.floor(Math.random()*WORDS.length)]+'-'+(1000+Math.floor(Math.random()*9000));enterRoom(c,true);};
 $('#bJoin').onclick=()=>{if(!room)return;const c=$('#joinCode').value.trim().toLowerCase().replace(/\s+/g,'-');if(!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(c)){homeErr('That code doesn’t look right. It should look like jollof-4821.');return;}enterRoom(c,false);};
 $('#joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#bJoin').click();});
-$('#bSolo').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;menuMode='fun';menuTok=Object.keys(TOK)[Math.floor(Math.random()*Object.keys(TOK).length)];hostStart();};
+$('#bSolo').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;forgetRoom();}isHost=false;menuMode='fun';menuTok=Object.keys(TOK)[Math.floor(Math.random()*Object.keys(TOK).length)];hostStart();};
 $('#bCopy').onclick=()=>{const t=code||'';const done=()=>{$('#bCopy').textContent='Copied';setTimeout(()=>$('#bCopy').textContent='Copy code',1500);};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done).catch(sel);else sel();
   function sel(){const r=document.createRange();r.selectNodeContents($('#codeTxt'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
@@ -1437,7 +1439,7 @@ const backBtn=()=>SCAN.back==='wallet'&&SCAN.wallet?'<button class="sback" id="s
 function wireBack(){const b=$('#scanBack');if(b)b.onclick=()=>{SCAN.view='wallet';showWalletView(SCAN.wallet);};}
 function raceFromScan(chain,token){
   $('#scanOv').hidden=true;
-  if(state!=='lobby'){readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;showLobby();}
+  if(state!=='lobby'){readNick();if(nr){nr.leave().catch(()=>{});nr=null;forgetRoom();}isHost=false;showLobby();}
   menuMode='real';renderLobby();loadHot();pickReal(chain,token);if(isHost)lobbyPresence();
 }
 $('#scanGo').onclick=()=>runScan($('#scanQ').value);
@@ -1455,14 +1457,19 @@ $('#scanMine').onclick=async()=>{
 $('#bScanL').onclick=()=>openScan();
 /* ---------- step-by-step menu: each choice moves straight on to the next question ---------- */
 const FLOWS={friends:['mode','name','car','look','friends'],paid:['mode','name','car','look','paid'],real:['mode','name','car','look'],join:['name']};
-let wizFlow='friends',wizAt='mode',wizPrev=null,pendingRoom=null;
-(function(){try{const r=new URLSearchParams(location.search).get('room');if(r&&/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(r))pendingRoom=r;}catch(e){}})();
+let wizFlow='friends',wizAt='mode',wizPrev=null,pendingRoom=null,pendingHost=false;
+const ROOM_RE=/^[a-z0-9][a-z0-9_.-]{0,47}$/;
+(function(){try{const r=new URLSearchParams(location.search).get('room');let saved=null;try{saved=JSON.parse(localStorage.getItem('hf-room')||'null');}catch(e){}
+  if(r&&ROOM_RE.test(r)){pendingRoom=r;pendingHost=!!(saved&&saved.code===r&&saved.host&&Date.now()-saved.at<3*3600e3);}
+  else if(saved&&ROOM_RE.test(saved.code||'')&&Date.now()-saved.at<3*3600e3){pendingRoom=saved.code;pendingHost=!!saved.host;}}catch(e){}})();
+function saveRoom(c,host){try{localStorage.setItem('hf-room',JSON.stringify({code:c,host:!!host,at:Date.now()}));}catch(e){}try{history.replaceState(null,'',inviteLink(c));}catch(e){}}
+function forgetRoom(){try{localStorage.removeItem('hf-room');}catch(e){}try{const u=new URL(location.href);u.searchParams.delete('room');history.replaceState(null,'',u.toString());}catch(e){}}
 function wizShow(step){
   wizAt=step;$('#homeOv').querySelectorAll('.step').forEach(x=>x.hidden=x.dataset.step!==step);
   const fl=FLOWS[wizFlow]||FLOWS.friends,i=fl.indexOf(step);
   $('#wDots').innerHTML=step==='settings'?'':fl.map((_,k)=>`<i class="${k<=i?'on':''}"></i>`).join('');
   $('#wBack').hidden=step!=='settings'&&i<=0;
-  if(step==='name'){$('#nameHint').textContent=wizFlow==='join'?`You’re joining race ${pendingRoom||''}. Everyone sees this name.`:'Everyone in the race sees this name.';setTimeout(()=>{try{$('#nick').focus();}catch(e){}},60);}
+  if(step==='name'){$('#nameHint').textContent=wizFlow==='join'?`You’re joining race ${pendingRoom||''}. Your friend sees this name in their lobby before they start.`:'Everyone in the race sees this name.';setTimeout(()=>{try{$('#nick').focus();}catch(e){}},60);}
   if(step==='paid')pdOpen();
   if(step==='mode')paidCard();
 }
@@ -1487,10 +1494,11 @@ $('#wNameNext').onclick=()=>{if(!$('#nick').value.trim()&&(wizFlow==='paid'||wiz
 $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wNameNext').click();});
 /* friends join by tapping a link: /hyperfocus?room=jollof-4821 */
 function inviteLink(c){const u=new URL(location.href);u.search='';u.hash='';u.searchParams.set('room',c);return u.toString();}
-async function joinWhenReady(c){
-  for(let k=0;k<20&&!room;k++)await new Promise(r=>setTimeout(r,250));
+async function joinWhenReady(c,host){
+  for(let k=0;k<40&&!room;k++)await new Promise(r=>setTimeout(r,250));
   if(!room){wizFlow='friends';wizShow('friends');homeErr('Racing with friends isn’t available right now. Try again in a moment.');return;}
-  enterRoom(c,false);
+  if(nr&&code===c){if(immersive())showLobby();return;}
+  enterRoom(c,!!host);
 }
 $('#bShare').onclick=async()=>{const url=$('#shareLink').value;if(!url)return;
   try{if(navigator.share){await navigator.share({title:'Hyperfocus GP',text:`Race me in Hyperfocus GP (code ${code})`,url});return;}}catch(e){if(e&&e.name==='AbortError')return;}
@@ -1747,7 +1755,7 @@ async function hostStart(){
 $('#bStart').onclick=hostStart;
 $('#bAgain').onclick=hostStart;
 $('#bLobby').onclick=()=>{if(S&&S.mode==='paid'||state==='paid-wait'){if(nr){nr.leave().catch(()=>{});nr=null;}S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();$('#bLobby').textContent='Back to lobby';return;}if(nr)lobbyPresence();showLobby();};
-$('#bLeave').onclick=()=>{if(nr){nr.leave().catch(()=>{});nr=null;}code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;wizHome();renderBoard([]);$('#feed').innerHTML='';};
+$('#bLeave').onclick=()=>{if(nr){nr.leave().catch(()=>{});nr=null;}forgetRoom();code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;wizHome();renderBoard([]);$('#feed').innerHTML='';};
 
 /* ================= input ================= */
 const KEYS={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',Space:'gas',ArrowUp:'gas',KeyW:'gas',ShiftLeft:'gas',ShiftRight:'gas',ArrowDown:'brake',KeyS:'brake'};
@@ -1762,20 +1770,20 @@ $('#pads').querySelectorAll('button[data-k]').forEach(b=>{const k=b.dataset.k;
 /* ================= full screen ================= */
 function immersive(){return document.body.classList.contains('immersive');}
 function enterImmersive(gesture){
-  document.body.classList.add('immersive');$('#launchOv').hidden=true;$('#bExit').hidden=false;
+  document.body.classList.add('immersive');document.querySelector('.wrap').classList.remove('landing');$('#launchOv').hidden=true;$('#bExit').hidden=false;
   if(gesture){const el=$('#stage');try{const p=el.requestFullscreen?el.requestFullscreen({navigationUI:'hide'}):el.webkitRequestFullscreen?el.webkitRequestFullscreen():null;
     if(p&&p.then)p.then(()=>{try{screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{});}catch(e){}}).catch(()=>{});}catch(e){}}
   requestAnimationFrame(resize);setTimeout(resize,300);
 }
 function exitImmersive(){
-  document.body.classList.remove('immersive','racing');$('#bExit').hidden=true;$('#pads').hidden=true;
+  document.body.classList.remove('immersive','racing');document.querySelector('.wrap').classList.add('landing');$('#bExit').hidden=true;$('#pads').hidden=true;
   try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(()=>{});}catch(e){}
   if(state==='race'){S=null;state=nr?'lobby':'home';if(nr)lobbyPresence();}
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);$('#launchOv').hidden=false;
   requestAnimationFrame(resize);
 }
 $('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
-  if(pendingRoom){if(me.nick&&me.nick!=='Racer'){const c=pendingRoom;pendingRoom=null;wizHome();joinWhenReady(c);}else{state='home';wizFlow='join';wizShow('name');}return;}
+  if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('name');}return;}
   wizHome();};
 $('#bExit').onclick=exitImmersive;
 addEventListener('resize',()=>requestAnimationFrame(resize));
