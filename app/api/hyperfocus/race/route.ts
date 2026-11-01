@@ -68,7 +68,7 @@ export async function GET(req: Request) {
   if (!isChainAddress(chain, token)) return json({ error: chain === "solana" ? "Paste the token's Solana address." : "Paste the token's contract address (it starts with 0x)." }, 400, "no-store");
 
   const [data, m] = await Promise.all([loadArena(chain, token).catch(() => null), market(chain, token)]);
-  if (!data) return json({ tracked: false, chain, token, symbol: m?.symbol ?? null, name: m?.name ?? null, image: m?.image ?? null }, 200, "no-store");
+  if (!data) return json({ tracked: false, chain, token, symbol: m?.symbol ?? null, name: m?.name ?? null, image: m?.image ?? null, price: m?.price ?? null, ch1: m?.ch1 ?? null, ch24: m?.ch24 ?? null, mcap: m?.mcap ?? null }, 200, "no-store");
 
   const { t } = data;
   const price = m?.price ?? null;
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
       return {
         w, lbl: typeof x.label === "string" ? x.label.slice(0, 20) : null, dev: !!x.is_dev,
         pct: num(x.pct), bal, usd: price ? bal * price : null,
-        x: mult, est: !x.acquired_at,
+        x: mult, est: !x.acquired_at, at: got || null,
         sold: peak > 0 && bal < peak * 0.98, out: bal <= 0,
       };
     });

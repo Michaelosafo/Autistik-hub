@@ -107,12 +107,13 @@ function newWorld(mode,tok,seedStr){
     const tierCol=x=>x==null?null:x>=100?'#c08bff':x>=10?'#43d18a':x>=2?'#2fd0c9':x>=1?'#7aa9ff':'#ff5a5a';
     let k=0;
     d.holders.forEach((r,i)=>{
-      const h={label:r.lbl||(r.w.slice(0,6)+'…'+r.w.slice(-4)),w:r.w,x:r.x,est:r.est,dev:r.dev,amt:r.bal,out:!!r.out,boost:0,drag:0,act:null,actT:-9};
+      const h={label:r.lbl||(r.w.slice(0,6)+'…'+r.w.slice(-4)),w:r.w,x:r.x,est:r.est,dev:r.dev,amt:r.bal,out:!!r.out,sold:!!r.sold,at:r.at||null,boost:0,drag:0,act:null,actT:-9};
       W0.byW.set(r.w.toLowerCase(),h);
       if(mine&&r.w.toLowerCase()===mine){W0.mine=h;return;}
       W0.holders.push(h);
       W0.ai.push({id:'h'+i,ai:true,type:CAR_KEYS[i%4],ref:h,color:tierCol(r.x)||PAL[i%PAL.length],pos:startZ+(k-5)*SEG*3.2+wr()*SEG,x:[-0.6,0,0.6][k%3],tx:[-0.6,0,0.6][k%3],speed:BASE*0.5,laneT:wrng(2,5),finished:false,ft:0});k++;
     });
+    {const ma=W0.mine&&W0.mine.at;W0.holders.forEach(h=>{h.withMe=!!(ma&&h.at&&Math.abs(h.at-ma)<=86400000);});}
     const tr=d.trades||[],t0=tr.length?tr[0].at:0,t1=tr.length?tr[tr.length-1].at:1,span=Math.max(1,t1-t0);
     W0.replay=tr.map(t=>({...t,rt:4+(t.at-t0)/span*140}));W0.ri=0;
   } else {
@@ -187,7 +188,7 @@ function priceFactor(){const mk=S.w.mk;return clamp(1+1.3*Math.log(mk.P/mk.p0),0
 function aiTarget(r){
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];if(c.rugged)return BASE*0.05;return BASE*clamp(0.7+0.11*Math.log(c.m)+c.mom*8,0.32,1.5)*(c.m>=50?1.22:1);}
   const h=r.ref,xf=S.w.mode==='real'?clamp(1+0.2*Math.log10(Math.max(h.x||1,0.02)),0.5,1.65):1;
-  return BASE*0.8*xf*priceFactor()*(h.boost>0?1.4:1)*(h.drag>0?0.5:1)*(h.out?0.32:1);
+  return BASE*0.8*xf*priceFactor()*(h.boost>0?1.4:1)*(h.drag>0?0.5:1)*(h.out?0.32:h.sold&&!h.boost?0.72:1);
 }
 function gatePicks(g){
   const cs=S.w.coins,live=COINS.filter(c=>!cs[c.k].rugged);
@@ -334,7 +335,7 @@ function disp(r){
   }
   if(S.w.mode==='fun'){const c=S.w.coins[r.ref];return {label:r.ref,sub:c.rugged?'RUG':fmtM(c.m),subCol:c.rugged?COL.dim:c.m>=50?COL.moon:c.mom>=0?COL.up:COL.down,color:r.color,moon:c.m>=50,rug:c.rugged};}
   const h=r.ref,recent=h.act&&S.w.wt-h.actT<1.8;
-  if(S.w.mode==='real')return {label:h.label,sub:recent?h.act.t:h.out?'SOLD ALL':h.x==null?fmtK(h.amt*S.w.mk.P):fmtX(h.x)+(h.est?'~':''),subCol:recent?h.act.c:h.out?COL.dim:h.x==null?COL.ink:h.x>=100?COL.moon:h.x>=1?COL.up:COL.down,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,moon:(h.x||0)>=100&&!h.out,mono:true};
+  if(S.w.mode==='real')return {label:h.label+(h.withMe?' · WITH YOU':''),sub:recent?h.act.t:h.out?'SOLD ALL':(h.x==null?fmtK(h.amt*S.w.mk.P):fmtX(h.x)+(h.est?'~':''))+(h.sold?' · SELLING':''),subCol:recent?h.act.c:h.out?COL.dim:h.sold?COL.down:h.x==null?COL.ink:h.x>=100?COL.moon:h.x>=1?COL.up:COL.down,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,moon:(h.x||0)>=100&&!h.out,mono:true};
   return {label:h.label,sub:recent?h.act.t:h.out?'SOLD OUT':fmtK(h.amt*S.w.mk.P),subCol:recent?h.act.c:h.out?COL.dim:COL.ink,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,mono:true};
 }
 
@@ -1225,7 +1226,7 @@ function renderBuy(){
   const hp=!isHost&&nr?hostPeer():null,mode=hp?hp.presence.mode:menuMode,tok=hp?hp.presence.tok:(menuMode==='real'?menuReal:menuTok);
   const rd=mode==='real'?REAL[tok]:null,symTxt=rd&&rd.symbol?'$'+rd.symbol:tok;
   $('#buyNote').textContent=mode==='fun'?`You start with ${fmtUsd(menuBuy)} of ${tok||'SOL'} to race and swap at the gates. Play money.`
-    :`You buy ${fmtUsd(menuBuy)} of ${tok||'SOL'} at the start, plus ${fmtUsd(menuBuy/2)} of cash to buy more mid-race for boosts. Play money.`;
+    :`You buy ${fmtUsd(menuBuy)} of ${mode==='real'?symTxt:(tok||'SOL')} at the start, plus ${fmtUsd(menuBuy/2)} of cash to buy more mid-race for boosts. Play money.`;
   const rb=$('#realBuy');rb.hidden=!(window.HFWallet&&((mode==='token'&&SWAP_CHAIN[tok])||(mode==='real'&&rd)));
   if(!rb.hidden){if(mode==='real'){rb.href=`/swap?chain=${encodeURIComponent(rd.chain)}&buy=${encodeURIComponent(rd.token)}`;rb.textContent=`Join for real: buy ${symTxt} on AUTISTIK Swap →`;}else{rb.href='/swap?chain='+SWAP_CHAIN[tok];rb.textContent=`Buy real ${tok} on AUTISTIK Swap →`;}}
   $('#bStart').textContent=`Buy in ${fmtUsd(menuBuy)} · ${nr?'Start race':'Start solo race'}`;
@@ -1329,6 +1330,108 @@ $('#useMine').onclick=async()=>{
   const d=menuReal&&REAL[menuReal];const pick=(d&&d.chain==='solana')?(a.sol||a.evm):(a.evm||a.sol);
   if(pick){me.wallet=pick;$('#myAddr').value=pick;showMine();}else $('#myInfo').textContent='No wallet connected yet. Connect one, or paste your address.';
 };
+/* ---------- scanner: paste any wallet or token address ---------- */
+// Fun play needs no wallet. Wallet mode opens this: a wallet shows its balances; a token shows its details, every
+// holder grouped by how far up they are, who bought with you, who is selling (they trail behind you in the race),
+// with Buy (AUTISTIK Swap, your own wallet) and Race buttons. Read-only public data, not financial advice.
+const SCAN={view:null,wallet:null,back:null};
+const ONSITE=()=>!!window.HFWallet;
+function openScan(q){
+  $('#homeOv').hidden=true;$('#lobbyOv').hidden=true;$('#scanOv').hidden=false;
+  if(!ONSITE()){$('#scanOut').innerHTML='<p class="mini">Wallet and token search runs on autistik.io/hyperfocus. Fun races work here.</p>';return;}
+  if(q){$('#scanQ').value=q;runScan(q);}else if(!SCAN.view&&me.wallet){$('#scanQ').value=me.wallet;runScan(me.wallet);}
+  setTimeout(()=>{try{$('#scanQ').focus();}catch(e){}},50);
+}
+function closeScan(){$('#scanOv').hidden=true;if(state==='lobby')$('#lobbyOv').hidden=false;else $('#homeOv').hidden=false;}
+const xTier=x=>x==null?'':x>=1000?'x1000':x>=100?'x100':x>=25?'x25':x>=10?'x10':x>=1?'x1':'xdn';
+const xBadge=(x,est)=>x==null?'<span class="xb xq">entry ?</span>':`<span class="xb ${xTier(x)}">${fmtX(x)}${est?'~':''}</span>`;
+async function runScan(q){
+  q=String(q||'').trim();const msg=$('#scanMsg');
+  if(!/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(q)){msg.innerHTML='<span class="bad">That isn’t a wallet or token address.</span>';return;}
+  msg.textContent='Looking it up…';$('#scanOut').innerHTML='';
+  try{const r=await fetch('/api/hyperfocus/lookup?q='+encodeURIComponent(q));const d=await r.json().catch(()=>({}));
+    if(!r.ok){msg.innerHTML=`<span class="bad">${esc(d.error||'Couldn’t look that up.')}</span>`;return;}
+    msg.textContent='';
+    if(d.kind==='token'){SCAN.back=null;showTokenView(d.chain,d.token);}
+    else{SCAN.wallet=d;SCAN.view='wallet';me.wallet=d.address;try{$('#myAddr').value=d.address;}catch(e){}showWalletView(d);}
+  }catch(e){msg.innerHTML='<span class="bad">Couldn’t reach the site. Try again.</span>';}
+}
+function showWalletView(d){
+  const rows=d.holdings.map((h,i)=>`<button class="srow" data-i="${i}" ${h.native?'disabled':''}>
+      <span class="sl">${h.logo?`<img src="${esc(h.logo)}" alt="">`:'<i class="ph"></i>'}<b>${esc(h.symbol||'?')}</b><small>${esc(h.chainName)}${h.raced?' · racing':''}</small></span>
+      <span class="sr"><b>${h.valueUsd!=null?fmtUsd(h.valueUsd):'—'}</b><small>${fmtAmt(h.amount)} ${esc(h.symbol||'')}</small></span></button>`).join('');
+  $('#scanOut').innerHTML=`<div class="shead"><div><div class="lbl">Wallet</div><b class="mono">${esc(shortA(d.address))}</b></div><div class="sr"><div class="lbl">Total</div><b class="big">${fmtUsd(d.total||0)}</b></div></div>
+    ${d.holdings.length?`<div class="slist">${rows}</div><p class="mini">Tap a token to see its holders and race it.${d.chains.length>1?' Shows the main coins on BNB Chain, Base and Ethereum, plus any coin Hyperfocus races.':''}</p>`:'<p class="mini">No balances found for this wallet.</p>'}`;
+  $('#scanOut').querySelectorAll('.srow').forEach(b=>b.onclick=()=>{const h=d.holdings[+b.dataset.i];SCAN.back='wallet';showTokenView(h.chain,h.address);});
+}
+async function showTokenView(chain,token){
+  SCAN.view='token';const key=`${chain}:${token}`;$('#scanOut').innerHTML='<p class="mini">Loading the token and its holders…</p>';
+  const d=REAL[key]||await loadReal(key);
+  if(SCAN.view!=='token')return;
+  if(!d||d.error){$('#scanOut').innerHTML=`<p class="bad">${esc((d&&d.error)||'Couldn’t load that token.')}</p>${backBtn()}`;wireBack();return;}
+  const img=d.image?`<img src="${esc(d.image)}" alt="">`:'',sym=d.symbol?'$'+d.symbol:shortA(d.token),pc=v=>v==null?'—':`<span class="${v>=0?'ok':'bad'}">${v>=0?'+':''}${v.toFixed(1)}%</span>`;
+  const buy=`/swap?chain=${encodeURIComponent(d.chain)}&buy=${encodeURIComponent(d.token)}`;
+  let html=`${backBtn()}<div class="shead tok"><span class="rtok big">${img}<span><b>${esc(sym)}</b><small>${esc(d.name||'')} · ${esc(d.chain)}</small></span></span>
+    <div class="sr"><b class="big">${fmtPrice(d.price)}</b><small>1h ${pc(d.ch1)} · 24h ${pc(d.ch24)}${d.mcap?` · mcap ${fmtK(d.mcap)}`:''}</small></div></div>
+    <div class="row"><a class="btnl go" href="${buy}">Buy ${esc(sym)} →</a>${d.tracked?'<button class="go" id="scanRace">Race this coin</button>':''}</div>
+    <p class="mini">Buying opens AUTISTIK Swap: you approve it in your own wallet. Once you hold it, your car joins this coin’s race with your real gains.</p>`;
+  if(!d.tracked){html+=`<p class="mini">${esc(sym)} isn’t in the arena yet, so its holders aren’t loaded.</p><div class="row"><button id="scanKick">Load its holders</button><span class="mini" id="scanKickMsg"></span></div>`;
+    $('#scanOut').innerHTML=html;wireBack();
+    $('#scanKick').onclick=async()=>{$('#scanKickMsg').textContent='Loading every holder… about a minute.';
+      try{const r=await fetch('/api/analytics/scan',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chain:d.chain,token:d.token})});
+        if(r.status===401){$('#scanKickMsg').innerHTML=`<a href="/login?next=${encodeURIComponent('/hyperfocus?chain='+d.chain+'&ca='+d.token)}">Sign in</a> to load a new coin.`;return;}
+        const j=await r.json().catch(()=>({}));if(!r.ok){$('#scanKickMsg').textContent=j.error||'Couldn’t load it.';return;}
+        delete REAL[key];showTokenView(chain,token);}catch(e){$('#scanKickMsg').textContent='Couldn’t reach the site. Try again.';}};
+    return;}
+  // group the holders
+  const mine=(me.wallet||'').toLowerCase(),H=d.holders,you=mine?H.find(h=>h.w.toLowerCase()===mine):null,DAY=86400000;
+  const sellW=new Set(H.filter(h=>h.sold||h.out).map(h=>h.w.toLowerCase()));
+  (d.trades||[]).forEach(t=>{if(t.s<0&&Date.now()-t.at<DAY)sellW.add(String(t.w).toLowerCase());});
+  const others=H.filter(h=>h!==you);
+  const withYou=you&&you.at?others.filter(h=>h.at&&Math.abs(h.at-you.at)<=DAY):others.filter(h=>h.at&&Date.now()-h.at<=DAY);
+  const groups=[
+    [you&&you.at?'Bought with you (within a day of your buy)':'Bought in the last 24 hours',withYou,'with'],
+    ['1000x club',others.filter(h=>h.x>=1000),'x1000'],
+    ['100x or more',others.filter(h=>h.x>=100&&h.x<1000),'x100'],
+    ['Closing in on 100x (25x–99x)',others.filter(h=>h.x>=25&&h.x<100),'x25'],
+    ['10x–25x',others.filter(h=>h.x>=10&&h.x<25),'x10'],
+    ['Up 1x–10x',others.filter(h=>h.x>=1&&h.x<10),'x1'],
+    ['Down (under 1x)',others.filter(h=>h.x!=null&&h.x<1),'xdn'],
+    ['Selling: they trail behind you in the race',others.filter(h=>sellW.has(h.w.toLowerCase())),'sell'],
+    ['Entry price unknown',others.filter(h=>h.x==null),'xq']];
+  const row=h=>`<button class="srow w" data-w="${esc(h.w)}"><span class="sl"><b class="mono">${esc(h.lbl||shortA(h.w))}</b><small>${h.dev?'DEV · ':''}${h.out?'sold everything':sellW.has(h.w.toLowerCase())?'selling':h.at?'in since '+new Date(h.at).toLocaleDateString():''}</small></span>
+    <span class="sr">${xBadge(h.x,h.est)}<small>${h.usd!=null?fmtK(h.usd):fmtAmt(h.bal)}</small></span></button>`;
+  html+=you?`<div class="sgrp you"><div class="lbl">You</div>${row(you)}</div>`:mine?`<p class="mini">${esc(shortA(me.wallet))} isn’t among the top holders of ${esc(sym)} yet.</p>`:`<p class="mini">Search your wallet first to see who bought with you.</p>`;
+  const big=H.filter(h=>(h.x||0)>=100).length;
+  html+=`<p class="mini">${H.length} top holders · ${big} up 100x or more · ${sellW.size} selling in the last day · ${(d.trades||[]).length} trades in the last day.</p>`;
+  groups.forEach(([t,list,cls])=>{if(!list.length)return;
+    html+=`<details class="sgrp ${cls}" ${['with','x1000','x100','sell'].includes(cls)?'open':''}><summary><span>${esc(t)}</span><b>${list.length}</b></summary><div class="slist">${list.slice(0,12).map(row).join('')}${list.length>12?`<p class="mini">+${list.length-12} more</p>`:''}</div></details>`;});
+  $('#scanOut').innerHTML=html;wireBack();
+  const rb=$('#scanRace');if(rb)rb.onclick=()=>raceFromScan(chain,token);
+  $('#scanOut').querySelectorAll('.srow.w').forEach(b=>b.onclick=()=>{$('#scanQ').value=b.dataset.w;runScan(b.dataset.w);});
+}
+const backBtn=()=>SCAN.back==='wallet'&&SCAN.wallet?'<button class="sback" id="scanBack">← Back to wallet</button>':'';
+function wireBack(){const b=$('#scanBack');if(b)b.onclick=()=>{SCAN.view='wallet';showWalletView(SCAN.wallet);};}
+function raceFromScan(chain,token){
+  $('#scanOv').hidden=true;
+  if(state!=='lobby'){readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;showLobby();}
+  menuMode='real';renderLobby();loadHot();pickReal(chain,token);if(isHost)lobbyPresence();
+}
+$('#scanGo').onclick=()=>runScan($('#scanQ').value);
+$('#scanQ').addEventListener('keydown',e=>{if(e.key==='Enter')runScan($('#scanQ').value);});
+$('#scanClose').onclick=closeScan;
+$('#scanMine').onclick=async()=>{
+  if(!ONSITE()){$('#scanMsg').textContent='Connect a wallet on autistik.io/hyperfocus.';return;}
+  let a=window.HFWallet.addresses?await window.HFWallet.addresses():{};
+  if(!a.evm&&!a.sol){$('#scanMsg').textContent='Pick a wallet to connect…';try{await window.HFWallet.connect();}catch(e){}a=await window.HFWallet.addresses();}
+  const pick=a.sol&&!a.evm?a.sol:(a.evm||a.sol);
+  if(!pick){$('#scanMsg').textContent='No wallet connected yet. Connect one, or paste an address.';return;}
+  if(a.evm&&a.sol)$('#scanMsg').textContent='Showing your EVM wallet. Paste your Solana address to see that one.';
+  $('#scanQ').value=pick;runScan(pick);
+};
+$('#bFunPlay').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;}isHost=false;menuMode='fun';showLobby();renderLobby();};
+$('#bWalletPlay').onclick=()=>openScan();
+$('#bScanL').onclick=()=>openScan();
 /* links like /hyperfocus?chain=bsc&ca=0x… open that coin's race */
 (function(){try{const q=new URLSearchParams(location.search),ca=q.get('ca'),ch=q.get('chain')||'bsc';
   if(ca&&window.HFWallet&&/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(ca)){menuMode='real';pickReal(/^(bsc|ethereum|base|solana)$/.test(ch)?ch:'bsc',ca);
