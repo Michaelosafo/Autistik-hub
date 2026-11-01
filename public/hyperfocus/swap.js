@@ -40,9 +40,10 @@ const short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'?';
 const ago=ts=>{const s=Math.round((Date.now()-ts)/1000);return s<60?s+'s ago':s<3600?Math.round(s/60)+'m ago':Math.round(s/3600)+'h ago';};
 
 /* ---- tabs ---- */
-function showTab(name){if(!['race','swap','wallet'].includes(name))name='wallet';
-  ['race','swap','wallet'].forEach(n=>{$('#tab-'+n).hidden=n!==name;$('#tb-'+n).setAttribute('aria-selected',n===name);});
-  if(name==='wallet')renderWallet();}
+function showTab(name){if(!['race','swap','wallet','scanner'].includes(name))name='wallet';
+  ['race','swap','wallet','scanner'].forEach(n=>{$('#tab-'+n).hidden=n!==name;$('#tb-'+n).setAttribute('aria-selected',n===name);});
+  if(name==='wallet')renderWallet();
+  window.HFTab=name;try{window.dispatchEvent(new CustomEvent('hf-tab',{detail:name}));}catch(e){}}
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{location.hash=b.dataset.tab;showTab(b.dataset.tab);});
 addEventListener('hashchange',()=>showTab(location.hash.slice(1)));
 showTab(location.hash.slice(1)||(/[?&](room|ca)=/.test(location.search)?'race':'wallet'));

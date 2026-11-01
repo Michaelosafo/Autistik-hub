@@ -34,10 +34,10 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
   ] },
   // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
   { name: "Wallet", icon: "i-wallet", tip: "Your coins", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"], items: [
-    { href: "/wallet", name: "My wallet", note: "Balances, send, receive and trade", icon: "i-wallet" },
+    { href: "/hyperfocus", name: "My wallet", note: "Dashboard, balances, rewards, send, receive and trade", icon: "i-wallet" },
     { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
     { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
-    { href: "/hyperfocus", name: "Hyperfocus GP", note: "Game arena: race every holder in 3D, with friends", icon: "i-ball" },
+    { href: "/hyperfocus#race", name: "Hyperfocus GP", note: "Race every holder in 3D, with friends, or play to win", icon: "i-ball" },
   ] },
   { name: "Earn", icon: "i-rew", tip: "Stake, Susu savings and rewards", match: ["/stake", "/susu", "/rewards"], items: [
     { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
@@ -77,7 +77,7 @@ const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?
   { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/susu", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
-  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"] },
+  { href: "/hyperfocus", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"] },
 ];
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -206,7 +206,7 @@ export default function AppShell({ admin, me, onMe, children }: {
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
                   <div className="ax-menu-addr"><small>Connected · Solana</small><b className="mono">{cs.sol.account.address.slice(0, 6)}…{cs.sol.account.address.slice(-6)}</b></div>
-                  <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{cs.sol.name} · Solana</small></Link>
+                  <Link role="menuitem" href="/hyperfocus"><b>My wallet</b><small>{cs.sol.name} · Solana</small></Link>
                   <button type="button" role="menuitem" onClick={() => { navigator.clipboard?.writeText(cs.sol!.account.address).catch(() => {}); setAcctMenu(false); }}><b>Copy address</b></button>
                   <button type="button" role="menuitem" onClick={() => { pickWallet({ fresh: true }); setAcctMenu(false); }}><b>Switch wallet</b></button>
                   <button type="button" role="menuitem" onClick={() => { disconnectSol(); setAcctMenu(false); }}><b>Disconnect</b></button>
@@ -224,7 +224,7 @@ export default function AppShell({ admin, me, onMe, children }: {
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
                   <div className="ax-menu-addr"><small>Connected · {net.name}</small><b className="mono">{acct.slice(0, 6)}…{acct.slice(-6)}</b></div>
-                  <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{wallet?.name}</small></Link>
+                  <Link role="menuitem" href="/hyperfocus"><b>My wallet</b><small>{wallet?.name}</small></Link>
                   <div className="ax-switch" role="group" aria-label="Switch network">
                     <small>Switch network</small>
                     <div className="ax-switch-grid">
