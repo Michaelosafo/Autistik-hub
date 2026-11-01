@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAddress, isAddress } from "viem";
+import { createPublicClient, erc20Abi, getAddress, http, isAddress } from "viem";
 import { detectChain } from "@/lib/analytics-detect";
 import { rateLimit } from "@/lib/ratelimit";
 import { supabaseServer } from "@/lib/supabase/server";
@@ -26,6 +26,19 @@ async function isSolMint(a: string) {
   } catch { return false; }
 }
 
+/** True when an EVM address is an ERC-20 token. Smart-contract wallets (Safe, EIP-7702 accounts) have code too, but no token supply. */
+async function isErc20(ch: WChainKey, a: `0x${string}`) {
+  try {
+    const c = WCHAINS[ch];
+    const pc: any = createPublicClient({ chain: c.viem, transport: http(c.rpc, { timeout: 5000 }) });
+    const [d, sup] = await Promise.all([
+      pc.readContract({ address: a, abi: erc20Abi, functionName: "decimals" }),
+      pc.readContract({ address: a, abi: erc20Abi, functionName: "totalSupply" }),
+    ]);
+    return d != null && sup != null;
+  } catch { return false; }
+}
+
 /** Tokens this wallet holds that Hyperfocus already races (from the tracked holder lists). */
 async function racedTokens(owner: string, sol: boolean) {
   try {
@@ -46,7 +59,7 @@ export async function GET(req: Request) {
   if (sol ? await isSolMint(q) : false) return out({ kind: "token", chain: "solana", token: q });
   if (!sol) {
     const ch = await detectChain(q).catch(() => null);
-    if (ch && ch !== "solana" && ch !== "robinhood") return out({ kind: "token", chain: ch, token: getAddress(q) });
+    if (ch && ch !== "solana" && ch !== "robinhood" && await isErc20(ch as WChainKey, getAddress(q))) return out({ kind: "token", chain: ch, token: getAddress(q) });
   }
 
   // A wallet: what it holds, on every network we support.
