@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import HFBoot from "./HFBoot";
 import WalletDash from "./WalletDash";
+import ScannerTab from "./ScannerTab";
 import { HF_CSS, HF_MARKUP } from "./markup";
 import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 import { adminState } from "@/lib/admin";
@@ -46,6 +47,7 @@ export default async function HyperfocusPage({ searchParams }: { searchParams: {
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Figtree:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" />
       <style dangerouslySetInnerHTML={{ __html: HF_CSS }} />
       <div className="hf" dangerouslySetInnerHTML={{ __html: HF_MARKUP }} suppressHydrationWarning />
+      <ScannerTab signedIn={rewards.signedIn} />
       <WalletDash appId={appId} member={member as any} start={start} admin={!!admin} rewards={rewards} feeNote={feeNote} />
       <HFBoot nonce={nonce} />
     </>
