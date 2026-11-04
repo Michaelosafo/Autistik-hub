@@ -34,6 +34,10 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
       <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
         text={<>Lock your pool&apos;s liquidity so it can&apos;t be pulled (no rug pull), or lock team tokens so they can&apos;t be dumped. Nobody, not even the AUTISTIK team, can touch a lock before its date.</>}
         stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["Auto", "release when due"]]} />
+      <div className="card row" style={{ justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div><b>No pool yet, or want to add more?</b><p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Add liquidity to your token&apos;s pool first (or create the pool), then come back and lock the LP tokens here.</p></div>
+        <Link className="btn primary" href="/liquidity">Add liquidity</Link>
+      </div>
       <Guide id="lockers" action={{ href: "#lock", label: "Lock my tokens now" }} title="How to lock, in 3 steps" steps={[
         <>Connect your wallet below and pick the network your coin is on.</>,
         <>Choose what to lock: your pool&apos;s <b>LP token</b> (proves the liquidity can&apos;t be pulled) or <b>team tokens</b>. Paste its address and the amount.</>,
