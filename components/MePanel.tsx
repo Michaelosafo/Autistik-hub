@@ -32,8 +32,8 @@ const ACTIONS = [
   { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire", color: "#FFD84D" },
   { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "i-rocket", color: "#FF6B9A" },
   { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "i-swap", color: "#4FD1FF" },
-  { href: "/lockers", name: "Lock", note: "Lock LP or team tokens", icon: "i-lock", color: "#B57CFF" },
-  { href: "/stake", name: "Earn", note: "Stake and rewards", icon: "i-rew", color: "#5BE38F" },
+  { href: "/lockers", name: "Lock", note: "Lockers, stake, Susu and rewards", icon: "i-lock", color: "#B57CFF" },
+  { href: "/analytics", name: "Scanner", note: "Check any token or wallet", icon: "i-search", color: "#5BE38F" },
 ];
 type Coin = { chain: string; token: string; name: string; symbol: string; logo: string | null; market: { marketCap: number | null; change24h: number | null } | null };
 const short$ = (n: number | null | undefined) => n == null ? "–" : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
