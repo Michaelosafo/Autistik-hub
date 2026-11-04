@@ -26,7 +26,8 @@ const heat = (t: BoardToken) => (t.market?.volume24h ?? 0) + (t.market?.txns24h 
 
 function rank(list: BoardToken[], tab: Tab) {
   const l = [...list];
-  if (tab === "listed") return rank(l.filter((t) => t.source === "listed"), "trending");
+  // Listed tokens: coins listed from elsewhere, plus any coin whose 24 hours on Trending are over (until it is listed again).
+  if (tab === "listed") return l.filter((t) => t.source === "listed" || t.aged).sort((a, b) => heat(b) - heat(a));
   if (tab === "new") return l.sort((a, b) => b.created_at.localeCompare(a.created_at));
   if (tab === "mcap") return l.sort((a, b) => (b.market?.marketCap ?? 0) - (a.market?.marketCap ?? 0));
   if (tab === "gainers") return l.filter((t) => t.market?.change24h != null).sort((a, b) => (b.market!.change24h ?? 0) - (a.market!.change24h ?? 0));
@@ -68,7 +69,7 @@ export default function Board({ initial, initialTab = "trending" }: { initial: B
   }, [tokens, tab, chain, q]);
   const king = useMemo(() => rank(tokens, "trending")[0], [tokens]);
   const hot = useMemo(() => rank(tokens, "trending").slice(0, 10), [tokens]);
-  const listedCount = useMemo(() => tokens.filter((t) => t.source === "listed").length, [tokens]);
+  const listedCount = useMemo(() => tokens.filter((t) => t.source === "listed" || t.aged).length, [tokens]);
 
   // Cards glide from their old place to their new one when the ranking changes (FLIP).
   const grid = useRef<HTMLDivElement>(null);

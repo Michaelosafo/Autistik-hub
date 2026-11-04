@@ -2,6 +2,7 @@ import { CHAINS, type ChainKey } from "@/lib/launchpad";
 import { getDexAbout, getMarkets, pairFromUrl, type Market } from "@/lib/market";
 import { supabaseServer } from "@/lib/supabase/server";
 import { HIDDEN, LISTINGS, TRENDING_ONLY } from "@/lib/listings";
+import { TRENDING_HOURS } from "@/lib/trending";
 
 export type BoardToken = {
   chain: ChainKey;
@@ -18,8 +19,14 @@ export type BoardToken = {
   market: Market | null;
   /** The picture chosen at launch (falls back to DexScreener's). */
   logo: string | null;
-  /** Allowed on Trending (lib/listings.ts TRENDING_ONLY; every coin when that list is empty). */
+  /**
+   * On Trending right now: allowed (lib/listings.ts TRENDING_ONLY; every coin when that list is empty) AND either
+   * launched/listed in the last TRENDING_HOURS (24h) or paying for a trending slot. After that it leaves Trending by
+   * itself and shows under Listed tokens until it is listed again (a new trending payment).
+   */
   trend: boolean;
+  /** Its 24 hours on Trending are over and it hasn't been listed again: shown under Listed tokens. */
+  aged: boolean;
   /** Listed coins: the project's write-up from DexScreener, when it has one. */
   about: string | null;
 };
@@ -67,17 +74,25 @@ export async function getBoard(limit = 200, chain?: ChainKey): Promise<BoardToke
   const abouts = new Map<string, string | null>(await Promise.all(rows.filter((r: any) => r.source === "listed").map(async (r: any) =>
     [key(r.chain, r.token), await getDexAbout(r.chain, r.pair || pairFromUrl(markets[r.token.toLowerCase()]?.url))] as [string, string | null])));
   const logoOf = new Map<string, string>((logos || []).map((l: any) => [key(l.chain, l.token), l.url]));
-  return rows.map((r: any) => ({
-    // Only the public fields: rows are read with * so the board keeps working before new columns exist.
-    chain: r.chain, token: r.token, pair: r.pair, name: r.name, symbol: r.symbol, created_at: r.created_at,
-    source: r.source === "listed" ? "listed" : "launchpad",
-    watchers: watchers.get(key(r.chain, r.token)) ?? 0,
-    promotedUntil: until.get(key(r.chain, r.token)) ?? null,
-    market: markets[r.token.toLowerCase()] ?? null,
-    logo: logoOf.get(key(r.chain, r.token)) ?? markets[r.token.toLowerCase()]?.imageUrl ?? null,
-    about: abouts.get(key(r.chain, r.token)) ?? null,
-    trend: !TRENDING_ONLY.size || TRENDING_ONLY.has(String(r.token).toLowerCase()),
-  }));
+  const fresh = Date.now() - TRENDING_HOURS * 3600e3;
+  return rows.map((r: any) => {
+    const allowed = !TRENDING_ONLY.size || TRENDING_ONLY.has(String(r.token).toLowerCase());
+    const paid = until.has(key(r.chain, r.token));
+    const recent = Date.parse(r.created_at) >= fresh;
+    const t: BoardToken = {
+      // Only the public fields: rows are read with * so the board keeps working before new columns exist.
+      chain: r.chain, token: r.token, pair: r.pair, name: r.name, symbol: r.symbol, created_at: r.created_at,
+      source: r.source === "listed" ? "listed" : "launchpad",
+      watchers: watchers.get(key(r.chain, r.token)) ?? 0,
+      promotedUntil: until.get(key(r.chain, r.token)) ?? null,
+      market: markets[r.token.toLowerCase()] ?? null,
+      logo: logoOf.get(key(r.chain, r.token)) ?? markets[r.token.toLowerCase()]?.imageUrl ?? null,
+      about: abouts.get(key(r.chain, r.token)) ?? null,
+      trend: allowed && (paid || recent),
+      aged: allowed && !paid && !recent,
+    };
+    return t;
+  });
 }
 
 /** Paid slots first (newest purchase ending last first), then the busiest tokens by 24h volume and trades. */
