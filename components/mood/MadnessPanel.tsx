@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import FindPeople from "@/components/FindPeople";
 import TikComposer from "./TikComposer";
@@ -43,7 +43,7 @@ export function MadnessLink({ onGo }: { onGo?: () => void }) {
   );
 }
 
-export default function MadnessPanel({ full }: { full?: boolean }) {
+export default function MadnessPanel({ full, side, focus }: { full?: boolean; side?: ReactNode; focus?: ReactNode }) {
   const [open, setOpen] = useState(!!full);
   const [tab, setTab] = useState<Tab>("following");
   const [k, setK] = useState(0);
@@ -67,6 +67,54 @@ export default function MadnessPanel({ full }: { full?: boolean }) {
     })();
   }, []);
   const toggle = () => { const o = !open; setOpen(o); try { localStorage.setItem("madness-open", o ? "1" : "0"); } catch {} };
+
+  if (full) {
+    const NAV: [Tab, string, string, string][] = [
+      ["following", "Following", "Posts from people you follow", '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 11l2 2 4-4"/>'],
+      ["everyone", "Everyone", "The whole TIK feed", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>'],
+      ["alerts", "Alerts", "Replies, follows and likes", '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'],
+      ["people", "Find people", "Search and follow members", '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'],
+    ];
+    const cur = NAV.find((n) => n[0] === tab)!;
+    return (
+      <section className="tik-pro" aria-label="TIK">
+        <aside className="tik-side" aria-label="TIK menu">
+          <div className="tik-brand">
+            <span className="tik-logo" aria-hidden="true">T</span>
+            <span><b>TIK</b><small>LIVE · SOCIAL · AUTISTIK</small></span>
+          </div>
+          <nav className="tik-nav" role="tablist" aria-orientation="vertical">
+            {NAV.map(([t, l, , d]) => (
+              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+                <span className="tik-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} /></span>
+                <span className="tik-nl">{l}</span>
+                {t === "alerts" && unread > 0 && <em className="tik-badge">{unread > 9 ? "9+" : unread}</em>}
+              </button>
+            ))}
+          </nav>
+          <Link href="/spaces?host=1" className="tik-host"><i aria-hidden="true" />Host a live</Link>
+          <div className="tik-links">
+            <Link href="/spaces">Live rooms</Link>
+            <Link href="/chats">Chats</Link>
+            <Link href="/board">Board</Link>
+          </div>
+          {side && <div className="tik-live"><div className="tik-cap"><span className="tik-dot" aria-hidden="true" />Live now</div>{side}</div>}
+        </aside>
+        <div className="tik-main">
+          <header className="tik-top">
+            <div><h2>{cur[1]}</h2><small>{cur[2]}</small></div>
+            <span className="tik-status"><span className="tik-dot" aria-hidden="true" />Live feed</span>
+          </header>
+          {focus}
+          {(tab === "following" || tab === "everyone") && me && <TikComposer onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
+          {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
+          {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
+          {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
+          {tab === "people" && <FindPeople />}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={"mp-sec mad" + (open ? " open" : "") + (full ? " full" : "")} aria-label="TIK">
