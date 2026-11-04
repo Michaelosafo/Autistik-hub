@@ -11,7 +11,7 @@ export const metadata = { title: "Members · AUTISTIK Hub" };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Tab = "feed" | "find" | "followers" | "following";
 
-export default async function MembersPage({ searchParams }: { searchParams: { tab?: string; q?: string; id?: string } }) {
+export default async function MembersPage({ searchParams }: { searchParams: { tab?: string; q?: string; id?: string; all?: string } }) {
   const user = await currentUser();
   if (!user) {
     return (
@@ -153,7 +153,10 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
         <div className="card stack">
           <h2>{whoName ? `${tab === "followers" ? "Followers of" : "Followed by"} ${whoName}` : tab === "followers" ? "Your followers" : "People you follow"}</h2>
           {!people.length && <div className="empty">{tab === "followers" ? "No followers yet." : "Not following anyone yet."}</div>}
-          <div className="member-list">{people.map(card)}</div>
+          <div className="member-list">{(searchParams.all === "1" ? people : people.slice(0, 10)).map(card)}</div>
+          {people.length > 10 && searchParams.all !== "1" && (
+            <Link className="btn" style={{ alignSelf: "flex-start" }} href={`/members?tab=${tab}${searchParams.id ? `&id=${searchParams.id}` : ""}&all=1`}>Show all {people.length}</Link>
+          )}
         </div>
       )}
     </div>

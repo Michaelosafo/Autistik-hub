@@ -4682,3 +4682,7 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .earn-tabs.lock-tabs a[aria-current=page]{background:linear-gradient(180deg,#FFE27A,#F0B90B) !important;border-color:#fff !important;box-shadow:0 6px 0 #B98500,0 0 0 3px #F0B90B,0 16px 28px -10px #F0B90B !important}
 .earn-tabs.lock-tabs a[aria-current=page] b{color:#191326 !important;text-shadow:none}
 .earn-tabs.lock-tabs a:active{transform:translateY(2px) !important;box-shadow:0 2px 0 color-mix(in srgb,var(--tc) 55%,#000) !important}
+/* Names: plain dark text for everyone (the badge beside the name shows who is verified or team) */
+.mname .mname-text,.mname.ver .mname-text,.mname.team .mname-text{color:var(--ink) !important;background:none !important;-webkit-text-fill-color:currentColor;font-weight:700}
+.ch-name,.ch-name.ver,.ch-name.team{color:var(--ink) !important}
+.tik-head b{color:var(--ink);font-weight:700}
