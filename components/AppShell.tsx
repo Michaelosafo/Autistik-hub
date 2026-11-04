@@ -19,33 +19,34 @@ export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.start
 
 type Item = { href: string; name: string; note?: string; icon?: string };
 const MENU: { name: string; icon: string; tip: string; match: string[]; items: Item[] }[] = [
-  // The Board first: every coin launched here, and everything to make one (create, liquidity, trending).
-  { name: "Board", icon: "i-fire", tip: "Coins launched on AUTISTIK, live", match: ["/board", "/launchpad", "/momentum", "/liquidity"], items: [
+  // The Board first: every coin launched here, everything to make one, and the scanner to check any coin.
+  { name: "Board", icon: "i-fire", tip: "Coins launched on AUTISTIK, live", match: ["/board", "/launchpad", "/momentum", "/liquidity", "/analytics", "/pro"], items: [
     { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
     { href: "/launchpad/new", name: "Create a coin", note: "Pick a network, 3 simple steps, sign once", icon: "i-rocket" },
+    { href: "/analytics", name: "Scanner", note: "Any token or wallet: holders, whales, safety grade, dev wallet", icon: "i-search" },
+    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
+    { href: "/pro", name: "Pro signals", note: "Whale radar, signals and reports", icon: "i-bolt" },
     { href: "/liquidity", name: "Add liquidity", note: "Paste your token address: add to its pool or create one", icon: "i-swap" },
     { href: "/board?tab=trending", name: "Trending", note: "Coins trending on the Board now", icon: "i-trend" },
     { href: "/board?tab=listed", name: "Listed tokens", note: "Coins listed on AUTISTIK", icon: "i-star" },
     { href: "/momentum", name: "Momentum", note: "New coins picking up speed", icon: "i-bolt" },
   ] },
-  { name: "Trade", icon: "i-swap", tip: "Swap any token", match: ["/swap", "/perps", "/trade"], items: [
+  // Trade: swap, your wallet (balances and transactions) and perpetuals.
+  { name: "Trade", icon: "i-swap", tip: "Swap any token and see your wallet", match: ["/swap", "/wallet", "/perps", "/trade"], items: [
     { href: "/swap", name: "Swap", note: "Trade any token at the best price, on any network", icon: "i-swap" },
+    { href: "/wallet", name: "My wallet", note: "Your balances, transactions, send and receive", icon: "i-wallet" },
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
-  // Wallet is its own menu: the wallet itself, then the game arena and the token scanner that trade from it.
-  { name: "Wallet", icon: "i-wallet", tip: "Your coins", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"], items: [
-    { href: "/hyperfocus", name: "My wallet", note: "Dashboard, balances, rewards, send, receive and trade", icon: "i-wallet" },
-    { href: "/analytics", name: "Token scanner", note: "Holders, whales, safety", icon: "i-search" },
-    { href: "/analytics/pins", name: "Watchlist", note: "Coins you follow", icon: "i-star" },
+  // Play: the games.
+  { name: "Play", icon: "i-ball", tip: "Race in Hyperfocus GP", match: ["/hyperfocus", "/arena"], items: [
     { href: "/hyperfocus#race", name: "Hyperfocus GP", note: "Race every holder in 3D, with friends, or play to win", icon: "i-ball" },
   ] },
-  { name: "Earn", icon: "i-rew", tip: "Stake, Susu savings and rewards", match: ["/stake", "/susu", "/rewards"], items: [
-    { href: "/stake", name: "Stake", note: "Earn BNB from platform fees, up to 3x", icon: "i-rew" },
+  // Lock: lock liquidity or tokens, and everything that earns while it is locked.
+  { name: "Lock", icon: "i-lock", tip: "Lockers, staking, Susu savings and rewards", match: ["/lockers", "/stake", "/susu", "/rewards"], items: [
+    { href: "/lockers", name: "Lockers", note: "Lock liquidity or team tokens", icon: "i-lock" },
+    { href: "/stake", name: "Stake", note: "Lock $AUTISTIK and earn BNB from platform fees, up to 3x", icon: "i-rew" },
     { href: "/susu", name: "Susu", note: "Save USDT or BUSD every day, get it all at the end", icon: "i-gift" },
     { href: "/rewards", name: "Rewards", note: "Points and $AUTISTIK airdrops", icon: "i-gift" },
-  ] },
-  { name: "Lock", icon: "i-lock", tip: "Lock liquidity or tokens", match: ["/lockers"], items: [
-    { href: "/lockers", name: "Lockers", note: "Lock liquidity or team tokens", icon: "i-lock" },
   ] },
 ];
 // The full menu (phone ☰ button, desktop Menu button): every App tool above, then the website and your account.
@@ -73,11 +74,11 @@ const MORE: { name: string; items: Item[] }[] = [
 // Phone bar: Swap sits in the middle as the big button; everything else is behind the ☰ Menu button.
 const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?: boolean }[] = [
   { href: "/", name: "Home", icon: "i-home", match: [] },
-  { href: "/board", name: "Board", icon: "i-rocket", match: ["/board", "/launchpad", "/momentum", "/liquidity"] },
-  { href: "/stake", name: "Earn", icon: "i-rew", match: ["/stake", "/susu", "/rewards"] },
+  { href: "/board", name: "Board", icon: "i-rocket", match: ["/board", "/launchpad", "/momentum", "/liquidity", "/analytics", "/pro"] },
+  { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers", "/stake", "/susu", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
-  { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers"] },
-  { href: "/hyperfocus", name: "Wallet", icon: "i-wallet", match: ["/wallet", "/arena", "/hyperfocus", "/analytics", "/pro"] },
+  { href: "/hyperfocus#race", name: "Play", icon: "i-ball", match: ["/hyperfocus", "/arena"] },
+  { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet"] },
 ];
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

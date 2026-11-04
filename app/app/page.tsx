@@ -13,27 +13,26 @@ export const revalidate = 60;
 
 type Tool = { href: string; icon: IconName; name: string; text: string; tag?: "New" | "Popular" };
 const GROUPS: { name: string; text: string; tools: Tool[] }[] = [
-  { name: "Wallet", text: "Your coins on every network", tools: [
-    { href: "/wallet", icon: "wallet", name: "Wallet", text: "Balances, send and receive" },
-    { href: "/arena", icon: "arena", name: "Game arena", text: "Holders on a pitch", tag: "New" },
-    { href: "/analytics", icon: "scan", name: "Token scanner", text: "Holders and safety" },
+  { name: "Board", text: "Launch, find and check coins", tools: [
+    { href: "/board", icon: "trending", name: "Board", text: "Every coin launched here", tag: "Popular" },
+    { href: "/launchpad/new", icon: "launch", name: "Create a coin", text: "Launch a token, no code" },
+    { href: "/analytics", icon: "scan", name: "Scanner", text: "Holders, whales and safety" },
     { href: "/analytics/pins", icon: "watch", name: "Watchlist", text: "Coins you follow" },
-  ] },
-  { name: "Trade", text: "Best price across every DEX", tools: [
-    { href: "/wallet?quick=1", icon: "buy", name: "Buy", text: "Any coin, in dollars" },
-    { href: "/swap", icon: "swap", name: "Swap", text: "Best price, every DEX", tag: "Popular" },
-    { href: "/perps", icon: "perps", name: "Perpetuals", text: "Long or short" },
-  ] },
-  { name: "Discover", text: "Find coins early", tools: [
-    { href: "/launchpad", icon: "trending", name: "Trending", text: "What's being bought" },
     { href: "/momentum", icon: "momentum", name: "Momentum", text: "Coins gaining speed" },
   ] },
-  { name: "Build", text: "Launch and protect a token", tools: [
-    { href: "/launchpad/new", icon: "launch", name: "Launch Pad", text: "Launch a token, no code" },
-    { href: "/lockers", icon: "lock", name: "Lockers", text: "Lock liquidity or tokens" },
+  { name: "Trade", text: "Best price across every DEX, and your wallet", tools: [
+    { href: "/swap", icon: "swap", name: "Swap", text: "Best price, every DEX", tag: "Popular" },
+    { href: "/wallet", icon: "wallet", name: "My wallet", text: "Balances and transactions" },
+    { href: "/wallet?quick=1", icon: "buy", name: "Buy", text: "Any coin, in dollars" },
+    { href: "/perps", icon: "perps", name: "Perpetuals", text: "Long or short" },
   ] },
-  { name: "Earn", text: "Put your coins to work", tools: [
+  { name: "Play", text: "Race in 3D", tools: [
+    { href: "/hyperfocus#race", icon: "arena", name: "Hyperfocus GP", text: "Race holders, friends, or play to win", tag: "New" },
+  ] },
+  { name: "Lock", text: "Lock, stake, save and earn", tools: [
+    { href: "/lockers", icon: "lock", name: "Lockers", text: "Lock liquidity or tokens" },
     { href: "/stake", icon: "stake", name: "Stake", text: "Earn BNB, up to 3x" },
+    { href: "/susu", icon: "rewards", name: "Susu", text: "Save daily, get it all at the end" },
     { href: "/rewards", icon: "rewards", name: "Rewards", text: "Points and airdrops" },
   ] },
 ];

@@ -23,8 +23,6 @@ const nextConfig = {
       { source: "/arena", destination: "/hyperfocus", permanent: false },
       { source: "/arena/:chain/:token", destination: "/hyperfocus?chain=:chain&ca=:token", permanent: false },
       { source: "/arena/:path*", destination: "/hyperfocus", permanent: false },
-      // The wallet now lives in Hyperfocus (app/hyperfocus): the Wallet tab has the dashboard and the full wallet.
-      { source: "/wallet", destination: "/hyperfocus", permanent: false },
     ];
   },
   // Profile links: autistik.io/@name opens that member's profile.
