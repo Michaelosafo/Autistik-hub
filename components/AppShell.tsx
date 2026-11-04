@@ -19,6 +19,12 @@ export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.start
 
 type Item = { href: string; name: string; note?: string; icon?: string };
 const MENU: { name: string; icon: string; tip: string; match: string[]; items: Item[] }[] = [
+  // TIK first: the community feed, live rooms and chats.
+  { name: "TIK", icon: "i-com", tip: "Post, follow your people and go live", match: ["/mood", "/chats", "/spaces"], items: [
+    { href: "/mood", name: "TIK", note: "Post how you feel, see your people, follow each other", icon: "i-com" },
+    { href: "/spaces", name: "Live rooms", note: "Host or join a live audio room, like an X Space", icon: "i-ses" },
+    { href: "/chats", name: "Chats", note: "Message people you follow, groups, the AUTISTIK group", icon: "i-com" },
+  ] },
   // The Board first: every coin launched here, everything to make one, and the scanner to check any coin.
   { name: "Board", icon: "i-fire", tip: "Coins launched on AUTISTIK, live", match: ["/board", "/launchpad", "/momentum", "/analytics", "/pro"], items: [
     { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire" },
@@ -57,9 +63,6 @@ const MORE: { name: string; items: Item[] }[] = [
     { href: "/", name: "Home", note: "The AUTISTIK main page", icon: "i-home" },
     { href: "/app", name: "All tools", note: "Every App tool on one page", icon: "i-grid" },
     { href: "/companions", name: "Ask the bot", note: "Chat with Believer, Purity and the AUTISTIK bot", icon: "i-kai" },
-    { href: "/mood", name: "TIK", note: "Share how you feel, post Tiks, see your people", icon: "i-com" },
-    { href: "/chats", name: "Chats", note: "Message people you follow, groups, the AUTISTIK group", icon: "i-com" },
-    { href: "/spaces", name: "Live rooms", note: "Host or join a live audio room, like an X Space", icon: "i-ses" },
     { href: "/live", name: "Live hub", note: "Join the team's live sessions, get airdrops", icon: "i-ses" },
     { href: "/community", name: "Community", note: "Groups, posts and live sessions", icon: "i-com" },
     { href: "/buy", name: "$AUTISTIK", note: "How to buy the token", icon: "i-buy" },
