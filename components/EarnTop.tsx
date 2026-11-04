@@ -20,7 +20,6 @@ export function LockTabs({ active }: { active: string }) {
     <nav className="earn-tabs lock-tabs" aria-label="Lock">
       {TABS.map((t) => (
         <Link key={t.href} href={t.href} aria-current={t.href === active ? "page" : undefined}>
-          <i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{t.icon}</svg></i>
           <span><b>{t.name}</b><small>{t.blurb}</small></span>
         </Link>
       ))}
