@@ -31,8 +31,8 @@ type Update = { kind: string; id: string; at: string; body?: string; author?: { 
 const ACTIONS = [
   { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire", color: "#FFD84D" },
   { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "i-rocket", color: "#FF6B9A" },
-  { href: "/liquidity", name: "Liquidity", note: "Add to a pool or create one", icon: "i-swap", color: "#4FD1FF" },
   { href: "/lockers", name: "Lock", note: "Lockers, stake, Susu and rewards", icon: "i-lock", color: "#B57CFF" },
+  { href: "/liquidity", name: "Liquidity", note: "Add liquidity, then lock it", icon: "i-swap", color: "#4FD1FF" },
   { href: "/analytics", name: "Scanner", note: "Check any token or wallet", icon: "i-search", color: "#5BE38F" },
 ];
 type Coin = { chain: string; token: string; name: string; symbol: string; logo: string | null; market: { marketCap: number | null; change24h: number | null } | null };

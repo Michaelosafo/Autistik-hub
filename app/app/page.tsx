@@ -31,6 +31,7 @@ const GROUPS: { name: string; text: string; tools: Tool[] }[] = [
   ] },
   { name: "Lock", text: "Lock, stake, save and earn", tools: [
     { href: "/lockers", icon: "lock", name: "Lockers", text: "Lock liquidity or tokens" },
+    { href: "/liquidity", icon: "swap", name: "Add liquidity", text: "Add to a pool, then lock it" },
     { href: "/stake", icon: "stake", name: "Stake", text: "Earn BNB, up to 3x" },
     { href: "/susu", icon: "rewards", name: "Susu", text: "Save daily, get it all at the end" },
     { href: "/rewards", icon: "rewards", name: "Rewards", text: "Points and airdrops" },
