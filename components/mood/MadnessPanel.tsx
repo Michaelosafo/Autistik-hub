@@ -14,10 +14,10 @@ type Act = { user_id: string; at: string; kind: string; label: string | null; li
 const ACT: Record<string, string> = { post: "posted in a group", live: "joined a live", launch: "launched a coin", lock: "locked liquidity", pin: "pinned a coin", scan: "scanned a coin", follow: "followed someone", listed: "listed a coin" };
 
 /**
- * Autistik Madness, pinned in your panel and closed until you tap it: Tiks and activity from people you follow,
+ * TIK, pinned in your panel and closed until you tap it: Tiks and activity from people you follow,
  * everyone's Tiks, your notifications (likes and replies), finding people, and a box to post how you feel.
  */
-/** The row in your panel: opens the Autistik Madness page (like Create a coin opens its own page). */
+/** The row in your panel: opens the TIK page (like Create a coin opens its own page). */
 export function MadnessLink({ onGo }: { onGo?: () => void }) {
   const [unread, setUnread] = useState(0);
   useEffect(() => {
@@ -30,12 +30,12 @@ export function MadnessLink({ onGo }: { onGo?: () => void }) {
     })();
   }, []);
   return (
-    <Link href="/mood" className="mp-sec mad mad-link" onClick={onGo} aria-label="Open Autistik Madness">
+    <Link href="/mood" className="mp-sec mad mad-link" onClick={onGo} aria-label="Open TIK">
       <span className="mad-head">
         <span className="mad-pin" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 21s-7-4.6-9.2-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.2 6c-2.2 4.4-9.2 9-9.2 9z" /></svg>
         </span>
-        <span className="mad-t"><b>Autistik Madness</b><small>Post how you feel, see your people, have fun</small></span>
+        <span className="mad-t"><b>TIK</b><small>Post how you feel, see your people, have fun</small></span>
         {unread > 0 && <em className="mad-badge">{unread > 9 ? "9+" : unread}</em>}
         <i className="mad-go" aria-hidden="true">›</i>
       </span>
@@ -69,12 +69,12 @@ export default function MadnessPanel({ full }: { full?: boolean }) {
   const toggle = () => { const o = !open; setOpen(o); try { localStorage.setItem("madness-open", o ? "1" : "0"); } catch {} };
 
   return (
-    <section className={"mp-sec mad" + (open ? " open" : "") + (full ? " full" : "")} aria-label="Autistik Madness">
+    <section className={"mp-sec mad" + (open ? " open" : "") + (full ? " full" : "")} aria-label="TIK">
       {!full && <button type="button" className="mad-head" onClick={toggle} aria-expanded={open}>
         <span className="mad-pin" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 21s-7-4.6-9.2-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.2 6c-2.2 4.4-9.2 9-9.2 9z" /></svg>
         </span>
-        <span className="mad-t"><b>Autistik Madness</b><small>Feelings, posts and what your people are doing</small></span>
+        <span className="mad-t"><b>TIK</b><small>Feelings, posts and what your people are doing</small></span>
         {unread > 0 && <em className="mad-badge">{unread > 9 ? "9+" : unread}</em>}
         <i className="mad-chev" aria-hidden="true" />
       </button>}
@@ -90,7 +90,7 @@ export default function MadnessPanel({ full }: { full?: boolean }) {
           {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={full ? 20 : 5} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
           {tab === "people" && <FindPeople />}
-          {!full && <Link href="/mood" className="mad-open">Open Autistik Madness</Link>}
+          {!full && <Link href="/mood" className="mad-open">Open TIK</Link>}
         </div>
       )}
     </section>
