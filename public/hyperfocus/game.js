@@ -192,7 +192,7 @@ const fmtPrice=p=>!p?'$0':p>=1?fmtUsd(p):'$'+Number(p.toPrecision(3)).toString()
 function tokLabel(){return S&&S.w.mk&&S.w.mk.sym?'$'+S.w.mk.sym:(S?S.tok:'');}
 function priceFactor(){const mk=S.w.mk;return clamp(1+1.3*Math.log(mk.P/mk.p0),0.45,1.9);}
 function aiTarget(r){
-  if(S.w.mode==='fun'){const c=S.w.coins[r.ref];if(c.rugged)return BASE*0.05;return BASE*clamp(0.7+0.11*Math.log(c.m)+c.mom*8,0.32,1.5)*(c.m>=50?1.22:1);}
+  if(S.w.mode==='fun'){const k=(hash(String(r.id))%1000)/1000;return BASE*(0.8+0.28*k)*(1+0.05*Math.sin(S.w.wt*0.35+k*9));}
   const h=r.ref,xf=S.w.mode==='real'?((h.x||0)>=5?clamp(1.24+0.14*Math.log10(h.x/5),1.24,1.75):clamp(1+0.2*Math.log10(Math.max(h.x||1,0.02)),0.5,1.12)):1;
   return BASE*0.8*xf*priceFactor()*(h.boost>0?1.4:1)*(h.drag>0?0.5:1)*(h.out?0.32:h.sold&&!h.boost?0.72:1);
 }
@@ -205,7 +205,7 @@ function gatePicks(g){
 }
 function worldStep(dt){
   const w=S.w;w.wt+=dt;w.tickAcc+=dt;
-  while(w.tickAcc>=0.2-1e-9){w.tickAcc-=0.2;w.mode==='fun'?funTick():w.mode==='real'?realTick():tokTick();}
+  while(w.tickAcc>=0.2-1e-9){w.tickAcc-=0.2;w.mode==='fun'?0:w.mode==='real'?realTick():tokTick();}
   w.histAcc+=dt;if(w.histAcc>=1){w.histAcc-=1;if(w.mk){w.mk.hist.push(w.mk.P);if(w.mk.hist.length>60)w.mk.hist.shift();}}
   if(w.mode==='fun')GATES.forEach(g=>{if(!g.frozen&&w.wt>=g.freezeT){g.coins=gatePicks(g);g.frozen=true;}});
   for(const r of w.ai){
@@ -227,7 +227,7 @@ function myValue(h){return S.w.mode==='paid'?0:S.w.mode==='real'?h.amt*S.w.mk.P:
 function realEngine(h){const v=h.amt*S.w.mk.P;return h.start>0?clamp(1+0.3*Math.log10(Math.max(0.01,v/h.start)),0.8,1.6):1;}
 /* +$40 MADE / −$20 LOST pops up as your bag moves */
 function profitFlash(h,dt){h.flashT=(h.flashT||0)+dt;if(h.flash)h.flash.t-=dt;if(h.flashT<3)return;h.flashT=0;const v=h.amt*S.w.mk.P;if(h.flashV==null){h.flashV=v;return;}const d=v-h.flashV;if(Math.abs(d)>=Math.max(0.5,h.flashV*0.01)){h.flash={txt:`${d>0?'+':'−'}${fmtUsd(Math.abs(d)).replace('−','')} ${d>0?'MADE':'LOST'}`,col:d>0?COL.up:COL.down,t:1.6};h.flashV=v;}}
-function engine(h){const st=h.start||100;return S.w.mode==='fun'?clamp(1+0.15*Math.log(Math.max(0.01,myValue(h))/st),0.65,1.4):clamp(1+0.12*Math.log(Math.max(0.01,myValue(h))/st),0.75,1.3);}
+function engine(h){const st=h.start||100;return S.w.mode==='fun'?1:clamp(1+0.12*Math.log(Math.max(0.01,myValue(h))/st),0.75,1.3);}
 function updMe(h,dt){
   h.toasts.forEach(t=>t.t-=dt);h.toasts=h.toasts.filter(t=>t.t>0).slice(-3);h.shake=Math.max(0,h.shake-dt);
   if(h.finished){h.speed=Math.max(0,h.speed-BASE*0.6*dt);h.pos+=h.speed*dt;return;}
@@ -271,7 +271,6 @@ function updMe(h,dt){
       if(fun){h.gas=Math.min(100,h.gas+38);h.toasts.push({txt:'+ GAS',color:COL.gas,t:1.8});}
       else if(real){h.gas=Math.min(100,h.gas+38);h.toasts.push({txt:'+ NITRO',color:COL.gas,t:1.8});}
       else{h.cash+=10;h.toasts.push({txt:'AIRDROP +$10',color:COL.gas,t:1.8});}}
-    if(it.type==='gate'&&fun)doGate(h,it);
   }
   for(const r of S.w.ai){const gap=r.pos-h.pos;
     if(gap>0&&gap<SEG*1.1&&Math.abs(r.x-h.x)<0.36&&h.speed>r.speed){
@@ -306,7 +305,7 @@ function startRace(mode,tok,go,seedStr){
   if(mode==='fun'){h.coin=tok;h.amt=buy/w.coins[tok].p0;h.gas=60;h.swaps=0;h.start=buy;}
   else{h.cash=Math.round(buy*50)/100;h.amt=buy/w.mk.p0;h.tradeT=0;h.boostT=0;h.start=buy+h.cash;}
   if(mode==='real'){h.cash=0;h.amt=w.mine?w.mine.amt:0;h.start=h.amt*w.mk.p0;h.gas=60;h.buy=0;h.flashV=null;h.waveT=0;if(w.mine){h.realX=w.mine.x;h.name=(me.nick||'You');}}
-  if(mode!=='real')w.feed.unshift(`<b>${esc(h.name)}</b> bought in with ${fmtUsd(buy)} of ${tok}.`);
+  if(mode!=='real'&&mode!=='fun')w.feed.unshift(`<b>${esc(h.name)}</b> bought in with ${fmtUsd(buy)} of ${tok}.`);
   if(mode==='real'&&w.mine)w.feed.unshift(`Your wallet is in this race: up ${fmtX(w.mine.x)} on your real bag. Engine boosted.`);
   S={w,me:h,go,mode,tok,seed:seedStr,remotes:[],feedDirty:true,endShown:false,pubT:0,steps:0};
   $('#pauseOv').hidden=true;
@@ -314,7 +313,8 @@ function startRace(mode,tok,go,seedStr){
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);
   if(!immersive())enterImmersive(false);
   document.body.classList.add('racing');
-  $('#pads').hidden=false;$('#tradePads').hidden=mode!=='real';$('#wpnPads').hidden=false;$('#wpnPads').style.bottom=mode==='real'?'196px':'';
+  $('#pads').hidden=false;$('#tradePads').hidden=mode!=='real';
+  {const fc=$('#feed').closest('.card');if(fc)fc.hidden=mode==='fun';}$('#wpnPads').hidden=false;$('#wpnPads').style.bottom=mode==='real'?'196px':'';
   $('#padGas').textContent=mode==='token'?'BUY':mode==='real'?'NITRO':'GAS';$('#padBrake').textContent=mode==='token'?'SELL':'BRAKE';
   $('#keyHint').innerHTML=(mode==='fun'?'<b>← →</b> steer · <b>Space / ↑</b> GAS · <b>↓</b> brake':'<b>← →</b> steer · <b>Space / ↑</b> buy (boost) · <b>↓</b> sell')+' · <b>F</b> rocket · <b>B</b> bomb · <b>V</b> blades';
   $('#wireH').textContent=mode==='fun'?'Market wire':mode==='real'?`$${w.mk.sym} live trades`:`${tok} onchain wire`;
@@ -446,12 +446,13 @@ function ranked(){
     if(a.finished&&b.finished)return a.ft-b.ft;if(a.finished)return -1;if(b.finished)return 1;return b.pos-a.pos;});
 }
 function placeOf(r,list){return list.indexOf(r)+1;}
+const RACER_NAMES=['Blaze','Nova','Comet','Turbo','Flash','Storm','Bolt','Zoom','Dash','Rocket'];
 function disp(r){
   if(r.me||r.remote){
-    const sub=S.mode==='paid'?((r.pos/SEG*2/1000).toFixed(2)+' km'):r.me?fmtUsd(myValue(r)):fmtUsd(r.value);
+    const sub=(S.mode==='paid'||S.w.mode==='fun')?((r.pos/SEG*2/1000).toFixed(2)+' km'):r.me?fmtUsd(myValue(r)):fmtUsd(r.value);
     return {label:(r.waveT>0?'👋 ':'')+(r.me?(S.remotes.length?r.name:'YOU'):r.name),sub,subCol:COL.gas,color:r.color,boost:r.me?r.boosting:r.boost,human:true};
   }
-  if(S.w.mode==='fun'){const c=S.w.coins[r.ref];return {label:r.ref,sub:c.rugged?'RUG':fmtM(c.m),subCol:c.rugged?COL.dim:c.m>=50?COL.moon:c.mom>=0?COL.up:COL.down,color:r.color,moon:c.m>=50,rug:c.rugged};}
+  if(S.w.mode==='fun'){return {label:RACER_NAMES[(+String(r.id).replace(/\D/g,'')||0)%RACER_NAMES.length],sub:(r.pos/SEG*2/1000).toFixed(2)+' km',subCol:COL.ink,color:r.color};}
   const h=r.ref,recent=h.act&&S.w.wt-h.actT<1.8;
   if(S.w.mode==='real')return {label:h.label+(h.withMe?' · WITH YOU':''),sub:recent?h.act.t:h.out?'SOLD ALL':(h.x==null?fmtK(h.amt*S.w.mk.P):fmtX(h.x)+(h.est?'~':''))+(h.sold?' · SELLING':''),subCol:recent?h.act.c:h.out?COL.dim:h.sold?COL.down:h.x==null?COL.ink:h.x>=100?COL.moon:h.x>=1?COL.up:COL.down,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,moon:(h.x||0)>=100&&!h.out,mono:true};
   return {label:h.label,sub:recent?h.act.t:h.out?'SOLD OUT':fmtK(h.amt*S.w.mk.P),subCol:recent?h.act.c:h.out?COL.dim:COL.ink,color:r.color,boost:h.boost>0,brake:h.drag>0,rug:h.out,mono:true};
@@ -1072,7 +1073,7 @@ function renderGL(pl,others,dt,showMe){
   G.cars.forEach((g,id)=>{if(!seen.has(id))g.visible=false;});
   wpnGL(dt);
   G.cans.forEach(c=>{const it=segments[c.n]&&segments[c.n].items[c.k];c.m.visible=!!S&&!!it&&!it.taken&&c.n>plSeg-5&&c.n<plSeg+DRAW;c.m.rotation.y+=dt*2;});
-  G.gates.forEach(g=>{const vis=fun&&g.n>plSeg-10&&g.n<plSeg+DRAW;g.grp.visible=vis;
+  G.gates.forEach(g=>{const vis=false;g.grp.visible=vis;
     if(vis){g.t-=dt;if(g.t<=0){g.t=0.3;const it=segments[g.n].items[g.k];const coins=(it&&it.coins)||gatePicks(it||g.it);coins.forEach((k,i)=>drawGatePanel(g.panels[i],k));}}});
   let li=0;for(const l of G.lamps){if(l.n<plSeg-4)continue;if(li>=G.lampLights.length||l.n>plSeg+70)break;G.lampLights[li].position.set(l.x,l.y,l.z);li++;}
   for(;li<G.lampLights.length;li++)G.lampLights[li].position.set(0,-999,0);
@@ -1158,7 +1159,7 @@ function drawItem(c,it,x,y,sc){
   else if(it.type==='can'){if(it.taken||!S)return;const cw=170*u,ch=230*u;if(cw<2)return;
     c.fillStyle=COL.gas;rr(c,x-cw/2,y-ch,cw,ch,cw*0.15);c.fill();c.fillStyle=COL.night;c.fillRect(x-cw*0.15,y-ch*1.12,cw*0.3,ch*0.14);
     if(cw>18){c.font=`${cw*(S.w.mode==='fun'?0.3:0.24)}px ${F_RACE}`;c.textAlign='center';c.fillText(S.w.mode==='fun'?'GAS':'$10',x,y-ch*0.4);c.textAlign='left';}}
-  else if(it.type==='gate'&&S&&S.w.mode==='fun'){
+  else if(it.type==='gate'&&false){
     const coins=it.coins||gatePicks(it);const gw=ROADW*1.15*u,top=y-1900*u,bh=520*u;if(gw<6)return;
     c.fillStyle='#24203f';c.fillRect(x-gw-30*u,top,60*u,y-top);c.fillRect(x+gw-30*u,top,60*u,y-top);c.fillStyle='#120f26';c.fillRect(x-gw,top,gw*2,bh);
     const pw=(gw*2)/3;
@@ -1253,9 +1254,9 @@ function drawHUD(pl,list){
   const eg=paid?1:real?realEngine(pl)*priceFactor():fun?engine(pl):priceFactor()*engine(pl);
   if(paid){const P=PD.view,pot=P?P.entryUsd*P.players.length:0;c.fillStyle=COL.up;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillStyle=COL.ink;c.fillText('PRIZE POOL',bx+14,by+24);
     c.font=`600 14px ${F_MONO}`;c.fillStyle=COL.gas;c.fillText(`${fmtUsd(pot*0.7)} to the top 5`,bx+14,by+46);c.font=`600 11px ${F_MONO}`;c.fillStyle=place<=5?COL.up:COL.dim;c.fillText(place<=5?`IN THE MONEY: ${ordinal(place).toUpperCase()} WINS ${fmtUsd(pot*0.7*PD_SPLIT[place-1]/100)}`:'GET INTO THE TOP 5 TO WIN',bx+14,by+64);
-  } else if(S.w.mode==='fun'){const cn=S.w.coins[pl.coin];c.fillStyle=cn.color;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillText(pl.coin,bx+14,by+24);const cw=c.measureText(pl.coin).width;
-    c.font=`600 13px ${F_MONO}`;c.fillStyle=cn.rugged?COL.dim:cn.m>=50?COL.moon:cn.mom>=0?COL.up:COL.down;c.fillText(cn.rugged?'RUGGED':fmtM(cn.m),bx+22+cw,by+23);
-    c.fillStyle=COL.ink;c.font=`600 15px ${F_MONO}`;c.fillText(fmtUsd(myValue(pl)),bx+14,by+46);
+  } else if(S.w.mode==='fun'){c.fillStyle=pl.color||COL.gas;c.fillRect(bx,by,5,ph);c.font=`18px ${F_RACE}`;c.fillStyle=COL.ink;c.fillText('FREE PLAY',bx+14,by+24);
+    c.font=`600 15px ${F_MONO}`;c.fillStyle=COL.gas;c.fillText(`${ordinal(place).toUpperCase()} OF ${list.length}`,bx+14,by+46);
+    c.font=`600 12px ${F_MONO}`;c.fillStyle=COL.dim;c.fillText(`${(pl.pos/SEG*2/1000).toFixed(2)} km · GAS ${Math.round(pl.gas||0)}%`,bx+14,by+64);
   } else {const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100,tl=tokLabel();c.fillStyle=TOK[S.tok]?TOK[S.tok].color:COL.gas;c.fillRect(bx,by,5,ph);
     c.font=`18px ${F_RACE}`;c.fillText(tl,bx+14,by+24);const cw=c.measureText(tl).width;
     c.font=`600 13px ${F_MONO}`;c.fillStyle=COL.ink;const pt=fmtPrice(mk.P);c.fillText(pt,bx+22+cw,by+23);const ptw=c.measureText(pt).width;
@@ -1266,7 +1267,7 @@ function drawHUD(pl,list){
   if(pl.realX){c.fillStyle=COL.moon;c.textAlign='right';c.fillText(`YOUR WALLET ${fmtX(pl.realX)}`,bx+pw-10,by+64);c.textAlign='left';}
   // speedometer, right side above the pedals
   drawGauge(c,W-112,H-238,58,pl.speed,pl.boosting);
-  if(S.w.mode==='fun'){const ng=GATES.find(g=>g.n*SEG>pl.pos);if(ng){const d=(ng.n*SEG-pl.pos)/SEG;if(d<70){shadow(true);c.textAlign='center';c.font=`16px ${F_RACE}`;c.fillStyle=COL.gas;c.fillText(`SWAP GATE ${Math.round(d*4)}m · pick a lane`,W/2,84);shadow(false);}}}
+  if(false){const ng=GATES.find(g=>g.n*SEG>pl.pos);if(ng){const d=(ng.n*SEG-pl.pos)/SEG;if(d<70){shadow(true);c.textAlign='center';c.font=`16px ${F_RACE}`;c.fillStyle=COL.gas;c.fillText(`SWAP GATE ${Math.round(d*4)}m · pick a lane`,W/2,84);shadow(false);}}}
   if(pl.flash&&pl.flash.t>0){c.save();shadow(true);c.textAlign='center';c.globalAlpha=Math.min(1,pl.flash.t*1.6);c.font=`34px ${F_RACE}`;c.fillStyle=pl.flash.col;c.fillText(pl.flash.txt,W/2,H*0.25);shadow(false);c.restore();}
   c.textAlign='center';shadow(true);pl.toasts.forEach((tt,i)=>{c.globalAlpha=Math.min(1,tt.t*2);c.font=`26px ${F_RACE}`;c.fillStyle=tt.color;c.fillText(tt.txt,W/2,H*0.36+i*32);});c.globalAlpha=1;
   const left=(S.go-Date.now())/1000;
@@ -1295,13 +1296,13 @@ function showEnd(){clearResume();
   const p=placeOf(S.me,list);
   $('#endH').textContent=p===1?'P1. You won the race.':`You finished P${p} of ${list.length}`;
   const v=myValue(S.me),start=S.me.start||100;
-  let sub=`Your bag: ${fmtUsd(v)} (${v>=start?'+':''}${((v/start-1)*100).toFixed(0)}%).`;
+  let sub=S.w.mode==='fun'?'Nice driving! Race again, or send the link to a friend.':`Your bag: ${fmtUsd(v)} (${v>=start?'+':''}${((v/start-1)*100).toFixed(0)}%).`;
   if(humans.length>1){const ahead=humans.filter(h=>h!==S.me&&placeOf(h,list)<p).length;sub+=ahead?` ${ahead} friend${ahead>1?'s':''} beat you.`:' You beat every friend in the race.';}
   if(S.w.mode==='fun'&&S.me.swaps)sub+=` ${S.me.swaps} offline swap${S.me.swaps>1?'s':''} settled at the line.`;
   $('#endSub').textContent=sub;
-  $('#resTbl').innerHTML='<tr><th>Pos</th><th>Racer</th><th>Result</th><th>Bag / holding</th></tr>'+list.map((r,i)=>{
+  $('#resTbl').innerHTML=`<tr><th>Pos</th><th>Racer</th><th>Result</th><th>${S.w.mode==='fun'?'Distance':'Bag / holding'}</th></tr>`+list.map((r,i)=>{
     const d=r.d||disp(r),human=r.me||r.remote;
-    return `<tr class="${r.me?'me':r.remote?'friend':''}"><td>${i+1}</td><td class="${human?'':'a'}">${esc(human?r.name+(r.me?' (you)':''):(d.name||d.label))}</td><td>${r.finished?(r.ft-Math.max(0,0)).toFixed(1)+'s':'racing'}</td><td>${human?fmtUsd(r.me?myValue(r):r.value):esc(d.sub)}</td></tr>`;}).join('');
+    return `<tr class="${r.me?'me':r.remote?'friend':''}"><td>${i+1}</td><td class="${human?'':'a'}">${esc(human?r.name+(r.me?' (you)':''):(d.name||d.label))}</td><td>${r.finished?(r.ft-Math.max(0,0)).toFixed(1)+'s':'racing'}</td><td>${human&&S.w.mode!=='fun'?fmtUsd(r.me?myValue(r):r.value):esc(d.sub)}</td></tr>`;}).join('');
   const canRestart=!nr||isHost;
   $('#bAgain').hidden=!canRestart;$('#endWait').hidden=canRestart;$('#bLobby').textContent=nr?'Back to lobby':'Change race';
   $('#endOv').hidden=false;$('#pads').hidden=true;document.body.classList.remove('racing');
@@ -1394,12 +1395,12 @@ function renderLobby(){
   // the menu already chose the race: no race-type, coin or buy-in choices here
   $('#modeBox').querySelector('.lbl').hidden=true;$('#modeBox').querySelector('.row[role=group]').hidden=true;$('#tokRow').hidden=true;
   $('#tokRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===menuTok));
-  $('#modeDesc').textContent=menuMode==='real'?'Every car is a real holder of this coin, shown by wallet. Each one drives as fast as that wallet is up since it bought in, so 100x wallets fly past you. The last day\'s real buys and sells replay as boosts and slowdowns.':menuMode==='token'?`You race the real-feel crowd of ${menuTok} holders. Buyers boost, sellers drop back, and a rising price speeds everyone up.`:`Nine coins race. Pumpers fly, rugs stall, and you can swap your coin offline at the gates.`;
+  $('#modeDesc').textContent=menuMode==='real'?'Every car is a real holder of this coin, shown by wallet. Each one drives as fast as that wallet is up since it bought in, so 100x wallets fly past you. The last day\'s real buys and sells replay as boosts and slowdowns.':menuMode==='token'?`You race the real-feel crowd of ${menuTok} holders. Buyers boost, sellers drop back, and a rising price speeds everyone up.`:`A free race against nine racers and your friends. Grab GAS cans for a boost and be first to the line.`;
   if(!nr){$('#players').innerHTML=`<li><span class="dot" style="background:${me.color}"></span>${esc(me.nick||'You')}<span class="t">you</span></li>`;return;}
   const ps=nr.peers();
   $('#players').innerHTML=ps.length?ps.map(p=>{const q=p.presence||{};const c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888';
     const bi='';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
-  if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a Fun race':hp.presence.mode==='real'?'a real-token race':'a Token race'}${hp.presence.tok?' with '+(hp.presence.mode==='real'?(REAL[hp.presence.tok]&&REAL[hp.presence.tok].symbol?'$'+REAL[hp.presence.tok].symbol:'a pasted coin'):hp.presence.tok):''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
+  if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a free race':hp.presence.mode==='real'?'a real-token race':'a Token race'}${hp.presence.tok&&hp.presence.mode!=='fun'?' with '+(hp.presence.mode==='real'?(REAL[hp.presence.tok]&&REAL[hp.presence.tok].symbol?'$'+REAL[hp.presence.tok].symbol:'a pasted coin'):hp.presence.tok):''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
 }
 $('#nick').value=me.nick;
 function renderWorld(){$('#worldPick').querySelectorAll('button').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.w===WORLD);b.onclick=()=>{if(WORLD===b.dataset.w)return;WORLD=b.dataset.w;try{localStorage.setItem('hf-world',WORLD);}catch(e){}renderWorld();rebuildWorld();};});}
@@ -1834,6 +1835,7 @@ async function startPaidRace(v){
   if(!immersive())enterImmersive(false);
   document.body.classList.add('racing');$('#pads').hidden=false;$('#tradePads').hidden=true;$('#wpnPads').hidden=true;
   $('#padGas').textContent='NITRO';$('#padBrake').textContent='BRAKE';
+  {const fc=$('#feed').closest('.card');if(fc)fc.hidden=false;}
   state='race';
   try{if(nr){nr.leave().catch(()=>{});nr=null;}if(room)nr=await room.join('paid-'+v.room.id);}catch(e){nr=null;}
   publish(true);

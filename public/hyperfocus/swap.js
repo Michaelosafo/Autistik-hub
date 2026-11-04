@@ -43,6 +43,7 @@ const ago=ts=>{const s=Math.round((Date.now()-ts)/1000);return s<60?s+'s ago':s<
 function showTab(name){if(!['race','swap','wallet','scanner'].includes(name))name='wallet';
   ['race','swap','wallet','scanner'].forEach(n=>{$('#tab-'+n).hidden=n!==name;$('#tb-'+n).setAttribute('aria-selected',n===name);});
   if(name==='wallet')renderWallet();
+  {const pt=$('#bPlayTop');if(pt)pt.style.display=name==='race'?'':'none';}
   window.HFTab=name;try{window.dispatchEvent(new CustomEvent('hf-tab',{detail:name}));}catch(e){}}
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{location.hash=b.dataset.tab;showTab(b.dataset.tab);});
 addEventListener('hashchange',()=>showTab(location.hash.slice(1)));
