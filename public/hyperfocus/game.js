@@ -2077,7 +2077,10 @@ const Sound=(()=>{
     scF=ac.createBiquadFilter();scF.type='highpass';scF.frequency.value=2600;scG=ac.createGain();scG.gain.value=0;loopNoise().connect(scF);scF.connect(scG);scG.connect(sfx);
     nextNote=ac.currentTime+0.1;apply();
   }
-  function apply(){if(!ac)return;const t=ac.currentTime;master.gain.setTargetAtTime(mode==='off'?0:0.9,t,0.05);mus.gain.setTargetAtTime(mode==='all'?0.22:0,t,0.1);}
+  // game sound plays only on the Race tab (the wallet, scanner and swap tabs stay quiet)
+  const onRace=()=>(window.HFTab||'race')==='race';
+  function apply(){if(!ac)return;const t=ac.currentTime,on=mode!=='off'&&onRace();master.gain.setTargetAtTime(on?0.9:0,t,0.05);mus.gain.setTargetAtTime(on&&mode==='all'?0.22:0,t,0.1);}
+  addEventListener('hf-tab',()=>apply());
   function wake(){init();if(ac&&ac.state==='suspended'&&!document.hidden)ac.resume().catch(()=>{});}
   ['pointerdown','keydown','touchstart'].forEach(ev=>addEventListener(ev,wake,{passive:true}));
   document.addEventListener('visibilitychange',()=>{if(!ac)return;if(document.hidden)ac.suspend().catch(()=>{});else ac.resume().catch(()=>{});});

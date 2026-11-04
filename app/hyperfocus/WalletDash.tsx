@@ -30,6 +30,7 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
   const [evm, setEvm] = useState("");
   const [list, setList] = useState<Holding[] | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recv, setRecv] = useState(false);
 
   // Follow the page's tabs; hide the plain wallet card the game page shows when this dashboard isn't there.
   useEffect(() => {
@@ -98,7 +99,7 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
         <div className="hfd-acts">
           {!addrs.length && <button className="btn primary" onClick={() => pickWallet({ fresh: true })}>Connect a wallet</button>}
           <a className="btn primary" href="#hfd-wallet">Send</a>
-          <a className="btn" href="#hfd-wallet">Receive</a>
+          <button className="btn" onClick={() => setRecv(true)}>Receive</button>
           <Link className="btn" href="/swap">Swap</Link>
           <button className="btn" onClick={() => document.getElementById("bPlayTop")?.click()}>Play</button>
         </div>
@@ -111,6 +112,8 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
         )}
         {busy && <p className="hfd-muted">Updating balances…</p>}
       </section>
+
+      {recv && <Receive evm={evm || member?.evm || ""} sol={sol || member?.sol || ""} onClose={() => setRecv(false)} />}
 
       {/* Race a friend: the game fills this with its invite card (copy link, see who joined, start) */}
       <div id="hfInviteMount" className="hf hfd-invite" />
@@ -172,7 +175,93 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
   );
 }
 
+const NETS = [
+  { id: "bsc", name: "BNB Chain", kind: "evm", tokens: "BNB and BEP-20 tokens like $AUTISTIK", color: "#F0B90B" },
+  { id: "ethereum", name: "Ethereum", kind: "evm", tokens: "ETH and ERC-20 tokens", color: "#627EEA" },
+  { id: "base", name: "Base", kind: "evm", tokens: "ETH on Base and Base tokens", color: "#2F6BFF" },
+  { id: "solana", name: "Solana", kind: "sol", tokens: "SOL and SPL tokens", color: "#9945FF" },
+] as const;
+
+/** Receive: pick a network, show its address as a QR code with copy and share. */
+function Receive({ evm, sol, onClose }: { evm: string; sol: string; onClose: () => void }) {
+  const [net, setNet] = useState<(typeof NETS)[number]["id"]>(evm ? "bsc" : sol ? "solana" : "bsc");
+  const [qr, setQr] = useState("");
+  const [copied, setCopied] = useState(false);
+  const n = NETS.find((x) => x.id === net)!;
+  const address = n.kind === "sol" ? sol : evm;
+
+  useEffect(() => {
+    setQr(""); setCopied(false);
+    if (!address) return;
+    import("qrcode").then((m) => m.toDataURL(address, { margin: 1, width: 240, color: { dark: "#14151a", light: "#ffffff" } })).then(setQr).catch(() => setQr(""));
+  }, [address]);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 1600); }
+    catch { const el = document.getElementById("hfr-addr"); if (el) { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel?.removeAllRanges(); sel?.addRange(r); } }
+  };
+  const share = async () => { try { await (navigator as any).share({ title: `My ${n.name} address`, text: address }); } catch {} };
+
+  return (
+    <div className="hfr-bg" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="hfr card" role="dialog" aria-modal="true" aria-labelledby="hfr-title">
+        <div className="hfr-top">
+          <div><small>Receive</small><h3 id="hfr-title">Your {n.name} address</h3></div>
+          <button className="hfr-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="hfr-nets" role="radiogroup" aria-label="Network">
+          {NETS.map((x) => (
+            <button key={x.id} role="radio" aria-checked={net === x.id} onClick={() => setNet(x.id)} style={{ ["--nc" as any]: x.color }}>
+              <i aria-hidden="true" />{x.name}
+            </button>
+          ))}
+        </div>
+        {address ? (
+          <>
+            <div className="hfr-qr">{qr ? <img src={qr} alt={`QR code for your ${n.name} address`} width={240} height={240} /> : <span>Making QR code…</span>}</div>
+            <div className="hfr-addr"><code id="hfr-addr">{address}</code></div>
+            <div className="hfr-acts">
+              <button className="btn primary" onClick={copy}>{copied ? "Copied ✓" : "Copy address"}</button>
+              {typeof navigator !== "undefined" && (navigator as any).share && <button className="btn" onClick={share}>Share</button>}
+            </div>
+            <p className="hfr-warn" style={{ ["--nc" as any]: n.color }}>Only send <b>{n.tokens}</b> on <b>{n.name}</b> to this address. Coins sent on another network can be lost.</p>
+          </>
+        ) : (
+          <div className="hfr-empty">
+            <p>Connect a {n.kind === "sol" ? "Solana" : "BNB Chain, Ethereum or Base"} wallet to see your address here.</p>
+            <button className="btn primary" onClick={() => { onClose(); pickWallet({ fresh: true }); }}>Connect a wallet</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const CSS = `
+.hfr-bg{position:fixed;inset:0;z-index:400;display:grid;place-items:center;padding:16px;background:rgba(10,8,20,.55);backdrop-filter:blur(6px)}
+.hfr{width:min(420px,100%);max-height:calc(100dvh - 32px);overflow:auto;display:flex;flex-direction:column;gap:14px;padding:20px !important;border-radius:24px;box-shadow:0 30px 70px -20px rgba(0,0,0,.5)}
+.hfr-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.hfr-top small{display:block;font-size:.72em;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.65}
+.hfr-top h3{margin:2px 0 0;font-size:1.15em}
+.hfr-x{border:0;background:color-mix(in srgb,currentColor 8%,transparent);color:inherit;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:1rem}
+.hfr-nets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.hfr-nets button{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:12px;border:1.5px solid color-mix(in srgb,currentColor 14%,transparent);background:none;color:inherit;font:inherit;font-weight:700;font-size:.88em;cursor:pointer;text-align:left}
+.hfr-nets button i{width:10px;height:10px;border-radius:50%;background:var(--nc);flex:none}
+.hfr-nets button[aria-checked=true]{border-color:var(--nc);background:color-mix(in srgb,var(--nc) 14%,transparent)}
+.hfr-nets button:focus-visible,.hfr-x:focus-visible{outline:2px solid #ffb300;outline-offset:2px}
+.hfr-qr{align-self:center;display:grid;place-items:center;width:264px;max-width:100%;aspect-ratio:1;padding:12px;border-radius:20px;background:#fff;color:#14151a;box-shadow:0 0 0 1px color-mix(in srgb,currentColor 10%,transparent)}
+.hfr-qr img{display:block;width:100%;height:auto}
+.hfr-addr{padding:10px 12px;border-radius:12px;background:color-mix(in srgb,currentColor 6%,transparent);text-align:center}
+.hfr-addr code{font-size:.86em;word-break:break-all;line-height:1.45}
+.hfr-acts{display:flex;gap:8px}.hfr-acts .btn{flex:1;justify-content:center}
+.hfr-warn{margin:0;padding:10px 12px;border-radius:12px;font-size:.84em;line-height:1.45;border-left:4px solid var(--nc);background:color-mix(in srgb,var(--nc) 10%,transparent)}
+.hfr-empty{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.hfr-empty p{margin:0;opacity:.8}
 .hfd{max-width:1320px;margin:0 auto 18px}
 .hfd .card{padding:16px}
 .hfd-hero{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;background:linear-gradient(135deg,color-mix(in srgb,#ffb300 16%,transparent),transparent 60%)}
