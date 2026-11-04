@@ -4644,7 +4644,11 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
   .tik-top{top:0}
 }
 
-/* Lock: five tabs (Lockers, Add liquidity, Stake, Susu, Rewards) */
-.earn-tabs.lock-tabs{grid-template-columns:repeat(5,minmax(0,1fr))}
+/* Lock: five tabs (Lockers, Add liquidity, Stake, Susu, Rewards), text only, all five always on screen */
+.earn-tabs.lock-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.earn-tabs.lock-tabs a{justify-content:center;text-align:center;padding:12px 8px;min-width:0}
+.earn-tabs.lock-tabs span{align-items:center}
+.earn-tabs.lock-tabs b{line-height:1.2}
+.earn-tabs.lock-tabs small{white-space:normal}
 @media (max-width:1100px){.earn-tabs.lock-tabs small{display:none}}
-@media (max-width:700px){.earn-tabs.lock-tabs{display:flex;overflow-x:auto;scrollbar-width:none;gap:6px}.earn-tabs.lock-tabs::-webkit-scrollbar{display:none}.earn-tabs.lock-tabs a{flex:none;min-width:88px}}
+@media (max-width:700px){.earn-tabs.lock-tabs{gap:4px}.earn-tabs.lock-tabs a{padding:10px 4px;border-radius:12px}.earn-tabs.lock-tabs b{font-size:.78em}}
