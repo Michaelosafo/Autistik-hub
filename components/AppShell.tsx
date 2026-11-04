@@ -34,6 +34,7 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
   { name: "Trade", icon: "i-swap", tip: "Swap any token and see your wallet", match: ["/swap", "/wallet", "/perps", "/trade"], items: [
     { href: "/swap", name: "Swap", note: "Trade any token at the best price, on any network", icon: "i-swap" },
     { href: "/wallet", name: "My wallet", note: "Your balances, transactions, send and receive", icon: "i-wallet" },
+    { href: "/wallet/offline", name: "Offline swap", note: "Swap face to face with QR codes, no internet needed", icon: "i-swap" },
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
   // Play: the games.
@@ -207,7 +208,7 @@ export default function AppShell({ admin, me, onMe, children }: {
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
                   <div className="ax-menu-addr"><small>Connected · Solana</small><b className="mono">{cs.sol.account.address.slice(0, 6)}…{cs.sol.account.address.slice(-6)}</b></div>
-                  <Link role="menuitem" href="/hyperfocus"><b>My wallet</b><small>{cs.sol.name} · Solana</small></Link>
+                  <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{cs.sol.name} · Solana</small></Link>
                   <button type="button" role="menuitem" onClick={() => { navigator.clipboard?.writeText(cs.sol!.account.address).catch(() => {}); setAcctMenu(false); }}><b>Copy address</b></button>
                   <button type="button" role="menuitem" onClick={() => { pickWallet({ fresh: true }); setAcctMenu(false); }}><b>Switch wallet</b></button>
                   <button type="button" role="menuitem" onClick={() => { disconnectSol(); setAcctMenu(false); }}><b>Disconnect</b></button>
@@ -225,7 +226,7 @@ export default function AppShell({ admin, me, onMe, children }: {
               {acctMenu && (
                 <div className="ax-menu right" role="menu">
                   <div className="ax-menu-addr"><small>Connected · {net.name}</small><b className="mono">{acct.slice(0, 6)}…{acct.slice(-6)}</b></div>
-                  <Link role="menuitem" href="/hyperfocus"><b>My wallet</b><small>{wallet?.name}</small></Link>
+                  <Link role="menuitem" href="/wallet"><b>My wallet</b><small>{wallet?.name}</small></Link>
                   <div className="ax-switch" role="group" aria-label="Switch network">
                     <small>Switch network</small>
                     <div className="ax-switch-grid">

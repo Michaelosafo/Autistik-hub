@@ -98,7 +98,7 @@ export default function Board({ initial, initialTab = "trending" }: { initial: B
           <h1>The Board</h1>
           <p className="muted">Every coin launched on AUTISTIK, live. <span className="bd-live"><i />{live ? "Live" : "Paused"}</span></p>
         </div>
-        <Link href="/launchpad/new" className="bd-create">Create coin</Link>
+        <span style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href="/launchpad/new" className="bd-create">Create coin</Link><Link href="/analytics" className="bd-create">Scanner</Link></span>
       </header>
 
       {hot.length > 0 && (
