@@ -4672,3 +4672,13 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .earn-tabs.lock-tabs a[aria-current=page] small{color:#3a2a00 !important}
 @media (max-width:700px){.earn-tabs.lock-tabs{gap:5px;padding-block:8px}.earn-tabs.lock-tabs a:nth-child(odd){transform:translateY(-4px)}.earn-tabs.lock-tabs a:nth-child(even){transform:translateY(4px)}}
 @media (prefers-reduced-motion:reduce){.earn-tabs.lock-tabs a{transition:none}}
+/* Lock tabs: solid, real buttons (filled colour, bold clear text, gold edge), no faint lettering */
+.earn-tabs.lock-tabs a{background:linear-gradient(180deg,var(--tc),color-mix(in srgb,var(--tc) 72%,#000)) !important;border:2px solid #F0B90B !important;
+  box-shadow:0 6px 0 color-mix(in srgb,var(--tc) 55%,#000),0 14px 24px -12px var(--tc) !important}
+.earn-tabs.lock-tabs a::after{display:none}
+.earn-tabs.lock-tabs small{display:none !important}
+.earn-tabs.lock-tabs b{color:#fff !important;font-weight:900;letter-spacing:.01em;text-shadow:0 1px 1px rgba(0,0,0,.35);font-style:normal}
+.earn-tabs.lock-tabs a:nth-child(3) b{color:#191326 !important;text-shadow:none}
+.earn-tabs.lock-tabs a[aria-current=page]{background:linear-gradient(180deg,#FFE27A,#F0B90B) !important;border-color:#fff !important;box-shadow:0 6px 0 #B98500,0 0 0 3px #F0B90B,0 16px 28px -10px #F0B90B !important}
+.earn-tabs.lock-tabs a[aria-current=page] b{color:#191326 !important;text-shadow:none}
+.earn-tabs.lock-tabs a:active{transform:translateY(2px) !important;box-shadow:0 2px 0 color-mix(in srgb,var(--tc) 55%,#000) !important}
