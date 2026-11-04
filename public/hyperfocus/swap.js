@@ -40,7 +40,8 @@ const short=a=>a?a.slice(0,6)+'…'+a.slice(-4):'?';
 const ago=ts=>{const s=Math.round((Date.now()-ts)/1000);return s<60?s+'s ago':s<3600?Math.round(s/60)+'m ago':Math.round(s/3600)+'h ago';};
 
 /* ---- tabs ---- */
-function showTab(name){if(!['race','swap','wallet','scanner'].includes(name))name='wallet';
+// Play shows only the race. Offline swap opens from the wallet (autistik.io/wallet/offline); every other link lands on the race.
+function showTab(name){if(!['race','swap'].includes(name))name='race';
   ['race','swap','wallet','scanner'].forEach(n=>{$('#tab-'+n).hidden=n!==name;$('#tb-'+n).setAttribute('aria-selected',n===name);});
   if(name==='wallet')renderWallet();
   {const pt=$('#bPlayTop');if(pt)pt.style.display=name==='race'?'':'none';}
@@ -48,7 +49,7 @@ function showTab(name){if(!['race','swap','wallet','scanner'].includes(name))nam
 document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{location.hash=b.dataset.tab;showTab(b.dataset.tab);});
 addEventListener('hashchange',()=>showTab(location.hash.slice(1)));
 const _resumeAt=(()=>{try{const r=JSON.parse(localStorage.getItem('hf-resume')||'null');return r&&Date.now()-r.at<20*60e3?r.at:0;}catch(e){return 0;}})();
-showTab(location.hash.slice(1)||(/[?&](room|ca)=/.test(location.search)||_resumeAt?'race':'wallet'));
+showTab(location.hash.slice(1)||'race');
 window.HFShowTab=showTab;
 
 /* ---- connection chip ---- */
