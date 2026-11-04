@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Guide from "@/components/Guide";
+import { LockTabs } from "@/components/EarnTop";
 import { getAddress, isAddress } from "viem";
 import Locker from "@/components/Locker";
 import LockerDeploy from "@/components/LockerDeploy";
@@ -31,23 +32,10 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
 
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
+      <LockTabs active="/lockers" />
       <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
         text={<>Lock your pool&apos;s liquidity so it can&apos;t be pulled (no rug pull), or lock team tokens so they can&apos;t be dumped. Nobody, not even the AUTISTIK team, can touch a lock before its date.</>}
         stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["Auto", "release when due"]]} />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 10 }}>
-        {[
-          { href: "/liquidity", t: "Add liquidity", d: "Add to your token's pool or create it, then lock the LP here.", primary: true },
-          { href: "/stake", t: "Stake", d: "Lock $AUTISTIK and earn BNB from platform fees, up to 3x." },
-          { href: "/susu", t: "Susu", d: "Save USDT or BUSD every day, get it all at the end." },
-          { href: "/rewards", t: "Rewards", d: "Points and $AUTISTIK airdrops for taking part." },
-        ].map((c) => (
-          <Link key={c.href} href={c.href} className="card" style={{ display: "flex", flexDirection: "column", gap: 6, textDecoration: "none", color: "inherit" }}>
-            <b>{c.t} →</b>
-            <span className="muted" style={{ fontSize: ".88em" }}>{c.d}</span>
-            {c.primary && <span className="btn primary" style={{ alignSelf: "flex-start", marginTop: 4 }}>Add liquidity</span>}
-          </Link>
-        ))}
-      </div>
       <Guide id="lockers" action={{ href: "#lock", label: "Lock my tokens now" }} title="How to lock, in 3 steps" steps={[
         <>Connect your wallet below and pick the network your coin is on.</>,
         <>Choose what to lock: your pool&apos;s <b>LP token</b> (proves the liquidity can&apos;t be pulled) or <b>team tokens</b>. Paste its address and the amount.</>,
