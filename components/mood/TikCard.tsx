@@ -3,18 +3,17 @@ import Link from "next/link";
 import { useState } from "react";
 import Avatar from "@/components/Avatar";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { ago, moodOf, type Tik } from "@/lib/mood";
+import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
 import { useTiks } from "./useMood";
 
-/** One Tik: who, how they feel, what they wrote, a picture, likes and replies. */
+/** One Tik: who, what they wrote, a picture, likes and replies. */
 export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean }) {
   const [liked, setLiked] = useState(t.liked);
   const [likes, setLikes] = useState(t.likes);
   const [replies, setReplies] = useState(t.replies);
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(false);
-  const mood = moodOf(t.mood);
   const a = t.author;
 
   async function like() {
@@ -41,7 +40,6 @@ export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: str
           <b>{a?.alias || "Member"}</b>
           {a?.is_verified && <span className="mp-tick" title="Verified">✓</span>}
           {a?.is_team && <span className="tik-team">Team</span>}
-          {mood && <span className="tik-mood" style={{ ["--mc" as any]: mood.color }}>feeling {mood.label.toLowerCase()}</span>}
           <small className="tik-time">{ago(t.created_at)}</small>
         </div>
         <p className="tik-body">{t.body}</p>

@@ -12,11 +12,11 @@ export default function MoodFeed({ limit = 20, compact, more: moreLink }: { limi
   return (
     <div className={"mood-feed" + (compact ? " compact" : "")}>
       {me ? <TikComposer compact={compact} onPosted={() => setK((n) => n + 1)} /> : tiks !== null && (
-        <p className="muted" style={{ margin: 0 }}><Link href="/login?next=/mood">Sign in</Link> to share how you feel and see everyone&apos;s Tiks.</p>
+        <p className="muted" style={{ margin: 0 }}><Link href="/login?next=/mood">Sign in</Link> to post and see everyone&apos;s Tiks.</p>
       )}
       {err && <small className="muted">{err}</small>}
       {tiks === null ? <small className="muted">Loading Tiks…</small> : !tiks.length ? (
-        me ? <p className="muted" style={{ margin: 0 }}>No Tiks yet. Be the first to share how you feel.</p> : null
+        me ? <p className="muted" style={{ margin: 0 }}>No Tiks yet. Be the first to post.</p> : null
       ) : tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={compact} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
       {moreLink ? <Link href="/mood" className="mood-more">View more on TIK</Link>
         : more && <button type="button" className="tik-more" onClick={loadMore}>Load more</button>}

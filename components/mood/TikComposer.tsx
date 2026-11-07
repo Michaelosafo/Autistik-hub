@@ -1,7 +1,6 @@
 "use client";
 import { useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { MOODS } from "@/lib/mood";
 
 /** Shrinks a picture to at most 1280px and saves it as WebP (smaller, strips location data). */
 async function shrink(file: File): Promise<Blob> {
@@ -13,10 +12,9 @@ async function shrink(file: File): Promise<Blob> {
   return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("Couldn't read that picture."))), "image/webp", 0.85));
 }
 
-/** Write a Tik: how you feel (a mood), a few words and an optional picture. Also used for replies. */
+/** Write a Tik: just type and post, with an optional picture. Also used for replies. Ctrl/Cmd+Enter posts. */
 export default function TikComposer({ replyTo, onPosted, compact, placeholder }: { replyTo?: string; onPosted?: () => void; compact?: boolean; placeholder?: string }) {
   const [body, setBody] = useState("");
-  const [mood, setMood] = useState<string | null>(null);
   const [pic, setPic] = useState<{ blob: Blob; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -31,7 +29,7 @@ export default function TikComposer({ replyTo, onPosted, compact, placeholder }:
 
   async function post() {
     const text = body.trim();
-    if (!text) { setMsg(replyTo ? "Write a reply first." : "Write how you feel first."); return; }
+    if (!text) { setMsg(replyTo ? "Write a reply first." : "Write something first."); return; }
     setBusy(true); setMsg("");
     const sb = supabaseBrowser();
     const { data: { user } } = await sb.auth.getUser();
@@ -43,24 +41,18 @@ export default function TikComposer({ replyTo, onPosted, compact, placeholder }:
       if (error) { setBusy(false); setMsg("Couldn't upload the picture. Try again."); return; }
       image_url = sb.storage.from("tik-images").getPublicUrl(path).data.publicUrl;
     }
-    const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), mood: replyTo ? null : mood, image_url, reply_to: replyTo ?? null });
+    const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), image_url, reply_to: replyTo ?? null });
     setBusy(false);
     if (error) { setMsg(/slow down/i.test(error.message) ? error.message : "Couldn't post. Try again."); return; }
-    setBody(""); setMood(null); if (pic) URL.revokeObjectURL(pic.url); setPic(null);
+    setBody(""); if (pic) URL.revokeObjectURL(pic.url); setPic(null);
     onPosted?.();
   }
 
   return (
     <div className={"tik-new" + (compact ? " compact" : "") + (replyTo ? " reply" : "")}>
-      {!replyTo && (
-        <div className="tik-moods" role="group" aria-label="How are you feeling?">
-          {MOODS.map((m) => (
-            <button key={m.key} type="button" className={mood === m.key ? "on" : ""} style={{ ["--mc" as any]: m.color }} aria-pressed={mood === m.key} onClick={() => setMood(mood === m.key ? null : m.key)}>{m.label}</button>
-          ))}
-        </div>
-      )}
       <textarea value={body} maxLength={500} rows={compact ? 2 : 3} onChange={(e) => setBody(e.target.value)}
-        placeholder={placeholder || (replyTo ? "Write a reply…" : "How are you feeling today? Write a Tik…")} aria-label={replyTo ? "Your reply" : "Your Tik"} />
+        onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy && body.trim()) { e.preventDefault(); post(); } }}
+        placeholder={placeholder || (replyTo ? "Write a reply…" : "What's happening?")} aria-label={replyTo ? "Your reply" : "Your Tik"} />
       {pic && (
         <div className="tik-pic-prev">
           <img src={pic.url} alt="Your picture" />
@@ -78,7 +70,7 @@ export default function TikComposer({ replyTo, onPosted, compact, placeholder }:
           </>
         )}
         <small className="tik-count">{body.length}/500</small>
-        <button type="button" className="tik-post" disabled={busy || !body.trim()} onClick={post}>{busy ? "Posting…" : replyTo ? "Reply" : "Post Tik"}</button>
+        <button type="button" className="tik-post" disabled={busy || !body.trim()} onClick={post}>{busy ? "Posting…" : replyTo ? "Reply" : "Post"}</button>
       </div>
       {msg && <small className="tik-msg" role="status">{msg}</small>}
     </div>

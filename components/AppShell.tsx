@@ -21,7 +21,7 @@ type Item = { href: string; name: string; note?: string; icon?: string };
 const MENU: { name: string; icon: string; tip: string; match: string[]; items: Item[] }[] = [
   // TIK first: the community feed, live rooms and chats.
   { name: "TIK", icon: "i-com", tip: "Post, follow your people and go live", match: ["/mood", "/chats", "/spaces"], items: [
-    { href: "/mood", name: "TIK", note: "Post how you feel, see your people, follow each other", icon: "i-com" },
+    { href: "/mood", name: "TIK", note: "Post anything, see your people, follow each other", icon: "i-com" },
     { href: "/spaces", name: "Live rooms", note: "Host or join a live audio room, like an X Space", icon: "i-ses" },
     { href: "/chats", name: "Chats", note: "Message people you follow, groups, the AUTISTIK group", icon: "i-com" },
   ] },

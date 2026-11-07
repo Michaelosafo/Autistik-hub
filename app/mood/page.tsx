@@ -5,7 +5,7 @@ import LiveNow from "@/components/rooms/LiveNow";
 import { currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "TIK · AUTISTIK Hub", description: "Post how you feel, see what your people are doing, follow each other and join live rooms." };
+export const metadata = { title: "TIK · AUTISTIK Hub", description: "Post anything, see what your people are doing, follow each other and join live rooms." };
 
 export default async function MadnessPage({ searchParams }: { searchParams: { tik?: string } }) {
   const user = await currentUser();
@@ -14,7 +14,7 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
       {!user && <header className="bd-top ln-top">
         <div>
           <h1>TIK</h1>
-          <p className="muted">Post how you feel, share pictures, follow each other and see what your people are up to.</p>
+          <p className="muted">Post anything, share pictures, follow each other and see what your people are up to.</p>
         </div>
         <div className="ln-top-r"><Link href="/spaces?host=1" className="ln-watch">Host a live</Link><Link href="/board" className="ln-ghost">Open the Board</Link></div>
       </header>}
