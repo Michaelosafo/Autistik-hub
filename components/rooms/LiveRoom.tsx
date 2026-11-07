@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
+import { DropOptIn, DropPanel } from "@/components/rooms/RoomDrops";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Me = { id: string; alias: string; color: string | null; avatar_url: string | null };
@@ -12,8 +13,16 @@ type Room = { id: string; title: string; host_id: string; ended_at: string | nul
 const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }, { urls: "stun:stun.cloudflare.com:3478" }] };
 const MAX_SPEAKERS = 6;
 
+/** A live video tile (a speaker's camera). */
+function VideoTile({ stream, mine, label }: { stream: MediaStream; mine?: boolean; label: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => { if (ref.current && ref.current.srcObject !== stream) ref.current.srcObject = stream; }, [stream]);
+  // Muted: the voice already plays through the room's audio (and your own would echo).
+  return <div className="room-video"><video ref={ref} autoPlay playsInline muted style={mine ? { transform: "scaleX(-1)" } : undefined} /><small>{label}</small></div>;
+}
+
 /**
- * A live audio room, like an X Space. The host and up to 5 invited speakers talk; everyone signed in can listen,
+ * A live audio and video room, like an X Space. The host and up to 5 invited speakers talk (camera optional); everyone signed in can listen,
  * raise a hand and be invited up. Audio goes straight between browsers (WebRTC); the site only passes the
  * connection messages (Supabase Realtime). Nothing is recorded.
  */
@@ -27,6 +36,10 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const [ended, setEnded] = useState(!!room.ended_at);
   const [msg, setMsg] = useState("");
   const [talking, setTalking] = useState<Record<string, boolean>>({});
+  // Video: speakers can turn their camera on; everyone sees it on the stage.
+  const [cam, setCam] = useState(false);
+  const [videos, setVideos] = useState<Record<string, MediaStream>>({});
+  const [drop, setDrop] = useState("");
 
   const chan = useRef<any>(null);
   const mic = useRef<MediaStream | null>(null);
@@ -45,6 +58,8 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     if (pc) { try { pc.close(); } catch {} pcs.current.delete(key); }
     const a = audios.current.get(key);
     if (a) { a.srcObject = null; a.remove(); audios.current.delete(key); }
+    const [from, to] = key.split(">");
+    if (to === me.id) setVideos((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
   }
 
   function newPc(key: string, remote: string) {
@@ -53,6 +68,12 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     pcs.current.set(key, pc);
     pc.onicecandidate = (e) => { if (e.candidate) send("ice", { to: remote, key, candidate: e.candidate.toJSON() }); };
     pc.ontrack = (e) => {
+      if (e.track.kind === "video") {
+        const st = e.streams[0] || new MediaStream([e.track]);
+        setVideos((v) => ({ ...v, [remote]: st }));
+        e.track.onended = () => setVideos((v) => { const n = { ...v }; delete n[remote]; return n; });
+        return;
+      }
       let a = audios.current.get(key);
       if (!a) { a = document.createElement("audio"); a.autoplay = true; (a as any).playsInline = true; document.body.appendChild(a); audios.current.set(key, a); }
       a.srcObject = e.streams[0] || new MediaStream([e.track]);
@@ -105,7 +126,25 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       return false;
     }
   }
+  // Camera on/off: the video goes along with the voice, so everyone gets a fresh connection with or without it.
+  async function toggleCam() {
+    if (!mic.current) return;
+    if (!cam) {
+      try {
+        const v = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15 } } });
+        v.getVideoTracks().forEach((t) => mic.current!.addTrack(t));
+        setCam(true);
+      } catch { setMsg("Allow the camera in your browser to go on video."); return; }
+    } else {
+      mic.current.getVideoTracks().forEach((t) => { t.stop(); mic.current!.removeTrack(t); });
+      setCam(false);
+      send("cam", { on: false });
+    }
+    Object.keys(peers).forEach((id) => { if (id !== me.id) callPeer(id); });
+  }
+
   function stopMic() {
+    setCam(false);
     mic.current?.getTracks().forEach((t) => t.stop());
     mic.current = null;
     levels.current.get(me.id)?.();
@@ -149,6 +188,10 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       if (payload.from !== room.host_id) return;
       setSpeakers(payload.speakers);
     });
+    ch.on("broadcast", { event: "cam" }, ({ payload }: any) => {
+      if (payload.on === false) setVideos((v) => { const n = { ...v }; delete n[payload.from]; return n; });
+    });
+    ch.on("broadcast", { event: "drop" }, ({ payload }: any) => { if (payload.from === room.host_id) setDrop(String(payload.text || "").slice(0, 160)); });
     ch.on("broadcast", { event: "end" }, ({ payload }: any) => { if (payload.from === room.host_id) { setEnded(true); leave(); } });
     ch.subscribe(async (status: string) => {
       if (status !== "SUBSCRIBED") { if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setMsg("Couldn't connect to the room. Check your internet and try again."); return; }
@@ -237,6 +280,13 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
         </div>
       ) : (
         <>
+          {drop && <div className="room-drop-banner" role="status">{drop} <small>Check your wallet.</small></div>}
+          {(cam || Object.keys(videos).length > 0) && (
+            <section className="room-videos" aria-label="Video">
+              {cam && mic.current && <VideoTile stream={mic.current} mine label="You" />}
+              {Object.entries(videos).map(([id, st]) => <VideoTile key={id} stream={st} label={peers[id]?.alias || "Speaker"} />)}
+            </section>
+          )}
           <section className="room-stage" aria-label="Speakers">
             {onStage.map((p) => (
               <div key={p.id} className={"room-person" + (talking[p.id] && !p.muted ? " talking" : "")}>
@@ -277,12 +327,15 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
             ) : (
               <button type="button" className={"room-btn" + (hand ? " on" : "")} onClick={raiseHand}>{hand ? "Lower hand" : "Raise hand"}</button>
             )}
+            {canSpeak && <button type="button" className={"room-btn" + (cam ? " on" : "")} onClick={toggleCam}>{cam ? "Camera off" : "🎥 Camera"}</button>}
+            {isHost && <DropPanel roomId={room.id} onDropped={(text) => { setDrop(text); send("drop", { text }); }} />}
             <button type="button" className="room-btn" onClick={() => { navigator.clipboard?.writeText(location.href).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }}>Share</button>
             {isHost ? <button type="button" className="room-btn end" onClick={endRoom}>End live</button>
               : <button type="button" className="room-btn" onClick={leave}>Leave</button>}
           </div>
         </>
       )}
+      {joined && !isHost && <DropOptIn roomId={room.id} meId={me.id} />}
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>
   );
