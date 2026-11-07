@@ -57,7 +57,7 @@ export function MadnessLink({ onGo }: { onGo?: () => void }) {
       <div className="ptik-tabs" role="tablist" aria-label="TIK in your panel">
         {TABS.map(([t, l]) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={t === "alerts" && unread ? "hot" : ""} onClick={() => setTab(t)}>{l}</button>)}
       </div>
-      {tab !== "alerts" && me && <TikComposer compact onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
+      {tab !== "alerts" && me && <TikComposer compact onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" />}
       {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={3} />}
       {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => { window.location.href = "/mood"; }} limit={3} />}
       {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
@@ -133,7 +133,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
             <span className="tik-status"><span className="tik-dot" aria-hidden="true" />Live feed</span>
           </header>
           {focus}
-          {(tab === "following" || tab === "everyone") && me && <TikComposer onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
+          {(tab === "following" || tab === "everyone") && me && <TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" />}
           {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
           {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
@@ -160,7 +160,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{l}</button>
             ))}
           </div>
-          {(tab === "following" || tab === "everyone") && me && <TikComposer compact={!full} onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
+          {(tab === "following" || tab === "everyone") && me && <TikComposer compact={!full} onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" />}
           {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={full ? 20 : 5} />}
           {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={full ? 20 : 5} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
