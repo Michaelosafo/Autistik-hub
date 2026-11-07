@@ -3,7 +3,7 @@ import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, defineChain, http, encodeAbiParameters, formatEther, getAddress, parseAbi, parseEther, parseEventLogs, toHex, zeroAddress } from "viem";
 import { CHAINS, viemChain } from "@/lib/launchpad";
-import { INSTANT_ABI, INSTANT_CONSTRUCTOR, INSTANT_CREATOR_BPS, INSTANT_DEX, INSTANT_START_FDV_BNB, PANCAKE_V3, V3_ROUTER_ABI, type InstantChain } from "@/lib/instant";
+import { INSTANT_CREATOR_BPS, INSTANT_DEX, INSTANT_REWARDS, INSTANT_START_FDV_BNB, INSTANT_V2_ABI, INSTANT_V2_CONSTRUCTOR, NATIVE_REWARD, PANCAKE_V3, V3_ROUTER_ABI, type InstantChain } from "@/lib/instant";
 
 /**
  * Admin only: Instant launch (no liquidity, no bonding curve, PancakeSwap v3).
@@ -56,17 +56,22 @@ export default function InstantAdmin() {
     if (r.status !== "success") throw new Error(`${what} failed.`);
     return r;
   };
-  const deployData = async (owner: `0x${string}`, feeTo: `0x${string}`, signer: `0x${string}`, on: InstantChain = "bsc") => {
-    const { INSTANT_BYTECODE } = await import("@/lib/instant-build");
+  // Instant v2 (optional holder rewards). The ready-made reward list is the chain's top tokens with a known pool; on
+  // Robinhood Chain there's no router the contract can swap with, so it gets none (rewards there are paid in ETH, and
+  // launches there have no first buy). The testnet trial has no list either (rewards in tBNB).
+  const deployData = async (owner: `0x${string}`, feeTo: `0x${string}`, signer: `0x${string}`, on: InstantChain = "bsc", test = false) => {
+    const { INSTANT_V2_BYTECODE } = await import("@/lib/instant-v2-build");
     if (!(Number(fdv) > 0)) throw new Error("Set a starting market cap in BNB.");
-    return concat([INSTANT_BYTECODE, encodeAbiParameters(INSTANT_CONSTRUCTOR, [INSTANT_DEX[on].positions, INSTANT_DEX[on].router, owner, feeTo, parseEther(fdv), BigInt(INSTANT_CREATOR_BPS), signer])]);
+    const router = on === "robinhood" ? zeroAddress : INSTANT_DEX[on].router;
+    const listed = test || on === "robinhood" ? [] : INSTANT_REWARDS[on].filter((x) => x.fee);
+    return concat([INSTANT_V2_BYTECODE, encodeAbiParameters(INSTANT_V2_CONSTRUCTOR, [INSTANT_DEX[on].positions, router, owner, feeTo, parseEther(fdv), BigInt(INSTANT_CREATOR_BPS), signer, listed.map((x) => x.address), listed.map((x) => x.fee!)])]);
   };
 
   // ---- testnet trial
   const tDeploy = () => run(async () => {
     const { w, chain, account, pub } = await wallet(true);
     setMsg("Confirm in your wallet: deploy the test Instant Launch.");
-    const data = await deployData(account, account, zeroAddress);
+    const data = await deployData(account, account, zeroAddress, "bsc", true);
     const gas = ((await pub.estimateGas({ account, data })) * 140n) / 100n;
     const r = await sent(pub, await w.sendTransaction({ account, chain, data, gas }), "Deploy");
     keep({ pad: r.contractAddress });
@@ -74,11 +79,11 @@ export default function InstantAdmin() {
   });
   const tLaunch = () => run(async () => {
     const { w, chain, account, pub } = await wallet(true);
-    const call = { account, chain, address: saved.pad, abi: INSTANT_ABI, functionName: "launch", args: ["Instant Test", "ITEST", toHex(crypto.getRandomValues(new Uint8Array(32))), 0n, "0x", BigInt(Math.floor(Date.now() / 1000) + 1200)], value: parseEther("0.05") };
-    setMsg("Confirm in your wallet: launch ITEST with a 0.05 tBNB first buy (no liquidity).");
+    const call = { account, chain, address: saved.pad, abi: INSTANT_V2_ABI, functionName: "launch", args: ["Instant Test", "ITEST", toHex(crypto.getRandomValues(new Uint8Array(32))), 0n, "0x", BigInt(Math.floor(Date.now() / 1000) + 1200), { token: NATIVE_REWARD, holderBps: 5000, fee: 0 }], value: parseEther("0.05") };
+    setMsg("Confirm in your wallet: launch ITEST with a 0.05 tBNB first buy (no liquidity), half the creator's fees to holders in tBNB.");
     const gas = ((await pub.estimateContractGas(call)) * 130n) / 100n;
     const r = await sent(pub, await w.writeContract({ ...call, gas }), "Launch");
-    const ev = parseEventLogs({ abi: INSTANT_ABI, logs: r.logs, eventName: "Launched" })[0] as any;
+    const ev = parseEventLogs({ abi: INSTANT_V2_ABI, logs: r.logs, eventName: "Launched" })[0] as any;
     keep({ ...saved, token: getAddress(ev.args.token), pool: getAddress(ev.args.pool) });
     return `✅ ITEST is live in its PancakeSwap v3 pool. You got ${Number(formatEther(ev.args.creatorTokens)).toLocaleString()} ITEST from the first buy. Next: buy as someone else would.`;
   });
@@ -92,9 +97,9 @@ export default function InstantAdmin() {
   });
   const tCollect = () => run(async () => {
     const { w, chain, account, pub } = await wallet(true);
-    const r = await sent(pub, await w.writeContract({ account, chain, address: saved.pad, abi: INSTANT_ABI, functionName: "collectFees", args: [saved.token] }), "Collect");
-    const ev = parseEventLogs({ abi: INSTANT_ABI, logs: r.logs, eventName: "FeesCollected" })[0] as any;
-    setReport(ev ? `Pool fees collected: ${formatEther(ev.args.bnb)} tBNB (creator ${formatEther(ev.args.toCreatorBnb)}, AUTISTIK ${formatEther(ev.args.toAutistikBnb)}) and ${Number(formatEther(ev.args.tokens)).toLocaleString()} ITEST.` : "");
+    const r = await sent(pub, await w.writeContract({ account, chain, address: saved.pad, abi: INSTANT_V2_ABI, functionName: "collectFees", args: [saved.token] }), "Collect");
+    const ev = parseEventLogs({ abi: INSTANT_V2_ABI, logs: r.logs, eventName: "FeesCollected" })[0] as any;
+    setReport(ev ? `Pool fees collected: ${formatEther(ev.args.eth)} tBNB (creator ${formatEther(ev.args.toCreatorEth)}, holders ${formatEther(ev.args.toHoldersEth)}, AUTISTIK ${formatEther(ev.args.toAutistikEth)}) and ${Number(formatEther(ev.args.tokens)).toLocaleString()} ITEST.` : "");
     return "✅ Fees collected and split. The whole flow works on testnet.";
   });
 
@@ -123,8 +128,8 @@ export default function InstantAdmin() {
     const res = await fetch("/api/launchpad/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, kind: "instant", address: r.contractAddress, txHash: hash }) });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || "Deployed, but couldn't save it. Paste the address into the save box.");
-    setInfo({ ...info, instant: r.contractAddress });
-    return `✅ Instant Launch is live on ${c.name} at ${r.contractAddress}. The Create page now offers Instant launch there.`;
+    setInfo({ ...info, instant: r.contractAddress, instantVersion: 2 });
+    return `✅ Instant Launch v2 (holder rewards) is live on ${c.name} at ${r.contractAddress}. New Instant launches there use it; coins launched before keep working on the old contract.`;
   });
 
   const link = (a?: string, test = true) => a ? <a href={`${test ? "https://testnet.bscscan.com" : CHAINS[net].explorer}/address/${a}`} target="_blank" rel="noreferrer" className="mono">{a.slice(0, 8)}…{a.slice(-6)}</a> : null;
@@ -148,8 +153,9 @@ export default function InstantAdmin() {
           <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={busy} onClick={() => setNet(k)}>{CHAINS[k].name} · {INSTANT_DEX[k].dex}</button>
         ))}
       </div>
-      {info?.instant ? <p style={{ margin: 0 }}>✅ Live on {CHAINS[net].name} at {link(info.instant, false)}. The Create page offers Instant launch there.</p>
-        : <div><button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>Deploy on {CHAINS[net].name}</button> <small className="muted">{net === "ethereum" ? "Gas on Ethereum is about 0.005–0.03 ETH depending on the network. Use MetaMask." : net === "robinhood" ? "Gas on Robinhood Chain is a few cents of ETH: the wallet needs a little ETH on Robinhood Chain. Use MetaMask. Coins launched there have no first buy." : "Costs about 0.01 BNB of gas. Use MetaMask."} Starting market cap above is in {CHAINS[net].coin}.</small></div>}
+      {info?.instant && info.instantVersion >= 2 ? <p style={{ margin: 0 }}>✅ v2 (holder rewards) live on {CHAINS[net].name} at {link(info.instant, false)}. The Create page offers Instant launch with holder rewards there.</p>
+        : <div>{info?.instant && <p style={{ margin: "0 0 6px" }}>Live on {CHAINS[net].name} at {link(info.instant, false)} (v1: no holder rewards). Deploy v2 to switch on holder rewards for new launches; coins already launched keep working.</p>}
+          <button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>{info?.instant ? "Deploy v2" : "Deploy"} on {CHAINS[net].name}</button> <small className="muted">{net === "ethereum" ? "Gas on Ethereum is about 0.005–0.03 ETH depending on the network. Use MetaMask." : net === "robinhood" ? "Gas on Robinhood Chain is a few cents of ETH: the wallet needs a little ETH on Robinhood Chain. Use MetaMask. Coins launched there have no first buy." : "Costs about 0.01 BNB of gas. Use MetaMask."} Starting market cap above is in {CHAINS[net].coin}.</small></div>}
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>
   );

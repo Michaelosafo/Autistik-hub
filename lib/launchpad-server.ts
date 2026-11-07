@@ -6,13 +6,13 @@ import { getAddress, isAddress } from "viem";
 import { supabaseService } from "@/lib/supabase/server";
 import { CHAINS, type ChainKey, type Pads } from "@/lib/launchpad";
 
-let cache: { at: number; pads: Pads; burners: Partial<Record<ChainKey, string>>; versions: Partial<Record<ChainKey, number>>; instants: Partial<Record<ChainKey, `0x${string}`>> } | null = null;
+let cache: { at: number; pads: Pads; burners: Partial<Record<ChainKey, string>>; versions: Partial<Record<ChainKey, number>>; instants: Partial<Record<ChainKey, `0x${string}`>>; instantVersions: Partial<Record<ChainKey, number>> } | null = null;
 
 export async function padInfo(fresh = false) {
   if (!fresh && cache && Date.now() - cache.at < 60_000) return cache;
   // "*" so this keeps working before the version column exists (supabase/evm-vanity.sql).
   const { data } = await supabaseService().from("launchpad_contracts").select("*");
-  const pads: Pads = {}, burners: Partial<Record<ChainKey, string>> = {}, versions: Partial<Record<ChainKey, number>> = {}, instants: Partial<Record<ChainKey, `0x${string}`>> = {};
+  const pads: Pads = {}, burners: Partial<Record<ChainKey, string>> = {}, versions: Partial<Record<ChainKey, number>> = {}, instants: Partial<Record<ChainKey, `0x${string}`>> = {}, instantVersions: Partial<Record<ChainKey, number>> = {};
   for (const r of data || []) {
     if (!(r.chain in CHAINS) || !isAddress(r.address)) continue;
     // A row can hold just the burner (deployed first on BNB Chain) before the launchpad exists.
@@ -21,9 +21,12 @@ export async function padInfo(fresh = false) {
       versions[r.chain as ChainKey] = Number(r.version) || 2;
     }
     if (r.burner && isAddress(r.burner)) burners[r.chain as ChainKey] = getAddress(r.burner);
-    if (r.instant && isAddress(r.instant)) instants[r.chain as ChainKey] = getAddress(r.instant);
+    if (r.instant && isAddress(r.instant)) {
+      instants[r.chain as ChainKey] = getAddress(r.instant);
+      instantVersions[r.chain as ChainKey] = Number(r.instant_version) || 1; // 2: optional holder rewards
+    }
   }
-  cache = { at: Date.now(), pads, burners, versions, instants };
+  cache = { at: Date.now(), pads, burners, versions, instants, instantVersions };
   return cache;
 }
 

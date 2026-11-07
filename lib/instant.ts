@@ -72,3 +72,103 @@ export const INSTANT_SUPPLY = 1_000_000_000;
 export const INSTANT_CREATOR_BPS = 5000;
 /** Starting market cap in BNB (the whole supply). About $4–6k: small enough to move, big enough to stop dust buys. */
 export const INSTANT_START_FDV_BNB = "6";
+
+// ---------------------------------------------------------------- Instant v2: optional holder rewards
+
+/** Instant v2 (contracts/AutistikInstantLaunchV2.sol): the same launch, plus optional holder rewards. */
+export const INSTANT_V2_ABI = parseAbi([
+  "struct Reward { address token; uint16 holderBps; uint24 fee; }",
+  "function launch(string name, string symbol, bytes32 salt, uint256 permitDeadline, bytes permitSig, uint256 deadline, Reward reward) payable returns (address)",
+  "function rewardFeeFor(address token, uint256 holderBps, uint24 fee) view returns (uint24)",
+  "function rewardFee(address) view returns (uint24)",
+  "function rewardPending(address) view returns (uint256)",
+  "function collectFees(address token)",
+  "function claim()",
+  "function owed(address) view returns (uint256)",
+  "function coinOf(address) view returns (address creator, address pool, uint256 positionId, uint16 creatorShareBps, uint16 holderBps, uint24 rewardFee, uint64 launchedAt)",
+  "function launchFee() view returns (uint256)",
+  "function startFdv() view returns (uint256)",
+  "function owner() view returns (address)",
+  "function feeTo() view returns (address)",
+  "function positions() view returns (address)",
+  "function router() view returns (address)",
+  "event Launched(address indexed token, address indexed pool, address indexed creator, uint256 positionId, uint256 creatorTokens, string name, string symbol)",
+  "event RewardsChosen(address indexed token, address rewardToken, uint256 holderBps)",
+  "event FeesCollected(address indexed token, uint256 eth, uint256 tokens, uint256 toCreatorEth, uint256 toAutistikEth, uint256 toHoldersEth)",
+  "event RewardsPaid(address indexed token, address rewardToken, uint256 spentEth, uint256 rewardAmount)",
+  "error NoRewardPool()", "error RewardNotAllowed()", "error BadSettings()", "error NoFirstBuyHere()",
+  "error CreatorBuyTooBig()", "error PoolTaken()", "error TooLate()", "error NotEligible()", "error PermitUsed()", "error FeeTooLow()",
+]);
+
+/** An Instant v2 coin: holders' rewards, claimed straight from the coin's own contract. */
+export const INSTANT_TOKEN_V2_ABI = parseAbi([
+  "function rewardToken() view returns (address)",
+  "function withdrawableRewards(address) view returns (uint256)",
+  "function totalRewardsDistributed() view returns (uint256)",
+  "function claim() returns (uint256)",
+]);
+
+export const INSTANT_V2_CONSTRUCTOR = [
+  { type: "address", name: "positions" }, { type: "address", name: "router" }, { type: "address", name: "owner" }, { type: "address", name: "feeTo" },
+  { type: "uint256", name: "startFdv" }, { type: "uint256", name: "creatorShareBps" }, { type: "address", name: "signer" },
+  { type: "address[]", name: "rewardTokens" }, { type: "uint24[]", name: "rewardFees" },
+] as const;
+
+/** "The chain's own coin" as a reward (BNB, ETH). */
+export const NATIVE_REWARD = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" as const;
+
+export type RewardPick = { symbol: string; address: `0x${string}`; decimals: number; fee?: number; stock?: boolean };
+/**
+ * Top tokens offered as holder rewards on each Instant network (any other token can be pasted in). Those with a fee are
+ * on the contract's ready-made list (checked on real pools in contracts/test-instant/*Fork.t.sol); the rest are bought
+ * through their deepest pool with the chain's coin, found when the creator picks them. Robinhood Chain has no v3 router
+ * the contract can swap with, so rewards there are paid in ETH.
+ */
+export const INSTANT_REWARDS: Record<InstantChain, RewardPick[]> = {
+  bsc: [
+    { symbol: "USDT", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18, fee: 100 },
+    { symbol: "USDC", address: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 },
+    { symbol: "CAKE", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18, fee: 2500 },
+    { symbol: "BTCB", address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", decimals: 18 },
+    { symbol: "ETH", address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals: 18 },
+  ],
+  ethereum: [
+    { symbol: "USDC", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6, fee: 500 },
+    { symbol: "USDT", address: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6, fee: 500 },
+    { symbol: "WBTC", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8 },
+    { symbol: "LINK", address: "0x514910771AF9Ca656af840dff83E8264EcF986CA", decimals: 18 },
+    { symbol: "PEPE", address: "0x6982508145454Ce325dDbE47a25d4ec3d2311933", decimals: 18 },
+  ],
+  robinhood: [],
+};
+
+/** v3 factories and the fee tiers they offer (to find a reward token's pool with the chain's coin). */
+const V3_FACTORY: Partial<Record<InstantChain, { factory: `0x${string}`; wrapped: `0x${string}`; tiers: number[] }>> = {
+  bsc: { factory: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", wrapped: PANCAKE_V3.wbnb[56], tiers: [100, 500, 2500, 10_000] },
+  ethereum: { factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984", wrapped: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", tiers: [100, 500, 3000, 10_000] },
+};
+const FIND_ABI = parseAbi([
+  "function getPool(address, address, uint24) view returns (address)",
+  "function balanceOf(address) view returns (uint256)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+]);
+
+/**
+ * A token's deepest v3 pool with the chain's coin (the one the contract will buy it through), with its ticker. Null when
+ * there's no pool, or (min) less than a little of the chain's coin in it: holders' rewards could never be bought.
+ */
+export async function findRewardPool(pub: any, chain: InstantChain, token: `0x${string}`, min = 10n ** 16n) {
+  const f = V3_FACTORY[chain];
+  if (!f || token.toLowerCase() === f.wrapped.toLowerCase()) return null;
+  const pools: string[] = await Promise.all(f.tiers.map((fee) => pub.readContract({ address: f.factory, abi: FIND_ABI, functionName: "getPool", args: [f.wrapped, token, fee] }).catch(() => "0x0000000000000000000000000000000000000000")));
+  const depth: bigint[] = await Promise.all(pools.map((p) => /^0x0{40}$/i.test(p) ? 0n : pub.readContract({ address: f.wrapped, abi: FIND_ABI, functionName: "balanceOf", args: [p] }).catch(() => 0n)));
+  let best = -1;
+  depth.forEach((d, i) => { if (d >= min && (best < 0 || d > depth[best])) best = i; });
+  if (best < 0) return null;
+  const [symbol, decimals] = await Promise.all([
+    pub.readContract({ address: token, abi: FIND_ABI, functionName: "symbol" }).catch(() => "?"),
+    pub.readContract({ address: token, abi: FIND_ABI, functionName: "decimals" }).catch(() => 18),
+  ]);
+  return { fee: f.tiers[best], symbol: String(symbol).slice(0, 16), decimals: Number(decimals), depth: depth[best] };
+}

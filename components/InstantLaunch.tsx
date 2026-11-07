@@ -4,15 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import PhotoCrop from "@/components/PhotoCrop";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
+import { createPublicClient, createWalletClient, custom, formatEther, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseEventLogs, zeroAddress } from "viem";
 import { CHAINS, MIN_HOLD_USD, viemChain } from "@/lib/launchpad";
-import { INSTANT_ABI, INSTANT_CREATOR_BPS, INSTANT_DEX, isInstantChain, type InstantChain } from "@/lib/instant";
+import { INSTANT_ABI, INSTANT_CREATOR_BPS, INSTANT_DEX, INSTANT_REWARDS, INSTANT_TOKEN_V2_ABI, INSTANT_V2_ABI, NATIVE_REWARD, findRewardPool, isInstantChain, type InstantChain } from "@/lib/instant";
 import { useSolWallet } from "@/components/SolanaLaunch";
 import { signAndSend, solErr, solLaunchApi } from "@/lib/sol-wallet";
 
 type Style = "liquidity" | "instant";
 const KEY = "launch-style";
 type Instants = Partial<Record<InstantChain, string>>;
+type Versions = Partial<Record<InstantChain, number>>;
 
 /**
  * Create a coin. Instant comes first and is open straight away when it's live: a name, a picture and a few words,
@@ -20,7 +21,7 @@ type Instants = Partial<Record<InstantChain, string>>;
  * you and no bonding curve. "Add liquidity" is the classic Launch Pad (you put coins in the pool, then lock or burn it);
  * its form and tools only show when you pick it.
  */
-export default function LaunchChoice({ instants, admin, children }: { instants: Instants; admin: boolean; children: React.ReactNode }) {
+export default function LaunchChoice({ instants, instantVersions = {}, admin, children }: { instants: Instants; instantVersions?: Versions; admin: boolean; children: React.ReactNode }) {
   const open = (Object.keys(INSTANT_DEX) as InstantChain[]).filter((k) => instants[k]);
   const [style, setStyle] = useState<Style>("instant");
   useEffect(() => { try { if (localStorage.getItem(KEY) === "liquidity") setStyle("liquidity"); } catch {} }, []);
@@ -39,7 +40,8 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
             <li>Press <b>Launch now</b> and sign once in your wallet. You only pay the network fee; you need $20 of AUTISTIK in that wallet.</li>
             <li>All 1,000,000,000 coins go straight into a {`PancakeSwap / Uniswap / Raydium`} pool at a small starting price. There&apos;s no bonding curve: buyers bring the BNB or ETH, and the price rises as they buy.</li>
             <li>The pool is locked forever (by the AUTISTIK Instant contract, or Raydium&apos;s lock on Solana), so nobody can pull the liquidity, not you and not AUTISTIK. No tax, no owner, no minting.</li>
-            <li>Every trade pays the pool 1%: {INSTANT_CREATOR_BPS / 100}% of that is yours, collected from your coin page. For 5 minutes after launch, big buys are blocked to stop bots.</li>
+            <li>Every trade pays the pool 1%: {INSTANT_CREATOR_BPS / 100}% of that is yours, sent straight to the wallet that launched it. For 5 minutes after launch, big buys are blocked to stop bots.</li>
+            <li>Optional holder rewards: give some or all of your share to your holders, paid in BNB or ETH, a top token like USDT, USDC or CAKE, or any token you paste in.</li>
           </ol>
         </LaunchBar>
         <LaunchBar on={style === "liquidity"} onPick={() => pick("liquidity")} icon="💧" title="Add liquidity" tag="Classic"
@@ -54,7 +56,7 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
         </LaunchBar>
       </div>
       <div id="launch-form">
-        {style === "instant" && (true ? <InstantForm instants={instants} open={open} admin={admin} /> : (
+        {style === "instant" && (true ? <InstantForm instants={instants} versions={instantVersions} open={open} admin={admin} /> : (
           <div className="card stack" style={{ gap: 6 }}>
             <b>⚡ Instant launch opens very soon</b>
             {admin ? (
@@ -87,13 +89,15 @@ function LaunchBar({ on, onPick, icon, title, tag, line, children }: { on: boole
 }
 
 const BUYS = ["0", "0.05", "0.1", "0.2"];
+type RewardState = { on: boolean; token: string; custom: string; share: number; checking?: boolean; found?: { symbol: string; fee: number } | null; err?: string };
+const RW0: RewardState = { on: false, token: "native", custom: "", share: 50 };
 type Done = { token: string; pool: string; hash: string; listed: boolean; symbol: string };
 type Net = InstantChain | "solana";
 /** Solana Instant: Raydium concentrated pool, whole supply one-sided, the position locked forever (lib/solana-instant.ts). */
 const SOL_DX = { dex: "Raydium", startFdv: "30", noFirstBuy: true, swap: (t: string) => `https://raydium.io/swap/?inputMint=sol&outputMint=${t}` };
 type SolProgress = { mint?: string; sig?: string; pool?: string; nftMint?: string; pooled?: boolean; locked?: boolean };
 
-function InstantForm({ instants, open, admin }: { instants: Instants; open: InstantChain[]; admin: boolean }) {
+function InstantForm({ instants, versions, open, admin }: { instants: Instants; versions: Versions; open: InstantChain[]; admin: boolean }) {
   const [net, setNet] = useState<Net>(open[0] ?? "solana");
   const sol = net === "solana";
   const c = CHAINS[net];
@@ -111,6 +115,20 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoBusy, setLogoBusy] = useState("");
   const logoInput = useRef<HTMLInputElement>(null);
+  // Holder rewards (Instant v2 contracts only): off, or a share of the creator's fees paid to holders in a reward.
+  const v2 = !sol && (versions[net as InstantChain] ?? 1) >= 2;
+  const [rw, setRw] = useState<RewardState>(RW0);
+  const picks = sol ? [] : INSTANT_REWARDS[net as InstantChain];
+  const canPaste = net === "bsc" || net === "ethereum";
+  const rewardLabel = !rw.on ? "" : rw.token === "native" ? c.coin : rw.token === "custom" ? (rw.found?.symbol || "your token") : picks.find((x) => x.address === rw.token)?.symbol || "";
+  async function checkCustom(addr: string) {
+    setRw((x) => ({ ...x, custom: addr, found: undefined, err: "" }));
+    if (!isAddress(addr)) return;
+    setRw((x) => ({ ...x, checking: true }));
+    const pub = createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any;
+    const f = await findRewardPool(pub, net as InstantChain, getAddress(addr)).catch(() => null);
+    setRw((x) => x.custom !== addr ? x : { ...x, checking: false, found: f ? { symbol: f.symbol, fee: f.fee } : null, err: f ? "" : `No ${INSTANT_DEX[net as InstantChain].dex} v3 pool with ${c.coin} found for that token, so fees couldn't buy it. Pick another.` });
+  }
 
   useEffect(() => {
     if (sol || !pad) return;
@@ -188,6 +206,28 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
   const fdv = cfg ? Number(formatEther(cfg.fdv)) : Number(dx.startFdv);
   const buys = net === "bsc" ? BUYS : ["0", "0.01", "0.02", "0.05"];
 
+  /** The reward choice for the contract, checked against it first (a token it can't buy is refused before you sign). */
+  async function rewardArg(pub: any) {
+    if (!rw.on) return { token: zeroAddress, holderBps: 0, fee: 0 };
+    const holderBps = rw.share * 100;
+    let token: `0x${string}`, fee = 0;
+    if (rw.token === "native") token = NATIVE_REWARD;
+    else if (rw.token === "custom") {
+      if (!isAddress(rw.custom)) throw new Error("Paste the reward token's address, or pick one from the list.");
+      token = getAddress(rw.custom);
+    } else token = rw.token as `0x${string}`;
+    if (token !== NATIVE_REWARD) {
+      const listed = picks.find((x) => x.address.toLowerCase() === token.toLowerCase())?.fee;
+      if (!listed) {
+        const found = await findRewardPool(pub, net as InstantChain, token);
+        if (!found) throw new Error("NoRewardPool");
+        fee = found.fee;
+      }
+    }
+    await pub.readContract({ address: pad, abi: INSTANT_V2_ABI, functionName: "rewardFeeFor", args: [token, BigInt(holderBps), fee] });
+    return { token, holderBps, fee };
+  }
+
   async function launch(e: React.FormEvent) {
     e.preventDefault();
     const name = f.name.trim(), symbol = f.symbol.trim();
@@ -211,12 +251,15 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); return; }
       const fee = (await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" } as any)) as bigint;
+      const base = [name, symbol, permit.salt, BigInt(permit.deadline || 0), (permit.signature || "0x") as `0x${string}`, BigInt(Math.floor(Date.now() / 1000) + 20 * 60)] as const;
+      let call: any;
+      if (v2) {
+        const reward = await rewardArg(pub);
+        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward], value: fee + parseEther(f.buy || "0") };
+      } else {
+        call = { account, address: pad, abi: INSTANT_ABI, functionName: "launch", args: base, value: fee + parseEther(f.buy || "0") };
+      }
       setStatus("Confirm the launch in your wallet…");
-      const call = {
-        account, address: pad, abi: INSTANT_ABI, functionName: "launch",
-        args: [name, symbol, permit.salt, BigInt(permit.deadline || 0), (permit.signature || "0x") as `0x${string}`, BigInt(Math.floor(Date.now() / 1000) + 20 * 60)],
-        value: fee + parseEther(f.buy || "0"),
-      } as const;
       const gas = ((await pub.estimateContractGas(call as any)) * 130n) / 100n;
       const hash = await wallet.writeContract({ ...call, chain, gas } as any);
       setStatus(`Launching on ${dx.dex}… this usually takes under a minute.`);
@@ -231,10 +274,11 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
       const r = String(e?.shortMessage || e?.message || "");
       setStatus(/NotEligible|PermitUsed/.test(r) ? `The launch was refused: this wallet must hold at least $${MIN_HOLD_USD} of AUTISTIK. Press Launch again to re-check.`
         : /CreatorBuyTooBig/.test(r) ? "Your first buy is more than 5% of the coins. Make it smaller."
+        : /NoRewardPool|RewardNotAllowed/.test(r) ? "That reward token can't be bought with the pool fees (no pool with enough liquidity). Pick another reward, or switch rewards off."
         : /PoolTaken/.test(r) ? "Someone tried to set up a pool for this coin first. Nothing was launched. Press Launch again (you'll get a new address)."
         : /TooLate/.test(r) ? "The launch took too long. Nothing was launched. Press Launch again."
         : /insufficient funds/i.test(r) ? `Not enough ${c.coin} in this wallet for the network fee and your first buy.`
-        : /reject|denied/i.test(r) ? "You cancelled in your wallet. Nothing was launched." : e?.shortMessage || "Something went wrong. Nothing was launched.");
+        : /reject|denied/i.test(r) ? "You cancelled in your wallet. Nothing was launched." : e?.shortMessage || (r && r.length < 160 ? r : "Something went wrong. Nothing was launched."));
     } finally { setBusy(false); }
   }
 
@@ -262,7 +306,7 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Network">
           {(Object.keys(INSTANT_DEX) as InstantChain[]).map((k) => (
             <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={!instants[k] || busy || !!solStep.mint}
-              onClick={() => { setNet(k); setCfg(null); setF((x) => ({ ...x, buy: "0" })); }}>
+              onClick={() => { setNet(k); setCfg(null); setRw(RW0); setF((x) => ({ ...x, buy: "0" })); }}>
               {CHAINS[k].name}{!instants[k] ? " (soon)" : ""}
             </button>
           ))}
@@ -309,6 +353,33 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
         </div>
         <small className="muted">You buy before anyone else, at the starting price, in the same transaction (so bots can&apos;t jump in front).</small>
       </div>}
+      {v2 && (
+        <div className="field lc-rewards">
+          <span>Holder rewards <small className="muted">optional</small></span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Holder rewards">
+            <button type="button" role="radio" aria-checked={!rw.on} className={"btn small" + (!rw.on ? " primary" : "")} onClick={() => setRw({ ...rw, on: false })}>Off: keep all my fees</button>
+            <button type="button" role="radio" aria-checked={rw.on} className={"btn small" + (rw.on ? " primary" : "")} onClick={() => setRw({ ...rw, on: true })}>🎁 Reward my holders</button>
+          </div>
+          {rw.on && <>
+            <small className="muted">Paid in</small>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Reward">
+              <button type="button" role="radio" aria-checked={rw.token === "native"} className={"btn small" + (rw.token === "native" ? " primary" : "")} onClick={() => setRw({ ...rw, token: "native" })}>{c.coin}</button>
+              {picks.map((x) => <button key={x.address} type="button" role="radio" aria-checked={rw.token === x.address} className={"btn small" + (rw.token === x.address ? " primary" : "")} onClick={() => setRw({ ...rw, token: x.address })}>{x.symbol}</button>)}
+              {canPaste && <button type="button" role="radio" aria-checked={rw.token === "custom"} className={"btn small" + (rw.token === "custom" ? " primary" : "")} onClick={() => setRw({ ...rw, token: "custom" })}>Paste a token</button>}
+            </div>
+            {rw.token === "custom" && <>
+              <input value={rw.custom} onChange={(e) => checkCustom(e.target.value.trim())} placeholder="0x… token address" spellCheck={false} aria-label="Reward token address" />
+              {rw.checking ? <small className="muted">Looking for its pool…</small> : rw.found ? <small className="ql-good">✓ {rw.found.symbol}: fees can buy it ({rw.found.fee / 10_000}% pool)</small> : rw.err ? <small className="ql-bad">{rw.err}</small> : null}
+            </>}
+            {!canPaste && <small className="muted">On {c.name}, rewards are paid in {c.coin}.</small>}
+            <small className="muted">How much of your fee share goes to holders</small>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Share for holders">
+              {[25, 50, 75, 100].map((n) => <button key={n} type="button" role="radio" aria-checked={rw.share === n} className={"btn small" + (rw.share === n ? " primary" : "")} onClick={() => setRw({ ...rw, share: n })}>{n}%</button>)}
+            </div>
+            <small className="muted">Holders get {rw.share}% of your share of every trade, paid in {rewardLabel}; you keep {100 - rw.share}%. They claim it any time from your coin page. Fixed at launch: it can&apos;t be changed later.</small>
+          </>}
+        </div>
+      )}
       <ul className="lc-facts">
         <li><b>1,000,000,000</b> coins, all in the {dx.dex} pool</li>
         <li>Starting market cap <b>{fdv} {c.coin}</b>. The price rises as people buy</li>
@@ -319,7 +390,7 @@ function InstantForm({ instants, open, admin }: { instants: Instants; open: Inst
           <li>Four quick confirms in your wallet: the coin, the pool, your coins into the pool, the lock</li>
         </> : <>
           <li>No tax, no owner, no minting. Anti-bot: max 1% per buy for the first 5 minutes</li>
-          <li>The pool charges 1% per trade: <b>{INSTANT_CREATOR_BPS / 100}% of it is yours</b>, collected from your coin page</li>
+          <li>The pool charges 1% per trade: <b>{INSTANT_CREATOR_BPS / 100}% of it is yours</b>, sent straight to this wallet when fees are collected{rw.on && v2 ? <> ({rw.share}% of that goes to your holders in {rewardLabel})</> : null}</li>
         </>}
         {sol ? <li>Cost: a small launch fee + about 0.1 SOL of Solana network rent for the pool and lock</li> : <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} ${c.coin} + ` : "free + "}the network fee ({net === "ethereum" ? "a few dollars on Ethereum" : net === "robinhood" ? "a few cents on Robinhood Chain" : "about $0.30"}){Number(f.buy) > 0 ? ` + your ${f.buy} ${c.coin} buy` : ""}</li>}
         {!sol && <li>You need ${MIN_HOLD_USD} of AUTISTIK in this wallet to launch</li>}
@@ -350,9 +421,13 @@ export function InstantFees({ chain = "bsc", pad, token, creator }: { chain?: st
       const hash = await wallet.writeContract({ account, chain, address: pad, abi: INSTANT_ABI, functionName: claim ? "claim" : "collectFees", args: claim ? [] : [token] } as any);
       const r = await pub.waitForTransactionReceipt({ hash });
       if (r.status !== "success") throw new Error("failed");
-      const ev = parseEventLogs({ abi: INSTANT_ABI, logs: r.logs, eventName: "FeesCollected" })[0] as any;
+      // v1 and v2 contracts name the amounts differently; v2 also reports the holders' part.
+      const e2 = parseEventLogs({ abi: INSTANT_V2_ABI, logs: r.logs, eventName: "FeesCollected" })[0] as any;
+      const e1 = e2 ? null : (parseEventLogs({ abi: INSTANT_ABI, logs: r.logs, eventName: "FeesCollected" })[0] as any);
+      const total = e2 ? e2.args.eth : e1?.args.bnb, toCreator = e2 ? e2.args.toCreatorEth : e1?.args.toCreatorBnb;
       setOwed((await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "owed", args: [account] } as any)) as bigint);
-      setMsg(claim ? "✅ Sent to your wallet." : ev ? `✅ Collected ${Number(formatEther(ev.args.bnb)).toFixed(5)} ${c.coin} of fees: ${Number(formatEther(ev.args.toCreatorBnb)).toFixed(5)} ${c.coin} went to the creator.` : "✅ Done.");
+      const fmt = (v: bigint) => Number(formatEther(v)).toFixed(5);
+      setMsg(claim ? "✅ Sent to your wallet." : total !== undefined ? `✅ Collected ${fmt(total)} ${c.coin} of fees: ${fmt(toCreator)} ${c.coin} went to the creator${e2?.args.toHoldersEth > 0n ? `, ${fmt(e2.args.toHoldersEth)} ${c.coin} to holders' rewards` : ""}.` : "✅ Done.");
     } catch (e: any) {
       setMsg(/reject|denied/i.test(String(e?.message)) ? "You cancelled in your wallet." : "Couldn't do that right now. Try again.");
     } finally { setBusy(false); }
@@ -364,6 +439,63 @@ export function InstantFees({ chain = "bsc", pad, token, creator }: { chain?: st
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <button type="button" className="btn small primary" disabled={busy} onClick={() => run(false)}>{busy ? "…" : "Collect fees"}</button>
         {owed > 0n && <button type="button" className="btn small" disabled={busy} onClick={() => run(true)}>Claim {formatEther(owed)} {c.coin}</button>}
+      </div>
+      {msg && <small className="muted" role="status">{msg}</small>}
+      <HolderRewards chainKey={(isInstantChain(chain) ? chain : "bsc") as InstantChain} token={token} />
+    </div>
+  );
+}
+
+const ERC20_META = parseAbi(["function symbol() view returns (string)", "function decimals() view returns (uint8)"]);
+
+/** An Instant v2 coin whose creator chose holder rewards: what's been paid in, and your share to claim. */
+function HolderRewards({ chainKey, token }: { chainKey: InstantChain; token: `0x${string}` }) {
+  const c = CHAINS[chainKey];
+  const [r, setR] = useState<{ token: string; symbol: string; decimals: number; total: bigint } | null>(null);
+  const [mine, setMine] = useState<bigint | null>(null);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const pub = createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any;
+    (async () => {
+      const rt = getAddress(await pub.readContract({ address: token, abi: INSTANT_TOKEN_V2_ABI, functionName: "rewardToken" })); // v1 coins: no such function
+      if (rt === zeroAddress) return;
+      const total: bigint = await pub.readContract({ address: token, abi: INSTANT_TOKEN_V2_ABI, functionName: "totalRewardsDistributed" });
+      if (rt === getAddress(NATIVE_REWARD)) { setR({ token: rt, symbol: c.coin, decimals: 18, total }); return; }
+      const [symbol, decimals] = await Promise.all([pub.readContract({ address: rt, abi: ERC20_META, functionName: "symbol" }).catch(() => "tokens"), pub.readContract({ address: rt, abi: ERC20_META, functionName: "decimals" }).catch(() => 18)]);
+      setR({ token: rt, symbol: String(symbol), decimals: Number(decimals), total });
+    })().catch(() => {});
+  }, [c, token]);
+  if (!r) return null;
+  const show = (v: bigint) => Number(formatUnits(v, r.decimals)).toLocaleString("en-US", { maximumFractionDigits: 6 });
+  async function go(claim: boolean) {
+    const eth = await pickWallet();
+    if (!eth) return;
+    setBusy(true); setMsg(claim ? "Check your wallet app…" : "");
+    try {
+      const chain = viemChain(c);
+      const wallet = createWalletClient({ chain, transport: custom(eth) });
+      const pub = createPublicClient({ chain, transport: http(c.rpc) });
+      const [account] = await wallet.requestAddresses();
+      if (claim) {
+        try { await wallet.switchChain({ id: c.chainId }); } catch { await wallet.addChain({ chain }); await wallet.switchChain({ id: c.chainId }); }
+        const h = await wallet.writeContract({ account, chain, address: token, abi: INSTANT_TOKEN_V2_ABI, functionName: "claim" } as any);
+        const rc = await pub.waitForTransactionReceipt({ hash: h });
+        if (rc.status !== "success") throw new Error("failed");
+        setMsg(`✅ Your ${r!.symbol} rewards were sent to your wallet.`);
+      }
+      setMine((await pub.readContract({ address: token, abi: INSTANT_TOKEN_V2_ABI, functionName: "withdrawableRewards", args: [account] } as any)) as bigint);
+    } catch (e: any) {
+      setMsg(/reject|denied/i.test(String(e?.message)) ? "You cancelled in your wallet." : "Couldn't do that right now. Try again.");
+    } finally { setBusy(false); }
+  }
+  return (
+    <div className="stack" style={{ gap: 6, borderTop: "1px solid var(--line, #8883)", paddingTop: 8 }}>
+      <b>🎁 Holder rewards in {r.symbol}</b>
+      <small className="muted">This coin&apos;s creator gives part of their trading fees to holders, paid in {r.symbol}. The more you hold, the bigger your share. Paid in so far: <b>{show(r.total)} {r.symbol}</b>. Rewards arrive each time fees are collected.</small>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {mine === null ? <button type="button" className="btn small" disabled={busy} onClick={() => go(false)}>Check my rewards</button>
+          : <><span>You can claim <b>{show(mine)} {r.symbol}</b></span>{mine > 0n && <button type="button" className="btn small primary" disabled={busy} onClick={() => go(true)}>{busy ? "…" : "Claim"}</button>}</>}
       </div>
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>

@@ -5,7 +5,7 @@ import { json } from "@/lib/ai";
 import { logActivity } from "@/lib/activity";
 import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCHPAD_V4_ABI, deployable, viemChain, type ChainKey } from "@/lib/launchpad";
 import { padInfo } from "@/lib/launchpad-server";
-import { INSTANT_ABI, INSTANT_DEX, isInstantChain } from "@/lib/instant";
+import { INSTANT_ABI, INSTANT_DEX, INSTANT_V2_ABI, isInstantChain } from "@/lib/instant";
 import { lockerOn } from "@/lib/locker-server";
 import { getMarkets } from "@/lib/market";
 import { TREASURY } from "@/lib/trending";
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
   return json({
     chain, coin: c.coin, priceUsd: price, router: c.router, stablecoin: c.stablecoin, team: TREASURY ?? null, autistik: AUTISTIK,
     locker: locker?.address ?? null, signer: key ? privateKeyToAccount(key as `0x${string}`).address : "0x0000000000000000000000000000000000000000",
-    pad: info.pads[chain] ?? null, padVersion: info.pads[chain] ? info.versions[chain] ?? 2 : null, burner: info.burners[chain] ?? null, instant: info.instants[chain] ?? null,
+    pad: info.pads[chain] ?? null, padVersion: info.pads[chain] ? info.versions[chain] ?? 2 : null, burner: info.burners[chain] ?? null, instant: info.instants[chain] ?? null, instantVersion: info.instants[chain] ? info.instantVersions[chain] ?? 1 : null,
   });
 }
 
@@ -65,9 +65,11 @@ export async function POST(req: Request) {
       const [positions, owner, feeTo] = await Promise.all(["positions", "owner", "feeTo"].map((functionName) => pub.readContract({ address: at, abi: INSTANT_ABI, functionName })));
       if (getAddress(positions) !== getAddress(INSTANT_DEX[chain].positions)) return json({ error: `That contract doesn't use ${INSTANT_DEX[chain].dex} v3.` }, 400);
       if (!TREASURY || getAddress(owner) !== getAddress(TREASURY) || getAddress(feeTo) !== getAddress(TREASURY)) return json({ error: "That Instant Launch isn't owned by (and paying) the AUTISTIK team wallet." }, 400);
+      // v2 (optional holder rewards) answers rewardFeeFor(); v1 doesn't. New launches go to the newest; coins keep their own.
+      const version = await pub.readContract({ address: at, abi: INSTANT_V2_ABI, functionName: "rewardFeeFor", args: ["0x0000000000000000000000000000000000000000", 0n, 0] }).then(() => 2, () => 1);
       const { data: row } = await sb.from("launchpad_contracts").select("chain").eq("chain", chain).maybeSingle();
-      if (row) await sb.from("launchpad_contracts").update({ instant: at }).eq("chain", chain);
-      else await sb.from("launchpad_contracts").insert({ chain, address: "0x0000000000000000000000000000000000000000", instant: at });
+      if (row) await sb.from("launchpad_contracts").update({ instant: at, instant_version: version }).eq("chain", chain);
+      else await sb.from("launchpad_contracts").insert({ chain, address: "0x0000000000000000000000000000000000000000", instant: at, instant_version: version });
     } else if (kind === "burner") {
       if (chain !== "bsc") return json({ error: "The AUTISTIK burner is only for BNB Chain." }, 400);
       const [router, autistik] = await Promise.all([pub.readContract({ address: at, abi: BURNER_ABI, functionName: "router" }), pub.readContract({ address: at, abi: BURNER_ABI, functionName: "autistik" })]);
