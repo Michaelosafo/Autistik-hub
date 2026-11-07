@@ -303,7 +303,7 @@ function watchRequests(name: string, provider: any) {
     try { return await orig(args); }
     catch (e: any) {
       if (e?.code === -32002 || /already pending/i.test(String(e?.message))) {
-        throw Object.assign(new Error(`${label} already has a request waiting. Open ${label} and approve or reject it, then try again.`), { code: -32002 });
+        throw Object.assign(new Error(`${label} already has a request waiting. Open ${label}, answer that request first, then try again here.`), { code: -32002 });
       }
       throw e;
     } finally {
@@ -334,7 +334,7 @@ export async function chooseInjected(name: string, provider: any) {
     if (id) await switchEvm(provider, id).catch(() => { /* they can switch later from the network button */ });
     choose(name, provider);
   } catch (e: any) {
-    set({ busy: "", error: /reject|denied|cancel/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 200) });
+    set({ busy: "", error: e?.code === -32002 ? String(e.message) : /reject|denied|cancel/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 200) });
   }
 }
 
