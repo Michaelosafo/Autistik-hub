@@ -293,7 +293,7 @@ let wcChain = 0;
 const WC_CHAINS = [56, 1, 8453, 42161, 10, 137, 43114, 59144, 324];
 async function initWc(chainId = netOf(state.network).chainId || 56) {
   // A new network before connecting: start a fresh WalletConnect with that network required.
-  if (wc && !wc.session && wcChain !== chainId) { try { await wc.disconnect(); } catch { /* not connected */ } wc = null; }
+  if (wc && !wc.session && wcChain !== chainId) { pre = null; try { await wc.disconnect(); } catch { /* not connected */ } wc = null; }
   if (wc) return wc;
   wcChain = chainId;
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
@@ -340,10 +340,67 @@ export function wcHref(base: string, uri: string) {
   return `${base.replace(/\/$/, "")}/wc?uri=${u}`;
 }
 
+// ---- Phones: the WalletConnect link is made BEFORE the tap.
+// Phones only let a page open another app (the wallet) straight from a tap. Making the link takes a second or two
+// over the network, so opening the wallet after that was often blocked and nothing happened. Now the link is made
+// in the background as soon as the Connect window opens, and tapping a wallet opens it within the tap itself.
+let pre: { uri: string; at: number; wc: any } | null = null;
+let preparing = false;
+const PRE_FRESH = 4 * 60_000; // WalletConnect links last 5 minutes
+const preReady = () => !!pre && pre.wc === wc && !!wc && !wc.session && Date.now() - pre.at < PRE_FRESH;
+
+export async function prepareMobileWc() {
+  if (!isMobile() || !WALLETCONNECT_ID || state.current || state.network === "solana" || preparing || preReady()) return;
+  preparing = true;
+  try {
+    // A stale link: start over with a fresh provider.
+    if (pre && !preReady() && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
+    const p = await initWc();
+    if (p.session) return;
+    p.rpc.showQrModal = false;
+    const uri = await new Promise<string>((res, rej) => {
+      const t = setTimeout(() => rej(new Error("timeout")), 15_000);
+      p.once("display_uri", (u: string) => { clearTimeout(t); res(u); });
+      p.connect().then(async () => {
+        // Approved in the wallet app.
+        const id = netOf(state.network).chainId;
+        if (id) await switchEvm(p, id).catch(() => {});
+        if (!state.current) choose("WalletConnect", p);
+      }).catch(() => { if (pre?.wc === p) pre = null; if (state.busy) set({ busy: "" }); });
+    });
+    if (wc === p) pre = { uri, at: Date.now(), wc: p };
+  } catch { pre = null; } finally { preparing = false; }
+}
+
 export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
   const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
   const top: WcTarget | undefined = !t ? undefined : "id" in t ? { name: t.name, logo: `/wallets/${(t as any).id}.svg`, wc: (t as any).wc, native: (t as any).native, install: (t as any).install } : t;
+  // Phone + a wallet with its own link + the link already made: open the wallet NOW, inside the tap (no waiting).
+  if (isMobile() && top && (top.native || top.wc) && preReady()) {
+    const base = top.native || top.wc!, href = wcHref(base, pre!.uri);
+    try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: top.name })); } catch { /* private mode */ }
+    flagWc(true);
+    set({ open: true, busy: "", error: "", qr: { uri: pre!.uri, name: top.name, logo: top.logo, install: top.install, href } });
+    location.href = href;
+    return; // prepareMobileWc's connect() finishes the connection when the wallet approves
+  }
+  // Tapped while the link is still being made: wait for it (a second or two), then show a big "Open" button
+  // (a fresh tap always opens the wallet) and try opening it straight away too.
+  if (isMobile() && top && (top.native || top.wc) && preparing) {
+    set({ busy: top.name, error: "" });
+    for (let i = 0; i < 40 && preparing; i++) await new Promise((r) => setTimeout(r, 150));
+    if (preReady()) {
+      const base = top.native || top.wc!, href = wcHref(base, pre!.uri);
+      try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: top.name })); } catch { /* private mode */ }
+      flagWc(true);
+      set({ open: true, busy: "", qr: { uri: pre!.uri, name: top.name, logo: top.logo, install: top.install, href } });
+      location.href = href;
+      return;
+    }
+  }
+  // Any other way while a prepared link is waiting: drop it, so the two don't clash.
+  if (pre && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
   set({ busy: top?.name || "WalletConnect", error: "", qr: null });
   const mobile = isMobile();
   // On a phone: that wallet's own app opens with the request. On a computer: our window shows a code to scan
@@ -390,7 +447,7 @@ let cancelled = false;
 export function cancelQr() {
   cancelled = true;
   set({ qr: null, busy: "" });
-  const old = wc; wc = null;
+  const old = wc; wc = null; pre = null;
   old?.disconnect?.().catch(() => {});
   if (solWc && !solWc.session) { const o = solWc; solWc = null; o.disconnect?.().catch(() => {}); }
 }
@@ -632,5 +689,5 @@ async function restoreSolWc(): Promise<SolConn | null> {
 export function warmUp() {
   if (!WALLETCONNECT_ID || typeof window === "undefined") return;
   if (state.network === "solana") { if (!solWc) initSolWc().catch(() => {}); }
-  else if (!state.current) initWc().catch(() => {});
+  else if (!state.current) { if (isMobile()) prepareMobileWc().catch(() => {}); else initWc().catch(() => {}); }
 }

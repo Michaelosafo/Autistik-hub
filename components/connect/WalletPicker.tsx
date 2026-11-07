@@ -32,7 +32,13 @@ export default function WalletPicker() {
     if (s.qr) import("qrcode").then((m) => m.toDataURL(s.qr!.uri, { margin: 1, width: 260, color: { dark: "#191326", light: "#FFFFFF" } })).then(setQrImg).catch(() => {});
   }, [s.qr]);
   useEffect(() => { startDiscovery(); }, []);
-  useEffect(() => { if (s.open) warmUp(); }, [s.network, s.open]);
+  useEffect(() => {
+    if (!s.open) return;
+    warmUp();
+    // Phones: keep the wallet link fresh while the window is open (links expire after 5 minutes).
+    const t = setInterval(warmUp, 60_000);
+    return () => clearInterval(t);
+  }, [s.network, s.open]);
   useEffect(() => {
     if (!s.open) return;
     setQ(""); setLast(lastWalletName()); setShowAll(false);
