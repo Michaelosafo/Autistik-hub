@@ -11,6 +11,7 @@ contract V2Pool {
     constructor(uint160 s, int24 t) { sp = s; tk = t; }
     function slot0() external view returns (uint160, int24, uint16, uint16, uint16, uint32, bool) { return (sp, tk, 0, 0, 0, 0, true); }
     function pay(address token, address to, uint256 a) external { IERC20(token).transfer(to, a); }
+    function liquidity() external pure returns (uint128) { return 1e18; }
 }
 
 contract V2NPM {
@@ -25,6 +26,10 @@ contract V2NPM {
     function setTick(int24 t) external { nextTick = t; }
     function setFees(uint256 id, uint256 f0, uint256 f1) external { fees[id] = [f0, f1]; }
     function key(address a, address b) public pure returns (bytes32) { return keccak256(abi.encode(a, b)); }
+    mapping(address => mapping(uint24 => address)) public rewardPool;
+    function factory() external view returns (address) { return address(this); }
+    function setRewardPool(address token, uint24 fee) external { rewardPool[token][fee] = address(new V2Pool(1, 0)); }
+    function getPool(address a, address b, uint24 fee) external view returns (address) { return rewardPool[a == WETH9 ? b : a][fee]; }
     function createAndInitializePoolIfNecessary(address t0, address t1, uint24, uint160 s) external payable returns (address p) {
         require(t0 < t1, "order");
         p = poolOf[key(t0, t1)];
@@ -99,7 +104,7 @@ contract InstantV2Test is Test {
 
     function _launch(uint256 value, bytes32 salt, address reward, uint256 holderBps) internal returns (address t) {
         vm.prank(creator);
-        t = pad.launch{value: value}("Instant Dog", "IDOG", salt, 0, "", block.timestamp + 60, reward, holderBps);
+        t = pad.launch{value: value}("Instant Dog", "IDOG", salt, 0, "", block.timestamp + 60, AutistikInstantLaunchV2.Reward(reward, uint16(holderBps), 0));
     }
 
     function _buy(address who, address t, uint256 value) internal {
@@ -108,7 +113,7 @@ contract InstantV2Test is Test {
     }
 
     function _fees(address t, uint256 eth) internal {
-        (,, uint256 id,,,) = pad.coinOf(t);
+        (,, uint256 id,,,,) = pad.coinOf(t);
         if (t < address(weth)) npm.setFees(id, 0, eth); else npm.setFees(id, eth, 0);
     }
 
@@ -133,7 +138,7 @@ contract InstantV2Test is Test {
         _launch(0, bytes32(uint256(2)), NATIVE, 0);
         vm.expectRevert(AutistikInstantLaunchV2.BadSettings.selector);
         _launch(0, bytes32(uint256(2)), NATIVE, 10_001);
-        vm.expectRevert(AutistikInstantLaunchV2.RewardNotAllowed.selector);
+        vm.expectRevert(AutistikInstantLaunchV2.NoRewardPool.selector);
         _launch(0, bytes32(uint256(2)), address(0x1234), 5000);
     }
 
@@ -266,6 +271,30 @@ contract InstantV2Test is Test {
 
     function c_pool(address t) internal view returns (address) { return AutistikInstantTokenV2(payable(t)).pool(); }
 
+    function test_customToken_needsALivePool() public {
+        MockToken pepe = new MockToken("PEPE", 18);
+        AutistikInstantLaunchV2.Reward memory r = AutistikInstantLaunchV2.Reward(address(pepe), 5000, 3000);
+        vm.prank(creator);
+        vm.expectRevert(AutistikInstantLaunchV2.NoRewardPool.selector);
+        pad.launch("Instant Dog", "IDOG", bytes32(uint256(20)), 0, "", block.timestamp + 60, r);
+        npm.setRewardPool(address(pepe), 3000);
+        r.fee = 1234; // not a real fee tier
+        vm.prank(creator);
+        vm.expectRevert(AutistikInstantLaunchV2.NoRewardPool.selector);
+        pad.launch("Instant Dog", "IDOG", bytes32(uint256(20)), 0, "", block.timestamp + 60, r);
+        r.fee = 3000;
+        vm.prank(creator);
+        address t = pad.launch{value: 1 ether}("Instant Dog", "IDOG", bytes32(uint256(20)), 0, "", block.timestamp + 60, r);
+        (,,,,, uint24 fee,) = pad.coinOf(t);
+        assertEq(fee, 3000);
+        _fees(t, 0.4 ether);
+        pad.collectFees(t);
+        assertEq(pepe.balanceOf(t), 100 ether);
+        assertApproxEqAbs(AutistikInstantTokenV2(payable(t)).withdrawableRewards(creator), 100 ether, 10);
+        vm.expectRevert(AutistikInstantLaunchV2.RewardNotAllowed.selector);
+        pad.rewardFeeFor(address(weth), 5000, 500); // the chain's coin: use NATIVE
+    }
+
     // ---------------------------------------------------------------- safety
 
     function test_onlyLauncherAddsRewards() public {
@@ -315,7 +344,7 @@ contract InstantV2Test is Test {
         setUpWith(address(0x0000000000000000000000000000000000000F00));
         npm.setTick(160_123);
         address t = _launch(1 ether, bytes32(uint256(13)), NATIVE, 5000);
-        (,, uint256 id,,,) = pad.coinOf(t);
+        (,, uint256 id,,,,) = pad.coinOf(t);
         (,, int24 lo, int24 hi, uint256 a0, uint256 a1,) = npm.pos(id);
         assertEq(lo, -887_200);
         assertEq(hi, 160_000);
@@ -333,12 +362,12 @@ contract InstantV2Test is Test {
         assertEq(rh.rewardFee(address(usdt)), 0);
         vm.prank(creator);
         vm.expectRevert(AutistikInstantLaunchV2.RewardNotAllowed.selector);
-        rh.launch("A", "A", bytes32(uint256(1)), 0, "", block.timestamp + 60, address(usdt), 5000);
+        rh.launch("A", "A", bytes32(uint256(1)), 0, "", block.timestamp + 60, AutistikInstantLaunchV2.Reward(address(usdt), 5000, 0));
         vm.prank(creator);
         vm.expectRevert(AutistikInstantLaunchV2.NoFirstBuyHere.selector);
-        rh.launch{value: 1 ether}("A", "A", bytes32(uint256(1)), 0, "", block.timestamp + 60, NATIVE, 5000);
+        rh.launch{value: 1 ether}("A", "A", bytes32(uint256(1)), 0, "", block.timestamp + 60, AutistikInstantLaunchV2.Reward(NATIVE, 5000, 0));
         vm.prank(creator);
-        rh.launch("A", "A", bytes32(uint256(1)), 0, "", block.timestamp + 60, NATIVE, 5000);
+        rh.launch("A", "A", bytes32(uint256(1)), 0, "", block.timestamp + 60, AutistikInstantLaunchV2.Reward(NATIVE, 5000, 0));
         vm.expectRevert(AutistikInstantLaunchV2.BadSettings.selector);
         rh.setRewardToken(address(usdt), 500);
     }
@@ -351,7 +380,7 @@ contract InstantV2Test is Test {
         uint256 dl = block.timestamp + 600;
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, MessageHashUtils.toEthSignedMessageHash(pad.permitHash(creator, salt, dl)));
         vm.prank(creator);
-        pad.launch("Instant Dog", "IDOG", salt, dl, abi.encodePacked(r, s, v), block.timestamp + 60, NATIVE, 5000);
+        pad.launch("Instant Dog", "IDOG", salt, dl, abi.encodePacked(r, s, v), block.timestamp + 60, AutistikInstantLaunchV2.Reward(NATIVE, 5000, 0));
     }
 
     function test_ownerManagesRewardList() public {
@@ -362,7 +391,7 @@ contract InstantV2Test is Test {
         pad.setRewardToken(address(cake), 2500);
         _launch(0, bytes32(uint256(15)), address(cake), 5000);
         pad.setRewardToken(address(cake), 0);
-        vm.expectRevert(AutistikInstantLaunchV2.RewardNotAllowed.selector);
+        vm.expectRevert(AutistikInstantLaunchV2.NoRewardPool.selector);
         _launch(0, bytes32(uint256(16)), address(cake), 5000);
     }
 }

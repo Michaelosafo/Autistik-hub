@@ -55,11 +55,11 @@ contract InstantV2EthForkTest is Test {
         _sell(b1, t, IERC20(t).balanceOf(b1) / 2);
     }
 
-    function _run(address reward) internal {
+    function _run(address reward, uint24 fee) internal {
         if (!on) { vm.skip(true); return; }
-        assertTrue(reward == NATIVE || IV3Factory(FACTORY).getPool(WBNB, reward, pad.rewardFee(reward)) != address(0), "reward pool");
+        assertTrue(reward == NATIVE || IV3Factory(FACTORY).getPool(WBNB, reward, fee == 0 ? pad.rewardFee(reward) : fee) != address(0), "reward pool");
         vm.prank(creator);
-        address t = pad.launch{value: 0.05 ether}("Fork Dog", "FDOG", keccak256(abi.encode(reward)), 0, "", block.timestamp + 60, reward, 5000);
+        address t = pad.launch{value: 0.05 ether}("Fork Dog", "FDOG", keccak256(abi.encode(reward)), 0, "", block.timestamp + 60, AutistikInstantLaunchV2.Reward(reward, 5000, fee));
         AutistikInstantTokenV2 c = AutistikInstantTokenV2(payable(t));
         assertGt(IERC20(t).balanceOf(creator), 0, "creator buy");
         assertEq(c.eligibleSupply(), IERC20(t).balanceOf(creator), "only the creator counts");
@@ -98,14 +98,31 @@ contract InstantV2EthForkTest is Test {
         assertEq(address(pad).balance, 0, "nothing left behind");
     }
 
-    function test_fork_usdcRewards() public { _run(USDT); }
-    function test_fork_usdtRewards() public { _run(CAKE); }
-    function test_fork_ethRewards() public { _run(NATIVE); }
+    function test_fork_usdcRewards() public { _run(USDT, 0); }
+    function test_fork_usdtRewards() public { _run(CAKE, 0); }
+    function test_fork_ethRewards() public { _run(NATIVE, 0); }
+
+    /// A token that isn't on the ready-made list, pasted by the creator: the deepest live pool with the coin is used.
+    function test_fork_customToken_wbtc() public {
+        if (!on) { vm.skip(true); return; }
+        address tok = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
+        uint24[4] memory tiers = [uint24(500), 2500, 3000, 10_000];
+        uint24 best; uint256 deepest;
+        for (uint256 i; i < 4; i++) {
+            address p = IV3Factory(FACTORY).getPool(WBNB, tok, tiers[i]);
+            if (p == address(0)) continue;
+            uint256 bal = IERC20(WBNB).balanceOf(p);
+            if (bal > deepest) { deepest = bal; best = tiers[i]; }
+        }
+        assertGt(best, 0, "a pool");
+        console.log("custom reward pool fee tier", best);
+        _run(tok, best);
+    }
 
     function test_fork_noRewards() public {
         if (!on) { vm.skip(true); return; }
         vm.prank(creator);
-        address t = pad.launch{value: 0.05 ether}("Plain", "PLN", bytes32(0), 0, "", block.timestamp + 60, address(0), 0);
+        address t = pad.launch{value: 0.05 ether}("Plain", "PLN", bytes32(0), 0, "", block.timestamp + 60, AutistikInstantLaunchV2.Reward(address(0), 0, 0));
         _trade(t);
         uint256 cr0 = creator.balance;
         uint256 tr0 = treasury.balance;

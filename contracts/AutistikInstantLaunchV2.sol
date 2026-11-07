@@ -33,6 +33,15 @@ interface INonfungiblePositionManagerV2 {
     function mint(MintParams calldata params) external payable returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
     function collect(CollectParams calldata params) external payable returns (uint256 amount0, uint256 amount1);
     function WETH9() external view returns (address);
+    function factory() external view returns (address);
+}
+
+interface IV3FactoryV2 {
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address);
+}
+
+interface IV3LiquidityV2 {
+    function liquidity() external view returns (uint128);
 }
 
 /// @dev v3 pool slot0. PancakeSwap's feeProtocol is a uint32 and Uniswap's a uint8; decoding as uint32 reads both.
@@ -209,6 +218,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     /// @dev The original v3 SwapRouter, or address(0) where there is none (then: no first buy, rewards only in the coin).
     ISwapRouterV3V2 public immutable router;
     address public immutable weth;
+    address public immutable factory;
 
     address public owner;
     address public feeTo; // AUTISTIK's share of pool fees and the launch fee
@@ -218,8 +228,18 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     address public eligibilitySigner; // the Hub's $20 AUTISTIK check (zero: off)
     uint256 public launches;
 
-    /// @notice Tokens creators may pick as the holders' reward, with the v3 pool fee tier used to buy them with the coin.
+    /// @notice Top tokens shown as ready-made reward choices, with the v3 pool fee tier used to buy them with the coin.
+    /// Creators can also paste any other token that has a live pool with the chain's coin (see launch).
     mapping(address => uint24) public rewardFee;
+
+    /// @notice A creator's holder-reward choice. token: address(0) none, NATIVE the chain's coin, or any token.
+    /// holderBps: share of the creator's part of the pool fees that buys the reward for holders (10000 = all of it).
+    /// fee: the v3 pool fee tier to buy a token that isn't on the ready-made list (0 for listed tokens).
+    struct Reward {
+        address token;
+        uint16 holderBps;
+        uint24 fee;
+    }
 
     struct Coin {
         address creator;
@@ -227,6 +247,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         uint256 positionId;
         uint16 creatorShareBps;
         uint16 holderBps; // share of the creator's part that goes to holders
+        uint24 rewardFee; // v3 fee tier used to buy the reward token
         uint64 launchedAt;
     }
     mapping(address => Coin) public coinOf;
@@ -255,6 +276,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     error PoolTaken();
     error RewardNotAllowed();
     error NoFirstBuyHere();
+    error NoRewardPool();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -269,6 +291,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         positions = INonfungiblePositionManagerV2(positions_);
         router = ISwapRouterV3V2(router_);
         weth = INonfungiblePositionManagerV2(positions_).WETH9();
+        factory = INonfungiblePositionManagerV2(positions_).factory();
         owner = owner_;
         feeTo = feeTo_;
         startFdv = startFdv_;
@@ -288,40 +311,53 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     // ------------------------------------------------------------------ launch
 
     /// @notice Launches a coin. msg.value = launch fee + (optional) the creator's first buy, made before anyone else.
-    /// @param rewardToken address(0) for no holder rewards, NATIVE for the chain's coin, or an approved token.
-    /// @param holderBps share (in basis points) of the creator's part of the pool fees that goes to holders.
+    /// @param reward optional holder rewards (see Reward); all zero for none.
     function launch(
         string calldata name, string calldata symbol, bytes32 salt, uint256 permitDeadline, bytes calldata permitSig, uint256 deadline,
-        address rewardToken, uint256 holderBps
+        Reward calldata reward
     ) external payable nonReentrant returns (address token) {
         if (block.timestamp > deadline) revert TooLate();
         if (bytes(name).length == 0 || bytes(name).length > 32 || bytes(symbol).length == 0 || bytes(symbol).length > 12) revert BadName();
         if (msg.value < launchFee) revert FeeTooLow();
-        if (rewardToken == address(0)) {
-            if (holderBps != 0) revert BadSettings();
-        } else {
-            if (holderBps == 0 || holderBps > 10_000) revert BadSettings();
-            if (rewardToken != NATIVE && rewardFee[rewardToken] == 0) revert RewardNotAllowed();
-        }
+        uint24 fee = rewardFeeFor(reward.token, reward.holderBps, reward.fee);
         _checkEligible(permitDeadline, salt, permitSig);
-        token = _launch(name, symbol, salt, rewardToken, holderBps);
+        token = _launch(name, symbol, salt, reward, fee);
     }
 
-    function _launch(string calldata name, string calldata symbol, bytes32 salt, address rewardToken, uint256 holderBps) private returns (address token) {
-        token = address(new AutistikInstantTokenV2{salt: keccak256(abi.encode(msg.sender, salt))}(name, symbol, SUPPLY, rewardToken));
-        _setup(token, holderBps);
+    /// @notice Checks a reward choice and returns the pool fee tier its token is bought with (reverts if it can't be).
+    /// A token that isn't on the ready-made list needs a live v3 pool with the chain's coin at the given fee tier.
+    function rewardFeeFor(address token, uint256 holderBps, uint24 fee) public view returns (uint24) {
+        if (token == address(0)) {
+            if (holderBps != 0) revert BadSettings();
+            return 0;
+        }
+        if (holderBps == 0 || holderBps > 10_000) revert BadSettings();
+        if (token == NATIVE) return 0;
+        if (address(router) == address(0) || token == weth) revert RewardNotAllowed();
+        uint24 listed = rewardFee[token];
+        if (listed != 0 && (fee == 0 || fee == listed)) return listed;
+        if (fee != 100 && fee != 500 && fee != 2500 && fee != 3000 && fee != 10_000) revert NoRewardPool();
+        if (token.code.length == 0) revert NoRewardPool();
+        address pool = IV3FactoryV2(factory).getPool(weth, token, fee);
+        if (pool == address(0) || IV3LiquidityV2(pool).liquidity() == 0) revert NoRewardPool();
+        return fee;
+    }
+
+    function _launch(string calldata name, string calldata symbol, bytes32 salt, Reward calldata reward, uint24 fee) private returns (address token) {
+        token = address(new AutistikInstantTokenV2{salt: keccak256(abi.encode(msg.sender, salt))}(name, symbol, SUPPLY, reward.token));
+        _setup(token, reward.holderBps, fee);
         uint256 got = _firstBuy(token, msg.value - launchFee);
         AutistikInstantTokenV2(payable(token)).start();
         if (launchFee > 0) _pay(feeTo, launchFee);
         Coin storage c = coinOf[token];
         emit Launched(token, c.pool, msg.sender, c.positionId, got, name, symbol);
-        if (rewardToken != address(0)) emit RewardsChosen(token, rewardToken, holderBps);
+        if (reward.token != address(0)) emit RewardsChosen(token, reward.token, reward.holderBps);
     }
 
     /// @dev The pool and the position, recorded.
-    function _setup(address token, uint256 holderBps) private {
+    function _setup(address token, uint16 holderBps, uint24 fee) private {
         (address pool, uint256 positionId) = _seed(token);
-        coinOf[token] = Coin(msg.sender, pool, positionId, uint16(creatorShareBps), uint16(holderBps), uint64(block.timestamp));
+        coinOf[token] = Coin(msg.sender, pool, positionId, uint16(creatorShareBps), holderBps, fee, uint64(block.timestamp));
         unchecked { launches++; }
     }
 
@@ -386,7 +422,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
             _pay(c.creator, creatorPart - holdersPart);
             _pay(feeTo, eth - creatorPart);
         }
-        if (c.holderBps > 0) _payHolders(token, holdersPart);
+        if (c.holderBps > 0) _payHolders(token, holdersPart, c.rewardFee);
         if (coins > 0) {
             uint256 tc = (coins * c.creatorShareBps) / 10_000;
             if (tc > 0) IERC20(token).safeTransfer(c.creator, tc);
@@ -396,7 +432,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     }
 
     /// @dev Turns the holders' part (plus anything pending) into the reward and pays it into the coin for its holders.
-    function _payHolders(address token, uint256 amount) private {
+    function _payHolders(address token, uint256 amount, uint24 fee) private {
         uint256 total = amount + rewardPending[token];
         if (total == 0) return;
         AutistikInstantTokenV2 coin = AutistikInstantTokenV2(payable(token));
@@ -409,7 +445,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
             return;
         }
         uint256 before = IERC20(reward).balanceOf(token);
-        try router.exactInputSingle{value: total}(ISwapRouterV3V2.ExactInputSingleParams(weth, reward, rewardFee[reward], token, block.timestamp, total, 0, 0)) {
+        try router.exactInputSingle{value: total}(ISwapRouterV3V2.ExactInputSingleParams(weth, reward, fee, token, block.timestamp, total, 0, 0)) {
             uint256 got = IERC20(reward).balanceOf(token) - before;
             rewardPending[token] = 0;
             coin.addRewards(got);
@@ -472,7 +508,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         emit SettingsChanged();
     }
 
-    /// @notice Approves (fee > 0) or removes (fee 0) a token as a holders' reward for new launches. Coins already
+    /// @notice Adds (fee > 0) or removes (fee 0) a token on the ready-made reward list for new launches. Coins already
     /// launched keep the reward they chose.
     function setRewardToken(address token, uint24 fee) external onlyOwner {
         if (token == address(0) || token == NATIVE || address(router) == address(0)) revert BadSettings();
