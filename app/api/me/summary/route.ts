@@ -15,7 +15,7 @@ export async function GET(req: Request) {
   if (slow) return slow;
   const sb = supabaseService();
   const [{ data: prof }, { count: following }, { count: followers }, { data: w }, { count: tiks }, { count: likes }] = await Promise.all([
-    sb.from("profiles").select("alias,handle,color,is_team,team_title,is_verified").eq("id", user.id).maybeSingle(),
+    sb.from("profiles").select("alias,handle,color,is_team,team_title,is_verified,verified_badge").eq("id", user.id).maybeSingle(),
     sb.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", user.id),
     sb.from("follows").select("*", { count: "exact", head: true }).eq("followee_id", user.id),
     sb.from("wallets").select("address").eq("user_id", user.id).maybeSingle(),
