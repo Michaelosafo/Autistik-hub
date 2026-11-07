@@ -8,6 +8,7 @@ import { CHAINS, SOL_DECIMALS, checkPlan } from "@/lib/launchpad";
 import { PublicKey } from "@solana/web3.js";
 import { SOL_ADDR, connection, buildAddLiquidity, buildBurnLp, buildMint, buildPool, findPool } from "@/lib/solana-launch";
 import { buildClaimLp, buildLockLp } from "@/lib/solana-locker";
+import { SOL_INSTANT_SUPPLY, buildInstantLock, buildInstantPool } from "@/lib/solana-instant";
 import { LOCK_SECONDS, isLock } from "@/lib/launchpad";
 
 export const runtime = "nodejs";
@@ -48,6 +49,27 @@ export async function POST(req: Request) {
           if (error) return json({ error: "Couldn't set up holder rewards. Try again." }, 500);
         }
         return json(built);
+      }
+      // Instant launch (no liquidity, no bonding curve): the coin, then its Raydium pool with the whole supply
+      // one-sided, then that position locked forever (lib/solana-instant.ts).
+      case "instant-mint": {
+        const me = await currentUser();
+        if (!me) return json({ error: "Please sign in first." }, 401);
+        const name = String(b?.name || "").trim().replace(/\s+/g, " ").slice(0, 32), symbol = String(b?.symbol || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+        if (!name || !symbol) return json({ error: "Add a name and a ticker." }, 400);
+        const taken = takenError(await namesTaken(name, symbol));
+        if (taken) return json({ error: taken }, 409);
+        const built = await buildMint(owner, { name, symbol, supply: String(SOL_INSTANT_SUPPLY) });
+        await saveLogo("solana", built.mint, b?.logo, me.id).catch(() => {});
+        return json(built);
+      }
+      case "instant-pool": {
+        if (!SOL_ADDR.test(String(b.mint || ""))) return json({ error: "Missing the coin's address." }, 400);
+        return json(await buildInstantPool(owner, b.mint));
+      }
+      case "instant-lock": {
+        if (!SOL_ADDR.test(String(b.nftMint || ""))) return json({ error: "Missing the pool position." }, 400);
+        return json(await buildInstantLock(owner, b.nftMint));
       }
       case "pool": {
         const r = checkPlan({ ...b.plan, chain: "solana" }, {});
@@ -126,6 +148,7 @@ export async function POST(req: Request) {
   } catch (e: any) {
     console.error(`launch-solana ${action}:`, String(e?.message || e).slice(0, 300));
     if ((action === "lock" || action === "claim") && /AUTISTIK Solana Locker|LP tokens|no lock|Still locked/.test(String(e?.message))) return json({ error: String(e.message) }, 400);
+    if (action.startsWith("instant") && /^(Your coin|This wallet|Raydium didn't)/.test(String(e?.message))) return json({ error: String(e.message) }, 400);
     return json({ error: `Couldn't prepare the ${CHAINS.solana.name} transaction. Try again in a moment.` }, 502);
   }
 }

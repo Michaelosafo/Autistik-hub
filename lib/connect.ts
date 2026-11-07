@@ -62,12 +62,20 @@ export const NETWORKS: Net[] = XCHAIN_LIST.map((c) => ({
     add: { chainName: c.name, nativeCurrency: { name: c.native.symbol, symbol: c.native.symbol, decimals: c.native.decimals }, rpcUrls: [c.rpc], blockExplorerUrls: c.explorer ? [c.explorer] : [] },
   } : {}),
 }));
+// Robinhood Chain (an Arbitrum chain, chain ID 4663): in the network menu for the Launch Pad, Instant launch and the
+// AUTISTIK Locker there. Not in the cross-network swap list (lib/bridge-chains.ts), since LI.FI doesn't route to it.
+if (!NETWORKS.some((n) => n.key === "robinhood")) {
+  NETWORKS.push({
+    key: "robinhood", id: 4663, chainId: 4663, name: "Robinhood Chain", short: "Robinhood", color: "#00C805",
+    add: { chainName: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: ["https://rpc.mainnet.chain.robinhood.com"], blockExplorerUrls: ["https://robinhoodchain.blockscout.com"] },
+  });
+}
 /** Network logos (from LI.FI, through the Hub), loaded once per visit. Missing ones show a coloured dot. */
 let logoReq: Promise<Record<number, string>> | null = null;
 export const netLogos = () => (logoReq ??= fetch("/api/wallet/x-chains", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })
   .then((r) => r.json()).then((d) => (d?.logos && typeof d.logos === "object" ? d.logos : {})).catch(() => ({})));
 /** The ones shown first. */
-export const TOP_NETWORKS = ["bsc", "ethereum", "solana", "base", "arbitrum"];
+export const TOP_NETWORKS = ["bsc", "ethereum", "solana", "robinhood", "base", "arbitrum"];
 export const netOf = (k: NetKey) => NETWORKS.find((n) => n.key === k) ?? NETWORKS[0];
 const savedNet = (): NetKey => {
   try { const v = localStorage.getItem("aw-network"); if (NETWORKS.some((n) => n.key === v)) return v as NetKey; } catch { /* private mode */ }

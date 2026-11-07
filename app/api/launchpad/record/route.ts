@@ -9,6 +9,7 @@ import { lockPda, lockerId, readLock } from "@/lib/solana-locker";
 import { PublicKey } from "@solana/web3.js";
 import { instantOn, padOn } from "@/lib/launchpad-server";
 import { INSTANT_ABI } from "@/lib/instant";
+import { verifyInstant } from "@/lib/solana-instant";
 import { LOCKER_ABI } from "@/lib/locker";
 import { supabaseServer, supabaseService, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
   const chain = CHAINS[body?.chain as ChainKey];
   const txHash = String(body?.txHash || "");
   if (!chain) return json({ error: "Unknown chain." }, 400);
-  if (isSolana(chain)) return recordSolana(body);
+  if (isSolana(chain)) return body?.style === "instant" ? recordSolanaInstant(body) : recordSolana(body);
   if (body?.style === "instant") return recordInstant(chain.key, txHash, body);
   const pad = await padOn(chain.key);
   if (!pad) return json({ error: `${chain.name} launches aren't open yet.` }, 400);
@@ -160,7 +161,14 @@ async function recordInstant(chainKey: ChainKey, txHash: string, body: any) {
   if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your coin launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on PancakeSwap." : "Your coin launched, but we couldn't add it to the list. It's still live on PancakeSwap." }, 500);
   const user = await currentUser();
   await saveLogo(chainKey, row.token, body?.logo, user?.id ?? null).catch(() => {});
-  // What the creator wrote about the coin (kept off-chain for Instant coins), shown on its coin page.
+  await saveInfo(chainKey, row.token, body, owner);
+  if (isAChain(chainKey)) await scanToken(chainKey, row.token, { dev: row.creator, userId: owner }).catch(() => null);
+  logActivity(owner, "launch", `Instant-launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chainKey}/${row.token}`);
+  return json({ launch: row });
+}
+
+/** What the creator wrote about an Instant coin (kept off-chain), shown on its coin page: description and links. */
+async function saveInfo(chain: string, token: string, body: any, owner: string | null) {
   const link = (v: unknown, hosts?: RegExp) => {
     const t = typeof v === "string" ? v.trim() : "";
     if (!/^https:\/\/[^\s]{3,200}$/.test(t)) return null;
@@ -171,9 +179,26 @@ async function recordInstant(chainKey: ChainKey, txHash: string, body: any) {
     website: link(body?.website), x: link(body?.x, /(^|\.)(x|twitter)\.com$/i), telegram: link(body?.telegram, /(^|\.)(t\.me|telegram\.me)$/i),
   };
   if (info.description || info.website || info.x || info.telegram) {
-    await supabaseService().from("token_info").upsert({ chain: chainKey, token: row.token, ...info, user_id: owner, updated_at: new Date().toISOString() }, { onConflict: "chain,token", ignoreDuplicates: true }).then(() => {}, () => {});
+    await supabaseService().from("token_info").upsert({ chain, token, ...info, user_id: owner, updated_at: new Date().toISOString() }, { onConflict: "chain,token", ignoreDuplicates: true }).then(() => {}, () => {});
   }
-  if (isAChain(chainKey)) await scanToken(chainKey, row.token, { dev: row.creator, userId: owner }).catch(() => null);
-  logActivity(owner, "launch", `Instant-launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chainKey}/${row.token}`);
+}
+
+/** Solana Instant launch: the coin, its Raydium CLMM pool, and the pool position locked by Raydium's lock program. */
+async function recordSolanaInstant(body: any) {
+  const mint = String(body?.token || ""), pool = String(body?.pair || ""), nftMint = String(body?.nftMint || ""), sig = String(body?.txHash || "");
+  if (!SOL_ADDR.test(mint) || !SOL_ADDR.test(pool) || !SOL_ADDR.test(nftMint) || !/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(sig)) return json({ error: "Missing the coin, pool or transaction." }, 400);
+  let v;
+  try { v = await verifyInstant(mint, pool, nftMint); } catch { return json({ error: "Couldn't reach Solana. Try again in a minute." }, 502); }
+  if ("error" in v) return json({ error: v.error }, 400);
+  const owner = await ownerOf(v.creator, true);
+  const row = {
+    chain: "solana", token: mint, pair: pool, creator: v.creator, name: v.name.slice(0, 64), symbol: v.symbol.slice(0, 24),
+    supply: v.supply, tx_hash: sig, lp_lock: "burn", lp_unlock_at: null, user_id: owner, style: "instant",
+  };
+  const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
+  if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your coin launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on Raydium." : "Your coin launched, but we couldn't add it to the list. It's still live on Raydium." }, 500);
+  await saveInfo("solana", mint, body, owner);
+  if (isAChain("solana")) await scanToken("solana", mint, { dev: v.creator, userId: owner }).catch(() => null);
+  logActivity(owner, "launch", `Instant-launched ${row.symbol || mint} on Solana`, `/launchpad/solana/${mint}`);
   return json({ launch: row });
 }
