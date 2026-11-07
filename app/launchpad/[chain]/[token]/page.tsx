@@ -30,7 +30,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
   const token = sol ? params.token : getAddress(params.token);
   const sb = supabaseServer();
   if (HIDDEN.has(token.toLowerCase())) notFound();
-  const [{ data: row }, user, board, access, { data: logoRow }, dex] = await Promise.all([
+  const [{ data: row }, user, board, access, { data: logoRow }, dex, { data: info }] = await Promise.all([
     sb.from("launches").select("*").eq("chain", c.key).eq("token", token).maybeSingle(),
     currentUser(),
     getBoard(60),
@@ -38,6 +38,8 @@ export default async function TokenPage({ params }: { params: { chain: string; t
     sb.from("token_logos").select("url").eq("chain", c.key).eq("token", token).maybeSingle(),
     // Picture, banner and links from DexScreener, for every token (null when DexScreener doesn't list it).
     getDexProfile(c.key, token),
+    // What the creator wrote at launch (Instant coins): description and links.
+    sb.from("token_info").select("description,website,x,telegram").eq("chain", c.key).eq("token", token).maybeSingle(),
   ]);
   // A coin on the whitelist (lib/listings.ts) has a page even without a row in launches.
   const wl = LISTINGS.find((l) => l.chain === c.key && l.token.toLowerCase() === token.toLowerCase());
@@ -87,6 +89,14 @@ export default async function TokenPage({ params }: { params: { chain: string; t
           <small className="muted">Written by the project on DexScreener, not by AUTISTIK.</small>
         </section>
       )}
+      {info?.description && !about && <p className="tk-about-own" style={{ margin: 0 }}>{info.description}</p>}
+      {info && !(dex && (dex.websites.length > 0 || dex.socials.length > 0)) && (info.website || info.x || info.telegram) && (
+        <nav className="tk-links" aria-label={`${launch.symbol} links`}>
+          {info.website && <a className="btn small" href={info.website} target="_blank" rel="noopener noreferrer nofollow ugc">Website ↗</a>}
+          {info.x && <a className="btn small" href={info.x} target="_blank" rel="noopener noreferrer nofollow ugc">X ↗</a>}
+          {info.telegram && <a className="btn small" href={info.telegram} target="_blank" rel="noopener noreferrer nofollow ugc">Telegram ↗</a>}
+        </nav>
+      )}
       {dex && (dex.websites.length > 0 || dex.socials.length > 0) && (
         <nav className="tk-links" aria-label={`${launch.symbol} links`}>
           {[...dex.websites, ...dex.socials].map((l) => <a key={l.url} className="btn small" href={l.url} target="_blank" rel="noopener noreferrer nofollow">{l.label} ↗</a>)}
@@ -119,13 +129,13 @@ export default async function TokenPage({ params }: { params: { chain: string; t
             {!listed && !sol && !instant && <VerifySource chain={c.key} token={token} />}
             {listed ? (
               <p className="muted"><>Listed {listedAt(launch.created_at)}{row ? "" : " by the AUTISTIK team"}. </> {String(launch.tx_hash || "").startsWith("liquidity:") ? <>Its liquidity was added through AUTISTIK, but the token wasn&apos;t made with the full Launch Pad flow, so we don&apos;t vouch for its tax, owner or liquidity lock.</> : <>This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock.</>} Check the contract on the explorer before buying.</p>
-            ) : instant ? <p className="muted">Instant launch on {listedAt(launch.created_at)}: no bonding curve and no liquidity from the creator. All 1,000,000,000 coins went straight into a PancakeSwap v3 pool, and that pool position is held by the AUTISTIK Instant Launch contract forever, so the liquidity can&apos;t be removed by anyone. No tax, no owner, no minting.</p>
+            ) : instant ? <p className="muted">Instant launch on {listedAt(launch.created_at)}: no bonding curve and no liquidity from the creator. All 1,000,000,000 coins went straight into a {c.dex} v3 pool, and that pool position is held by the AUTISTIK Instant Launch contract forever, so the liquidity can&apos;t be removed by anyone. No tax, no owner, no minting.</p>
             : <p className="muted">Launched {listedAt(launch.created_at)} with a fixed supply of {BigInt(launch.supply).toLocaleString("en-US")}. No minting, no blacklist. {lock === "burn" ? "The liquidity was burned at launch, so it stays in the pool forever." : `Liquidity: ${LOCKS[lock].short.toLowerCase()} in the AUTISTIK ${sol ? "Solana " : ""}Locker.`}</p>}
           </div>
         </div>
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
-          {instant && launch.pad && <InstantFees pad={launch.pad} token={token as `0x${string}`} creator={launch.creator} />}
+          {instant && launch.pad && <InstantFees chain={c.key} pad={launch.pad} token={token as `0x${string}`} creator={launch.creator} />}
           {!listed && !sol && !instant && <HolderRewards chain={c.key} token={token as `0x${string}`} />}
           {!listed && !sol && !instant && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}
           {!listed && sol && <SolanaHolderRewards token={token} />}
