@@ -15,13 +15,14 @@ export default function DevPerks() {
   const toHolders = (yours * share) / 100;
   const keep = yours - toHolders;
   return (
-    <section className={"dev-perks" + (open ? " open" : "")} aria-labelledby="dev-perks-h">
+    // Closed: just one small button, so the launch form comes straight away.
+    !open ? (
+      <button type="button" className="btn small perk-open" aria-expanded={false} aria-controls="dev-perks-more" onClick={() => setOpen(true)}>✨ Why launch with us? Read</button>
+    ) : (
+    <section className="dev-perks" aria-labelledby="dev-perks-h">
       <div className="perk-bar">
-        <span className="perk-bar-t">
-          <b id="dev-perks-h">💛 What you get as a dev</b>
-          <span className="perk-chips"><em>💸 50% of fees</em><em>🎁 Holder rewards</em><em>🔒 Rug-proof</em><em>🤖 Bot shield</em></span>
-        </span>
-        <button type="button" className="btn small primary" aria-expanded={open} aria-controls="dev-perks-more" onClick={() => setOpen(!open)}>{open ? "Close" : "📖 Read before you launch"}</button>
+        <b id="dev-perks-h">💛 Why launch with AUTISTIK</b>
+        <button type="button" className="btn small" aria-expanded={true} aria-controls="dev-perks-more" onClick={() => setOpen(false)}>Close ✕</button>
       </div>
       {open && <div id="dev-perks-more" className="stack" style={{ gap: 12, marginTop: 12 }}>
       <small className="muted">Free to launch · you only pay the network fee</small>
@@ -54,5 +55,6 @@ export default function DevPerks() {
       </div>
       </div>}
     </section>
+    )
   );
 }

@@ -4795,3 +4795,5 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .lock-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #86efac); border-radius: 99px; }
 .cert-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .cert-facts > div { display: flex; flex-direction: column; gap: 2px; }
+
+.perk-open { align-self: flex-start; }
