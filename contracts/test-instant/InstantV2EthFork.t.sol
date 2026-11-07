@@ -58,7 +58,7 @@ contract InstantV2EthForkTest is Test {
         if (!on) { vm.skip(true); return; }
         assertTrue(reward == NATIVE || IV3Factory(FACTORY).getPool(WBNB, reward, pad.rewardFee(reward)) != address(0), "reward pool");
         vm.prank(creator);
-        address t = pad.launch{value: 0.2 ether}("Fork Dog", "FDOG", keccak256(abi.encode(reward)), 0, "", block.timestamp + 60, reward, 5000);
+        address t = pad.launch{value: 0.05 ether}("Fork Dog", "FDOG", keccak256(abi.encode(reward)), 0, "", block.timestamp + 60, reward, 5000);
         AutistikInstantTokenV2 c = AutistikInstantTokenV2(payable(t));
         assertGt(IERC20(t).balanceOf(creator), 0, "creator buy");
         assertEq(c.eligibleSupply(), IERC20(t).balanceOf(creator), "only the creator counts");
@@ -103,7 +103,7 @@ contract InstantV2EthForkTest is Test {
     function test_fork_noRewards() public {
         if (!on) { vm.skip(true); return; }
         vm.prank(creator);
-        address t = pad.launch{value: 0.2 ether}("Plain", "PLN", bytes32(0), 0, "", block.timestamp + 60, address(0), 0);
+        address t = pad.launch{value: 0.05 ether}("Plain", "PLN", bytes32(0), 0, "", block.timestamp + 60, address(0), 0);
         _trade(t);
         uint256 cr0 = creator.balance;
         pad.collectFees(t);
