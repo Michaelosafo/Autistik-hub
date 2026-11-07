@@ -235,7 +235,9 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     /// @notice Holders' part not yet turned into the reward token (a swap failed); retried on the next collection.
     mapping(address => uint256) public rewardPending;
 
-    event Launched(address indexed token, address indexed pool, address indexed creator, uint256 positionId, uint256 creatorTokens, string name, string symbol, address rewardToken, uint256 holderBps);
+    /// @dev Same as v1, so anything that reads v1 launches reads these too.
+    event Launched(address indexed token, address indexed pool, address indexed creator, uint256 positionId, uint256 creatorTokens, string name, string symbol);
+    event RewardsChosen(address indexed token, address rewardToken, uint256 holderBps);
     event FeesCollected(address indexed token, uint256 eth, uint256 tokens, uint256 toCreatorEth, uint256 toAutistikEth, uint256 toHoldersEth);
     event RewardsPaid(address indexed token, address rewardToken, uint256 spentEth, uint256 rewardAmount);
     event RewardTokenSet(address indexed token, uint24 fee);
@@ -307,14 +309,21 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
 
     function _launch(string calldata name, string calldata symbol, bytes32 salt, address rewardToken, uint256 holderBps) private returns (address token) {
         token = address(new AutistikInstantTokenV2{salt: keccak256(abi.encode(msg.sender, salt))}(name, symbol, SUPPLY, rewardToken));
+        _setup(token, holderBps);
+        uint256 got = _firstBuy(token, msg.value - launchFee);
+        AutistikInstantTokenV2(payable(token)).start();
+        if (launchFee > 0) _pay(feeTo, launchFee);
+        Coin storage c = coinOf[token];
+        emit Launched(token, c.pool, msg.sender, c.positionId, got, name, symbol);
+        if (rewardToken != address(0)) emit RewardsChosen(token, rewardToken, holderBps);
+    }
+
+    /// @dev The pool and the position, then the pool is shut out of holder rewards before anyone can buy.
+    function _setup(address token, uint256 holderBps) private {
         (address pool, uint256 positionId) = _seed(token);
         AutistikInstantTokenV2(payable(token)).setPool(pool);
         coinOf[token] = Coin(msg.sender, pool, positionId, uint16(creatorShareBps), uint16(holderBps), uint64(block.timestamp));
         unchecked { launches++; }
-        uint256 got = _firstBuy(token, msg.value - launchFee);
-        AutistikInstantTokenV2(payable(token)).start();
-        if (launchFee > 0) _pay(feeTo, launchFee);
-        emit Launched(token, pool, msg.sender, positionId, got, name, symbol, rewardToken, holderBps);
     }
 
     /// @dev The creator's first buy, straight from the pool before trading opens for everyone else (at most 5%).
