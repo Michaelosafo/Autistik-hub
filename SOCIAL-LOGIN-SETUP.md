@@ -17,6 +17,10 @@ Supabase → **Authentication → URL Configuration**:
 ---
 
 ## 1. Google (about 10 minutes, free)
+Google signs people in on autistik.io itself (components/GoogleSignIn.tsx). After the steps below, set
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID` in Vercel to the Client ID (done 2026-11-07) and add `https://autistik.io` and
+`https://www.autistik.io` under **Authorised JavaScript origins**.
+
 1. Open **console.cloud.google.com** and sign in with your Google account.
 2. Top bar → project picker → **New project** → name it `AUTISTIK Hub` → **Create**, then select it.
 3. Left menu → **APIs & Services → OAuth consent screen** (on newer screens: **Google Auth Platform → Branding**) → **Get started**:
@@ -38,24 +42,22 @@ Supabase → **Authentication → URL Configuration**:
 ---
 
 ## 2. Apple (about 20 minutes, needs an Apple Developer account, $99 a year)
+Apple signs people in on autistik.io itself (components/AppleSignIn.tsx), so Apple's window says AUTISTIK. This way
+needs **no secret key**, so there is nothing to renew every 6 months.
 1. Sign in at **developer.apple.com/account** → **Certificates, Identifiers & Profiles**.
-2. **Identifiers → +** → **App IDs** → **App** → Description `AUTISTIK Hub`, Bundle ID (Explicit) `io.autistik.hub`
+2. **Identifiers → +** → **App IDs** → **App** → Description `AUTISTIK`, Bundle ID (Explicit) `io.autistik.hub`
    → tick **Sign in with Apple** → **Continue → Register**.
-3. **Identifiers → +** → **Services IDs** → Description `AUTISTIK Hub web`, Identifier `io.autistik.hub.web` → **Register**.
+3. **Identifiers → +** → **Services IDs** → Description `AUTISTIK`, Identifier `io.autistik.web` → **Register**.
    Open it → tick **Sign in with Apple** → **Configure**:
    - Primary App ID: `io.autistik.hub`
-   - **Domains and Subdomains:** `autistik.io`, `ehgkvthcwfullihgfxym.supabase.co`
-   - **Return URLs:** `https://ehgkvthcwfullihgfxym.supabase.co/auth/v1/callback`
+   - **Domains and Subdomains:** `autistik.io`
+   - **Return URLs:** `https://autistik.io/login`
    - **Next → Done → Continue → Save**.
-4. **Keys → +** → name `AUTISTIK Hub sign in` → tick **Sign in with Apple** → **Configure** → pick `io.autistik.hub` → **Save → Continue → Register**.
-   **Download** the `.p8` file (you can only download it once) and note the **Key ID**.
-   Your **Team ID** is shown at the top right of the developer site.
-5. Supabase → **Authentication → Sign In / Providers → Apple** → turn on **Enable Sign in with Apple**:
-   - **Client IDs:** `io.autistik.hub.web`
-   - **Secret Key (for OAuth):** Supabase makes this from your `.p8` file, Key ID, Team ID and Services ID. Use the
-     "generate secret" tool linked on that Apple settings panel (or in Supabase's "Login with Apple" guide), paste the result → **Save**.
-6. **Every 6 months** Apple's secret expires: make a new one the same way and paste it in. Put a reminder in your calendar.
-7. Test: private window → autistik.io → Sign in → **Continue with Apple**.
+4. Supabase → **Authentication → Sign In / Providers → Apple** → turn on **Enable Sign in with Apple**,
+   **Client IDs:** `io.autistik.web` (leave Secret Key empty) → **Save**.
+5. Vercel → autistiklatestwork → **Settings → Environment Variables**: `NEXT_PUBLIC_APPLE_CLIENT_ID` = `io.autistik.web`
+   (Production and Preview), then redeploy.
+6. Test: private window on an iPhone → autistik.io → Sign in → **Continue with Apple**.
 
 ---
 
