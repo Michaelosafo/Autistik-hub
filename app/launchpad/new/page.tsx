@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
 
 export default async function NewLaunchPage() {
-  const [user, board, { pads, versions, instants }, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
+  const [user, board, { pads, versions, instants, instantVersions }, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
@@ -41,7 +41,7 @@ export default async function NewLaunchPage() {
         <>
           {!access.public && <div className="notice warn">Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Remove <span className="mono">LAUNCH_PUBLIC=0</span> in Vercel to open it to all.</div>}
           {/* Instant opens first (just a name, picture and info). The liquidity form and tools only show under Add liquidity. */}
-          <LaunchChoice instants={{ bsc: instants.bsc, ethereum: instants.ethereum }} admin={admin}>
+          <LaunchChoice instants={{ bsc: instants.bsc, ethereum: instants.ethereum, robinhood: instants.robinhood }} instantVersions={instantVersions} admin={admin}>
             <div className="stack">
               <p className="ln-alt">Already made your token, here or anywhere else? <Link href="/liquidity">Add liquidity by pasting its address</Link></p>
               <Launchpad signedIn={!!user} pads={pads} versions={versions} admin={admin} />
