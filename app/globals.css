@@ -5128,3 +5128,52 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 @keyframes micspin { to { transform: rotate(360deg); } }
 @keyframes micbreathe { 50% { inset: -4px; opacity: .7; } }
 @media (prefers-reduced-motion: reduce) { .mic-ring, .mic-lv b { animation: none !important; } }
+
+/* ================= Edgeless: no outline lines on panels, soft depth instead ================= */
+:root { --edge-bg: rgba(var(--wc), .065); --edge-bg-2: rgba(var(--wc), .09); --edge-shadow: 0 10px 30px -18px rgba(0,0,0,.55); }
+:root[data-theme="light"] { --edge-bg: #ffffff; --edge-bg-2: #ffffff; --edge-shadow: 0 8px 26px -14px rgba(40,28,80,.22); }
+/* your panel */
+.rail, .mp-drawer-in, .nx-rail, :root[data-theme="dark"] .rail, :root[data-theme="dark"] .mp-drawer-in, :root[data-theme="dark"] .nx-rail { border-right: 0 !important; border-left: 0 !important; }
+.mp-hero, :root[data-theme="dark"] .mp-hero, :root[data-theme="light"] .mp-hero {
+  border: 0 !important; outline: 0 !important;
+  background: radial-gradient(120% 90% at 0% 0%, rgba(181,124,255,.28), transparent 60%), radial-gradient(90% 80% at 100% 0%, rgba(79,209,255,.18), transparent 60%), var(--edge-bg-2) !important;
+  box-shadow: var(--edge-shadow) !important; }
+:root[data-theme="light"] .mp-hero { background: radial-gradient(120% 90% at 0% 0%, rgba(181,124,255,.16), transparent 60%), radial-gradient(90% 80% at 100% 0%, rgba(79,209,255,.12), transparent 60%), #fff !important; }
+.mp-sec, .mp-links, .mp-search, .mp-results, .mp-start, .mp-team, .mp-live, .mp-wallet, .mp-earn, .fp, .ptik, .mad,
+:root[data-theme="dark"] .mp-sec, :root[data-theme="dark"] .mp-links, :root[data-theme="dark"] .mp-search, :root[data-theme="dark"] .mp-results {
+  border: 0 !important; outline: 0; background: var(--edge-bg) !important; box-shadow: var(--edge-shadow) !important; }
+.mp-search:focus-within { box-shadow: 0 0 0 2px rgba(240,185,11,.45), var(--edge-shadow) !important; }
+.mp-act, .mp-q, .mp-chip, .mp-stats a, .mp-earn-grid a, .ptik-tabs, .ptik-foot a, .mad-act, .mad-note { border: 0 !important; }
+.mp-q { background: var(--edge-bg) !important; }
+.mp-chip { background: rgba(var(--wc), .1) !important; }
+.mp-sec b, .mp-name b, .mp-id-n { color: var(--rail-hi, var(--ink)); }
+/* TIK, home and live */
+.th-card, .th-news, .tik-pro .mad-act, .tik-pro .mad-note, .mad.full .mad-act, .mad.full .mad-note, .lv-ctl, .spk-pop, .mp-sheet, .apb, .myp {
+  border: 0 !important; box-shadow: var(--edge-shadow) !important; }
+.th-card { background: var(--edge-bg-2) !important; }
+.th-news { background: radial-gradient(120% 100% at 0% 0%, rgba(240,185,11,.16), transparent 60%), radial-gradient(100% 100% at 100% 0%, rgba(255,107,154,.12), transparent 60%), var(--edge-bg-2) !important; }
+.th-n.pin { border: 0 !important; box-shadow: inset 3px 0 0 #F0B90B; }
+.ctl-ic, .spk .spk-more { border: 0 !important; }
+.ctl-ic { background: rgba(var(--wc), .09); }
+.mic.off .mic-core { border: 0 !important; }
+.apb { box-shadow: 0 0 0 1px rgba(240,185,11,.25), 0 22px 50px -18px rgba(0,0,0,.6) !important; }
+
+/* App home: TIK section + your people */
+.ah-tik { display: flex; flex-direction: column; gap: 14px; margin: 6px 0 18px; }
+.ah-tik-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ah-tik-h h2 { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 1.15rem; }
+.ah-tik-h a { font-weight: 800; font-size: .85rem; text-decoration: none; color: #F0B90B; }
+.ah-tik-dot { width: 9px; height: 9px; border-radius: 50%; background: #22c55e; animation: thpulse 1.8s infinite; }
+.myp { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 20px; background: radial-gradient(120% 100% at 0% 0%, rgba(181,124,255,.18), transparent 60%), var(--edge-bg-2); }
+.myp-h { display: flex; justify-content: space-between; align-items: center; }
+.myp-h a { font-size: .78rem; opacity: .75; }
+.myp-dim { opacity: .65; font-size: .8rem; }
+.myp-n { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.myp-n a { display: flex; flex-direction: column; align-items: center; padding: 10px 6px; border-radius: 14px; text-decoration: none; color: inherit; background: rgba(var(--wc), .06); }
+.myp-n b { font-size: 1.2rem; background: linear-gradient(90deg, #FFD84D, #FF6B9A); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.myp-n small { font-size: .72rem; opacity: .75; }
+.myp-faces { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.myp-face { flex: none; width: 58px; display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; color: inherit; }
+.myp-face small { display: inline-flex; align-items: center; gap: 2px; max-width: 58px; font-size: .66rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
+.myp-av { width: 46px !important; height: 46px !important; box-shadow: 0 0 0 2px rgba(240,185,11,.55); }
+@media (prefers-reduced-motion: reduce) { .ah-tik-dot { animation: none; } }

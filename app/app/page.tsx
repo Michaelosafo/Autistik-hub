@@ -3,6 +3,9 @@ import { TOKEN_ADDRESS } from "@/lib/groups";
 import { buyLink } from "@/lib/listings";
 import TokenLogo from "@/components/TokenLogo";
 import AppMe from "@/components/AppMe";
+import MyPeople from "@/components/home/MyPeople";
+import TikHome from "@/components/mood/TikHome";
+import { adminState } from "@/lib/admin";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { getBoard, trending, type BoardToken } from "@/lib/board";
 import { CHAINS } from "@/lib/launchpad";
@@ -51,9 +54,10 @@ const tone = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "up" :
 
 /** The App's home: your account up top (badge, who you follow, wallet funds), quick actions, every tool, and live markets. */
 export default async function AppHome() {
-  const [markets, board] = await Promise.all([
+  const [markets, board, adm] = await Promise.all([
     getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }]).catch(() => ({} as Record<string, never>)),
     getBoard(60).catch(() => [] as BoardToken[]),
+    adminState().catch(() => ({ admin: false } as any)),
   ]);
   const m = markets[TOKEN_ADDRESS.toLowerCase()];
   const top = trending(board).slice(0, 5);
@@ -72,6 +76,16 @@ export default async function AppHome() {
             <Link key={a.name} href={a.href} className="ah-act"><span className="ah-icon"><ToolIcon name={a.icon} /></span><b>{a.name}</b></Link>
           ))}
         </nav>
+      </section>
+
+      {/* What's happening: your followers, then TIK (news, activity, coins people watch, clean scans, people to follow). */}
+      <section className="ah-tik" aria-label="TIK: what's happening">
+        <div className="ah-tik-h">
+          <h2><span className="ah-tik-dot" aria-hidden="true" />What&apos;s happening</h2>
+          <Link href="/mood">Open TIK →</Link>
+        </div>
+        <MyPeople />
+        <TikHome admin={!!adm?.admin} />
       </section>
 
       <div className="ah-body">
