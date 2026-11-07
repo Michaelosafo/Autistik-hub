@@ -4686,3 +4686,39 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .mname .mname-text,.mname.ver .mname-text,.mname.team .mname-text{color:var(--ink) !important;background:none !important;-webkit-text-fill-color:currentColor;font-weight:700}
 .ch-name,.ch-name.ver,.ch-name.team{color:var(--ink) !important}
 .tik-head b{color:var(--ink);font-weight:700}
+
+/* ---- TIK in your panel: the AUTISTIK logo beside TIK, live feed, tabs, quick actions ---- */
+.ptik{position:relative;display:flex;flex-direction:column;gap:10px;padding:12px !important;border-radius:18px;isolation:isolate;overflow:hidden;
+  border:1px solid transparent;background:linear-gradient(var(--surface),var(--surface)) padding-box,linear-gradient(120deg,#FFD84D,#FF6B9A 45%,#B57CFF 75%,#4FD1FF) border-box}
+.ptik::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(90% 60% at 0% 0%,rgba(255,107,154,.16),transparent 60%),radial-gradient(80% 60% at 100% 0%,rgba(79,209,255,.14),transparent 60%)}
+.ptik-head{display:flex;align-items:center;gap:10px}
+.ptik-logo{flex:none;display:grid;place-items:center;border-radius:14px;line-height:0;transition:transform .18s ease,filter .18s ease}
+.ptik-logo:hover{transform:scale(1.06) rotate(-3deg);filter:drop-shadow(0 0 10px rgba(255,107,154,.55))}
+.ptik-logo:focus-visible,.ptik-t:focus-visible,.ptik-open:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
+.ptik-t{flex:1;min-width:0;display:flex;flex-direction:column;text-decoration:none;color:var(--ink)}
+.ptik-t b{font-family:var(--f-display);font-size:1.15rem;letter-spacing:.06em;background:linear-gradient(90deg,#FFD84D,#FF6B9A 55%,#B57CFF);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.ptik-t small{display:flex;align-items:center;gap:6px;font-size:.74em;font-weight:700;color:var(--muted)}
+.ptik-dot{width:7px;height:7px;border-radius:50%;background:#2EBD85;box-shadow:0 0 0 0 rgba(46,189,133,.6);animation:ptikPulse 1.8s infinite}
+@keyframes ptikPulse{0%{box-shadow:0 0 0 0 rgba(46,189,133,.6)}70%{box-shadow:0 0 0 7px rgba(46,189,133,0)}100%{box-shadow:0 0 0 0 rgba(46,189,133,0)}}
+.ptik-open{flex:none;padding:7px 14px;border-radius:99px;font-weight:800;font-size:.8em;text-decoration:none;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B 55%,#FF9F5A)}
+.ptik-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:12px;background:rgba(var(--wc),.06)}
+.ptik-tabs button{all:unset;cursor:pointer;text-align:center;padding:7px 4px;border-radius:9px;font-size:.78em;font-weight:800;color:var(--muted);transition:background .15s,color .15s}
+.ptik-tabs button[aria-selected=true]{color:var(--ink);background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.ptik-tabs button.hot{color:#E5484D}
+.ptik-tabs button:focus-visible{outline:2px solid #F0B90B}
+.ptik .tik,.ptik .tik-new{background:rgba(var(--wc),.04);border-color:transparent}
+.ptik .mad-feed{gap:6px}
+.ptik-foot{display:flex;gap:6px;flex-wrap:wrap}
+.ptik-foot a{flex:1;text-align:center;padding:7px 8px;border-radius:10px;font-size:.76em;font-weight:800;text-decoration:none;color:var(--ink);background:rgba(var(--wc),.06)}
+.ptik-foot a:hover{background:rgba(var(--wc),.12)}
+.mp-quick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mp-q{display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 4px;border-radius:14px;text-decoration:none;background:rgba(var(--wc),.05);transition:transform .15s ease,background .15s}
+.mp-q:hover{transform:translateY(-2px);background:rgba(var(--wc),.1)}
+.mp-q:focus-visible{outline:2px solid #F0B90B}
+.mp-q-ic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;color:var(--qc);background:color-mix(in srgb,var(--qc) 16%,transparent)}
+.mp-q-ic svg{width:18px;height:18px}
+.mp-q small{font-size:.7em;font-weight:800;color:var(--ink)}
+.mp-stats:has(> a:nth-child(4)){grid-template-columns:repeat(4,1fr)}
+@media (prefers-reduced-motion:reduce){.ptik-dot{animation:none}.ptik-logo,.mp-q{transition:none}}
+:root[data-theme="light"] .ptik{box-shadow:0 10px 26px rgba(40,28,80,.10)}
+:root[data-theme="light"] .ptik-t b{background:linear-gradient(90deg,#C97F00,#D63C74 55%,#7C3AED);-webkit-background-clip:text;background-clip:text}

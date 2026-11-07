@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import FindPeople from "@/components/FindPeople";
+import LogoMark from "@/components/LogoMark";
 import TikComposer from "./TikComposer";
 import TikCard from "./TikCard";
 import { useTiks } from "./useMood";
@@ -17,29 +18,55 @@ const ACT: Record<string, string> = { post: "posted in a group", live: "joined a
  * TIK, pinned in your panel and closed until you tap it: Tiks and activity from people you follow,
  * everyone's Tiks, your notifications (likes and replies), finding people, and a box to post how you feel.
  */
-/** The row in your panel: opens the TIK page (like Create a coin opens its own page). */
+/**
+ * TIK in your panel, right under your photo: the AUTISTIK logo sits beside the TIK name and opens TIK, with your
+ * unread alerts, a box to post how you feel, and the newest Tiks (like and reply right here) for everyone, the
+ * people you follow, or your alerts.
+ */
 export function MadnessLink({ onGo }: { onGo?: () => void }) {
+  const [tab, setTab] = useState<"everyone" | "following" | "alerts">("everyone");
+  const [k, setK] = useState(0);
+  const [me, setMe] = useState<string | null>(null);
+  const [follows, setFollows] = useState<string[] | null>(null);
   const [unread, setUnread] = useState(0);
   useEffect(() => {
     (async () => {
       const sb = supabaseBrowser();
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
-      const { count } = await sb.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null);
+      setMe(user.id);
+      const [{ data: f }, { count }] = await Promise.all([
+        sb.from("follows").select("followee_id").eq("follower_id", user.id).limit(500),
+        sb.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
+      ]);
+      setFollows((f || []).map((x: any) => x.followee_id));
       setUnread(count || 0);
-    })();
+    })().catch(() => {});
   }, []);
+  const TABS: ["everyone" | "following" | "alerts", string][] = [["everyone", "For you"], ["following", "Following"], ["alerts", unread ? `Alerts ${unread > 9 ? "9+" : unread}` : "Alerts"]];
   return (
-    <Link href="/mood" className="mp-sec mad mad-link" onClick={onGo} aria-label="Open TIK">
-      <span className="mad-head">
-        <span className="mad-pin" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 21s-7-4.6-9.2-9A5.3 5.3 0 0 1 12 6a5.3 5.3 0 0 1 9.2 6c-2.2 4.4-9.2 9-9.2 9z" /></svg>
-        </span>
-        <span className="mad-t"><b>TIK</b><small>Post how you feel, see your people, have fun</small></span>
-        {unread > 0 && <em className="mad-badge">{unread > 9 ? "9+" : unread}</em>}
-        <i className="mad-go" aria-hidden="true">›</i>
-      </span>
-    </Link>
+    <section className="mp-sec ptik" aria-label="TIK">
+      <div className="ptik-head">
+        <Link href="/mood" className="ptik-logo" onClick={onGo} aria-label="Open TIK"><LogoMark size={44} title="Open TIK" /></Link>
+        <Link href="/mood" className="ptik-t" onClick={onGo}>
+          <b>TIK</b>
+          <small><i className="ptik-dot" aria-hidden="true" />Live feed{unread > 0 ? ` · ${unread > 9 ? "9+" : unread} new` : ""}</small>
+        </Link>
+        <Link href="/mood" className="ptik-open" onClick={onGo}>Open</Link>
+      </div>
+      <div className="ptik-tabs" role="tablist" aria-label="TIK in your panel">
+        {TABS.map(([t, l]) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={t === "alerts" && unread ? "hot" : ""} onClick={() => setTab(t)}>{l}</button>)}
+      </div>
+      {tab !== "alerts" && me && <TikComposer compact onPosted={() => setK((n) => n + 1)} placeholder="How are you feeling? Post a Tik…" />}
+      {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={3} />}
+      {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => { window.location.href = "/mood"; }} limit={3} />}
+      {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
+      <div className="ptik-foot">
+        <Link href="/mood" onClick={onGo}>All Tiks</Link>
+        <Link href="/spaces?host=1" onClick={onGo}>Host a live</Link>
+        <Link href="/chats" onClick={onGo}>Chats</Link>
+      </div>
+    </section>
   );
 }
 
@@ -181,7 +208,7 @@ function Following({ me, follows, refreshKey, onFind, limit }: { me: string | nu
   return (
     <>
       <Feed me={me} authors={me ? [...follows, me] : follows} refreshKey={refreshKey} limit={limit} />
-      {!!acts?.length && (
+      {!!acts?.length && limit > 3 && (
         <div className="mad-acts">
           <small className="mp-cap">What they&apos;re doing</small>
           {acts.map((a, i) => (

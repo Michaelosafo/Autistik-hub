@@ -14,11 +14,14 @@ export async function GET(req: Request) {
   const slow = await rateLimit(req, "me-summary", 40, 600, user.id);
   if (slow) return slow;
   const sb = supabaseService();
-  const [{ data: prof }, { count: following }, { count: followers }, { data: w }] = await Promise.all([
+  const [{ data: prof }, { count: following }, { count: followers }, { data: w }, { count: tiks }, { count: likes }] = await Promise.all([
     sb.from("profiles").select("alias,handle,color,is_team,team_title,is_verified").eq("id", user.id).maybeSingle(),
     sb.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", user.id),
     sb.from("follows").select("*", { count: "exact", head: true }).eq("followee_id", user.id),
     sb.from("wallets").select("address").eq("user_id", user.id).maybeSingle(),
+    // TIK numbers for the panel: Tiks posted (not replies) and likes those Tiks have received.
+    sb.from("tiks").select("id", { count: "exact", head: true }).eq("author_id", user.id).is("reply_to", null),
+    sb.from("tik_likes").select("tik_id,tiks!inner(author_id)", { count: "exact", head: true }).eq("tiks.author_id", user.id),
   ]);
   // The AUTISTIK team, recommended to everyone to follow (with whether this member already does).
   const { data: teamRows } = await sb.from("profiles").select("id,alias,handle,color,avatar_url,team_title,is_verified").eq("is_team", true).neq("id", user.id).limit(12);
@@ -54,7 +57,7 @@ export async function GET(req: Request) {
   }
   return json({
     signedIn: true,
-    profile: prof, following: following ?? 0, followers: followers ?? 0, recent: recentWithLast, launches: launches || [], team,
+    profile: prof, following: following ?? 0, followers: followers ?? 0, tiks: tiks ?? 0, likes: likes ?? 0, recent: recentWithLast, launches: launches || [], team,
     wallet: address ? { short: `${address.slice(0, 6)}…${address.slice(-4)}`, funds, totalUsd } : null,
   });
 }

@@ -148,7 +148,7 @@ export default function AppShell({ admin, me, onMe, children }: {
             {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
           </button>
         ) : null}
-        <Link href="/app" className="ax-logo" aria-label="AUTISTIK App: all tools"><LogoMark size={38} /></Link>
+        <Link href="/mood" className="ax-logo" aria-label="Open TIK" title="Open TIK"><LogoMark size={38} /></Link>
         {/* Home switches sides: from the App it goes to the website's main page, whose Home button comes back here. */}
         <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">

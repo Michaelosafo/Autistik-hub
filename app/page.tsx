@@ -88,7 +88,7 @@ export default async function Home() {
     <div className="lp">
       <header className="lp-bar">
         {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} />}
-        <Link href="/" className="lp-logo" aria-label="AUTISTIK home"><LogoMark size={40} /></Link>
+        <Link href="/mood" className="lp-logo" aria-label="Open TIK" title="Open TIK"><LogoMark size={40} /></Link>
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
@@ -239,7 +239,7 @@ export default async function Home() {
       <footer className="lp-foot">
         <div className="lp-foot-cols">
           <div className="lp-foot-brand">
-            <Link href="/" className="lp-logo" aria-label="AUTISTIK home"><LogoMark size={40} /></Link>
+            <Link href="/mood" className="lp-logo" aria-label="Open TIK" title="Open TIK"><LogoMark size={40} /></Link>
             <p>A home for autistic people and supporters, with simple, safe crypto tools.</p>
           </div>
           <div><b>App</b><Link href="/swap">Swap</Link><Link href="/stake">Stake</Link><Link href="/lockers">Lockers</Link><Link href="/launchpad/new">Launch Pad</Link><Link href="/analytics">Scanner</Link></div>
