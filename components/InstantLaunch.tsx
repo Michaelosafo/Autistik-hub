@@ -89,6 +89,8 @@ function LaunchBar({ on, onPick, icon, title, tag, line, children }: { on: boole
 }
 
 const BUYS = ["0", "0.05", "0.1", "0.2"];
+/** Admin market cap picks (in the chain's coin). */
+const MCAPS = { bsc: [3, 6, 10, 20, 50, 100], eth: [1, 2, 5, 10, 25, 50] };
 type RewardState = { on: boolean; token: string; custom: string; share: number; checking?: boolean; found?: { symbol: string; fee: number } | null; err?: string };
 const RW0: RewardState = { on: false, token: "native", custom: "", share: 50 };
 type Done = { token: string; pool: string; hash: string; listed: boolean; symbol: string };
@@ -120,6 +122,18 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
   const [rw, setRw] = useState<RewardState>(RW0);
   // Admin only: launch at a starting market cap of your choice (Instant v2: team wallets the owner allowed, and the owner).
   const [adminFdv, setAdminFdv] = useState("");
+  // What the admin launch needs to know: does this contract have launchAtFdv (newer v2), who owns it, the coin's price.
+  const [adm, setAdm] = useState<{ direct: boolean; owner: string; usd: number | null } | null>(null);
+  useEffect(() => {
+    setAdm(null);
+    if (!admin || sol || !pad || (versions[net as InstantChain] ?? 1) < 2) return;
+    const pub = createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any;
+    Promise.all([
+      pub.readContract({ address: pad, abi: INSTANT_V2_ABI, functionName: "curator", args: [zeroAddress] }).then(() => true, () => false),
+      pub.readContract({ address: pad, abi: INSTANT_V2_ABI, functionName: "owner" }).then((o: string) => getAddress(o), () => ""),
+      fetch(`/api/launchpad/contracts?chain=${net}`).then((r) => r.json()).then((j) => (typeof j?.priceUsd === "number" ? j.priceUsd : null), () => null),
+    ]).then(([direct, owner, usd]) => setAdm({ direct, owner, usd }));
+  }, [admin, sol, pad, net, c, versions]);
   const picks = sol ? [] : INSTANT_REWARDS[net as InstantChain];
   const canPaste = net === "bsc" || net === "ethereum";
   const rewardLabel = !rw.on ? "" : rw.token === "native" ? c.coin : rw.token === "custom" ? (rw.found?.symbol || "your token") : picks.find((x) => x.address === rw.token)?.symbol || "";
@@ -215,6 +229,26 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
   const customFdv = admin && v2 && Number(adminFdv) > 0 && (!cfg || Number(adminFdv) !== Number(formatEther(cfg.fdv))) ? Number(adminFdv) : 0;
   const fdv = customFdv || (cfg ? Number(formatEther(cfg.fdv)) : Number(dx.startFdv));
   const maxBuy = fdv * 0.05;
+  const defFdv = cfg ? formatEther(cfg.fdv) : dx.startFdv;
+  const usd = (n: number) => (adm?.usd ? ` · ~$${Math.round(n * adm.usd).toLocaleString("en-US")}` : "");
+  /** Admin: put the contract's normal starting market cap back (if a custom launch couldn't). Team wallet only. */
+  async function resetFdv() {
+    const eth = await pickWallet();
+    if (!eth) return;
+    setBusy(true);
+    try {
+      const chain = viemChain(c);
+      const wallet = createWalletClient({ chain, transport: custom(eth) });
+      const pub = createPublicClient({ chain, transport: http(c.rpc) });
+      const [account] = await wallet.requestAddresses();
+      const [feeTo, fee, share] = await Promise.all((["feeTo", "launchFee", "creatorShareBps"] as const).map((fn) => pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: fn } as any))) as [string, bigint, bigint];
+      setStatus("Confirm in your wallet (team wallet)…");
+      await pub.waitForTransactionReceipt({ hash: await wallet.writeContract({ account, chain, address: pad, abi: INSTANT_ABI, functionName: "setSettings", args: [feeTo, fee, parseEther(dx.startFdv), share] } as any) });
+      setCfg({ fee, fdv: parseEther(dx.startFdv) });
+      setStatus("✅ Normal market cap restored.");
+    } catch (e: any) { setStatus(/reject|denied/i.test(String(e?.message)) ? "You cancelled in your wallet." : "Couldn't reset it. Use the team wallet and try again."); }
+    finally { setBusy(false); }
+  }
   const buys = net === "bsc" ? BUYS : ["0", "0.01", "0.02", "0.05"];
 
   /** The reward choice for the contract, checked against it first (a token it can't buy is refused before you sign). */
@@ -264,21 +298,43 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
       const fee = (await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" } as any)) as bigint;
       const base = [name, symbol, permit.salt, BigInt(permit.deadline || 0), (permit.signature || "0x") as `0x${string}`, BigInt(Math.floor(Date.now() / 1000) + 20 * 60)] as const;
       let call: any;
-      if (v2 && customFdv) {
+      let restore: null | (() => Promise<void>) = null;
+      if (v2 && customFdv && adm?.direct) {
         // Your own starting market cap: only works from a team wallet the owner allowed (or the owner).
         const reward = await rewardArg(pub);
         call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launchAtFdv", args: [name, symbol, permit.salt, base[5], reward, parseEther(String(customFdv))], value: fee + parseEther(f.buy || "0") };
+      } else if (v2 && customFdv) {
+        // This contract has no launchAtFdv yet: the team wallet (its owner) sets the starting market cap, launches, then
+        // puts the normal one back (three quick confirms).
+        const owner = getAddress(await pub.readContract({ address: pad, abi: INSTANT_V2_ABI, functionName: "owner" } as any) as string);
+        if (owner !== getAddress(account)) throw new Error(`Connect the team wallet (${owner.slice(0, 6)}…${owner.slice(-4)}) to launch at your own market cap, or clear the market cap box.`);
+        const reward = await rewardArg(pub);
+        const [feeTo, share, normal] = await Promise.all((["feeTo", "creatorShareBps", "startFdv"] as const).map((fn) => pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: fn } as any))) as [string, bigint, bigint];
+        const settings = (v: bigint) => ({ account, chain, address: pad, abi: INSTANT_ABI, functionName: "setSettings", args: [feeTo, fee, v, share] });
+        setStatus(`Confirm 1 of 3 in your wallet: set the starting market cap to ${customFdv} ${c.coin}…`);
+        await pub.waitForTransactionReceipt({ hash: await wallet.writeContract(settings(parseEther(String(customFdv))) as any) });
+        restore = async () => {
+          setStatus(`Confirm 3 of 3: put the normal market cap (${formatEther(normal)} ${c.coin}) back…`);
+          await pub.waitForTransactionReceipt({ hash: await wallet.writeContract(settings(normal) as any) });
+        };
+        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward], value: fee + parseEther(f.buy || "0") };
       } else if (v2) {
         const reward = await rewardArg(pub);
         call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward], value: fee + parseEther(f.buy || "0") };
       } else {
         call = { account, address: pad, abi: INSTANT_ABI, functionName: "launch", args: base, value: fee + parseEther(f.buy || "0") };
       }
-      setStatus("Confirm the launch in your wallet…");
-      const gas = ((await pub.estimateContractGas(call as any)) * 130n) / 100n;
-      const hash = await wallet.writeContract({ ...call, chain, gas } as any);
-      setStatus(`Launching on ${dx.dex}… this usually takes under a minute.`);
-      const receipt = await pub.waitForTransactionReceipt({ hash });
+      setStatus(restore ? "Confirm 2 of 3: launch your coin…" : "Confirm the launch in your wallet…");
+      let hash: `0x${string}` = "0x", receipt: any = null;
+      try {
+        const gas = ((await pub.estimateContractGas(call as any)) * 130n) / 100n;
+        hash = await wallet.writeContract({ ...call, chain, gas } as any);
+        setStatus(`Launching on ${dx.dex}… this usually takes under a minute.`);
+        receipt = await pub.waitForTransactionReceipt({ hash });
+      } finally {
+        // Always put the normal market cap back, even if the launch was cancelled or failed.
+        if (restore) await (restore as () => Promise<void>)().catch(() => setStatus("⚠️ Couldn't put the normal market cap back. Use “Reset market cap” in the admin box now."));
+      }
       if (receipt.status !== "success") { setStatus("The launch transaction failed. Nothing was created, but the network fee was spent."); return; }
       const ev = parseEventLogs({ abi: INSTANT_ABI, logs: receipt.logs, eventName: "Launched" })[0];
       if (!ev) { setStatus("Launched, but we couldn't read the result. Check your wallet's activity."); return; }
@@ -428,11 +484,30 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
         </div>
       )}
       {admin && v2 && (
-        <label className="field lc-admin-fdv">
-          <span>🛠️ Admin: starting market cap ({c.coin}) <small className="muted">only you see this · leave empty for the normal {cfg ? formatEther(cfg.fdv) : dx.startFdv} {c.coin}</small></span>
-          <input value={adminFdv} inputMode="decimal" placeholder={cfg ? formatEther(cfg.fdv) : dx.startFdv} onChange={(e) => setAdminFdv(e.target.value.replace(/[^0-9.]/g, ""))} />
-          {customFdv > 0 && <small className="muted">This coin starts at {customFdv} {c.coin}. Your first buy can be up to {(customFdv * 0.05).toFixed(3)} {c.coin} (5%).</small>}
-        </label>
+        <div className="card stack lc-admin" style={{ gap: 10 }}>
+          <b>🛠️ Admin launch <small className="muted">only you see this</small></b>
+          <ul className="lc-facts" style={{ margin: 0 }}>
+            <li><b>Pick any starting market cap</b>: everyone else always starts at the normal {defFdv} {c.coin}</li>
+            <li><b>No $20 AUTISTIK check</b>: you launch with the admin permit</li>
+            <li><b>First buy before anyone</b>: up to 5% of the coins at your price, in the same transaction</li>
+            <li><b>Fees</b>: your 50% creator share comes to this wallet automatically; the team share goes to the team wallet</li>
+            <li><b>Holder rewards</b>, picture, links: same as everyone, all optional</li>
+          </ul>
+          <span className="field" style={{ margin: 0 }}><span>Starting market cap</span></span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Starting market cap">
+            <button type="button" role="radio" aria-checked={!customFdv} className={"btn small" + (!customFdv ? " primary" : "")} onClick={() => setAdminFdv("")}>Normal · {defFdv} {c.coin}{usd(Number(defFdv))}</button>
+            {MCAPS[net === "bsc" ? "bsc" : "eth"].filter((m) => m !== Number(defFdv)).map((m) => (
+              <button key={m} type="button" role="radio" aria-checked={customFdv === m} className={"btn small" + (customFdv === m ? " primary" : "")} onClick={() => setAdminFdv(String(m))}>{m} {c.coin}{usd(m)}</button>
+            ))}
+          </div>
+          <label className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <small className="muted">or type any amount</small>
+            <input value={adminFdv} inputMode="decimal" style={{ width: 120 }} placeholder={defFdv} onChange={(e) => setAdminFdv(e.target.value.replace(/[^0-9.]/g, ""))} aria-label={`Starting market cap in ${c.coin}`} />
+            <small className="muted">{c.coin}{Number(adminFdv) > 0 ? usd(Number(adminFdv)) : ""}</small>
+          </label>
+          {customFdv > 0 && <small>Your coin starts at <b>{customFdv} {c.coin}{usd(customFdv)}</b>. Your first buy can be up to {(customFdv * 0.05).toFixed(3)} {c.coin} (5%).{adm && !adm.direct ? <> Three quick confirms with the team wallet ({adm.owner.slice(0, 6)}…{adm.owner.slice(-4)}): set your market cap, launch, put the normal one back.</> : null}</small>}
+          {cfg && Number(formatEther(cfg.fdv)) !== Number(dx.startFdv) && !customFdv && <small className="ql-bad">The contract&apos;s normal market cap is {formatEther(cfg.fdv)} {c.coin}, not {dx.startFdv}. <button type="button" className="linkish" disabled={busy} onClick={resetFdv}>Reset market cap to {dx.startFdv} {c.coin}</button></small>}
+        </div>
       )}
       <ul className="lc-facts">
         <li><b>1,000,000,000</b> coins, all in the {dx.dex} pool</li>
@@ -450,7 +525,7 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
         {!sol && <li>You need ${MIN_HOLD_USD} of AUTISTIK in this wallet to launch</li>}
       </ul>
       <label className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><small>I understand the coins go straight into the {dx.dex} pool, the liquidity can never be taken out, and coin prices can go to zero. <Link href="/terms">Terms</Link></small></label>
-      <button className="btn primary" type="submit" disabled={busy}>{busy ? "Launching…" : "⚡ Launch now"}</button>
+      <button className="btn primary" type="submit" disabled={busy}>{busy ? "Launching…" : customFdv ? `🚀 Start: go live at ${customFdv} ${c.coin}` : "⚡ Launch now"}</button>
       {status && <p className="muted" role="status" style={{ margin: 0 }}>{status}</p>}
     </form>
   );
