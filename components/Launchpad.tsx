@@ -709,14 +709,19 @@ function SolRewardsPick({ f, setF }: { f: any; setF: (fn: (x: any) => any) => vo
     <div className="hr-pick">
       <div className="hr-head">
         <b>Holder rewards</b>
-        <small className="muted">Optional. A fee on every trade; part of it buys SOL, BTC or ETH for every holder.</small>
+        <small className="muted">Optional. A fee on every trade; part of it buys SOL, BTC, ETH, USDC or a stock for every holder.</small>
       </div>
       {!ready ? <small className="muted">Holder rewards on Solana open soon.</small> : (
         <>
           <div className="hr-chips" role="radiogroup" aria-label="Reward for holders">
             <button type="button" role="radio" aria-checked={!f.reward} className={!f.reward ? "on" : ""} onClick={() => pick("")}>No rewards</button>
-            {Object.entries(SOL_REWARD_TOKENS).map(([k, t]) => <button key={k} type="button" role="radio" aria-checked={f.reward === k} className={f.reward === k ? "on" : ""} onClick={() => pick(k)} title={t.name}>{t.symbol}</button>)}
+            {Object.entries(SOL_REWARD_TOKENS).filter(([, t]) => !t.stock).map(([k, t]) => <button key={k} type="button" role="radio" aria-checked={f.reward === k} className={f.reward === k ? "on" : ""} onClick={() => pick(k)} title={t.name}>{t.symbol}</button>)}
           </div>
+          <small className="muted" style={{ marginTop: 2 }}>Or reward holders with a stock:</small>
+          <div className="hr-chips" role="radiogroup" aria-label="Stock reward for holders">
+            {Object.entries(SOL_REWARD_TOKENS).filter(([, t]) => t.stock).map(([k, t]) => <button key={k} type="button" role="radio" aria-checked={f.reward === k} className={f.reward === k ? "on" : ""} onClick={() => pick(k)} title={t.name}>{t.symbol}</button>)}
+          </div>
+          {SOL_REWARD_TOKENS[f.reward]?.stock && <small className="muted">{SOL_REWARD_TOKENS[f.reward].name}: a token by Backed that tracks the share price. It isn&apos;t the share itself, has no voting rights, and isn&apos;t offered to people in the US.</small>}
           {f.reward && (
             <>
               <div className="form-grid">
