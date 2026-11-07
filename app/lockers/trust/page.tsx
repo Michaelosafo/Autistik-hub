@@ -16,7 +16,7 @@ const mark = (v: boolean | null) => (v === null ? "…" : v ? "✅" : "⚠️");
 
 export default async function LockerTrustPage() {
   const checks = await lockerTrust().catch(() => []);
-  const total = checks.reduce((n, c) => n + (c.locks || 0), 0);
+  const total = checks.reduce<number>((n, c) => n + (c.locks || 0), 0);
   const allGood = checks.length > 0 && checks.every((c) => c.noOwner && c.noAdmin && c.notUpgradeable);
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
