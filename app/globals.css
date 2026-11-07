@@ -5177,3 +5177,7 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .myp-face small { display: inline-flex; align-items: center; gap: 2px; max-width: 58px; font-size: .66rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 .myp-av { width: 46px !important; height: 46px !important; box-shadow: 0 0 0 2px rgba(240,185,11,.55); }
 @media (prefers-reduced-motion: reduce) { .ah-tik-dot { animation: none; } }
+.ah-tik { margin-top: 0; }
+.ah-tik-go { display: inline-flex; align-items: center; gap: 12px; }
+.ah-tik-post { padding: 6px 12px; border-radius: 99px; color: #191326 !important; background: linear-gradient(135deg, #FFD84D, #F0B90B); font-size: .8rem; }
+.ah-actions-slim { margin: 4px 0 14px; }

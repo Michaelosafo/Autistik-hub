@@ -2,8 +2,6 @@ import Link from "next/link";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import { buyLink } from "@/lib/listings";
 import TokenLogo from "@/components/TokenLogo";
-import AppMe from "@/components/AppMe";
-import MyPeople from "@/components/home/MyPeople";
 import TikHome from "@/components/mood/TikHome";
 import { adminState } from "@/lib/admin";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
@@ -52,7 +50,7 @@ const ACTIONS: { href: string; icon: IconName; name: string }[] = [
 const pct = (v: number | null | undefined) => (v == null ? "–" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`);
 const tone = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "up" : "down");
 
-/** The App's home: your account up top (badge, who you follow, wallet funds), quick actions, every tool, and live markets. */
+/** The App's home: TIK first (news, what's happening, coins people watch, clean scans, people to follow), quick actions, every tool, live markets. Your account and wallet live in your panel. */
 export default async function AppHome() {
   const [markets, board, adm] = await Promise.all([
     getMarkets([{ chain: "bsc", token: TOKEN_ADDRESS }]).catch(() => ({} as Record<string, never>)),
@@ -63,30 +61,26 @@ export default async function AppHome() {
   const top = trending(board).slice(0, 5);
   return (
     <div className="ah">
+      {/* TIK first: news, what's happening, coins people watch, clean scans, people to follow. */}
+      <section className="ah-tik" aria-label="TIK: what's happening">
+        <div className="ah-tik-h">
+          <h2><span className="ah-tik-dot" aria-hidden="true" />What&apos;s happening</h2>
+          <span className="ah-tik-go"><Link href="/mood#tik-post" className="ah-tik-post">✍️ Post a Tik</Link><Link href="/mood">Open TIK →</Link></span>
+        </div>
+        <TikHome admin={!!adm?.admin} />
+      </section>
+      <nav className="ah-actions ah-actions-slim" aria-label="Quick actions">
+        {ACTIONS.map((a) => (
+          <Link key={a.name} href={a.href} className="ah-act"><span className="ah-icon"><ToolIcon name={a.icon} /></span><b>{a.name}</b></Link>
+        ))}
+      </nav>
       {/* No single featured coin here: every coin is on the Board. */}
       <Link href="/board" className="ah-board">
         <span aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-fire" /></svg></span>
         <span><b>The Board</b><small>Every coin launched on AUTISTIK, live, ranked as it trades{board.length ? ` · ${board.length} coin${board.length === 1 ? "" : "s"}` : ""}</small></span>
         <i aria-hidden="true">Open →</i>
       </Link>
-      <section className="ah-hero" aria-label="Your account">
-        <AppMe />
-        <nav className="ah-actions" aria-label="Quick actions">
-          {ACTIONS.map((a) => (
-            <Link key={a.name} href={a.href} className="ah-act"><span className="ah-icon"><ToolIcon name={a.icon} /></span><b>{a.name}</b></Link>
-          ))}
-        </nav>
-      </section>
 
-      {/* What's happening: your followers, then TIK (news, activity, coins people watch, clean scans, people to follow). */}
-      <section className="ah-tik" aria-label="TIK: what's happening">
-        <div className="ah-tik-h">
-          <h2><span className="ah-tik-dot" aria-hidden="true" />What&apos;s happening</h2>
-          <Link href="/mood">Open TIK →</Link>
-        </div>
-        <MyPeople />
-        <TikHome admin={!!adm?.admin} />
-      </section>
 
       <div className="ah-body">
         <div className="ah-groups">
