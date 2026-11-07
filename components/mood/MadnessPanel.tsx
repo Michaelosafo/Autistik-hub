@@ -133,7 +133,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
             <span className="tik-status"><span className="tik-dot" aria-hidden="true" />Live feed</span>
           </header>
           {focus}
-          {(tab === "following" || tab === "everyone") && me && <TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" />}
+          {(tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
           {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
           {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
