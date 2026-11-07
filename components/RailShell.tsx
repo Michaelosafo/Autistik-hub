@@ -78,7 +78,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
   return (
     <div className="nx">
       <aside className="nx-rail" aria-label="Menu">
-        <Link href="/" className="nx-brand" aria-label="AUTISTIK Hub: home">
+        <Link href="/mood" className="nx-brand" aria-label="Open TIK" title="Open TIK">
           <LogoMark size={42} title="AUTISTIK Hub" />
         </Link>
         <nav className="nx-nav">

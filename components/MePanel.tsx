@@ -20,7 +20,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Summary = {
   signedIn: boolean;
   profile?: { alias: string; handle?: string | null } | null;
-  following?: number; followers?: number;
+  following?: number; followers?: number; tiks?: number; likes?: number;
   wallet?: { short: string; totalUsd: number | null; funds: { symbol: string; amount: number; valueUsd: number | null }[] } | null;
   launches?: { chain: string; token: string; symbol: string; lp_lock: string; lp_unlock_at: string | null }[];
   team?: { id: string; alias: string; handle: string | null; color: string; avatar_url: string | null; team_title: string | null; is_verified: boolean; following: boolean }[];
@@ -34,6 +34,17 @@ const ACTIONS = [
   { href: "/lockers", name: "Lock", note: "Lockers, stake, Susu and rewards", icon: "i-lock", color: "#B57CFF" },
   { href: "/liquidity", name: "Liquidity", note: "Add liquidity, then lock it", icon: "i-swap", color: "#4FD1FF" },
   { href: "/analytics", name: "Scanner", note: "Check any token or wallet", icon: "i-search", color: "#5BE38F" },
+];
+/** The quick-action grid under TIK: one tap to the things members use most. */
+const QUICK = [
+  { href: "/chats", name: "Chats", color: "#4FD1FF", d: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z"/>' },
+  { href: "/spaces", name: "Live", color: "#FF6B9A", d: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>' },
+  { href: "/wallet", name: "Wallet", color: "#F0B90B", d: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/>' },
+  { href: "/swap", name: "Swap", color: "#5BE38F", d: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>' },
+  { href: "/board", name: "Board", color: "#FFD84D", d: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>' },
+  { href: "/launchpad/new", name: "Launch", color: "#B57CFF", d: '<path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z"/><circle cx="15" cy="9" r="1.5"/>' },
+  { href: "/analytics", name: "Scan", color: "#3FCABB", d: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>' },
+  { href: "/hyperfocus", name: "Race", color: "#FF9F5A", d: '<path d="M5 17h14l-1.5-5.5A2 2 0 0 0 15.6 10H8.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>' },
 ];
 type Coin = { chain: string; token: string; name: string; symbol: string; logo: string | null; market: { marketCap: number | null; change24h: number | null } | null };
 const short$ = (n: number | null | undefined) => n == null ? "–" : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
@@ -165,11 +176,20 @@ export default function MePanel({ me, settings }: {
         <div className="mp-stats">
           <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b><small>Following</small></Link>
           <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b><small>Followers</small></Link>
-          <Link href="/launchpad"><b>{sum?.launches?.length ?? "–"}</b><small>Launches</small></Link>
+          <Link href="/mood"><b>{sum?.tiks ?? "–"}</b><small>Tiks</small></Link>
+          <Link href="/mood"><b>{sum?.likes ?? "–"}</b><small>Likes</small></Link>
         </div>
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
       <MadnessLink />
+      <nav className="mp-quick" aria-label="Quick actions">
+        {QUICK.map((q) => (
+          <Link key={q.href} href={q.href} className="mp-q" style={{ ["--qc" as any]: q.color }}>
+            <span className="mp-q-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: q.d }} /></span>
+            <small>{q.name}</small>
+          </Link>
+        ))}
+      </nav>
       <ChatsLink />
       <FindPeople />
 

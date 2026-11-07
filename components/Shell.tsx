@@ -228,7 +228,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
       <Sprites />
       <div className="app">
         <aside className="rail">
-          <Link href="/" className="brand" style={{ textDecoration: "none" }}>
+          <Link href="/mood" className="brand" style={{ textDecoration: "none" }} title="Open TIK">
             <LogoMark size={46} title="AUTISTIK Hub" />
             <div><small>Different wavelength. Same channel.</small></div>
           </Link>
