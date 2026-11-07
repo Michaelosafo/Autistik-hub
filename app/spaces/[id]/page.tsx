@@ -22,7 +22,7 @@ export default async function RoomPage({ params }: { params: { id: string } }) {
   }
   const sb = supabaseServer();
   const [{ data: room }, { data: me }] = await Promise.all([
-    sb.from("live_rooms").select("id,title,host_id,ended_at,chain,token").eq("id", params.id).maybeSingle(),
+    sb.from("live_rooms").select("id,title,host_id,ended_at,chain,token,cohosts").eq("id", params.id).maybeSingle(),
     sb.from("profiles").select("id,alias,color,avatar_url").eq("id", user.id).maybeSingle(),
   ]);
   if (!room) notFound();
