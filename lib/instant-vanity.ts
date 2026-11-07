@@ -89,9 +89,9 @@ export async function instantSalt(chain: ChainKey, pad: `0x${string}`, creator: 
     // The launcher's own answer must match, or we don't use it.
     const client = createPublicClient({ transport: http(CHAINS[chain].rpc, { timeout: 10_000 }) });
     const onChain = reward
-      ? await client.readContract({ address: pad, abi: V2_ABI, functionName: "tokenFor", args: [creator, found.salt, name, symbol, reward] })
-      : await client.readContract({ address: pad, abi: V1_ABI, functionName: "tokenFor", args: [creator, found.salt, name, symbol] });
-    if (getAddress(onChain) !== found.token) { console.error("instant vanity: tokenFor mismatch", chain, pad); return random; }
+      ? await client.readContract({ address: pad, abi: V2_ABI, functionName: "tokenFor", args: [creator, found.salt, name, symbol, reward] } as any)
+      : await client.readContract({ address: pad, abi: V1_ABI, functionName: "tokenFor", args: [creator, found.salt, name, symbol] } as any);
+    if (getAddress(onChain as string) !== found.token) { console.error("instant vanity: tokenFor mismatch", chain, pad); return random; }
     return { salt: found.salt, token: found.token, vanity: true };
   } catch (e) {
     console.error("instant vanity:", String((e as Error)?.message || e).slice(0, 200));
