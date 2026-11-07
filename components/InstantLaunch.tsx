@@ -29,30 +29,27 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
   };
   return (
     <div className="stack">
-      <div className="lc-pick" role="radiogroup" aria-label="How do you want to launch?">
-        <h2>How do you want to launch?</h2>
-        <button type="button" role="radio" aria-checked={style === "instant"} className={"lc-card lc-instant" + (style === "instant" ? " on" : "")} onClick={() => pick("instant")}>
-          <span className="lc-tag">Recommended · no liquidity needed</span>
-          <b>⚡ Instant launch</b>
-          <small>Just a name, a picture and a few words. No liquidity and no bonding curve: your coin is <b>live on PancakeSwap or Uniswap</b> the moment it&apos;s made.</small>
-          <ul>
-            <li>✓ Free to create (just the network fee)</li>
-            <li>✓ Liquidity locked in the pool forever</li>
-            <li>✓ You earn {INSTANT_CREATOR_BPS / 100}% of the pool&apos;s 1% trading fee</li>
-            <li>• BNB Chain and Ethereum · no tax · 1 billion supply</li>
-          </ul>
-        </button>
-        <button type="button" role="radio" aria-checked={style === "liquidity"} className={"lc-card" + (style === "liquidity" ? " on" : "")} onClick={() => pick("liquidity")}>
-          <span className="lc-tag">Classic · full control</span>
-          <b>💧 Add liquidity</b>
-          <small>You put {"BNB, ETH or SOL"} into the pool and set the starting price yourself, then lock or burn the liquidity.</small>
-          <ul>
-            <li>✓ Any network: BNB Chain, Ethereum, Solana…</li>
-            <li>✓ Your own supply, share, tax and holder rewards</li>
-            <li>✓ Lock 6 months, 1 year, or burn</li>
-            <li>• You need BNB/ETH/SOL for the pool</li>
-          </ul>
-        </button>
+      <div className="lc-bars" role="radiogroup" aria-label="How do you want to launch?">
+        <LaunchBar on={style === "instant"} onPick={() => pick("instant")} icon="⚡" title="Instant launch" tag="Recommended"
+          line="Name, picture, done. No liquidity needed. Live on PancakeSwap or Uniswap at once.">
+          <ol>
+            <li>Pick the network (BNB Chain or Ethereum), then add a name, a ticker and a picture. A description and links are optional.</li>
+            <li>Press <b>Launch now</b> and sign once in your wallet. You only pay the network fee; you need $20 of AUTISTIK in that wallet.</li>
+            <li>All 1,000,000,000 coins go straight into a {`PancakeSwap / Uniswap`} pool at a small starting price. There&apos;s no bonding curve: buyers bring the BNB or ETH, and the price rises as they buy.</li>
+            <li>The pool is held by the AUTISTIK Instant contract forever, so nobody can pull the liquidity, not you and not AUTISTIK. No tax, no owner, no minting.</li>
+            <li>Every trade pays the pool 1%: {INSTANT_CREATOR_BPS / 100}% of that is yours, collected from your coin page. For 5 minutes after launch, big buys are blocked to stop bots.</li>
+          </ol>
+        </LaunchBar>
+        <LaunchBar on={style === "liquidity"} onPick={() => pick("liquidity")} icon="💧" title="Add liquidity" tag="Classic"
+          line="Put in your own BNB, ETH or SOL, set the price, then lock or burn it. Any network.">
+          <ol>
+            <li>Pick any network (BNB Chain, Ethereum, Solana and more), a name, a ticker and a picture.</li>
+            <li>Choose your supply, how much goes into the pool, an optional tax (up to 10%) and optional holder rewards.</li>
+            <li>Add your own BNB, ETH or SOL to the pool. That sets the starting price.</li>
+            <li>Lock the liquidity for 6 months or 1 year, or burn it forever, so buyers know it can&apos;t be pulled.</li>
+            <li>A small fee on every trade supports AUTISTIK: 0.3% on BNB Chain and Ethereum, 0.5% on Solana.</li>
+          </ol>
+        </LaunchBar>
       </div>
       <div id="launch-form">
         {style === "instant" && (open.length ? <InstantForm instants={instants} open={open} admin={admin} onSolana={() => pick("liquidity")} /> : (
@@ -67,6 +64,22 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
         ))}
         {style === "liquidity" && children}
       </div>
+    </div>
+  );
+}
+
+/** One launch option as a simple bar: tap to choose it; "More" opens how it works, without choosing it. */
+function LaunchBar({ on, onPick, icon, title, tag, line, children }: { on: boolean; onPick: () => void; icon: string; title: string; tag: string; line: string; children: React.ReactNode }) {
+  const [more, setMore] = useState(false);
+  return (
+    <div className={"lc-bar" + (on ? " on" : "")}>
+      <button type="button" role="radio" aria-checked={on} className="lc-bar-main" onClick={onPick}>
+        <span className="lc-bar-ic" aria-hidden="true">{icon}</span>
+        <span className="lc-bar-t"><b>{title} <em>{tag}</em></b><small>{line}</small></span>
+        <span className="lc-bar-dot" aria-hidden="true" />
+      </button>
+      <button type="button" className="lc-bar-more" aria-expanded={more} onClick={() => setMore(!more)}>{more ? "Less" : "More"}</button>
+      {more && <div className="lc-bar-body">{children}</div>}
     </div>
   );
 }

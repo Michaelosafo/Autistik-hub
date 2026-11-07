@@ -4722,3 +4722,23 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 @media (prefers-reduced-motion:reduce){.ptik-dot{animation:none}.ptik-logo,.mp-q{transition:none}}
 :root[data-theme="light"] .ptik{box-shadow:0 10px 26px rgba(40,28,80,.10)}
 :root[data-theme="light"] .ptik-t b{background:linear-gradient(90deg,#C97F00,#D63C74 55%,#7C3AED);-webkit-background-clip:text;background-clip:text}
+
+/* ---- Create a coin: two simple bars (Instant / Add liquidity), More opens how it works ---- */
+.lc-bars{display:flex;flex-direction:column;gap:10px}
+.lc-bar{position:relative;border-radius:16px;background:var(--surface);border:1.5px solid var(--line);transition:border-color .15s,box-shadow .15s}
+.lc-bar.on{border-color:#F0B90B;box-shadow:0 0 0 3px rgba(240,185,11,.18)}
+.lc-bar-main{all:unset;box-sizing:border-box;cursor:pointer;width:100%;display:flex;align-items:center;gap:12px;padding:14px 72px 14px 14px}
+.lc-bar-main:focus-visible{outline:2px solid #F0B90B;outline-offset:-2px;border-radius:16px}
+.lc-bar-ic{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:1.25em;background:rgba(var(--wc),.06)}
+.lc-bar-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lc-bar-t b{font-size:1em;color:var(--ink)}
+.lc-bar-t em{font-style:normal;font-size:.68em;font-weight:800;margin-left:6px;padding:2px 8px;border-radius:99px;vertical-align:2px;color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B)}
+.lc-bar-t small{font-size:.82em;color:var(--muted);line-height:1.35}
+.lc-bar-dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--line)}
+.lc-bar.on .lc-bar-dot{border-color:#F0B90B;background:radial-gradient(circle,#F0B90B 45%,transparent 50%)}
+.lc-bar-more{all:unset;cursor:pointer;position:absolute;top:14px;right:44px;font-size:.76em;font-weight:800;color:var(--sun-bright,#C97F00);padding:4px 6px;border-radius:8px}
+.lc-bar-more:focus-visible{outline:2px solid #F0B90B}
+.lc-bar-body{padding:0 16px 14px 66px;font-size:.86em;color:var(--muted)}
+.lc-bar-body ol{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;line-height:1.45}
+.lc-bar-body b{color:var(--ink)}
+@media (max-width:520px){.lc-bar-body{padding-left:16px}.lc-bar-main{padding-right:64px}.lc-bar-more{right:40px}}
