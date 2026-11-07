@@ -7,6 +7,8 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { CHAINS, MIN_HOLD_USD, viemChain } from "@/lib/launchpad";
 import { INSTANT_ABI, INSTANT_CREATOR_BPS, INSTANT_DEX, isInstantChain, type InstantChain } from "@/lib/instant";
+import { useSolWallet } from "@/components/SolanaLaunch";
+import { signAndSend, solErr, solLaunchApi } from "@/lib/sol-wallet";
 
 type Style = "liquidity" | "instant";
 const KEY = "launch-style";
@@ -31,12 +33,12 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
     <div className="stack">
       <div className="lc-bars" role="radiogroup" aria-label="How do you want to launch?">
         <LaunchBar on={style === "instant"} onPick={() => pick("instant")} icon="⚡" title="Instant launch" tag="Recommended"
-          line="Name, picture, done. No liquidity needed. Live on PancakeSwap or Uniswap at once.">
+          line="Name, picture, done. No liquidity needed. Live on PancakeSwap, Uniswap or Raydium at once.">
           <ol>
-            <li>Pick the network (BNB Chain, Ethereum or Robinhood Chain), then add a name, a ticker and a picture. A description and links are optional.</li>
+            <li>Pick the network (BNB Chain, Ethereum, Robinhood Chain or Solana), then add a name, a ticker and a picture. A description and links are optional.</li>
             <li>Press <b>Launch now</b> and sign once in your wallet. You only pay the network fee; you need $20 of AUTISTIK in that wallet.</li>
-            <li>All 1,000,000,000 coins go straight into a {`PancakeSwap / Uniswap`} pool at a small starting price. There&apos;s no bonding curve: buyers bring the BNB or ETH, and the price rises as they buy.</li>
-            <li>The pool is held by the AUTISTIK Instant contract forever, so nobody can pull the liquidity, not you and not AUTISTIK. No tax, no owner, no minting.</li>
+            <li>All 1,000,000,000 coins go straight into a {`PancakeSwap / Uniswap / Raydium`} pool at a small starting price. There&apos;s no bonding curve: buyers bring the BNB or ETH, and the price rises as they buy.</li>
+            <li>The pool is locked forever (by the AUTISTIK Instant contract, or Raydium&apos;s lock on Solana), so nobody can pull the liquidity, not you and not AUTISTIK. No tax, no owner, no minting.</li>
             <li>Every trade pays the pool 1%: {INSTANT_CREATOR_BPS / 100}% of that is yours, collected from your coin page. For 5 minutes after launch, big buys are blocked to stop bots.</li>
           </ol>
         </LaunchBar>
@@ -52,7 +54,7 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
         </LaunchBar>
       </div>
       <div id="launch-form">
-        {style === "instant" && (open.length ? <InstantForm instants={instants} open={open} admin={admin} onSolana={() => pick("liquidity")} /> : (
+        {style === "instant" && (true ? <InstantForm instants={instants} open={open} admin={admin} /> : (
           <div className="card stack" style={{ gap: 6 }}>
             <b>⚡ Instant launch opens very soon</b>
             {admin ? (
@@ -86,12 +88,19 @@ function LaunchBar({ on, onPick, icon, title, tag, line, children }: { on: boole
 
 const BUYS = ["0", "0.05", "0.1", "0.2"];
 type Done = { token: string; pool: string; hash: string; listed: boolean; symbol: string };
+type Net = InstantChain | "solana";
+/** Solana Instant: Raydium concentrated pool, whole supply one-sided, the position locked forever (lib/solana-instant.ts). */
+const SOL_DX = { dex: "Raydium", startFdv: "30", noFirstBuy: true, swap: (t: string) => `https://raydium.io/swap/?inputMint=sol&outputMint=${t}` };
+type SolProgress = { mint?: string; sig?: string; pool?: string; nftMint?: string; pooled?: boolean; locked?: boolean };
 
-function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; open: InstantChain[]; admin: boolean; onSolana: () => void }) {
-  const [net, setNet] = useState<InstantChain>(open[0]);
+function InstantForm({ instants, open, admin }: { instants: Instants; open: InstantChain[]; admin: boolean }) {
+  const [net, setNet] = useState<Net>(open[0] ?? "solana");
+  const sol = net === "solana";
   const c = CHAINS[net];
-  const dx = INSTANT_DEX[net];
-  const pad = instants[net] as `0x${string}`;
+  const dx = sol ? SOL_DX : INSTANT_DEX[net as InstantChain];
+  const pad = (sol ? null : instants[net as InstantChain]) as `0x${string}`;
+  const { sw, picker } = useSolWallet();
+  const [solStep, setSolStep] = useState<SolProgress>({});
   const [f, setF] = useState({ name: "", symbol: "", buy: "0", logo: "", description: "", website: "", x: "", telegram: "" });
   const [cfg, setCfg] = useState<{ fee: bigint; fdv: bigint } | null>(null);
   const [status, setStatus] = useState("");
@@ -104,10 +113,53 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
   const logoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (sol || !pad) return;
     const pub = createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any;
     Promise.all([pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" }), pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "startFdv" })])
       .then(([fee, fdv]: bigint[]) => setCfg({ fee, fdv })).catch(() => {});
-  }, [pad, c]);
+  }, [pad, c, sol]);
+  // A Solana launch in progress is kept on this device, so a failed step or a reload continues with the same coin.
+  const solKey = `sol-instant:${f.symbol}:${f.name}`;
+  useEffect(() => {
+    if (!sol) return;
+    try { const v = JSON.parse(localStorage.getItem(solKey) || "null"); setSolStep(v?.mint ? v : {}); } catch { setSolStep({}); }
+  }, [sol, solKey]);
+  const keepSol = (v: SolProgress) => { setSolStep(v); try { localStorage.setItem(solKey, JSON.stringify(v)); } catch { /* private mode */ } };
+
+  /** Solana: coin → pool (two signatures) → lock → add to the Board. Each step continues where it stopped. */
+  async function launchSol(name: string, symbol: string) {
+    if (!sw) { setStatus("Connect a Solana wallet first (the button above)."); return; }
+    setBusy(true);
+    const owner = sw.account.address;
+    let st = { ...solStep };
+    try {
+      if (!st.mint) {
+        setStatus("Step 1 of 4: confirm your new coin in your wallet…");
+        const r = await solLaunchApi<{ tx: string; mint: string }>("instant-mint", { owner, name, symbol, logo: f.logo });
+        const sig = await signAndSend(sw, r.tx);
+        st = { mint: r.mint, sig }; keepSol(st);
+      }
+      if (!st.pooled) {
+        setStatus("Step 2 of 4: confirm the Raydium pool in your wallet (two quick confirms)…");
+        const r = await solLaunchApi<{ txs: string[]; pool: string; nftMint: string }>("instant-pool", { owner, mint: st.mint });
+        await signAndSend(sw, r.txs[0]);
+        setStatus("Step 3 of 4: confirm putting your coins into the pool…");
+        await signAndSend(sw, r.txs[1]);
+        st = { ...st, pool: r.pool, nftMint: r.nftMint, pooled: true }; keepSol(st);
+      }
+      if (!st.locked) {
+        setStatus("Step 4 of 4: confirm locking the pool forever…");
+        const r = await solLaunchApi<{ tx: string }>("instant-lock", { owner, nftMint: st.nftMint });
+        await signAndSend(sw, r.tx);
+        st = { ...st, locked: true }; keepSol(st);
+      }
+      setStatus("Adding it to the Board…");
+      const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "solana", style: "instant", token: st.mint, pair: st.pool, nftMint: st.nftMint, txHash: st.sig, description: f.description, website: f.website, x: f.x, telegram: f.telegram }) });
+      setDone({ token: st.mint!, pool: st.pool!, hash: st.sig!, listed: res.ok, symbol });
+      try { localStorage.removeItem(solKey); } catch { /* private mode */ }
+      setSolStep({}); setStatus("");
+    } catch (e) { setStatus(solErr(e)); } finally { setBusy(false); }
+  }
   useEffect(() => {
     setTaken(null);
     if (!f.name.trim() && !f.symbol.trim()) return;
@@ -144,6 +196,7 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
     const buy = Number(f.buy || 0);
     if (!(buy >= 0) || buy > maxBuy) { setStatus(`Your first buy can be up to ${maxBuy.toFixed(2)} ${c.coin} (5% of the coins).`); return; }
     if (!agree) { setStatus("Tick the box to confirm you've read how it works."); return; }
+    if (sol) { await launchSol(name, symbol); return; }
     const eth = await pickWallet();
     if (!eth) return;
     setBusy(true); setStatus("Check your wallet app…");
@@ -208,12 +261,12 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
         <span>Network</span>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Network">
           {(Object.keys(INSTANT_DEX) as InstantChain[]).map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={!instants[k] || busy}
+            <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={!instants[k] || busy || !!solStep.mint}
               onClick={() => { setNet(k); setCfg(null); setF((x) => ({ ...x, buy: "0" })); }}>
               {CHAINS[k].name}{!instants[k] ? " (soon)" : ""}
             </button>
           ))}
-          <button type="button" className="btn small" onClick={onSolana} title="Solana coins launch with Add liquidity for now">Solana</button>
+          <button type="button" role="radio" aria-checked={sol} className={"btn small" + (sol ? " primary" : "")} disabled={busy} onClick={() => { setNet("solana"); setCfg(null); setF((x) => ({ ...x, buy: "0" })); }}>Solana</button>
         </div>
       </div>
       <div className="ql-pic">
@@ -241,6 +294,13 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
           <label className="field"><span>Telegram</span><input value={f.telegram} onChange={(e) => setF({ ...f, telegram: e.target.value.trim() })} placeholder="https://t.me/…" inputMode="url" /></label>
         </div>
       </details>
+      {sol && (
+        <div className="field">
+          <span>Solana wallet</span>
+          {picker(busy, setStatus)}
+          {solStep.mint && <small className="muted">Continuing your launch: step {solStep.locked ? 4 : solStep.pooled ? 4 : 2} of 4. Press Launch now to carry on.</small>}
+        </div>
+      )}
       {!dx.noFirstBuy && <div className="field">
         <span>Be the first buyer <small className="muted">optional, up to {maxBuy.toFixed(2)} {c.coin} (5% of the coins)</small></span>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
@@ -253,10 +313,16 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
         <li><b>1,000,000,000</b> coins, all in the {dx.dex} pool</li>
         <li>Starting market cap <b>{fdv} {c.coin}</b>. The price rises as people buy</li>
         <li>Liquidity <b>locked forever</b>: nobody can remove it, not you and not AUTISTIK</li>
-        <li>No tax, no owner, no minting. Anti-bot: max 1% per buy for the first 5 minutes</li>
-        <li>The pool charges 1% per trade: <b>{INSTANT_CREATOR_BPS / 100}% of it is yours</b>, collected from your coin page</li>
-        <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} ${c.coin} + ` : "free + "}the network fee ({net === "ethereum" ? "a few dollars on Ethereum" : net === "robinhood" ? "a few cents on Robinhood Chain" : "about $0.30"}){Number(f.buy) > 0 ? ` + your ${f.buy} ${c.coin} buy` : ""}</li>
-        <li>You need ${MIN_HOLD_USD} of AUTISTIK in this wallet to launch</li>
+        {sol ? <>
+          <li>Minting and freezing switched off. A 0.5% fee on every transfer supports AUTISTIK</li>
+          <li>The pool charges 1% per trade: <b>most of it is yours</b> (Raydium keeps its 16% share), collected on Raydium with the fee NFT you get</li>
+          <li>Four quick confirms in your wallet: the coin, the pool, your coins into the pool, the lock</li>
+        </> : <>
+          <li>No tax, no owner, no minting. Anti-bot: max 1% per buy for the first 5 minutes</li>
+          <li>The pool charges 1% per trade: <b>{INSTANT_CREATOR_BPS / 100}% of it is yours</b>, collected from your coin page</li>
+        </>}
+        {sol ? <li>Cost: a small launch fee + about 0.1 SOL of Solana network rent for the pool and lock</li> : <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} ${c.coin} + ` : "free + "}the network fee ({net === "ethereum" ? "a few dollars on Ethereum" : net === "robinhood" ? "a few cents on Robinhood Chain" : "about $0.30"}){Number(f.buy) > 0 ? ` + your ${f.buy} ${c.coin} buy` : ""}</li>}
+        {!sol && <li>You need ${MIN_HOLD_USD} of AUTISTIK in this wallet to launch</li>}
       </ul>
       <label className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><small>I understand the coins go straight into the {dx.dex} pool, the liquidity can never be taken out, and coin prices can go to zero. <Link href="/terms">Terms</Link></small></label>
       <button className="btn primary" type="submit" disabled={busy}>{busy ? "Launching…" : "⚡ Launch now"}</button>
