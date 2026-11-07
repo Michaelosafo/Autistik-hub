@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import Avatar from "@/components/Avatar";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
@@ -38,7 +39,7 @@ export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: str
       <div className="tik-main">
         <div className="tik-head">
           <b>{a?.alias || "Member"}</b>
-          {a?.is_verified && <span className="mp-tick" title="Verified">✓</span>}
+          {a?.is_verified && <VerifiedBadge n={a.verified_badge} size={15} className="vbadge-name" />}
           {a?.is_team && <span className="tik-team">Team</span>}
           <small className="tik-time">{ago(t.created_at)}</small>
         </div>

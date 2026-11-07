@@ -1,10 +1,11 @@
 "use client";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
 import FollowButton from "@/components/members/FollowButton";
 
-type Person = { id: string; alias: string; handle: string | null; color: string; avatar_url: string | null; is_team: boolean; is_verified: boolean; following: boolean; followsYou: boolean };
+type Person = { id: string; alias: string; handle: string | null; color: string; avatar_url: string | null; is_team: boolean; is_verified: boolean; verified_badge?: number | null; following: boolean; followsYou: boolean };
 
 /**
  * "Find people" in your panel: one button opens a search by name or @handle with Follow right there. Before you
@@ -59,7 +60,7 @@ export default function FindPeople() {
             <Link href={`/members/${p.id}`} className="mp-person-l">
               <Avatar className="me-av" alias={p.alias} color={p.color} url={p.avatar_url} />
               <span className="mp-link-t">
-                <b>{p.alias}{p.is_verified && <span className="mp-tick" title="Verified">✓</span>}</b>
+                <b>{p.alias}{p.is_verified && <VerifiedBadge n={p.verified_badge} size={15} className="vbadge-name" />}</b>
                 <small>{[p.handle ? `@${p.handle}` : "", p.followsYou ? "Follows you" : "", p.is_team ? "AUTISTIK team" : ""].filter(Boolean).join(" · ") || "Member"}</small>
               </span>
             </Link>

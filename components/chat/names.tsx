@@ -1,6 +1,7 @@
 "use client";
-export type Person = { id: string; alias: string; color?: string | null; avatar_url?: string | null; is_team?: boolean | null; is_verified?: boolean | null; handle?: string | null };
-export const PERSON = "id,alias,color,avatar_url,is_team,is_verified,handle";
+import VerifiedBadge from "@/components/VerifiedBadge";
+export type Person = { id: string; alias: string; color?: string | null; avatar_url?: string | null; is_team?: boolean | null; is_verified?: boolean | null; handle?: string | null; verified_badge?: number | null };
+export const PERSON = "id,alias,color,avatar_url,is_team,is_verified,handle,verified_badge";
 
 /** A name in gold (team), green (verified) or black (everyone else), with its tick. */
 export function Name({ p, small, admin }: { p: Person | null | undefined; small?: boolean; admin?: boolean }) {
@@ -10,7 +11,7 @@ export function Name({ p, small, admin }: { p: Person | null | undefined; small?
   return (
     <span className={`ch-name ${cls}${small ? " sm" : ""}`}>
       {p.alias}
-      {p.is_team ? <i className="ch-tick team" title="AUTISTIK team">✓</i> : p.is_verified || admin ? <i className="ch-tick ver" title={admin && !p.is_verified ? "Group admin" : "Verified"}>✓</i> : null}
+      {p.is_team ? <i className="ch-tick team" title="AUTISTIK team">✓</i> : p.is_verified ? <VerifiedBadge n={p.verified_badge} size={small ? 13 : 15} className="vbadge-name" /> : admin ? <i className="ch-tick ver" title="Group admin">✓</i> : null}
     </span>
   );
 }

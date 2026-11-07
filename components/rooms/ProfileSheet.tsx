@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Card = {
-  id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null; is_verified: boolean; is_team: boolean; team_title: string | null;
+  id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null; is_verified: boolean; verified_badge?: number | null; is_team: boolean; team_title: string | null;
   followers: number; following: number; iFollow: boolean; me: boolean;
   posts: { id: string; body: string; image_url: string | null; created_at: string }[];
   launched: { chain: string; token: string; symbol: string; name: string }[];
@@ -46,7 +47,7 @@ export default function ProfileSheet({ id, alias, onClose, act }: { id: string; 
         <div className="lv-sheet-head">
           <Avatar className="avatar lv-sheet-av" alias={c?.alias || alias} color={c?.color ?? null} url={c?.avatar_url ?? null} />
           <div>
-            <b className="lv-sheet-name">{c?.alias || alias}{c?.is_verified ? " ✔️" : ""}</b>
+            <b className="lv-sheet-name">{c?.alias || alias} {c?.is_verified && <VerifiedBadge n={c.verified_badge} size={20} />}</b>
             <small className="muted">{c?.handle ? `@${c.handle} · ` : ""}{roleLabel}{c?.is_team ? ` · ${c.team_title || "AUTISTIK team"}` : ""}</small>
             <div className="lv-sheet-stats"><span><b>{c ? c.followers.toLocaleString("en-US") : "…"}</b> followers</span><span><b>{c ? c.following.toLocaleString("en-US") : "…"}</b> following</span></div>
           </div>

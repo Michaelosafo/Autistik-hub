@@ -5,7 +5,7 @@ import { currentUser, supabaseService } from "@/lib/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const COLS = "id,alias,handle,color,avatar_url,is_team,is_verified";
+const COLS = "id,alias,handle,color,avatar_url,is_team,is_verified,verified_badge";
 
 /**
  * Find people for the panel. With ?q= it searches names and @handles; without it, it lists the people who follow

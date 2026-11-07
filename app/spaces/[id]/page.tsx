@@ -23,12 +23,12 @@ export default async function RoomPage({ params }: { params: { id: string } }) {
   const sb = supabaseServer();
   const [{ data: room }, { data: me }] = await Promise.all([
     sb.from("live_rooms").select("id,title,host_id,ended_at,chain,token,cohosts").eq("id", params.id).maybeSingle(),
-    sb.from("profiles").select("id,alias,color,avatar_url").eq("id", user.id).maybeSingle(),
+    sb.from("profiles").select("id,alias,color,avatar_url,is_verified,is_team,verified_badge").eq("id", user.id).maybeSingle(),
   ]);
   if (!room) notFound();
   return (
     <div style={{ maxWidth: 820 }}>
-      <LiveRoom room={room as any} me={{ id: user.id, alias: me?.alias || "Member", color: me?.color ?? null, avatar_url: me?.avatar_url ?? null }} />
+      <LiveRoom room={room as any} me={{ id: user.id, alias: me?.alias || "Member", color: me?.color ?? null, avatar_url: me?.avatar_url ?? null, is_verified: !!(me as any)?.is_verified && !(me as any)?.is_team, verified_badge: (me as any)?.verified_badge ?? null }} />
     </div>
   );
 }

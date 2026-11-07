@@ -4,18 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
 import { DropPanel } from "@/components/rooms/RoomDrops";
 import ProfileSheet from "@/components/rooms/ProfileSheet";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type Me = { id: string; alias: string; color: string | null; avatar_url: string | null };
+type Me = { id: string; alias: string; color: string | null; avatar_url: string | null; is_verified?: boolean; verified_badge?: number | null };
 type Role = "host" | "cohost" | "speaker" | "listener";
-type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number };
+type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number; ver?: boolean; vb?: number | null };
 type Room = { id: string; title: string; host_id: string; ended_at: string | null; chain?: string | null; token?: string | null; cohosts?: string[] | null };
 
 const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }, { urls: "stun:stun.cloudflare.com:3478" }] };
 const MAX_STAGE = 8; // host + co-hosts + speakers
 const MAX_COHOSTS = 3;
-const REACTIONS = ["🔥", "🚀", "💎", "❤️", "😂", "👏"];
+const REACTIONS = ["🚀", "💎", "❤️", "😂", "👏", "🔥"];
 const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
 
 /** A live video tile (a speaker's camera). */
@@ -53,7 +54,10 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const [followers, setFollowers] = useState<Record<string, number>>({});
   const [sheet, setSheet] = useState<Peer | null>(null);
   const [sendTo, setSendTo] = useState<{ id: string; alias: string } | null>(null);
-  const [floaters, setFloaters] = useState<{ k: number; e: string; x: number }[]>([]);
+  const [floaters, setFloaters] = useState<{ k: number; e: string; x: number; big?: boolean }[]>([]);
+  // 🔥 MORE FIRE: the room's signature reaction. Everyone sees a burst of flames and the counter climbs.
+  const [fires, setFires] = useState(0);
+  const [blaze, setBlaze] = useState(false);
 
   const chan = useRef<any>(null);
   const mic = useRef<MediaStream | null>(null);
@@ -181,7 +185,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     ch.on("presence", { event: "sync" }, () => {
       const st = ch.presenceState() as Record<string, any[]>;
       const next: Record<string, Peer> = {};
-      for (const [id, metas] of Object.entries(st)) { const m = metas[metas.length - 1]; if (m) next[id] = { id, alias: m.alias, color: m.color, avatar_url: m.avatar_url, role: m.role, hand: !!m.hand, muted: !!m.muted, at: m.at || 0 }; }
+      for (const [id, metas] of Object.entries(st)) { const m = metas[metas.length - 1]; if (m) next[id] = { id, alias: m.alias, color: m.color, avatar_url: m.avatar_url, role: m.role, hand: !!m.hand, muted: !!m.muted, at: m.at || 0, ver: !!m.ver, vb: m.vb ?? null }; }
       setPeers(next);
       for (const k of [...pcs.current.keys()]) { const [a, b] = k.split(">"); if (!next[a] || !next[b]) closePc(k); }
       // The host's lists of speakers and co-hosts are the ones that count.
@@ -218,6 +222,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       if (payload.on === false) setVideos((v) => { const n = { ...v }; delete n[payload.from]; return n; });
     });
     ch.on("broadcast", { event: "drop" }, ({ payload }: any) => { if (runners().includes(payload.from)) setDrop(String(payload.text || "").slice(0, 160)); });
+    ch.on("broadcast", { event: "fire" }, () => fireBurst());
     ch.on("broadcast", { event: "react" }, ({ payload }: any) => { if (REACTIONS.includes(payload.e)) float(payload.e); });
     ch.on("broadcast", { event: "end" }, ({ payload }: any) => { if (payload.from === room.host_id) { setEnded(true); leave(); } });
     ch.subscribe(async (status: string) => {
@@ -231,7 +236,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   async function track(role: Role, h: boolean, m: boolean) {
-    await chan.current?.track({ alias: me.alias, color: me.color, avatar_url: me.avatar_url, role, hand: h, muted: m, at: Date.now(), ...(isHost ? { speakers: speakersRef.current, cohosts: cohostsRef.current } : {}) });
+    await chan.current?.track({ alias: me.alias, color: me.color, avatar_url: me.avatar_url, ver: !!me.is_verified, vb: me.verified_badge ?? null, role, hand: h, muted: m, at: Date.now(), ...(isHost ? { speakers: speakersRef.current, cohosts: cohostsRef.current } : {}) });
   }
 
   // My role changed (invited up or moved down): start or stop sending my voice.
@@ -314,6 +319,19 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     setTimeout(() => setFloaters((f) => f.filter((x) => x.k !== k)), 2600);
   }
   const react = (e: string) => { float(e); send("react", { e }); };
+  const blazeT = useRef<any>(null);
+  function fireBurst() {
+    setFires((n) => n + 1);
+    for (let i = 0; i < 9; i++) setTimeout(() => {
+      const k = ++fk.current;
+      setFloaters((f) => [...f.slice(-40), { k, e: "🔥", x: 4 + Math.random() * 92, big: true }]);
+      setTimeout(() => setFloaters((f) => f.filter((x) => x.k !== k)), 2800);
+    }, i * 70);
+    setBlaze(true);
+    clearTimeout(blazeT.current);
+    blazeT.current = setTimeout(() => setBlaze(false), 1400);
+  }
+  const moreFire = () => { fireBurst(); send("fire", {}); try { navigator.vibrate?.(30); } catch {} };
 
   const list = useMemo(() => Object.values(peers).sort((a, b) => a.at - b.at), [peers]);
   const onStage = list.filter((p) => roleOf(p.id) !== "listener").sort((a, b) => ["host", "cohost", "speaker"].indexOf(roleOf(a.id)) - ["host", "cohost", "speaker"].indexOf(roleOf(b.id)));
@@ -329,7 +347,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   );
 
   return (
-    <div className="lv stack" onClick={() => audios.current.forEach((a) => a.paused && a.play().catch(() => {}))}>
+    <div className={"lv stack" + (blaze ? " blaze" : "")} onClick={() => audios.current.forEach((a) => a.paused && a.play().catch(() => {}))}>
       <div className="lv-top">
         <span className="room-live"><i />Live</span>
         <h1>{room.title}</h1>
@@ -359,7 +377,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
             {onStage.map((p) => (
               <button type="button" key={p.id} className={"lv-face big" + (talking[p.id] && !p.muted ? " talking" : "")} onClick={() => setSheet(p)} aria-label={`${p.alias}, ${badge[roleOf(p.id)]}`}>
                 <span className="lv-ring"><Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
-                <span className="lv-name">{p.alias}{p.muted ? " 🔇" : ""}</span>
+                <span className="lv-name">{p.alias}{p.ver && <VerifiedBadge n={p.vb} size={15} className="vbadge-name" />}{p.muted ? " 🔇" : ""}</span>
                 <span className={"lv-role " + roleOf(p.id)}>{badge[roleOf(p.id)]}</span>
                 <span className="lv-f">{fmt(followers[p.id] ?? 0)} followers</span>
               </button>
@@ -383,7 +401,12 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
             {!audience.length && <small className="muted">No listeners yet. Share the link so people can join.</small>}
           </section>
 
-          <div className="lv-floats" aria-hidden="true">{floaters.map((f) => <span key={f.k} style={{ left: `${f.x}%` }}>{f.e}</span>)}</div>
+          <div className="lv-floats" aria-hidden="true">{floaters.map((f) => <span key={f.k} className={f.big ? "big" : undefined} style={{ left: `${f.x}%` }}>{f.e}</span>)}</div>
+
+          <button type="button" className="lv-fire" onClick={moreFire} aria-label="More fire">
+            <span className="lv-fire-ic" aria-hidden="true">🔥</span>
+            <span className="lv-fire-t"><b>MORE FIRE</b><small>{fires ? `${fmt(fires)} 🔥 in this live` : "Tap to light it up"}</small></span>
+          </button>
 
           <div className="lv-react" role="group" aria-label="React">{REACTIONS.map((e) => <button key={e} type="button" onClick={() => react(e)} aria-label={`React ${e}`}>{e}</button>)}</div>
 
