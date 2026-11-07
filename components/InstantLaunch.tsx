@@ -6,19 +6,22 @@ import PhotoCrop from "@/components/PhotoCrop";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { createPublicClient, createWalletClient, custom, formatEther, getAddress, http, parseEther, parseEventLogs } from "viem";
 import { CHAINS, MIN_HOLD_USD, viemChain } from "@/lib/launchpad";
-import { INSTANT_ABI, INSTANT_CREATOR_BPS } from "@/lib/instant";
+import { INSTANT_ABI, INSTANT_CREATOR_BPS, INSTANT_DEX, isInstantChain, type InstantChain } from "@/lib/instant";
 
 type Style = "liquidity" | "instant";
 const KEY = "launch-style";
+type Instants = Partial<Record<InstantChain, string>>;
 
 /**
- * Create a coin: first choose how. "Add liquidity" is the classic Launch Pad (you put BNB in the pool, then lock or
- * burn it). "Instant" needs no liquidity and has no bonding curve: the coin is on PancakeSwap and DexScreener the
- * moment it's made.
+ * Create a coin. Instant comes first and is open straight away when it's live: a name, a picture and a few words,
+ * sign once, and the coin trades on PancakeSwap (BNB Chain) or Uniswap (Ethereum) at once, with no liquidity from
+ * you and no bonding curve. "Add liquidity" is the classic Launch Pad (you put coins in the pool, then lock or burn it);
+ * its form and tools only show when you pick it.
  */
-export default function LaunchChoice({ instant, admin, children }: { instant: string | null; admin: boolean; children: React.ReactNode }) {
-  const [style, setStyle] = useState<Style | null>(null);
-  useEffect(() => { try { const s = localStorage.getItem(KEY); if (s === "liquidity" || s === "instant") setStyle(s); } catch {} }, []);
+export default function LaunchChoice({ instants, admin, children }: { instants: Instants; admin: boolean; children: React.ReactNode }) {
+  const open = (Object.keys(INSTANT_DEX) as InstantChain[]).filter((k) => instants[k]);
+  const [style, setStyle] = useState<Style>("instant");
+  useEffect(() => { try { if (localStorage.getItem(KEY) === "liquidity") setStyle("liquidity"); } catch {} }, []);
   const pick = (s: Style) => {
     setStyle(s);
     try { localStorage.setItem(KEY, s); } catch {}
@@ -29,14 +32,14 @@ export default function LaunchChoice({ instant, admin, children }: { instant: st
       <div className="lc-pick" role="radiogroup" aria-label="How do you want to launch?">
         <h2>How do you want to launch?</h2>
         <button type="button" role="radio" aria-checked={style === "instant"} className={"lc-card lc-instant" + (style === "instant" ? " on" : "")} onClick={() => pick("instant")}>
-          <span className="lc-tag">New · no liquidity needed</span>
+          <span className="lc-tag">Recommended · no liquidity needed</span>
           <b>⚡ Instant launch</b>
-          <small>No liquidity from you and no bonding curve. Your coin is <b>live on PancakeSwap</b> and shows on <b>DexScreener</b> the moment it&apos;s made. Start marketing straight away.</small>
+          <small>Just a name, a picture and a few words. No liquidity and no bonding curve: your coin is <b>live on PancakeSwap or Uniswap</b> the moment it&apos;s made.</small>
           <ul>
             <li>✓ Free to create (just the network fee)</li>
             <li>✓ Liquidity locked in the pool forever</li>
             <li>✓ You earn {INSTANT_CREATOR_BPS / 100}% of the pool&apos;s 1% trading fee</li>
-            <li>• BNB Chain only, no tax, 1 billion supply</li>
+            <li>• BNB Chain and Ethereum · no tax · 1 billion supply</li>
           </ul>
         </button>
         <button type="button" role="radio" aria-checked={style === "liquidity"} className={"lc-card" + (style === "liquidity" ? " on" : "")} onClick={() => pick("liquidity")}>
@@ -52,13 +55,13 @@ export default function LaunchChoice({ instant, admin, children }: { instant: st
         </button>
       </div>
       <div id="launch-form">
-        {style === "instant" && (instant ? <InstantForm pad={instant as `0x${string}`} admin={admin} /> : (
+        {style === "instant" && (open.length ? <InstantForm instants={instants} open={open} admin={admin} onSolana={() => pick("liquidity")} /> : (
           <div className="card stack" style={{ gap: 6 }}>
             <b>⚡ Instant launch opens very soon</b>
             {admin ? (
-              <p style={{ margin: 0 }}>Admin: Instant launch isn&apos;t deployed on BNB Chain yet, so nobody can use it. Deploy it once with <a href="#instant-admin">Admin: Instant launch</a> at the bottom of this page (about 0.01 BNB of gas). It switches on here straight away.</p>
+              <p style={{ margin: 0 }}>Admin: Instant launch isn&apos;t deployed yet, so nobody can use it. Deploy it once with <a href="#instant-admin">Admin: Instant launch</a> at the bottom of this page. It switches on here straight away.</p>
             ) : (
-              <p className="muted" style={{ margin: 0 }}>The AUTISTIK team is switching it on for BNB Chain. Until then you can launch the classic way with <button type="button" className="linkish" onClick={() => pick("liquidity")}>Add liquidity</button>.</p>
+              <p className="muted" style={{ margin: 0 }}>The AUTISTIK team is switching it on. Until then you can launch the classic way with <button type="button" className="linkish" onClick={() => pick("liquidity")}>Add liquidity</button>.</p>
             )}
           </div>
         ))}
@@ -71,9 +74,12 @@ export default function LaunchChoice({ instant, admin, children }: { instant: st
 const BUYS = ["0", "0.05", "0.1", "0.2"];
 type Done = { token: string; pool: string; hash: string; listed: boolean; symbol: string };
 
-function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
-  const c = CHAINS.bsc;
-  const [f, setF] = useState({ name: "", symbol: "", buy: "0", logo: "" });
+function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; open: InstantChain[]; admin: boolean; onSolana: () => void }) {
+  const [net, setNet] = useState<InstantChain>(open[0]);
+  const c = CHAINS[net];
+  const dx = INSTANT_DEX[net];
+  const pad = instants[net] as `0x${string}`;
+  const [f, setF] = useState({ name: "", symbol: "", buy: "0", logo: "", description: "", website: "", x: "", telegram: "" });
   const [cfg, setCfg] = useState<{ fee: bigint; fdv: bigint } | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,7 +94,7 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
     const pub = createPublicClient({ chain: viemChain(c), transport: http(c.rpc) }) as any;
     Promise.all([pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" }), pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "startFdv" })])
       .then(([fee, fdv]: bigint[]) => setCfg({ fee, fdv })).catch(() => {});
-  }, [pad]);
+  }, [pad, c]);
   useEffect(() => {
     setTaken(null);
     if (!f.name.trim() && !f.symbol.trim()) return;
@@ -113,8 +119,9 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
   }
 
   // The creator's first buy is capped at 5% of the supply: about 5% of the starting market cap in BNB.
-  const maxBuy = cfg ? Number(formatEther(cfg.fdv)) * 0.05 : 0.3;
-  const fdv = cfg ? Number(formatEther(cfg.fdv)) : 6;
+  const maxBuy = cfg ? Number(formatEther(cfg.fdv)) * 0.05 : Number(dx.startFdv) * 0.05;
+  const fdv = cfg ? Number(formatEther(cfg.fdv)) : Number(dx.startFdv);
+  const buys = net === "ethereum" ? ["0", "0.01", "0.02", "0.05"] : BUYS;
 
   async function launch(e: React.FormEvent) {
     e.preventDefault();
@@ -122,7 +129,7 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
     if (!name || !symbol) { setStatus("Add a name and a ticker."); return; }
     if (taken?.name || taken?.symbol) { setStatus(taken.name ? "That name was already launched here. Pick another." : "That ticker was already launched here. Pick another."); return; }
     const buy = Number(f.buy || 0);
-    if (!(buy >= 0) || buy > maxBuy) { setStatus(`Your first buy can be up to ${maxBuy.toFixed(2)} BNB (5% of the coins).`); return; }
+    if (!(buy >= 0) || buy > maxBuy) { setStatus(`Your first buy can be up to ${maxBuy.toFixed(2)} ${c.coin} (5% of the coins).`); return; }
     if (!agree) { setStatus("Tick the box to confirm you've read how it works."); return; }
     const eth = await pickWallet();
     if (!eth) return;
@@ -134,7 +141,7 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
       const [account] = await wallet.requestAddresses();
       try { await wallet.switchChain({ id: c.chainId }); } catch { await wallet.addChain({ chain }); await wallet.switchChain({ id: c.chainId }); }
       setStatus(admin ? "Getting your admin launch permit…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
-      const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "bsc", wallet: account, name, symbol, style: "instant" }) });
+      const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, wallet: account, name, symbol, style: "instant" }) });
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); return; }
       const fee = (await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" } as any)) as bigint;
@@ -146,12 +153,12 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
       } as const;
       const gas = ((await pub.estimateContractGas(call as any)) * 130n) / 100n;
       const hash = await wallet.writeContract({ ...call, chain, gas } as any);
-      setStatus("Launching on PancakeSwap… this usually takes under a minute.");
+      setStatus(`Launching on ${dx.dex}… this usually takes under a minute.`);
       const receipt = await pub.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") { setStatus("The launch transaction failed. Nothing was created, but the network fee was spent."); return; }
       const ev = parseEventLogs({ abi: INSTANT_ABI, logs: receipt.logs, eventName: "Launched" })[0];
       if (!ev) { setStatus("Launched, but we couldn't read the result. Check your wallet's activity."); return; }
-      const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "bsc", style: "instant", txHash: hash, logo: f.logo }) });
+      const res = await fetch("/api/launchpad/record", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, style: "instant", txHash: hash, logo: f.logo, description: f.description, website: f.website, x: f.x, telegram: f.telegram }) });
       setDone({ token: getAddress(ev.args.token), pool: getAddress(ev.args.pool), hash, listed: res.ok, symbol });
       setStatus("");
     } catch (e: any) {
@@ -160,30 +167,42 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
         : /CreatorBuyTooBig/.test(r) ? "Your first buy is more than 5% of the coins. Make it smaller."
         : /PoolTaken/.test(r) ? "Someone tried to set up a pool for this coin first. Nothing was launched. Press Launch again (you'll get a new address)."
         : /TooLate/.test(r) ? "The launch took too long. Nothing was launched. Press Launch again."
-        : /insufficient funds/i.test(r) ? "Not enough BNB in this wallet for the network fee and your first buy."
+        : /insufficient funds/i.test(r) ? `Not enough ${c.coin} in this wallet for the network fee and your first buy.`
         : /reject|denied/i.test(r) ? "You cancelled in your wallet. Nothing was launched." : e?.shortMessage || "Something went wrong. Nothing was launched.");
     } finally { setBusy(false); }
   }
 
   if (done) return (
     <div className="card stack lc-done" style={{ gap: 10 }}>
-      <h3 style={{ margin: 0 }}>🎉 ${done.symbol} is live on PancakeSwap</h3>
+      <h3 style={{ margin: 0 }}>🎉 ${done.symbol} is live on {dx.dex}</h3>
       <p className="muted" style={{ margin: 0 }}>Anyone can buy it now. DexScreener shows the chart within a few minutes of the first trade. Share your links and start marketing.</p>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <Link className="btn primary small" href={`/launchpad/bsc/${done.token}`}>Open your coin page</Link>
-        <a className="btn small" href={`https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${done.token}`} target="_blank" rel="noopener noreferrer">PancakeSwap</a>
-        <a className="btn small" href={`https://dexscreener.com/bsc/${done.pool}`} target="_blank" rel="noopener noreferrer">DexScreener</a>
+        <Link className="btn primary small" href={`/launchpad/${net}/${done.token}`}>Open your coin page</Link>
+        <a className="btn small" href={dx.swap(done.token)} target="_blank" rel="noopener noreferrer">{dx.dex}</a>
+        <a className="btn small" href={`https://dexscreener.com/${c.dexscreener}/${done.pool}`} target="_blank" rel="noopener noreferrer">DexScreener</a>
         <a className="btn small" href={`${c.explorer}/tx/${done.hash}`} target="_blank" rel="noopener noreferrer">Transaction</a>
       </div>
       <div className="field"><span>Contract address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{done.token}</span></div>
       {!done.listed && <small className="muted">Your coin is live, but we couldn&apos;t add it to the Board just now.</small>}
-      <button type="button" className="linkish" onClick={() => { setDone(null); setF({ name: "", symbol: "", buy: "0", logo: "" }); setAgree(false); }}>Launch another</button>
+      <button type="button" className="linkish" onClick={() => { setDone(null); setF({ name: "", symbol: "", buy: "0", logo: "", description: "", website: "", x: "", telegram: "" }); setAgree(false); }}>Launch another</button>
     </div>
   );
 
   return (
     <form className="card stack lc-form" style={{ gap: 14 }} onSubmit={launch}>
-      <div><b style={{ fontSize: "1.15em" }}>⚡ Instant launch</b><small className="muted" style={{ display: "block" }}>BNB Chain · PancakeSwap v3 · no liquidity · no bonding curve</small></div>
+      <div><b style={{ fontSize: "1.15em" }}>⚡ Instant launch</b><small className="muted" style={{ display: "block" }}>{c.name} · {dx.dex} v3 · no liquidity · no bonding curve</small></div>
+      <div className="field">
+        <span>Network</span>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Network">
+          {(Object.keys(INSTANT_DEX) as InstantChain[]).map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={!instants[k] || busy}
+              onClick={() => { setNet(k); setCfg(null); setF((x) => ({ ...x, buy: "0" })); }}>
+              {CHAINS[k].name}{!instants[k] ? " (soon)" : ""}
+            </button>
+          ))}
+          <button type="button" className="btn small" onClick={onSolana} title="Solana coins launch with Add liquidity for now">Solana</button>
+        </div>
+      </div>
       <div className="ql-pic">
         <button type="button" className="ql-pic-btn" onClick={() => logoInput.current?.click()} aria-label={f.logo ? "Change the coin picture" : "Add a coin picture"}>
           {f.logo ? <img src={f.logo} alt="" /> : <span><svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-cam" /></svg><small>Add picture</small></span>}
@@ -198,24 +217,35 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
         <label className="field"><span>Name {taken?.name ? <b className="ql-bad">already launched</b> : f.name.trim() && taken ? <b className="ql-good">✓ available</b> : null}</span><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} maxLength={32} placeholder="e.g. Calm Otter" required /></label>
         <label className="field"><span>Ticker {taken?.symbol ? <b className="ql-bad">already launched</b> : f.symbol.trim() && taken ? <b className="ql-good">✓ available</b> : null}</span><input value={f.symbol} onChange={(e) => setF({ ...f, symbol: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} maxLength={12} placeholder="e.g. OTTER" required /></label>
       </div>
+      <label className="field"><span>Description <small className="muted">optional</small></span>
+        <textarea value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} maxLength={500} rows={2} placeholder="What's your coin about?" />
+      </label>
+      <details className="lc-links">
+        <summary><b>Links</b> <small className="muted">optional: website, X, Telegram</small></summary>
+        <div className="form-grid" style={{ marginTop: 8 }}>
+          <label className="field"><span>Website</span><input value={f.website} onChange={(e) => setF({ ...f, website: e.target.value.trim() })} placeholder="https://…" inputMode="url" /></label>
+          <label className="field"><span>X</span><input value={f.x} onChange={(e) => setF({ ...f, x: e.target.value.trim() })} placeholder="https://x.com/…" inputMode="url" /></label>
+          <label className="field"><span>Telegram</span><input value={f.telegram} onChange={(e) => setF({ ...f, telegram: e.target.value.trim() })} placeholder="https://t.me/…" inputMode="url" /></label>
+        </div>
+      </details>
       <div className="field">
-        <span>Be the first buyer <small className="muted">optional, up to {maxBuy.toFixed(2)} BNB (5% of the coins)</small></span>
+        <span>Be the first buyer <small className="muted">optional, up to {maxBuy.toFixed(2)} {c.coin} (5% of the coins)</small></span>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          {BUYS.map((b) => <button key={b} type="button" className={"btn small" + (f.buy === b ? " primary" : "")} onClick={() => setF({ ...f, buy: b })}>{b === "0" ? "No buy" : `${b} BNB`}</button>)}
-          <input style={{ width: 110 }} inputMode="decimal" value={f.buy} onChange={(e) => setF({ ...f, buy: e.target.value.replace(/[^0-9.]/g, "") })} aria-label="First buy in BNB" />
+          {buys.map((b) => <button key={b} type="button" className={"btn small" + (f.buy === b ? " primary" : "")} onClick={() => setF({ ...f, buy: b })}>{b === "0" ? "No buy" : `${b} ${c.coin}`}</button>)}
+          <input style={{ width: 110 }} inputMode="decimal" value={f.buy} onChange={(e) => setF({ ...f, buy: e.target.value.replace(/[^0-9.]/g, "") })} aria-label={`First buy in ${c.coin}`} />
         </div>
         <small className="muted">You buy before anyone else, at the starting price, in the same transaction (so bots can&apos;t jump in front).</small>
       </div>
       <ul className="lc-facts">
-        <li><b>1,000,000,000</b> coins, all in the PancakeSwap pool</li>
-        <li>Starting market cap <b>{fdv} BNB</b>. The price rises as people buy</li>
+        <li><b>1,000,000,000</b> coins, all in the {dx.dex} pool</li>
+        <li>Starting market cap <b>{fdv} {c.coin}</b>. The price rises as people buy</li>
         <li>Liquidity <b>locked forever</b>: nobody can remove it, not you and not AUTISTIK</li>
         <li>No tax, no owner, no minting. Anti-bot: max 1% per buy for the first 5 minutes</li>
         <li>The pool charges 1% per trade: <b>{INSTANT_CREATOR_BPS / 100}% of it is yours</b>, collected from your coin page</li>
-        <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} BNB + ` : "free + "}the network fee (about $0.30){Number(f.buy) > 0 ? ` + your ${f.buy} BNB buy` : ""}</li>
+        <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} ${c.coin} + ` : "free + "}the network fee ({net === "ethereum" ? "a few dollars on Ethereum" : "about $0.30"}){Number(f.buy) > 0 ? ` + your ${f.buy} ${c.coin} buy` : ""}</li>
         <li>You need ${MIN_HOLD_USD} of AUTISTIK in this wallet to launch</li>
       </ul>
-      <label className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><small>I understand the coins go straight into the PancakeSwap pool, the liquidity can never be taken out, and coin prices can go to zero. <Link href="/terms">Terms</Link></small></label>
+      <label className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><small>I understand the coins go straight into the {dx.dex} pool, the liquidity can never be taken out, and coin prices can go to zero. <Link href="/terms">Terms</Link></small></label>
       <button className="btn primary" type="submit" disabled={busy}>{busy ? "Launching…" : "⚡ Launch now"}</button>
       {status && <p className="muted" role="status" style={{ margin: 0 }}>{status}</p>}
     </form>
@@ -223,11 +253,11 @@ function InstantForm({ pad, admin }: { pad: `0x${string}`; admin: boolean }) {
 }
 
 /** Coin page of an Instant coin: the pool's trading fees, collected and split between the creator and AUTISTIK. */
-export function InstantFees({ pad, token, creator }: { pad: `0x${string}`; token: `0x${string}`; creator: string }) {
+export function InstantFees({ chain = "bsc", pad, token, creator }: { chain?: string; pad: `0x${string}`; token: `0x${string}`; creator: string }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [owed, setOwed] = useState<bigint>(0n);
-  const c = CHAINS.bsc;
+  const c = CHAINS[(isInstantChain(chain) ? chain : "bsc") as InstantChain];
   async function run(claim: boolean) {
     const eth = await pickWallet();
     if (!eth) return;
@@ -243,7 +273,7 @@ export function InstantFees({ pad, token, creator }: { pad: `0x${string}`; token
       if (r.status !== "success") throw new Error("failed");
       const ev = parseEventLogs({ abi: INSTANT_ABI, logs: r.logs, eventName: "FeesCollected" })[0] as any;
       setOwed((await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "owed", args: [account] } as any)) as bigint);
-      setMsg(claim ? "✅ Sent to your wallet." : ev ? `✅ Collected ${Number(formatEther(ev.args.bnb)).toFixed(5)} BNB of fees: ${Number(formatEther(ev.args.toCreatorBnb)).toFixed(5)} BNB went to the creator.` : "✅ Done.");
+      setMsg(claim ? "✅ Sent to your wallet." : ev ? `✅ Collected ${Number(formatEther(ev.args.bnb)).toFixed(5)} ${c.coin} of fees: ${Number(formatEther(ev.args.toCreatorBnb)).toFixed(5)} ${c.coin} went to the creator.` : "✅ Done.");
     } catch (e: any) {
       setMsg(/reject|denied/i.test(String(e?.message)) ? "You cancelled in your wallet." : "Couldn't do that right now. Try again.");
     } finally { setBusy(false); }
@@ -251,10 +281,10 @@ export function InstantFees({ pad, token, creator }: { pad: `0x${string}`; token
   return (
     <div className="card stack" style={{ gap: 8 }}>
       <b>⚡ Instant coin · pool fees</b>
-      <small className="muted">Every trade pays the PancakeSwap pool a 1% fee. Anyone can press Collect: {INSTANT_CREATOR_BPS / 100}% goes straight to the creator ({creator.slice(0, 6)}…{creator.slice(-4)}) and the rest to AUTISTIK. The liquidity itself stays in the pool forever.</small>
+      <small className="muted">Every trade pays the {c.dex} pool a 1% fee. Anyone can press Collect: {INSTANT_CREATOR_BPS / 100}% goes straight to the creator ({creator.slice(0, 6)}…{creator.slice(-4)}) and the rest to AUTISTIK. The liquidity itself stays in the pool forever.</small>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <button type="button" className="btn small primary" disabled={busy} onClick={() => run(false)}>{busy ? "…" : "Collect fees"}</button>
-        {owed > 0n && <button type="button" className="btn small" disabled={busy} onClick={() => run(true)}>Claim {formatEther(owed)} BNB</button>}
+        {owed > 0n && <button type="button" className="btn small" disabled={busy} onClick={() => run(true)}>Claim {formatEther(owed)} {c.coin}</button>}
       </div>
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>

@@ -39,6 +39,21 @@ export const PANCAKE_V3 = {
   wbnb: { 56: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c", 97: "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd" },
 } as const;
 
+/** Where Instant launch works: each network's v3 DEX (position manager + router), wrapped coin and starting market cap. */
+export const INSTANT_DEX = {
+  bsc: {
+    dex: "PancakeSwap", positions: PANCAKE_V3.positions, router: PANCAKE_V3.router, wrapped: PANCAKE_V3.wbnb[56], startFdv: "6",
+    swap: (t: string) => `https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${t}`,
+  },
+  ethereum: {
+    dex: "Uniswap", positions: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88", router: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
+    wrapped: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", startFdv: "2",
+    swap: (t: string) => `https://app.uniswap.org/swap?chain=mainnet&outputCurrency=${t}`,
+  },
+} as const;
+export type InstantChain = keyof typeof INSTANT_DEX;
+export const isInstantChain = (c: string): c is InstantChain => c in INSTANT_DEX;
+
 export const V3_ROUTER_ABI = parseAbi([
   "struct P { address tokenIn; address tokenOut; uint24 fee; address recipient; uint256 deadline; uint256 amountIn; uint256 amountOutMinimum; uint160 sqrtPriceLimitX96; }",
   "function exactInputSingle(P params) payable returns (uint256)",

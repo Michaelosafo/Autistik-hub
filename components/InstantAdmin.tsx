@@ -3,7 +3,7 @@ import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
 import { concat, createPublicClient, createWalletClient, custom, defineChain, http, encodeAbiParameters, formatEther, getAddress, parseAbi, parseEther, parseEventLogs, toHex, zeroAddress } from "viem";
 import { CHAINS, viemChain } from "@/lib/launchpad";
-import { INSTANT_ABI, INSTANT_CONSTRUCTOR, INSTANT_CREATOR_BPS, INSTANT_START_FDV_BNB, PANCAKE_V3, V3_ROUTER_ABI } from "@/lib/instant";
+import { INSTANT_ABI, INSTANT_CONSTRUCTOR, INSTANT_CREATOR_BPS, INSTANT_DEX, INSTANT_START_FDV_BNB, PANCAKE_V3, V3_ROUTER_ABI, type InstantChain } from "@/lib/instant";
 
 /**
  * Admin only: Instant launch (no liquidity, no bonding curve, PancakeSwap v3).
@@ -29,13 +29,15 @@ export default function InstantAdmin() {
   const [fdv, setFdv] = useState(INSTANT_START_FDV_BNB);
   const [report, setReport] = useState<string>("");
   useEffect(() => { try { setSaved(JSON.parse(localStorage.getItem(KEY) || "{}")); } catch {} }, []);
-  useEffect(() => { fetch("/api/launchpad/contracts?chain=bsc").then((r) => r.json()).then(setInfo).catch(() => {}); }, []);
+  // The real network to deploy on: BNB Chain (PancakeSwap v3) or Ethereum (Uniswap v3).
+  const [net, setNet] = useState<InstantChain>("bsc");
+  useEffect(() => { setInfo(null); setFdv(INSTANT_DEX[net].startFdv); fetch(`/api/launchpad/contracts?chain=${net}`).then((r) => r.json()).then(setInfo).catch(() => {}); }, [net]);
   const keep = (s: Saved) => { setSaved(s); try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {} };
 
-  async function wallet(test: boolean) {
+  async function wallet(test: boolean, on: InstantChain = "bsc") {
     const eth = await pickWallet();
     if (!eth) throw new Error("No wallet chosen.");
-    const chain = test ? TESTNET : viemChain(CHAINS.bsc);
+    const chain = test ? TESTNET : viemChain(CHAINS[on]);
     const w = createWalletClient({ chain, transport: custom(eth) }) as any;
     const [account] = await w.requestAddresses();
     try { await w.switchChain({ id: chain.id }); } catch { await w.addChain({ chain }); await w.switchChain({ id: chain.id }); }
@@ -54,10 +56,10 @@ export default function InstantAdmin() {
     if (r.status !== "success") throw new Error(`${what} failed.`);
     return r;
   };
-  const deployData = async (owner: `0x${string}`, feeTo: `0x${string}`, signer: `0x${string}`) => {
+  const deployData = async (owner: `0x${string}`, feeTo: `0x${string}`, signer: `0x${string}`, on: InstantChain = "bsc") => {
     const { INSTANT_BYTECODE } = await import("@/lib/instant-build");
     if (!(Number(fdv) > 0)) throw new Error("Set a starting market cap in BNB.");
-    return concat([INSTANT_BYTECODE, encodeAbiParameters(INSTANT_CONSTRUCTOR, [PANCAKE_V3.positions, PANCAKE_V3.router, owner, feeTo, parseEther(fdv), BigInt(INSTANT_CREATOR_BPS), signer])]);
+    return concat([INSTANT_BYTECODE, encodeAbiParameters(INSTANT_CONSTRUCTOR, [INSTANT_DEX[on].positions, INSTANT_DEX[on].router, owner, feeTo, parseEther(fdv), BigInt(INSTANT_CREATOR_BPS), signer])]);
   };
 
   // ---- testnet trial
@@ -99,37 +101,38 @@ export default function InstantAdmin() {
   // ---- mainnet
   const deploy = () => run(async () => {
     if (!info?.team) throw new Error("The AUTISTIK team wallet isn't set on the site.");
-    const { eth, account } = await wallet(false);
-    const chain = viemChain(CHAINS.bsc);
-    const data = await deployData(info.team, info.team, info.signer || zeroAddress);
+    const c = CHAINS[net];
+    const { eth, account } = await wallet(false, net);
+    const chain = viemChain(c);
+    const data = await deployData(info.team, info.team, info.signer || zeroAddress, net);
     // Set the gas ourselves: phone wallets often guess too low for a contract this big, and the deploy then fails.
     // The estimate also runs the deploy first, so a problem shows here instead of costing gas.
-    const rpc = createPublicClient({ chain, transport: http(CHAINS.bsc.rpc) }) as any;
+    const rpc = createPublicClient({ chain, transport: http(c.rpc) }) as any;
     setMsg("Checking the deploy will work…");
     let gas: bigint;
     // At least 6M: storing a contract this size alone costs ~3M, and some phone wallets ignore a lower limit.
     try { const est = ((await rpc.estimateGas({ account, data })) * 150n) / 100n; gas = est > MIN_DEPLOY_GAS ? est : MIN_DEPLOY_GAS; }
     catch (e: any) { throw new Error(`The deploy would fail, so nothing was sent: ${String(e?.shortMessage || e?.message || e).split("\n")[0]}`); }
     const [price, bal] = await Promise.all([rpc.getGasPrice(), rpc.getBalance({ address: account })]);
-    if (bal < gas * price) throw new Error(`This wallet needs about ${Number(formatEther(gas * price)).toFixed(4)} BNB for gas and has ${Number(formatEther(bal)).toFixed(4)} BNB.`);
-    setMsg(`Confirm in your wallet: deploy Instant Launch on BNB Chain (gas about ${Number(formatEther(gas * price)).toFixed(4)} BNB). If your wallet shows a gas limit, it must be ${gas.toLocaleString()} or more; don't lower it.`);
+    if (bal < gas * price) throw new Error(`This wallet needs about ${Number(formatEther(gas * price)).toFixed(4)} ${c.coin} for gas and has ${Number(formatEther(bal)).toFixed(4)} ${c.coin}.`);
+    setMsg(`Confirm in your wallet: deploy Instant Launch on ${c.name} (gas about ${Number(formatEther(gas * price)).toFixed(4)} ${c.coin}). If your wallet shows a gas limit, it must be ${gas.toLocaleString()} or more; don't lower it.`);
     // Sent straight to the wallet with the limit under both names wallets use, so it can't swap in its own guess.
-    const hash = (await eth.request({ method: "eth_sendTransaction", params: [{ from: account, data, gas: toHex(gas), gasLimit: toHex(gas), chainId: toHex(56) }] })) as `0x${string}`;
+    const hash = (await eth.request({ method: "eth_sendTransaction", params: [{ from: account, data, gas: toHex(gas), gasLimit: toHex(gas), chainId: toHex(c.chainId!) }] })) as `0x${string}`;
     const pub = rpc;
     const r = await sent(pub, hash, "Deploy");
-    const res = await fetch("/api/launchpad/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "bsc", kind: "instant", address: r.contractAddress, txHash: hash }) });
+    const res = await fetch("/api/launchpad/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, kind: "instant", address: r.contractAddress, txHash: hash }) });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(j.error || "Deployed, but couldn't save it. Paste the address into the save box.");
     setInfo({ ...info, instant: r.contractAddress });
-    return `✅ Instant Launch is live on BNB Chain at ${r.contractAddress}. The Create page now offers Instant launch.`;
+    return `✅ Instant Launch is live on ${c.name} at ${r.contractAddress}. The Create page now offers Instant launch there.`;
   });
 
-  const link = (a?: string, test = true) => a ? <a href={`${test ? "https://testnet.bscscan.com" : "https://bscscan.com"}/address/${a}`} target="_blank" rel="noreferrer" className="mono">{a.slice(0, 8)}…{a.slice(-6)}</a> : null;
+  const link = (a?: string, test = true) => a ? <a href={`${test ? "https://testnet.bscscan.com" : CHAINS[net].explorer}/address/${a}`} target="_blank" rel="noreferrer" className="mono">{a.slice(0, 8)}…{a.slice(-6)}</a> : null;
   return (
     <div id="instant-admin" className="card stack" style={{ gap: 10, borderStyle: "dashed", scrollMarginTop: 80 }}>
       <h3 style={{ margin: 0 }}>⚡ Admin: Instant launch (no liquidity, no bonding curve)</h3>
       <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Each coin goes one-sided into a PancakeSwap v3 pool (1% fee) starting at the market cap below. The pool position stays in the contract forever; {INSTANT_CREATOR_BPS / 100}% of pool fees go to the creator, the rest to the team wallet. Try it on testnet first (free test BNB from the <a href="https://www.bnbchain.org/en/testnet-faucet" target="_blank" rel="noreferrer">faucet</a>).</p>
-      <label className="field" style={{ maxWidth: 260 }}><span>Starting market cap (BNB)</span><input value={fdv} inputMode="decimal" onChange={(e) => setFdv(e.target.value.replace(/[^0-9.]/g, ""))} /></label>
+      <label className="field" style={{ maxWidth: 260 }}><span>Starting market cap ({CHAINS[net].coin})</span><input value={fdv} inputMode="decimal" onChange={(e) => setFdv(e.target.value.replace(/[^0-9.]/g, ""))} /></label>
       <b>1 · Testnet trial</b>
       <ol className="stack" style={{ gap: 8, margin: 0, paddingLeft: 18 }}>
         <li>Test Instant Launch {saved.pad ? <>✅ {link(saved.pad)}</> : <button className="btn small" type="button" disabled={busy} onClick={tDeploy}>Deploy</button>}</li>
@@ -139,9 +142,14 @@ export default function InstantAdmin() {
       </ol>
       {saved.pad && <button type="button" className="linkish" style={{ alignSelf: "flex-start" }} onClick={() => { keep({}); setReport(""); setMsg("Testnet trial reset."); }}>Start the trial again</button>}
       {report && <p style={{ margin: 0 }}>{report}</p>}
-      <b>2 · BNB Chain (real)</b>
-      {info?.instant ? <p style={{ margin: 0 }}>✅ Live at {link(info.instant, false)}. The Create page offers Instant launch.</p>
-        : <div><button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>Deploy on BNB Chain</button> <small className="muted">Costs about 0.01 BNB of gas. Do the testnet trial first.</small></div>}
+      <b>2 · Real network</b>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Network to deploy on">
+        {(Object.keys(INSTANT_DEX) as InstantChain[]).map((k) => (
+          <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={busy} onClick={() => setNet(k)}>{CHAINS[k].name} · {INSTANT_DEX[k].dex}</button>
+        ))}
+      </div>
+      {info?.instant ? <p style={{ margin: 0 }}>✅ Live on {CHAINS[net].name} at {link(info.instant, false)}. The Create page offers Instant launch there.</p>
+        : <div><button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>Deploy on {CHAINS[net].name}</button> <small className="muted">{net === "ethereum" ? "Gas on Ethereum is about 0.005–0.03 ETH depending on the network. Use MetaMask." : "Costs about 0.01 BNB of gas. Use MetaMask."} Starting market cap above is in {CHAINS[net].coin}.</small></div>}
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>
   );

@@ -30,3 +30,20 @@ begin
   end;
   return new;
 end $function$;
+
+-- Applied 2026-11-07 (migration token_info): what a creator wrote about an Instant coin at launch.
+create table if not exists public.token_info (
+  chain text not null,
+  token text not null,
+  description text check (description is null or length(description) <= 500),
+  website text check (website is null or website ~ '^https://[^\s]{3,200}$'),
+  x text check (x is null or x ~ '^https://[^\s]{3,200}$'),
+  telegram text check (telegram is null or telegram ~ '^https://[^\s]{3,200}$'),
+  user_id uuid references auth.users(id) on delete set null,
+  updated_at timestamptz not null default now(),
+  primary key (chain, token)
+);
+alter table public.token_info enable row level security;
+create policy "token info readable" on public.token_info for select using (true);
+revoke all on public.token_info from anon, authenticated;
+grant select on public.token_info to anon, authenticated;

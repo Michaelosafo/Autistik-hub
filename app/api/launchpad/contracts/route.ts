@@ -5,7 +5,7 @@ import { json } from "@/lib/ai";
 import { logActivity } from "@/lib/activity";
 import { CHAINS, LAUNCHPAD_ABI, LAUNCHPAD_V3_ABI, LAUNCHPAD_V4_ABI, deployable, viemChain, type ChainKey } from "@/lib/launchpad";
 import { padInfo } from "@/lib/launchpad-server";
-import { INSTANT_ABI, PANCAKE_V3 } from "@/lib/instant";
+import { INSTANT_ABI, INSTANT_DEX, isInstantChain } from "@/lib/instant";
 import { lockerOn } from "@/lib/locker-server";
 import { getMarkets } from "@/lib/market";
 import { TREASURY } from "@/lib/trending";
@@ -61,9 +61,9 @@ export async function POST(req: Request) {
   const sb = supabaseService();
   try {
     if (kind === "instant") {
-      if (chain !== "bsc") return json({ error: "Instant launch is only for BNB Chain (PancakeSwap v3)." }, 400);
+      if (!isInstantChain(chain)) return json({ error: "Instant launch is only for BNB Chain (PancakeSwap v3) and Ethereum (Uniswap v3)." }, 400);
       const [positions, owner, feeTo] = await Promise.all(["positions", "owner", "feeTo"].map((functionName) => pub.readContract({ address: at, abi: INSTANT_ABI, functionName })));
-      if (getAddress(positions) !== getAddress(PANCAKE_V3.positions)) return json({ error: "That contract doesn't use PancakeSwap v3." }, 400);
+      if (getAddress(positions) !== getAddress(INSTANT_DEX[chain].positions)) return json({ error: `That contract doesn't use ${INSTANT_DEX[chain].dex} v3.` }, 400);
       if (!TREASURY || getAddress(owner) !== getAddress(TREASURY) || getAddress(feeTo) !== getAddress(TREASURY)) return json({ error: "That Instant Launch isn't owned by (and paying) the AUTISTIK team wallet." }, 400);
       const { data: row } = await sb.from("launchpad_contracts").select("chain").eq("chain", chain).maybeSingle();
       if (row) await sb.from("launchpad_contracts").update({ instant: at }).eq("chain", chain);
