@@ -1,7 +1,7 @@
 "use client";
 import { pickWallet } from "@/lib/connect";
 import { useEffect, useState } from "react";
-import { concat, createPublicClient, createWalletClient, custom, defineChain, encodeAbiParameters, formatEther, getAddress, parseAbi, parseEther, parseEventLogs, toHex, zeroAddress } from "viem";
+import { concat, createPublicClient, createWalletClient, custom, defineChain, http, encodeAbiParameters, formatEther, getAddress, parseAbi, parseEther, parseEventLogs, toHex, zeroAddress } from "viem";
 import { CHAINS, viemChain } from "@/lib/launchpad";
 import { INSTANT_ABI, INSTANT_CONSTRUCTOR, INSTANT_CREATOR_BPS, INSTANT_START_FDV_BNB, PANCAKE_V3, V3_ROUTER_ABI } from "@/lib/instant";
 
@@ -63,7 +63,9 @@ export default function InstantAdmin() {
   const tDeploy = () => run(async () => {
     const { w, chain, account, pub } = await wallet(true);
     setMsg("Confirm in your wallet: deploy the test Instant Launch.");
-    const r = await sent(pub, await w.sendTransaction({ account, chain, data: await deployData(account, account, zeroAddress) }), "Deploy");
+    const data = await deployData(account, account, zeroAddress);
+    const gas = ((await pub.estimateGas({ account, data })) * 140n) / 100n;
+    const r = await sent(pub, await w.sendTransaction({ account, chain, data, gas }), "Deploy");
     keep({ pad: r.contractAddress });
     return `✅ Test Instant Launch at ${r.contractAddress}. Next: launch a test coin.`;
   });
@@ -97,8 +99,18 @@ export default function InstantAdmin() {
   const deploy = () => run(async () => {
     if (!info?.team) throw new Error("The AUTISTIK team wallet isn't set on the site.");
     const { w, chain, account, pub } = await wallet(false);
-    setMsg(`Confirm in your wallet: deploy Instant Launch on BNB Chain (owner and fees: team wallet ${String(info.team).slice(0, 8)}…).`);
-    const hash = await w.sendTransaction({ account, chain, data: await deployData(info.team, info.team, info.signer || zeroAddress) });
+    const data = await deployData(info.team, info.team, info.signer || zeroAddress);
+    // Set the gas ourselves: phone wallets often guess too low for a contract this big, and the deploy then fails.
+    // The estimate also runs the deploy first, so a problem shows here instead of costing gas.
+    const rpc = createPublicClient({ chain, transport: http(CHAINS.bsc.rpc) }) as any;
+    setMsg("Checking the deploy will work…");
+    let gas: bigint;
+    try { gas = ((await rpc.estimateGas({ account, data })) * 140n) / 100n; }
+    catch (e: any) { throw new Error(`The deploy would fail, so nothing was sent: ${String(e?.shortMessage || e?.message || e).split("\n")[0]}`); }
+    const [price, bal] = await Promise.all([rpc.getGasPrice(), rpc.getBalance({ address: account })]);
+    if (bal < gas * price) throw new Error(`This wallet needs about ${Number(formatEther(gas * price)).toFixed(4)} BNB for gas and has ${Number(formatEther(bal)).toFixed(4)} BNB.`);
+    setMsg(`Confirm in your wallet: deploy Instant Launch on BNB Chain (gas about ${Number(formatEther(gas * price)).toFixed(4)} BNB). Don't change the gas limit.`);
+    const hash = await w.sendTransaction({ account, chain, data, gas });
     const r = await sent(pub, hash, "Deploy");
     const res = await fetch("/api/launchpad/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "bsc", kind: "instant", address: r.contractAddress, txHash: hash }) });
     const j = await res.json().catch(() => ({}));
