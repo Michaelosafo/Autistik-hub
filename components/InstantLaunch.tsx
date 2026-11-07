@@ -41,7 +41,6 @@ export default function LaunchChoice({ instants, instantVersions = {}, admin, ch
             <li>All 1,000,000,000 coins go straight into a {`PancakeSwap / Uniswap / Raydium`} pool at a small starting price. There&apos;s no bonding curve: buyers bring the BNB or ETH, and the price rises as they buy.</li>
             <li>The pool is locked forever (by the AUTISTIK Instant contract, or Raydium&apos;s lock on Solana), so nobody can pull the liquidity, not you and not AUTISTIK. No tax, no owner, no minting.</li>
             <li>Every trade pays the pool 1%: {INSTANT_CREATOR_BPS / 100}% of that is yours, sent straight to the wallet that launched it. For 5 minutes after launch, big buys are blocked to stop bots.</li>
-            <li>Optional holder rewards: give some or all of your share to your holders, paid in BNB or ETH, a top token like USDT, USDC or CAKE, or any token you paste in.</li>
           </ol>
         </LaunchBar>
         <LaunchBar on={style === "liquidity"} onPick={() => pick("liquidity")} icon="💧" title="Add liquidity" tag="Classic"
@@ -486,13 +485,7 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
       {admin && v2 && (
         <div className="card stack lc-admin" style={{ gap: 10 }}>
           <b>🛠️ Admin launch <small className="muted">only you see this</small></b>
-          <ul className="lc-facts" style={{ margin: 0 }}>
-            <li><b>Pick any starting market cap</b>: everyone else always starts at the normal {defFdv} {c.coin}</li>
-            <li><b>No $20 AUTISTIK check</b>: you launch with the admin permit</li>
-            <li><b>First buy before anyone</b>: up to 5% of the coins at your price, in the same transaction</li>
-            <li><b>Fees</b>: your 50% creator share comes to this wallet automatically; the team share goes to the team wallet</li>
-            <li><b>Holder rewards</b>, picture, links: same as everyone, all optional</li>
-          </ul>
+          <small className="muted">Your privileges are in the 📘 Dev guide at the top.</small>
           <span className="field" style={{ margin: 0 }}><span>Starting market cap</span></span>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Starting market cap">
             <button type="button" role="radio" aria-checked={!customFdv} className={"btn small" + (!customFdv ? " primary" : "")} onClick={() => setAdminFdv("")}>Normal · {defFdv} {c.coin}{usd(Number(defFdv))}</button>
