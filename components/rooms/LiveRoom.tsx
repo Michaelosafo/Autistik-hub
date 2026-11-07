@@ -16,7 +16,18 @@ type Role = "host" | "cohost" | "speaker" | "listener";
 type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number; ver?: boolean; vb?: number | null };
 type Room = { id: string; title: string; host_id: string; ended_at: string | null; chain?: string | null; token?: string | null; cohosts?: string[] | null };
 
-const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }, { urls: "stun:stun.cloudflare.com:3478" }] };
+// Connection helpers. STUN finds each phone's public address; a TURN relay (from /api/rooms/ice, when set up) carries
+// the voice when two networks won't connect directly, which is common on mobile data.
+const STUN: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }, { urls: "stun:stun.cloudflare.com:3478" }];
+let ICE: RTCConfiguration = { iceServers: STUN };
+let iceAt = 0;
+async function loadIce() {
+  if (Date.now() - iceAt < 10 * 60_000) return;
+  try {
+    const j = await fetch("/api/rooms/ice").then((r) => r.json());
+    if (Array.isArray(j?.iceServers) && j.iceServers.length) { ICE = { iceServers: [...STUN, ...j.iceServers] }; iceAt = Date.now(); }
+  } catch { /* STUN only */ }
+}
 const MAX_STAGE = 8; // host + co-hosts + speakers
 const MAX_COHOSTS = 3;
 const REACTIONS = ["🚀", "💎", "❤️", "😂", "👏", "🔥"];
@@ -99,6 +110,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   function closePc(key: string) {
     const pc = pcs.current.get(key);
     if (pc) { try { pc.close(); } catch {} pcs.current.delete(key); }
+    pendingIce.current.delete(key);
     const a = audios.current.get(key);
     if (a) { a.srcObject = null; a.remove(); audios.current.delete(key); }
     voices.current.delete(key);
@@ -106,6 +118,16 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     mixSrc.current.delete(key);
     const [from, to] = key.split(">");
     if (to === me.id) setVideos((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
+  }
+
+  // Connection details that arrive before the other side's offer/answer is applied wait here (they used to be dropped,
+  // which often left phones on mobile data unable to connect: no sound).
+  const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
+  const retries = useRef(new Map<string, number>());
+  async function flushIce(key: string, pc: RTCPeerConnection) {
+    const q = pendingIce.current.get(key);
+    pendingIce.current.delete(key);
+    for (const c of q || []) await pc.addIceCandidate(c).catch(() => {});
   }
 
   function newPc(key: string, remote: string) {
@@ -128,13 +150,27 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       a.play().catch(() => setMsg("Tap anywhere to hear the room."));
       watchLevel(remote, a.srcObject as MediaStream);
     };
-    pc.onconnectionstatechange = () => { if (pc.connectionState === "failed") closePc(key); };
+    pc.onconnectionstatechange = () => {
+      const st = pc.connectionState;
+      if (st === "connected") { retries.current.delete(key); return; }
+      if (st !== "failed" && st !== "disconnected") return;
+      // A dropped or failed voice link: the sender calls again (a few times, a little later each time).
+      setTimeout(() => {
+        if (pcs.current.get(key) !== pc || pc.connectionState === "connected") return;
+        const [from, to] = key.split(">");
+        const n = (retries.current.get(key) || 0) + 1;
+        if (from === me.id && n <= 4 && mic.current) { retries.current.set(key, n); callPeer(to); }
+        else if (pc.connectionState === "failed") { closePc(key); if (to === me.id) setMsg("A voice couldn't connect on this network. Try Wi-Fi, or leave and rejoin."); }
+      }, st === "failed" ? 800 : 4000);
+    };
     return pc;
   }
 
   // I'm on stage: send my microphone (and camera, if on) to one person.
   async function callPeer(to: string) {
     if (!mic.current || to === me.id) return;
+    await loadIce();
+    if (!mic.current) return;
     const key = `${me.id}>${to}`;
     const pc = newPc(key, to);
     mic.current.getTracks().forEach((t) => pc.addTrack(t, mic.current!));
@@ -222,8 +258,12 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     ch.on("broadcast", { event: "offer" }, async ({ payload }: any) => {
       // Voice only from people on stage (host, co-hosts, speakers).
       if (payload.to !== me.id || !(speakersRef.current.includes(payload.from) || runners().includes(payload.from))) return;
+      await loadIce();
+      const early = pendingIce.current.get(payload.key);
       const pc = newPc(payload.key, payload.from);
+      if (early) pendingIce.current.set(payload.key, early);
       await pc.setRemoteDescription(payload.sdp);
+      await flushIce(payload.key, pc);
       const ans = await pc.createAnswer();
       await pc.setLocalDescription(ans);
       send("answer", { to: payload.from, key: payload.key, sdp: pc.localDescription });
@@ -231,11 +271,19 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     ch.on("broadcast", { event: "answer" }, async ({ payload }: any) => {
       if (payload.to !== me.id) return;
       const pc = pcs.current.get(payload.key);
-      if (pc && pc.signalingState === "have-local-offer") await pc.setRemoteDescription(payload.sdp).catch(() => {});
+      if (pc && pc.signalingState === "have-local-offer") { await pc.setRemoteDescription(payload.sdp).catch(() => {}); await flushIce(payload.key, pc); }
     });
     ch.on("broadcast", { event: "ice" }, async ({ payload }: any) => {
       if (payload.to !== me.id) return;
-      await pcs.current.get(payload.key)?.addIceCandidate(payload.candidate).catch(() => {});
+      const pc = pcs.current.get(payload.key);
+      // Not ready yet (no offer/answer applied, or the call hasn't started here): keep it for a moment.
+      if (!pc || !pc.remoteDescription) {
+        const q = pendingIce.current.get(payload.key) || [];
+        if (q.length < 60) q.push(payload.candidate);
+        pendingIce.current.set(payload.key, q);
+        return;
+      }
+      await pc.addIceCandidate(payload.candidate).catch(() => {});
     });
     // The host and co-hosts run the stage.
     ch.on("broadcast", { event: "speakers" }, ({ payload }: any) => {
@@ -257,6 +305,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       if (isHost) await startMic();
       await track(isHost ? "host" : "listener", false, true);
       setJoined(true);
+      if (isHost) setMsg("You're live but muted. Tap the mic to talk.");
     });
   }
 
