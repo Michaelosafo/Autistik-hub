@@ -1,7 +1,8 @@
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
+import VerifiedBadge from "@/components/VerifiedBadge";
 
-export type MemberLite = { id: string; alias: string; color?: string | null; avatar_url?: string | null; is_team?: boolean | null; team_title?: string | null; is_verified?: boolean | null; handle?: string | null };
+export type MemberLite = { id: string; alias: string; color?: string | null; avatar_url?: string | null; is_team?: boolean | null; team_title?: string | null; is_verified?: boolean | null; handle?: string | null; verified_badge?: number | null };
 
 /**
  * A member's nickname and @handle (like X). Name colours: gold = AUTISTIK team, green = verified member (applied and
@@ -15,7 +16,7 @@ export default function MemberName({ m, link = true, avatar = false, handle = tr
         <span className="mname-text">{m.alias}</span>
         {handle && m.handle && <span className="mhandle">@{m.handle}</span>}
       </span>
-      {m.is_verified && !m.is_team && <span className="verified-badge" title="Verified by AUTISTIK">✓ VERIFIED</span>}
+      {m.is_verified && !m.is_team && <VerifiedBadge n={m.verified_badge} size={17} className="vbadge-name" />}
       {m.is_team && <span className="team-badge" title={m.team_title ? `AUTISTIK team · ${m.team_title}` : "AUTISTIK team"}>✓ TEAM</span>}
     </span>
   );

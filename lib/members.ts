@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { MemberLite } from "@/components/members/MemberName";
 
 // Team columns arrive with supabase/members-live.sql. Until it's run, profiles load without them.
-const PHOTO = "id,alias,color,is_admin,created_at,is_team,team_title,handle,holdings_share,is_verified,avatar_url";
+const PHOTO = "id,alias,color,is_admin,created_at,is_team,team_title,handle,holdings_share,is_verified,avatar_url,verified_badge";
 const FULL = "id,alias,color,is_admin,created_at,is_team,team_title,handle,holdings_share,is_verified";
 const MID = "id,alias,color,is_admin,created_at,is_team,team_title";
 const BASIC = "id,alias,color,is_admin,created_at";

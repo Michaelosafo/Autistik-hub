@@ -3,6 +3,7 @@ import Avatar from "@/components/Avatar";
 import { notFound } from "next/navigation";
 import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
+import BadgePicker from "@/components/BadgePicker";
 import FollowButton from "@/components/members/FollowButton";
 import ShareProfile from "@/components/members/ShareProfile";
 import ActivityList from "@/components/members/ActivityList";
@@ -114,6 +115,7 @@ export default async function MemberPage({ params, searchParams }: { params: { i
         <div className="grid2" style={{ alignItems: "start" }}>
           <div className="stack">
             <ProfileEdit alias={prof.alias} color={prof.color || "#6141D4"} handle={prof.handle ?? null} />
+            {((prof as any).is_verified || prof.is_team) && <BadgePicker current={(prof as any).verified_badge ?? null} name={prof.alias} />}
             <BadgeApply verified={!!(prof as any).is_verified} team={!!prof.is_team} />
           </div>
           <div className="card stack">

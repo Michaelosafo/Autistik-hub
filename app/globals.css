@@ -4872,3 +4872,29 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .lv-chip { padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line); text-decoration: none; color: inherit; font-size: .86em; }
 .lv-chip .mono { opacity: .6; font-size: .9em; }
 .lv-post { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; border-radius: 12px; background: color-mix(in srgb, currentColor 4%, transparent); text-decoration: none; color: inherit; font-size: .92em; }
+
+/* ---- Verified badges (10 designs) and the badge picker */
+.vbadge { display: inline-block; vertical-align: -0.18em; flex: none; }
+.vbadge-name { margin-left: 4px; }
+.bp-preview { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, currentColor 5%, transparent); font-size: 1.15em; font-weight: 700; }
+.bp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+@media (max-width: 420px) { .bp-grid { grid-template-columns: repeat(3, 1fr); } }
+.bp-item { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); transition: transform .15s ease, box-shadow .15s ease; }
+.bp-item:hover { transform: translateY(-2px); }
+.bp-item.on { border-color: #a855f7; box-shadow: 0 0 0 3px color-mix(in srgb, #a855f7 30%, transparent); }
+.bp-item:focus-visible { outline: 3px solid #a855f7; outline-offset: 2px; }
+.bp-open { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; }
+
+/* ---- MORE FIRE */
+.lv-fire { all: unset; cursor: pointer; display: flex; align-items: center; gap: 12px; align-self: center; padding: 10px 22px 10px 12px; border-radius: 99px; color: #fff;
+  background: linear-gradient(90deg, #FF3D00, #FF8A00 55%, #FFC400); box-shadow: 0 8px 26px rgba(255,80,0,.45), inset 0 1px 0 rgba(255,255,255,.35); transition: transform .12s ease; -webkit-tap-highlight-color: transparent; }
+.lv-fire:active { transform: scale(.95); }
+.lv-fire:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.lv-fire-ic { font-size: 2.1em; line-height: 1; filter: drop-shadow(0 0 8px rgba(255,200,0,.8)); animation: lvflick 1.4s ease-in-out infinite; }
+.lv-fire-t { display: flex; flex-direction: column; line-height: 1.1; }
+.lv-fire-t b { font-size: 1.15em; letter-spacing: .06em; }
+.lv-fire-t small { opacity: .9; }
+@keyframes lvflick { 0%,100% { transform: rotate(-4deg) scale(1); } 50% { transform: rotate(4deg) scale(1.08); } }
+.lv-floats span.big { font-size: 3em; animation-duration: 2.8s; }
+.lv.blaze .lv-stage { box-shadow: 0 0 0 2px #FF8A00, 0 0 40px rgba(255,90,0,.55); transition: box-shadow .2s ease; }
+@media (prefers-reduced-motion: reduce) { .lv-fire-ic, .lv-face.talking .lv-ring, .lv-handdot { animation: none; } .lv-floats span { animation-duration: .01s; } }

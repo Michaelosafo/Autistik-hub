@@ -14,13 +14,13 @@ export const MOODS = [
 export type MoodKey = (typeof MOODS)[number]["key"];
 export const moodOf = (k: string | null | undefined) => MOODS.find((m) => m.key === k) || null;
 
-export type TikAuthor = { id: string; alias: string; color: string | null; avatar_url: string | null; is_team?: boolean; is_verified?: boolean; handle?: string | null };
+export type TikAuthor = { id: string; alias: string; color: string | null; avatar_url: string | null; is_team?: boolean; is_verified?: boolean; handle?: string | null; verified_badge?: number | null };
 export type Tik = {
   id: string; body: string; mood: string | null; image_url: string | null; created_at: string; author_id: string; reply_to: string | null;
   author: TikAuthor | null; likes: number; replies: number; liked: boolean;
 };
 
-export const TIK_COLS = "id,body,mood,image_url,created_at,author_id,reply_to,author:profiles!tiks_author_id_fkey(id,alias,color,avatar_url,is_team,is_verified,handle),tik_likes(count),replies:tiks!reply_to(count)";
+export const TIK_COLS = "id,body,mood,image_url,created_at,author_id,reply_to,author:profiles!tiks_author_id_fkey(id,alias,color,avatar_url,is_team,is_verified,handle,verified_badge),tik_likes(count),replies:tiks!reply_to(count)";
 
 export function ago(iso: string) {
   const s = Math.max(1, (Date.now() - Date.parse(iso)) / 1000);

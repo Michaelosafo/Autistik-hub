@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const viewer = await currentUser();
   const sb = supabaseService();
   const [{ data: p }, followers, following, iFollow, { data: posts }, { data: launched }] = await Promise.all([
-    sb.from("profiles").select("id,alias,handle,color,avatar_url,is_verified,is_team,team_title,holdings_share,created_at").eq("id", id).maybeSingle(),
+    sb.from("profiles").select("id,alias,handle,color,avatar_url,is_verified,is_team,team_title,holdings_share,created_at,verified_badge").eq("id", id).maybeSingle(),
     sb.from("follows").select("*", { count: "exact", head: true }).eq("followee_id", id).then((r) => r.count ?? 0),
     sb.from("follows").select("*", { count: "exact", head: true }).eq("follower_id", id).then((r) => r.count ?? 0),
     viewer ? sb.from("follows").select("followee_id").eq("follower_id", viewer.id).eq("followee_id", id).maybeSingle().then((r) => !!r.data) : Promise.resolve(false),
