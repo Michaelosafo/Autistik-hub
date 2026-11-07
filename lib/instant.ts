@@ -42,13 +42,21 @@ export const PANCAKE_V3 = {
 /** Where Instant launch works: each network's v3 DEX (position manager + router), wrapped coin and starting market cap. */
 export const INSTANT_DEX = {
   bsc: {
-    dex: "PancakeSwap", positions: PANCAKE_V3.positions, router: PANCAKE_V3.router, wrapped: PANCAKE_V3.wbnb[56], startFdv: "6",
+    dex: "PancakeSwap", positions: PANCAKE_V3.positions, router: PANCAKE_V3.router, startFdv: "6", noFirstBuy: false,
     swap: (t: string) => `https://pancakeswap.finance/swap?chain=bsc&outputCurrency=${t}`,
   },
   ethereum: {
     dex: "Uniswap", positions: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88", router: "0xE592427A0AEce92De3Edee1F18E0157C05861564",
-    wrapped: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", startFdv: "2",
+    startFdv: "2", noFirstBuy: false,
     swap: (t: string) => `https://app.uniswap.org/swap?chain=mainnet&outputCurrency=${t}`,
+  },
+  // Robinhood Chain (an Arbitrum chain): Uniswap v3 from Uniswap's deployment list. It only has SwapRouter02, whose
+  // swap call differs from the one the contract uses for the creator's first buy, so launches there have no first buy
+  // (the contract never calls the router when the first buy is 0).
+  robinhood: {
+    dex: "Uniswap", positions: "0x73991a25c818bf1f1128deaab1492d45638de0d3", router: "0xcaf681a66d020601342297493863e78c959e5cb2",
+    startFdv: "2", noFirstBuy: true,
+    swap: (t: string) => `https://dexscreener.com/robinhood/${t}`,
   },
 } as const;
 export type InstantChain = keyof typeof INSTANT_DEX;

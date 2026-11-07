@@ -149,7 +149,7 @@ export default function InstantAdmin() {
         ))}
       </div>
       {info?.instant ? <p style={{ margin: 0 }}>✅ Live on {CHAINS[net].name} at {link(info.instant, false)}. The Create page offers Instant launch there.</p>
-        : <div><button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>Deploy on {CHAINS[net].name}</button> <small className="muted">{net === "ethereum" ? "Gas on Ethereum is about 0.005–0.03 ETH depending on the network. Use MetaMask." : "Costs about 0.01 BNB of gas. Use MetaMask."} Starting market cap above is in {CHAINS[net].coin}.</small></div>}
+        : <div><button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>Deploy on {CHAINS[net].name}</button> <small className="muted">{net === "ethereum" ? "Gas on Ethereum is about 0.005–0.03 ETH depending on the network. Use MetaMask." : net === "robinhood" ? "Gas on Robinhood Chain is a few cents of ETH: the wallet needs a little ETH on Robinhood Chain. Use MetaMask. Coins launched there have no first buy." : "Costs about 0.01 BNB of gas. Use MetaMask."} Starting market cap above is in {CHAINS[net].coin}.</small></div>}
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>
   );

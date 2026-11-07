@@ -33,7 +33,7 @@ export default function LaunchChoice({ instants, admin, children }: { instants: 
         <LaunchBar on={style === "instant"} onPick={() => pick("instant")} icon="⚡" title="Instant launch" tag="Recommended"
           line="Name, picture, done. No liquidity needed. Live on PancakeSwap or Uniswap at once.">
           <ol>
-            <li>Pick the network (BNB Chain or Ethereum), then add a name, a ticker and a picture. A description and links are optional.</li>
+            <li>Pick the network (BNB Chain, Ethereum or Robinhood Chain), then add a name, a ticker and a picture. A description and links are optional.</li>
             <li>Press <b>Launch now</b> and sign once in your wallet. You only pay the network fee; you need $20 of AUTISTIK in that wallet.</li>
             <li>All 1,000,000,000 coins go straight into a {`PancakeSwap / Uniswap`} pool at a small starting price. There&apos;s no bonding curve: buyers bring the BNB or ETH, and the price rises as they buy.</li>
             <li>The pool is held by the AUTISTIK Instant contract forever, so nobody can pull the liquidity, not you and not AUTISTIK. No tax, no owner, no minting.</li>
@@ -134,7 +134,7 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
   // The creator's first buy is capped at 5% of the supply: about 5% of the starting market cap in BNB.
   const maxBuy = cfg ? Number(formatEther(cfg.fdv)) * 0.05 : Number(dx.startFdv) * 0.05;
   const fdv = cfg ? Number(formatEther(cfg.fdv)) : Number(dx.startFdv);
-  const buys = net === "ethereum" ? ["0", "0.01", "0.02", "0.05"] : BUYS;
+  const buys = net === "bsc" ? BUYS : ["0", "0.01", "0.02", "0.05"];
 
   async function launch(e: React.FormEvent) {
     e.preventDefault();
@@ -241,21 +241,21 @@ function InstantForm({ instants, open, admin, onSolana }: { instants: Instants; 
           <label className="field"><span>Telegram</span><input value={f.telegram} onChange={(e) => setF({ ...f, telegram: e.target.value.trim() })} placeholder="https://t.me/…" inputMode="url" /></label>
         </div>
       </details>
-      <div className="field">
+      {!dx.noFirstBuy && <div className="field">
         <span>Be the first buyer <small className="muted">optional, up to {maxBuy.toFixed(2)} {c.coin} (5% of the coins)</small></span>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           {buys.map((b) => <button key={b} type="button" className={"btn small" + (f.buy === b ? " primary" : "")} onClick={() => setF({ ...f, buy: b })}>{b === "0" ? "No buy" : `${b} ${c.coin}`}</button>)}
           <input style={{ width: 110 }} inputMode="decimal" value={f.buy} onChange={(e) => setF({ ...f, buy: e.target.value.replace(/[^0-9.]/g, "") })} aria-label={`First buy in ${c.coin}`} />
         </div>
         <small className="muted">You buy before anyone else, at the starting price, in the same transaction (so bots can&apos;t jump in front).</small>
-      </div>
+      </div>}
       <ul className="lc-facts">
         <li><b>1,000,000,000</b> coins, all in the {dx.dex} pool</li>
         <li>Starting market cap <b>{fdv} {c.coin}</b>. The price rises as people buy</li>
         <li>Liquidity <b>locked forever</b>: nobody can remove it, not you and not AUTISTIK</li>
         <li>No tax, no owner, no minting. Anti-bot: max 1% per buy for the first 5 minutes</li>
         <li>The pool charges 1% per trade: <b>{INSTANT_CREATOR_BPS / 100}% of it is yours</b>, collected from your coin page</li>
-        <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} ${c.coin} + ` : "free + "}the network fee ({net === "ethereum" ? "a few dollars on Ethereum" : "about $0.30"}){Number(f.buy) > 0 ? ` + your ${f.buy} ${c.coin} buy` : ""}</li>
+        <li>Cost: {cfg && cfg.fee > 0n ? `${formatEther(cfg.fee)} ${c.coin} + ` : "free + "}the network fee ({net === "ethereum" ? "a few dollars on Ethereum" : net === "robinhood" ? "a few cents on Robinhood Chain" : "about $0.30"}){Number(f.buy) > 0 ? ` + your ${f.buy} ${c.coin} buy` : ""}</li>
         <li>You need ${MIN_HOLD_USD} of AUTISTIK in this wallet to launch</li>
       </ul>
       <label className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /><small>I understand the coins go straight into the {dx.dex} pool, the liquidity can never be taken out, and coin prices can go to zero. <Link href="/terms">Terms</Link></small></label>
