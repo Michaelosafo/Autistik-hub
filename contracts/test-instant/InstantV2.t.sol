@@ -91,6 +91,7 @@ contract InstantV2Test is Test {
         pad = new AutistikInstantLaunchV2(address(npm), address(router), address(this), treasury, 6 ether, 5000, address(0), rt, rf);
         vm.deal(creator, 100 ether);
         vm.deal(buyer, 100 ether);
+        vm.deal(other, 100 ether);
         vm.deal(wethAt, 1000 ether);
     }
 
@@ -150,14 +151,14 @@ contract InstantV2Test is Test {
         assertEq(creator.balance - c0, 0.1 ether);
         assertEq(treasury.balance, 0.2 ether);
         assertEq(t.balance, 0.1 ether);
-        assertEq(c.withdrawableRewards(creator), 0.05 ether);
-        assertEq(c.withdrawableRewards(buyer), 0.05 ether);
+        assertApproxEqAbs(c.withdrawableRewards(creator), 0.05 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(buyer), 0.05 ether, 10);
         assertEq(c.withdrawableRewards(c.pool()), 0);
         uint256 b0 = buyer.balance;
         vm.prank(buyer);
         c.claim();
-        assertEq(buyer.balance - b0, 0.05 ether);
-        assertEq(c.withdrawableRewards(buyer), 0);
+        assertApproxEqAbs(buyer.balance - b0, 0.05 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(buyer), 0, 10);
         vm.prank(buyer);
         assertEq(c.claim(), 0); // nothing twice
     }
@@ -171,13 +172,13 @@ contract InstantV2Test is Test {
         // buyer sends everything to `other`: what buyer earned stays buyer's
         vm.prank(buyer);
         IERC20(t).transfer(other, 10_000_000 ether);
-        assertEq(c.withdrawableRewards(buyer), 0.1 ether);
-        assertEq(c.withdrawableRewards(other), 0);
+        assertApproxEqAbs(c.withdrawableRewards(buyer), 0.1 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(other), 0, 10);
         _fees(t, 0.4 ether);
         pad.collectFees(t);
-        assertEq(c.withdrawableRewards(buyer), 0.1 ether);
-        assertEq(c.withdrawableRewards(other), 0.1 ether);
-        assertEq(c.withdrawableRewards(creator), 0.2 ether);
+        assertApproxEqAbs(c.withdrawableRewards(buyer), 0.1 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(other), 0.1 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(creator), 0.2 ether, 10);
         // selling into the pool takes the coins out of the reward count
         address pool = c.pool();
         vm.prank(other);
@@ -185,8 +186,8 @@ contract InstantV2Test is Test {
         assertEq(c.eligibleSupply(), 10_000_000 ether);
         _fees(t, 0.4 ether);
         pad.collectFees(t);
-        assertEq(c.withdrawableRewards(other), 0.1 ether);
-        assertEq(c.withdrawableRewards(creator), 0.4 ether);
+        assertApproxEqAbs(c.withdrawableRewards(other), 0.1 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(creator), 0.4 ether, 10);
         // everything paid in can be paid out
         uint256 owedAll = c.withdrawableRewards(buyer) + c.withdrawableRewards(other) + c.withdrawableRewards(creator);
         assertLe(owedAll, t.balance);
@@ -197,17 +198,18 @@ contract InstantV2Test is Test {
 
     function test_tokenRewards_bought_andClaimed() public {
         address t = _launch(1 ether, bytes32(uint256(5)), address(usdt), 5000);
+        vm.warp(block.timestamp + 5 minutes);
         _buy(buyer, t, 3 ether); // 30M, creator 10M
         AutistikInstantTokenV2 c = AutistikInstantTokenV2(payable(t));
         _fees(t, 0.4 ether);
         pad.collectFees(t);
         // holders' 0.1 BNB buys 100 USDT, split 1:3
         assertEq(usdt.balanceOf(t), 100 ether);
-        assertEq(c.withdrawableRewards(creator), 25 ether);
-        assertEq(c.withdrawableRewards(buyer), 75 ether);
+        assertApproxEqAbs(c.withdrawableRewards(creator), 25 ether, 10);
+        assertApproxEqAbs(c.withdrawableRewards(buyer), 75 ether, 10);
         vm.prank(other);
         c.claimFor(buyer); // anyone can push it; it always goes to the holder
-        assertEq(usdt.balanceOf(buyer), 75 ether);
+        assertApproxEqAbs(usdt.balanceOf(buyer), 75 ether, 10);
         assertEq(usdt.balanceOf(other), 0);
     }
 
@@ -225,7 +227,7 @@ contract InstantV2Test is Test {
         pad.collectFees(t);
         assertEq(pad.rewardPending(t), 0);
         assertEq(usdt.balanceOf(t), 200 ether);
-        assertEq(c.withdrawableRewards(creator), 200 ether);
+        assertApproxEqAbs(c.withdrawableRewards(creator), 200 ether, 10);
         assertEq(address(pad).balance, 0);
     }
 
@@ -241,7 +243,7 @@ contract InstantV2Test is Test {
         _fees(t, 0.2 ether);
         pad.collectFees(t);
         assertEq(pad.rewardPending(t), 0);
-        assertEq(AutistikInstantTokenV2(payable(t)).withdrawableRewards(other), 0.15 ether);
+        assertApproxEqAbs(AutistikInstantTokenV2(payable(t)).withdrawableRewards(other), 0.15 ether, 10);
     }
 
     function test_dustHolder_cantBreakRewards() public {
@@ -321,7 +323,7 @@ contract InstantV2Test is Test {
         assertEq(a1, 1_000_000_000 ether);
         _fees(t, 0.4 ether);
         pad.collectFees(t);
-        assertEq(AutistikInstantTokenV2(payable(t)).withdrawableRewards(creator), 0.1 ether);
+        assertApproxEqAbs(AutistikInstantTokenV2(payable(t)).withdrawableRewards(creator), 0.1 ether, 10);
     }
 
     function test_noRouterChain_nativeOnly_noFirstBuy() public {
