@@ -6,6 +6,7 @@ import { DropPanel } from "@/components/rooms/RoomDrops";
 import ProfileSheet from "@/components/rooms/ProfileSheet";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import Emo from "@/components/Emo";
+import SpeakerOut from "./SpeakerOut";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -78,6 +79,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const recBytes = useRef(0);
   const recStart = useRef(0);
   const audios = useRef(new Map<string, HTMLAudioElement>());
+  const allAudios = useCallback(() => [...audios.current.values()], []);
   const speakersRef = useRef(speakers);
   speakersRef.current = speakers;
   const cohostsRef = useRef(cohosts);
@@ -522,6 +524,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
             ) : (
               <button type="button" className={"room-btn" + (hand ? " on" : "")} onClick={raiseHand}>{hand ? "Lower hand" : "✋ Raise hand"}</button>
             )}
+            <SpeakerOut audios={allAudios} />
             {canSpeak && <button type="button" className={"room-btn" + (cam ? " on" : "")} onClick={toggleCam}>{cam ? "Camera off" : "🎥 Camera"}</button>}
             {isHost && <button type="button" className={"room-btn rec" + (rec ? " on" : "")} onClick={() => (rec ? stopRec() : startRec())}>{rec ? "⏹ Stop recording" : "🔴 Record"}</button>}
             {isHost && <a className="room-btn" href="/launchpad/new" target="_blank" rel="noopener">🚀 Launch</a>}
