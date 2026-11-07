@@ -12,6 +12,9 @@ import PhotoCrop from "@/components/PhotoCrop";
 import FollowButton from "@/components/members/FollowButton";
 import FindPeople from "@/components/FindPeople";
 import ShareProfile from "@/components/members/ShareProfile";
+import VerifiedBadge, { BADGES } from "@/components/VerifiedBadge";
+import BadgePicker from "@/components/BadgePicker";
+import BadgeApply from "@/components/BadgeApply";
 import { MadnessLink } from "@/components/mood/MadnessPanel";
 import ChatsLink from "@/components/chat/ChatsLink";
 import LiveNow from "@/components/rooms/LiveNow";
@@ -19,7 +22,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
   signedIn: boolean;
-  profile?: { alias: string; handle?: string | null } | null;
+  profile?: { alias: string; handle?: string | null; is_verified?: boolean; is_team?: boolean; verified_badge?: number | null } | null;
   following?: number; followers?: number; tiks?: number; likes?: number;
   wallet?: { short: string; totalUsd: number | null; funds: { symbol: string; amount: number; valueUsd: number | null }[] } | null;
   launches?: { chain: string; token: string; symbol: string; lp_lock: string; lp_unlock_at: string | null }[];
@@ -79,6 +82,8 @@ export default function MePanel({ me, settings }: {
   const [crop, setCrop] = useState<File | null>(null);
   const [view, setView] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [badge, setBadge] = useState(false);
+  const [vb, setVb] = useState<number | null>(null);
 
   useEffect(() => {
     fetch("/api/me/summary").then((r) => r.json()).then(setSum).catch(() => setSum({ signedIn: true }));
@@ -124,6 +129,7 @@ export default function MePanel({ me, settings }: {
     if (old && old.startsWith(me.id + "/")) await sb.storage.from("avatars").remove([old]).catch(() => {});
     setPhoto(null); setBusy(false); setMsg("Photo removed."); router.refresh();
   }
+  const verified = !!(sum?.profile?.is_verified || sum?.profile?.is_team);
   const q = scan.trim().toLowerCase();
   const isAddr = /^0x[0-9a-fA-F]{40}$/.test(scan.trim()) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(scan.trim());
   const found = q && !isAddr ? (coins || []).filter((c) => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q)).slice(0, 5) : [];
@@ -146,7 +152,7 @@ export default function MePanel({ me, settings }: {
           <button type="button" className="mp-photo" onClick={() => setSheet(true)} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
             <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
           </button>
-          <b className="mp-id-n">{sum?.profile?.alias || me.alias}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
+          <b className="mp-id-n">{sum?.profile?.alias || me.alias}{verified && <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={15} className="vbadge-name" />}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
           {sum?.profile?.handle && <small className="mp-id-h">@{sum.profile.handle}</small>}
           <div className="mp-id-s">
             <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b> Following</Link>
@@ -157,6 +163,7 @@ export default function MePanel({ me, settings }: {
           </div>
           <div className="mp-id-a">
             <Link className="mp-chip" href="/me">Profile</Link>
+            <button type="button" className="mp-chip mp-badge-chip" onClick={() => setBadge(true)}>{verified ? <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={13} /> : "🏅"} Badge</button>
             <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-chip" />
           </div>
         </div>
@@ -171,6 +178,23 @@ export default function MePanel({ me, settings }: {
               {photo && <button type="button" className="danger" onClick={() => { setSheet(false); removePhoto(); }}>🗑️ Remove photo</button>}
               <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-sheet-share" />
               <button type="button" className="mp-sheet-x" onClick={() => setSheet(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {badge && (
+          <div className="mp-sheet-bg" role="dialog" aria-modal="true" aria-label="Your badge" onClick={(e) => e.target === e.currentTarget && setBadge(false)}>
+            <div className="mp-sheet mp-badge-sheet">
+              {verified ? (
+                <BadgePicker current={vb ?? sum?.profile?.verified_badge ?? null} name={sum?.profile?.alias || me.alias} startOpen onSaved={(n) => { setVb(n); setBadge(false); }} />
+              ) : (
+                <>
+                  <b className="mp-bs-h">🏅 Choose your badge type</b>
+                  <small className="mp-dim">Apply for Verified (creators, projects, known members) or Team (you work with AUTISTIK). Once approved, you pick one of these 10 designs to show next to your name everywhere.</small>
+                  <div className="mp-bs-row" aria-hidden="true">{BADGES.map((b, i) => <VerifiedBadge key={b.name} n={i + 1} size={26} />)}</div>
+                  <BadgeApply verified={false} team={false} />
+                </>
+              )}
+              <button type="button" className="mp-sheet-x" onClick={() => setBadge(false)}>Close</button>
             </div>
           </div>
         )}

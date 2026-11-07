@@ -6,10 +6,11 @@ import FindPeople from "@/components/FindPeople";
 import LogoMark from "@/components/LogoMark";
 import TikComposer from "./TikComposer";
 import TikCard from "./TikCard";
+import TikHome from "./TikHome";
 import { useTiks } from "./useMood";
 import { ago } from "@/lib/mood";
 
-type Tab = "following" | "everyone" | "alerts" | "people";
+type Tab = "home" | "following" | "everyone" | "alerts" | "people";
 type Note = { id: number; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null };
 type Act = { user_id: string; at: string; kind: string; label: string | null; link: string | null };
 const ACT: Record<string, string> = { post: "posted in a group", live: "joined a live", launch: "launched a coin", lock: "locked liquidity", pin: "pinned a coin", scan: "scanned a coin", follow: "followed someone", listed: "listed a coin" };
@@ -72,7 +73,8 @@ export function MadnessLink({ onGo }: { onGo?: () => void }) {
 
 export default function MadnessPanel({ full, side, focus }: { full?: boolean; side?: ReactNode; focus?: ReactNode }) {
   const [open, setOpen] = useState(!!full);
-  const [tab, setTab] = useState<Tab>("following");
+  const [tab, setTab] = useState<Tab>(full ? "home" : "following");
+  const [admin, setAdmin] = useState(false);
   const [k, setK] = useState(0);
   const [me, setMe] = useState<string | null>(null);
   const [follows, setFollows] = useState<string[] | null>(null);
@@ -85,6 +87,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
       setMe(user.id);
+      if (full) sb.from("profiles").select("is_admin").eq("id", user.id).maybeSingle().then(({ data }) => setAdmin(!!data?.is_admin), () => {});
       const [{ data: f }, { count }] = await Promise.all([
         sb.from("follows").select("followee_id").eq("follower_id", user.id).limit(500),
         sb.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
@@ -97,6 +100,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
 
   if (full) {
     const NAV: [Tab, string, string, string][] = [
+      ["home", "Home", "News, activity, tokens people are watching, clean scans and people to follow", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'],
       ["following", "Following", "Posts from people you follow", '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 11l2 2 4-4"/>'],
       ["everyone", "Everyone", "The whole TIK feed", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>'],
       ["alerts", "Alerts", "Replies, follows and likes", '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'],
@@ -134,6 +138,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
           </header>
           {focus}
           {(tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
+          {tab === "home" && <TikHome admin={admin} />}
           {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
           {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
