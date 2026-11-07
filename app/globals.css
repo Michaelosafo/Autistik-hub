@@ -5036,3 +5036,11 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .spk-vol { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
 .spk-vol input { flex: 1; accent-color: #F0B90B; }
 .spk-tip { opacity: .7; font-size: .74rem; line-height: 1.35; }
+.spk-split { display: inline-flex; border-radius: 99px; overflow: hidden; background: var(--surface-2); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+.spk-split button { all: unset; cursor: pointer; padding: 10px 14px; font-weight: 800; font-size: .9em; color: var(--ink); }
+.spk-split .spk-more { padding: 10px 12px 10px 8px; border-left: 1px solid rgba(255,255,255,.08); opacity: .8; }
+.spk-split button:focus-visible { outline: 2px solid #F0B90B; outline-offset: -2px; }
+.spk-split.loud { background: linear-gradient(135deg, #22c55e, #16a34a); box-shadow: 0 0 0 3px rgba(34,197,94,.22), 0 8px 22px -8px rgba(34,197,94,.7); }
+.spk-split.loud button { color: #fff; }
+.spk-split.loud .spk-main b { padding: 1px 6px; margin-left: 2px; border-radius: 99px; background: rgba(255,255,255,.25); font-size: .8em; }
+.spk-split.off { background: color-mix(in srgb, #E5484D 30%, var(--surface-2)); }
