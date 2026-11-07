@@ -4761,7 +4761,11 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 @media (max-width:520px){.tik-welcome{grid-template-columns:1fr}.tik-welcome-logo{display:none}}
 
 /* ---- Dev perks (Create page) */
-.dev-perks { background: linear-gradient(135deg, color-mix(in srgb, #facc15 9%, transparent), color-mix(in srgb, #22c55e 7%, transparent)); }
+.dev-perks { padding: 10px 12px; border-radius: 14px; border: 1px solid color-mix(in srgb, #facc15 35%, transparent); background: linear-gradient(135deg, color-mix(in srgb, #facc15 9%, transparent), color-mix(in srgb, #22c55e 7%, transparent)); }
+.perk-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.perk-bar-t { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.perk-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.perk-chips em { font-style: normal; font-size: .8em; padding: 2px 8px; border-radius: 99px; background: color-mix(in srgb, currentColor 7%, transparent); white-space: nowrap; }
 .perk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
 .perk { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 14px; background: color-mix(in srgb, currentColor 4%, transparent); border: 1px solid color-mix(in srgb, currentColor 10%, transparent); transition: transform .15s ease; }
 .perk:hover { transform: translateY(-2px); }
