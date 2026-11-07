@@ -290,8 +290,10 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
       const pub = createPublicClient({ chain, transport: http(c.rpc) });
       const [account] = await wallet.requestAddresses();
       try { await wallet.switchChain({ id: c.chainId }); } catch { await wallet.addChain({ chain }); await wallet.switchChain({ id: c.chainId }); }
-      setStatus(admin ? "Getting your admin launch permit…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK…`);
-      const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, wallet: account, name, symbol, style: "instant" }) });
+      // The reward choice first: on v2 it's part of the coin's address, which the permit's salt makes end in AAAA.
+      const reward = v2 ? await rewardArg(pub) : null;
+      setStatus(admin ? "Getting your admin launch permit and your …AAAA address…" : `Checking this wallet holds at least $${MIN_HOLD_USD} of AUTISTIK and finding your …AAAA address…`);
+      const er = await fetch("/api/launchpad/eligibility", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, wallet: account, name, symbol, style: "instant", rewardToken: reward?.token ?? null }) });
       const permit = await er.json().catch(() => ({}));
       if (!er.ok) { setStatus(permit.error || "Couldn't check your AUTISTIK balance. Try again."); return; }
       const fee = (await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" } as any)) as bigint;
@@ -300,14 +302,12 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
       let restore: null | (() => Promise<void>) = null;
       if (v2 && customFdv && adm?.direct) {
         // Your own starting market cap: only works from a team wallet the owner allowed (or the owner).
-        const reward = await rewardArg(pub);
-        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launchAtFdv", args: [name, symbol, permit.salt, base[5], reward, parseEther(String(customFdv))], value: fee + parseEther(f.buy || "0") };
+        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launchAtFdv", args: [name, symbol, permit.salt, base[5], reward!, parseEther(String(customFdv))], value: fee + parseEther(f.buy || "0") };
       } else if (v2 && customFdv) {
         // This contract has no launchAtFdv yet: the team wallet (its owner) sets the starting market cap, launches, then
         // puts the normal one back (three quick confirms).
         const owner = getAddress(await pub.readContract({ address: pad, abi: INSTANT_V2_ABI, functionName: "owner" } as any) as string);
         if (owner !== getAddress(account)) throw new Error(`Connect the team wallet (${owner.slice(0, 6)}…${owner.slice(-4)}) to launch at your own market cap, or clear the market cap box.`);
-        const reward = await rewardArg(pub);
         const [feeTo, share, normal] = await Promise.all((["feeTo", "creatorShareBps", "startFdv"] as const).map((fn) => pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: fn } as any))) as [string, bigint, bigint];
         const settings = (v: bigint) => ({ account, chain, address: pad, abi: INSTANT_ABI, functionName: "setSettings", args: [feeTo, fee, v, share] });
         setStatus(`Confirm 1 of 3 in your wallet: set the starting market cap to ${customFdv} ${c.coin}…`);
@@ -316,14 +316,14 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
           setStatus(`Confirm 3 of 3: put the normal market cap (${formatEther(normal)} ${c.coin}) back…`);
           await pub.waitForTransactionReceipt({ hash: await wallet.writeContract(settings(normal) as any) });
         };
-        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward], value: fee + parseEther(f.buy || "0") };
+        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward!], value: fee + parseEther(f.buy || "0") };
       } else if (v2) {
-        const reward = await rewardArg(pub);
-        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward], value: fee + parseEther(f.buy || "0") };
+        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward!], value: fee + parseEther(f.buy || "0") };
       } else {
         call = { account, address: pad, abi: INSTANT_ABI, functionName: "launch", args: base, value: fee + parseEther(f.buy || "0") };
       }
-      setStatus(restore ? "Confirm 2 of 3: launch your coin…" : "Confirm the launch in your wallet…");
+      const addr = typeof permit.token === "string" && /^0x[0-9a-fA-F]{40}$/.test(permit.token) ? ` Your coin's address: ${permit.token.slice(0, 6)}…${permit.token.slice(-6)}` : "";
+      setStatus((restore ? "Confirm 2 of 3: launch your coin…" : "Confirm the launch in your wallet…") + addr);
       let hash: `0x${string}` = "0x", receipt: any = null;
       try {
         const gas = ((await pub.estimateContractGas(call as any)) * 130n) / 100n;
