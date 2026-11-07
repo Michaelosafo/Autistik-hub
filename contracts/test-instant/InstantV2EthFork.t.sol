@@ -66,9 +66,10 @@ contract InstantV2EthForkTest is Test {
         assertEq(c.eligibleSupply(), IERC20(t).balanceOf(creator) + IERC20(t).balanceOf(b1) + IERC20(t).balanceOf(b2), "eligible = holders");
 
         uint256 cr0 = creator.balance;
+        uint256 tr0 = treasury.balance;
         pad.collectFees(t);
         uint256 toCreator = creator.balance - cr0;
-        uint256 toTeam = treasury.balance;
+        uint256 toTeam = treasury.balance - tr0;
         assertGt(toTeam, 0, "team share");
         assertApproxEqAbs(toCreator, toTeam / 2, 2, "creator gets half of their 50% (rest to holders)");
         assertEq(pad.rewardPending(t), 0, "reward bought");
@@ -106,8 +107,9 @@ contract InstantV2EthForkTest is Test {
         address t = pad.launch{value: 0.05 ether}("Plain", "PLN", bytes32(0), 0, "", block.timestamp + 60, address(0), 0);
         _trade(t);
         uint256 cr0 = creator.balance;
+        uint256 tr0 = treasury.balance;
         pad.collectFees(t);
-        assertApproxEqAbs(creator.balance - cr0, treasury.balance, 2);
+        assertApproxEqAbs(creator.balance - cr0, treasury.balance - tr0, 2);
         assertEq(AutistikInstantTokenV2(payable(t)).totalRewardsDistributed(), 0);
     }
 }
