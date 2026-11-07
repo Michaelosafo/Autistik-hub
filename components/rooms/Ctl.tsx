@@ -34,3 +34,20 @@ export default function Ctl({ icon, label, on, tone, onClick, href, pressed, tit
     ? <a className={cls} href={href} target="_blank" rel="noopener" title={title || label}>{body}</a>
     : <button type="button" className={cls} onClick={onClick} aria-pressed={pressed} title={title || label}>{body}</button>;
 }
+
+/**
+ * The mic: small and alive. Muted it's dark glass with a red slash; live it turns gold with a soft ring that breathes,
+ * and three level bars that dance while your voice is picked up.
+ */
+export function MicBtn({ muted, talking, onClick }: { muted: boolean; talking: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className={"mic" + (muted ? " off" : " live") + (talking && !muted ? " talk" : "")} onClick={onClick} aria-pressed={!muted} title={muted ? "Unmute" : "Mute"}>
+      <span className="mic-core" aria-hidden="true">
+        <i className="mic-ring" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{muted ? I.micOff : I.mic}</svg>
+        {!muted && <span className="mic-lv"><b /><b /><b /></span>}
+      </span>
+      <small>{muted ? "Unmute" : talking ? "Speaking" : "Live"}</small>
+    </button>
+  );
+}
