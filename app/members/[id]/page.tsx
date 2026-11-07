@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
 import BadgePicker from "@/components/BadgePicker";
+import Recordings from "@/components/rooms/Recordings";
 import FollowButton from "@/components/members/FollowButton";
 import ShareProfile from "@/components/members/ShareProfile";
 import ActivityList from "@/components/members/ActivityList";
@@ -111,6 +112,7 @@ export default async function MemberPage({ params, searchParams }: { params: { i
         </div>
       </div>
 
+      <Recordings userId={params.id} mine={mine} />
       {mine && (
         <div className="grid2" style={{ alignItems: "start" }}>
           <div className="stack">

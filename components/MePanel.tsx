@@ -1,7 +1,7 @@
 "use client";
 /**
  * The member's own panel in the left menu (classic layout). Tapping your picture at the top of the menu swaps the
- * menu for this panel; tapping it again brings the menu back. It shows your photo (with Change photo), your wallet,
+ * menu for this panel; tapping it again brings the menu back. It shows your photo (tap it to change, remove or share), your wallet,
  * updates from people you follow, a token scanner, your launches and locks, and your account and display settings.
  */
 import Link from "next/link";
@@ -78,6 +78,7 @@ export default function MePanel({ me, settings }: {
   const file = useRef<HTMLInputElement>(null);
   const [crop, setCrop] = useState<File | null>(null);
   const [view, setView] = useState(false);
+  const [sheet, setSheet] = useState(false);
 
   useEffect(() => {
     fetch("/api/me/summary").then((r) => r.json()).then(setSum).catch(() => setSum({ signedIn: true }));
@@ -141,44 +142,49 @@ export default function MePanel({ me, settings }: {
     <div className="mp">
       <div className="mp-hero">
         <div className="mp-hero-bg" aria-hidden="true" />
-        <div className="mp-head">
-          <span className="mp-photo-wrap">
-            <button type="button" className="mp-photo" onClick={() => (photo ? setView(true) : file.current?.click())} disabled={busy} aria-label={photo ? "View your photo" : "Add a profile photo"}>
-              <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
-            </button>
-            <button type="button" className="mp-cam" onClick={() => file.current?.click()} disabled={busy} aria-label="Change your profile photo"><Ic id="i-cam" /></button>
-          </span>
-          <div className="mp-name">
-            <b>{sum?.profile?.alias || me.alias}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
-            {sum?.profile?.handle && <small>@{sum.profile.handle}</small>}
-            <div className="mp-row" style={{ marginTop: 6 }}>
-              <button type="button" className="mp-chip" onClick={() => file.current?.click()} disabled={busy}>{photo ? "Change photo" : "Add a photo"}</button>
-              {photo && <button type="button" className="mp-chip" onClick={removePhoto} disabled={busy}>Remove</button>}
-              <Link className="mp-chip" href="/me">Profile</Link>
-              <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-chip" />
-            </div>
+        <div className="mp-id">
+          <button type="button" className="mp-photo" onClick={() => setSheet(true)} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
+            <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
+          </button>
+          <b className="mp-id-n">{sum?.profile?.alias || me.alias}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
+          {sum?.profile?.handle && <small className="mp-id-h">@{sum.profile.handle}</small>}
+          <div className="mp-id-s">
+            <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b> Following</Link>
+            <i aria-hidden="true" />
+            <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b> Followers</Link>
+            <i aria-hidden="true" />
+            <Link href="/mood"><b>{sum?.tiks ?? "–"}</b> Tiks</Link>
+          </div>
+          <div className="mp-id-a">
+            <Link className="mp-chip" href="/me">Profile</Link>
+            <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-chip" />
           </div>
         </div>
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
         {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
+        {sheet && (
+          <div className="mp-sheet-bg" role="dialog" aria-modal="true" aria-label="Profile photo" onClick={(e) => e.target === e.currentTarget && setSheet(false)}>
+            <div className="mp-sheet">
+              <Avatar className="me-av mp-sheet-av" alias={me.alias} color={me.color} url={photo} logo />
+              <button type="button" onClick={() => { setSheet(false); file.current?.click(); }}>📷 {photo ? "Change photo" : "Add a photo"}</button>
+              {photo && <button type="button" onClick={() => { setSheet(false); setView(true); }}>🖼️ View photo</button>}
+              {photo && <button type="button" className="danger" onClick={() => { setSheet(false); removePhoto(); }}>🗑️ Remove photo</button>}
+              <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-sheet-share" />
+              <button type="button" className="mp-sheet-x" onClick={() => setSheet(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
         {view && photo && (
           <div className="pv-bg" role="dialog" aria-modal="true" aria-label="Your photo" onClick={(e) => e.target === e.currentTarget && setView(false)}>
             <div className="pv">
               <img src={photo} alt={`${me.alias}'s photo`} />
               <b>{me.alias}</b>
               <div className="mp-row" style={{ justifyContent: "center" }}>
-                <button type="button" className="btn small" onClick={() => { setView(false); file.current?.click(); }}>Change photo</button>
                 <button type="button" className="btn small" onClick={() => setView(false)}>Close</button>
               </div>
             </div>
           </div>
         )}
-        <div className="mp-stats">
-          <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b><small>Following</small></Link>
-          <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b><small>Followers</small></Link>
-          <Link href="/mood"><b>{sum?.tiks ?? "–"}</b><small>Tiks</small></Link>
-          <Link href="/mood"><b>{sum?.likes ?? "–"}</b><small>Likes</small></Link>
-        </div>
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
       <MadnessLink />
