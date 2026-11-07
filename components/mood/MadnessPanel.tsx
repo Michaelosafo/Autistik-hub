@@ -74,6 +74,13 @@ export function MadnessLink({ onGo }: { onGo?: () => void }) {
 export default function MadnessPanel({ full, side, focus }: { full?: boolean; side?: ReactNode; focus?: ReactNode }) {
   const [open, setOpen] = useState(!!full);
   const [tab, setTab] = useState<Tab>(full ? "home" : "following");
+  // "Post a Tik" links (…/mood#tik-post) open the feed with the post box, not Home.
+  useEffect(() => {
+    if (full && typeof location !== "undefined" && location.hash === "#tik-post") {
+      setTab("everyone");
+      setTimeout(() => document.getElementById("tik-post")?.scrollIntoView({ behavior: "smooth", block: "start" }), 400);
+    }
+  }, [full]);
   const [admin, setAdmin] = useState(false);
   const [k, setK] = useState(0);
   const [me, setMe] = useState<string | null>(null);
