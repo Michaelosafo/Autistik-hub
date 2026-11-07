@@ -62,7 +62,7 @@ export async function runInstantKeeper(deadline: number) {
       if (fees < MIN_FEES[key]) { stats.skipped++; continue; }
       const { request } = await pub.simulateContract({ account, address: pad, abi: PAD_ABI, functionName: "collectFees", args: [token] });
       const [gas, price] = await Promise.all([pub.estimateContractGas({ account, address: pad, abi: PAD_ABI, functionName: "collectFees", args: [token] }), pub.getGasPrice()]);
-      if (gas * price * 100n > fees * 15n) { stats.skipped++; continue; }
+      if (BigInt(gas) * BigInt(price) * 100n > fees * 15n) { stats.skipped++; continue; }
       const hash = await wallet.writeContract(request);
       await pub.waitForTransactionReceipt({ hash, timeout: 40_000 });
       stats.collected++;

@@ -52,9 +52,12 @@ export function DropOptIn({ roomId, meId }: { roomId: string; meId: string }) {
   );
 }
 
-/** The host sends the same amount of a coin to every listener who connected a wallet. */
-export function DropPanel({ roomId, onDropped }: { roomId: string; onDropped: (text: string) => void }) {
-  const [open, setOpen] = useState(false);
+/**
+ * The host (or a co-host) sends coins from their own wallet: the same amount to everyone in the room, or to one person
+ * (target: tapped on their picture). Addresses come from the server only at send time and are never shown.
+ */
+export function DropPanel({ roomId, onDropped, target, onClose, button = true }: { roomId: string; onDropped: (text: string) => void; target?: { id: string; alias: string } | null; onClose?: () => void; button?: boolean }) {
+  const [open, setOpen] = useState(!button);
   const [count, setCount] = useState<number | null>(null);
   const [net, setNet] = useState<DropChain>("bsc");
   const [kind, setKind] = useState<"native" | "token">("native");
@@ -64,13 +67,14 @@ export function DropPanel({ roomId, onDropped }: { roomId: string; onDropped: (t
   const [busy, setBusy] = useState(false);
   const c = CHAINS[net];
 
-  const refresh = () => fetch(`/api/rooms/${roomId}/drop?count=1`).then((r) => r.json()).then((j) => setCount(typeof j.count === "number" ? j.count : 0)).catch(() => {});
+  const q = target ? `user=${target.id}` : "";
+  const refresh = () => target ? Promise.resolve(setCount(1)) : fetch(`/api/rooms/${roomId}/drop?count=1`).then((r) => r.json()).then((j) => setCount(typeof j.count === "number" ? j.count : 0)).catch(() => {});
   useEffect(() => {
     if (!open) return;
     refresh();
     const t = setInterval(refresh, 15_000);
     return () => clearInterval(t);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, target?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function send() {
     setMsg("");
@@ -78,9 +82,9 @@ export function DropPanel({ roomId, onDropped }: { roomId: string; onDropped: (t
     if (!(Number(each) > 0)) { setMsg("Enter how much each listener gets."); return; }
     setBusy(true);
     try {
-      const list = await fetch(`/api/rooms/${roomId}/drop`).then((r) => r.json());
+      const list = await fetch(`/api/rooms/${roomId}/drop${q ? `?${q}` : ""}`).then((r) => r.json());
       const to: `0x${string}`[] = list?.recipients || [];
-      if (!to.length) { setMsg("No listener has connected a wallet yet. Ask them to press “Connect wallet for drops”."); return; }
+      if (!to.length) { setMsg(list?.error || "Nobody in the room has a wallet linked yet."); return; }
       const eth = await pickWallet();
       if (!eth) return;
       const chain = viemChain(c);
@@ -117,23 +121,23 @@ export function DropPanel({ roomId, onDropped }: { roomId: string; onDropped: (t
         sent += part.length;
         await fetch(`/api/rooms/${roomId}/drop`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: net, token: tokenAddr ?? "native", symbol, total: formatUnits(per * BigInt(part.length), Number(decimals)), recipients: part.length, txHash: hash }) }).catch(() => {});
       }
-      const text = `🎁 The host dropped ${each} ${symbol} to each of ${sent} listeners on ${c.name}!`;
+      const text = target ? `🎁 ${target.alias} just got ${each} ${symbol}!` : `🎁 ${each} ${symbol} dropped to each of ${sent} people on ${c.name}!`;
       onDropped(text);
-      setMsg(`✅ Sent ${each} ${symbol} to ${sent} listeners.`);
+      setMsg(target ? `✅ Sent ${each} ${symbol} to ${target.alias}.` : `✅ Sent ${each} ${symbol} to ${sent} people.`);
     } catch (e: any) {
       const r = String(e?.shortMessage || e?.message || "");
       setMsg(/reject|denied/i.test(r) ? "You cancelled in your wallet." : /insufficient funds/i.test(r) ? `Not enough ${c.coin} for the drop and the network fee.` : r.slice(0, 160) || "The drop didn't go through.");
     } finally { setBusy(false); }
   }
 
-  if (!open) return <button type="button" className="room-btn" onClick={() => setOpen(true)}>🎁 Drop tokens</button>;
+  if (!open) return <button type="button" className="room-btn" onClick={() => setOpen(true)}>🎁 Drop</button>;
   return (
     <div className="room-drop card stack" style={{ gap: 8 }}>
       <div className="row" style={{ justifyContent: "space-between", gap: 8 }}>
-        <b>🎁 Drop tokens to your listeners</b>
-        <button type="button" className="btn small" onClick={() => setOpen(false)}>Close</button>
+        <b>{target ? `🎁 Send tokens to ${target.alias}` : "🎁 Drop tokens to everyone here"}</b>
+        <button type="button" className="btn small" onClick={() => { setOpen(false); onClose?.(); }}>Close</button>
       </div>
-      <small className="muted"><b>{count === null ? "…" : count}</b> {count === 1 ? "listener has" : "listeners have"} connected a wallet. 🔒 Their addresses stay private: you only see the count.</small>
+      <small className="muted">{target ? "Straight to their wallet. 🔒 You never see their address." : <><b>{count === null ? "…" : count}</b> {count === 1 ? "person" : "people"} here with a wallet. 🔒 You only see the count, never addresses.</>}</small>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Network">
         {DROP_CHAINS.map((k) => <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} onClick={() => setNet(k)}>{CHAINS[k].name}</button>)}
       </div>
@@ -143,11 +147,11 @@ export function DropPanel({ roomId, onDropped }: { roomId: string; onDropped: (t
       </div>
       {kind === "token" && <input value={token} onChange={(e) => setToken(e.target.value.trim())} placeholder="0x… token address" spellCheck={false} aria-label="Token address" />}
       <label className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        <small>Each listener gets</small>
+        <small>{target ? "Amount" : "Each person gets"}</small>
         <input value={each} inputMode="decimal" style={{ width: 140 }} onChange={(e) => setEach(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 1000" aria-label="Amount per listener" />
         <small className="muted">{kind === "native" ? c.coin : "tokens"}{count && Number(each) > 0 ? ` · ${(Number(each) * count).toLocaleString("en-US")} in total` : ""}</small>
       </label>
-      <button type="button" className="btn primary" disabled={busy || !count} onClick={send}>{busy ? "Sending…" : `Send to ${count ?? 0} listeners`}</button>
+      <button type="button" className="btn primary" disabled={busy || !count} onClick={send}>{busy ? "Sending…" : target ? `Send to ${target.alias}` : `Send to ${count ?? 0} people`}</button>
       <small className="muted">Sent from your own wallet in one transaction per {DROP_BATCH} listeners, through Disperse (an open, widely used contract). You pay the network fee.</small>
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>

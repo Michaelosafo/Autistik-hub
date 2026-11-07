@@ -2,7 +2,7 @@ import Link from "next/link";
 import ProHero from "@/components/ProHero";
 import { LockTabs } from "@/components/EarnTop";
 import { LOCKER_CHAINS, short } from "@/lib/locker";
-import { lockerTrust } from "@/lib/locker-server";
+import { lockerTrust, type TrustCheck } from "@/lib/locker-server";
 import { LINKS } from "@/lib/site";
 
 export const revalidate = 600;
@@ -15,8 +15,8 @@ const SOURCE = "https://github.com/Michaelosafo/Autistik-hub/blob/main/contracts
 const mark = (v: boolean | null) => (v === null ? "…" : v ? "✅" : "⚠️");
 
 export default async function LockerTrustPage() {
-  const checks = await lockerTrust().catch(() => []);
-  const total = checks.reduce((n, c) => n + (c.locks || 0), 0);
+  const checks: TrustCheck[] = await lockerTrust().catch(() => [] as TrustCheck[]);
+  const total = checks.reduce((n: number, c) => n + (c.locks || 0), 0);
   const allGood = checks.length > 0 && checks.every((c) => c.noOwner && c.noAdmin && c.notUpgradeable);
   return (
     <div className="stack" style={{ maxWidth: 900 }}>
