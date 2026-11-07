@@ -25,21 +25,13 @@ export default async function NewLaunchPage() {
       <header className="bd-top ln-top">
         <div>
           <h1>Create a coin</h1>
-          <p className="muted">Free to launch. Go instant: just a name, a picture and a few words, with no liquidity and no bonding curve (live on PancakeSwap or Uniswap straight away). Or add your own liquidity and lock or burn it.{!access.public ? " Coming soon." : ""}</p>
+          <p className="muted">Free to launch. Pick one of two ways below; tap More to read how it works.{!access.public ? " Coming soon." : ""}</p>
         </div>
         <div className="ln-top-r">
           <VideoButton label="Watch how" title="Launch your coin, step by step" src="/videos/launch-your-coin.mp4" poster="/videos/launch-your-coin.jpg" captions="/videos/launch-your-coin.vtt" minutes={5} />
           <Link href="/board" className="ln-ghost">Open the Board</Link>
         </div>
       </header>
-      <ol className="ln-steps" aria-label="How it works">
-        <li><i>1</i><span><b>Pick a network and a name</b><small>BNB Chain, Ethereum, Solana and more. Add a picture.</small></span></li>
-        <li><i>2</i><span><b>Add a picture and a few words</b><small>Instant needs no liquidity. Or pick Add liquidity to put your own in.</small></span></li>
-        <li><i>3</i><span><b>Sign once, you&apos;re live</b><small>Your coin appears on the Board right away.</small></span></li>
-      </ol>
-      <div className="ln-facts">
-        <span><b>Free</b> to launch</span><span><b>Locked</b> or burned liquidity</span><span><b>≤10%</b> tax, only if you want</span><span>A small fee on every trade supports AUTISTIK: <b>0.3%</b> on BNB Chain and Ethereum, <b>0.5%</b> on Solana</span><span>You need <b>$20 of AUTISTIK</b> (BNB Chain) to launch on EVM networks</span>
-      </div>
       {!access.allowed ? (
         <div className="card stack" style={{ gap: 8 }}>
           <b>Coming soon</b>
