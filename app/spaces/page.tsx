@@ -4,7 +4,7 @@ import LiveNow from "@/components/rooms/LiveNow";
 import { currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Live rooms · AUTISTIK Hub", description: "Host or join a live audio room, like an X Space." };
+export const metadata = { title: "Live rooms · AUTISTIK Hub", description: "Host or join a live audio or video room, like an X Space, and drop tokens to your listeners." };
 
 export default async function SpacesPage({ searchParams }: { searchParams: { host?: string } }) {
   const user = await currentUser();
