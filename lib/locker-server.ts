@@ -120,3 +120,54 @@ export async function lpLockLive(chain: LockerChain, token: string): Promise<LpL
     return x ? lpLockOf(x.lp_holders, (await lockerOn(chain))?.address) : null;
   } catch { return null; }
 }
+
+/** One lock, read live from the chain, for its shareable certificate page. Null if there's no such lock. */
+export async function lockById(chain: LockerChain, id: number) {
+  const s = await lockerOn(chain);
+  if (!s || !Number.isInteger(id) || id < 0) return null;
+  const c = lockerClient(chain);
+  try {
+    const raw = await c.readContract({ address: s.address, abi: LOCKER_ABI, functionName: "getLockById", args: [BigInt(id)] });
+    const [view] = await describe(chain, [raw]);
+    return { ...view, locker: s.address, verified: s.verified, cycleDays: Number((raw as any).cycle) / 86400, cycleBps: Number((raw as any).cycleBps), tgeBps: Number((raw as any).tgeBps) };
+  } catch { return null; }
+}
+
+const IMPL_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"; // EIP-1967: where an upgradeable proxy keeps its code
+const PROBE_ABI = [
+  { type: "function", name: "owner", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+  { type: "function", name: "admin", stateMutability: "view", inputs: [], outputs: [{ type: "address" }] },
+] as const;
+
+export type TrustCheck = {
+  chain: LockerChain; address: `0x${string}`; explorer: string; verified: boolean;
+  locks: number | null; noOwner: boolean | null; noAdmin: boolean | null; notUpgradeable: boolean | null; error?: string;
+};
+
+/**
+ * Live checks anyone can repeat on a block explorer: the locker has no owner and no admin to call, isn't an upgradeable
+ * proxy (its code can never be swapped), and how many locks it holds. Read straight from each chain, not our database.
+ */
+export async function lockerTrust(): Promise<TrustCheck[]> {
+  const sites = await lockerSites();
+  return Promise.all(sites.map(async (s): Promise<TrustCheck> => {
+    const base = { chain: s.chain, address: s.address, explorer: LOCKER_CHAINS[s.chain].explorer, verified: s.verified };
+    try {
+      const c = lockerClient(s.chain);
+      const reads = <T,>(p: Promise<T>) => p.then((v) => ({ ok: true as const, v }), () => ({ ok: false as const, v: undefined }));
+      const [count, owner, admin, slot] = await Promise.all([
+        reads(c.readContract({ address: s.address, abi: LOCKER_ABI, functionName: "getTotalLockCount" })),
+        reads(c.readContract({ address: s.address, abi: PROBE_ABI, functionName: "owner" })),
+        reads(c.readContract({ address: s.address, abi: PROBE_ABI, functionName: "admin" })),
+        reads(c.getStorageAt({ address: s.address, slot: IMPL_SLOT })),
+      ]);
+      return {
+        ...base,
+        locks: count.ok ? Number(count.v) : null,
+        noOwner: !owner.ok, // the call fails: there is no owner function at all
+        noAdmin: !admin.ok,
+        notUpgradeable: slot.ok ? !slot.v || /^0x0*$/.test(String(slot.v)) : null,
+      };
+    } catch (e) { return { ...base, locks: null, noOwner: null, noAdmin: null, notUpgradeable: null, error: (e as Error).message.slice(0, 80) }; }
+  }));
+}

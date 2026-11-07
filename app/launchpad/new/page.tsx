@@ -13,6 +13,7 @@ import LaunchChoice from "@/components/InstantLaunch";
 import InstantAdmin from "@/components/InstantAdmin";
 import AdminListTokens from "@/components/AdminListTokens";
 import VideoButton from "@/components/VideoButton";
+import DevPerks from "@/components/DevPerks";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
@@ -40,6 +41,7 @@ export default async function NewLaunchPage() {
       ) : (
         <>
           {!access.public && <div className="notice warn">Test mode: only you (the owner) can launch and add liquidity here. Everyone else sees &ldquo;Coming soon&rdquo;. Remove <span className="mono">LAUNCH_PUBLIC=0</span> in Vercel to open it to all.</div>}
+          <DevPerks />
           {/* Instant opens first (just a name, picture and info). The liquidity form and tools only show under Add liquidity. */}
           <LaunchChoice instants={{ bsc: instants.bsc, ethereum: instants.ethereum, robinhood: instants.robinhood }} instantVersions={instantVersions} admin={admin}>
             <div className="stack">

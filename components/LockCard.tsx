@@ -40,7 +40,7 @@ export default function LockCard({ lp, locks, chain, token, lockerLive }: { lp: 
           {active.slice(0, 6).map((l) => (
             <div key={l.id} className="row" style={{ justifyContent: "space-between", gap: 8, fontSize: ".92em" }}>
               <span>{l.isLp ? "💧" : "🪙"} {amt(l.left)} {l.name}{l.pctOfSupply != null && l.pctOfSupply >= 0.1 && !l.isLp ? ` (${pct(l.pctOfSupply)} of supply)` : ""}{l.vesting ? " · unlocks in steps" : ""}</span>
-              <span className="muted">{l.unlockDate * 1000 > Date.now() ? `until ${new Date(l.unlockDate * 1000).toLocaleDateString()} (${untilText(l.unlockDate)})` : "unlockable now"}</span>
+              <span className="muted">{l.unlockDate * 1000 > Date.now() ? `until ${new Date(l.unlockDate * 1000).toLocaleDateString()} (${untilText(l.unlockDate)})` : "unlockable now"} · <Link href={`/lockers/lock/${l.chain}/${l.id}`}>Certificate</Link></span>
             </div>
           ))}
         </div>
