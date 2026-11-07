@@ -55,7 +55,11 @@ export default function LaunchChoice({ instant, admin, children }: { instant: st
         {style === "instant" && (instant ? <InstantForm pad={instant as `0x${string}`} admin={admin} /> : (
           <div className="card stack" style={{ gap: 6 }}>
             <b>⚡ Instant launch opens very soon</b>
-            <p className="muted" style={{ margin: 0 }}>The AUTISTIK team is switching it on for BNB Chain. Until then you can launch the classic way with <button type="button" className="linkish" onClick={() => pick("liquidity")}>Add liquidity</button>.</p>
+            {admin ? (
+              <p style={{ margin: 0 }}>Admin: Instant launch isn&apos;t deployed on BNB Chain yet, so nobody can use it. Deploy it once with <a href="#instant-admin">Admin: Instant launch</a> at the bottom of this page (about 0.01 BNB of gas). It switches on here straight away.</p>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>The AUTISTIK team is switching it on for BNB Chain. Until then you can launch the classic way with <button type="button" className="linkish" onClick={() => pick("liquidity")}>Add liquidity</button>.</p>
+            )}
           </div>
         ))}
         {style === "liquidity" && children}

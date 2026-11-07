@@ -109,7 +109,7 @@ export default function InstantAdmin() {
 
   const link = (a?: string, test = true) => a ? <a href={`${test ? "https://testnet.bscscan.com" : "https://bscscan.com"}/address/${a}`} target="_blank" rel="noreferrer" className="mono">{a.slice(0, 8)}…{a.slice(-6)}</a> : null;
   return (
-    <div className="card stack" style={{ gap: 10, borderStyle: "dashed" }}>
+    <div id="instant-admin" className="card stack" style={{ gap: 10, borderStyle: "dashed", scrollMarginTop: 80 }}>
       <h3 style={{ margin: 0 }}>⚡ Admin: Instant launch (no liquidity, no bonding curve)</h3>
       <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Each coin goes one-sided into a PancakeSwap v3 pool (1% fee) starting at the market cap below. The pool position stays in the contract forever; {INSTANT_CREATOR_BPS / 100}% of pool fees go to the creator, the rest to the team wallet. Try it on testnet first (free test BNB from the <a href="https://www.bnbchain.org/en/testnet-faucet" target="_blank" rel="noreferrer">faucet</a>).</p>
       <label className="field" style={{ maxWidth: 260 }}><span>Starting market cap (BNB)</span><input value={fdv} inputMode="decimal" onChange={(e) => setFdv(e.target.value.replace(/[^0-9.]/g, ""))} /></label>
