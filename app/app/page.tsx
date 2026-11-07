@@ -74,12 +74,6 @@ export default async function AppHome() {
           <Link key={a.name} href={a.href} className="ah-act"><span className="ah-icon"><ToolIcon name={a.icon} /></span><b>{a.name}</b></Link>
         ))}
       </nav>
-      {/* No single featured coin here: every coin is on the Board. */}
-      <Link href="/board" className="ah-board">
-        <span aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><use href="#i-fire" /></svg></span>
-        <span><b>The Board</b><small>Every coin launched on AUTISTIK, live, ranked as it trades{board.length ? ` · ${board.length} coin${board.length === 1 ? "" : "s"}` : ""}</small></span>
-        <i aria-hidden="true">Open →</i>
-      </Link>
 
 
       <div className="ah-body">
