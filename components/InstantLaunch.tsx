@@ -435,7 +435,7 @@ export function InstantFees({ chain = "bsc", pad, token, creator }: { chain?: st
   return (
     <div className="card stack" style={{ gap: 8 }}>
       <b>⚡ Instant coin · pool fees</b>
-      <small className="muted">Every trade pays the {c.dex} pool a 1% fee. Anyone can press Collect: {INSTANT_CREATOR_BPS / 100}% goes straight to the creator ({creator.slice(0, 6)}…{creator.slice(-4)}) and the rest to AUTISTIK. The liquidity itself stays in the pool forever.</small>
+      <small className="muted">Every trade pays the {c.dex} pool a 1% fee. Fees are paid out automatically about every 30 minutes once enough has built up (anyone can also press Collect): {INSTANT_CREATOR_BPS / 100}% goes straight to the creator&apos;s wallet ({creator.slice(0, 6)}…{creator.slice(-4)}), less any share they gave to holders, and the rest to AUTISTIK. The liquidity itself stays in the pool forever.</small>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <button type="button" className="btn small primary" disabled={busy} onClick={() => run(false)}>{busy ? "…" : "Collect fees"}</button>
         {owed > 0n && <button type="button" className="btn small" disabled={busy} onClick={() => run(true)}>Claim {formatEther(owed)} {c.coin}</button>}
