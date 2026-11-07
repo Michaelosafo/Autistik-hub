@@ -28,9 +28,13 @@ const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
 const PRIORITY = Number(process.env.SOLANA_REWARDS_PRIORITY || 20_000);
 const INCINERATOR = "1nc1nerator11111111111111111111111111111111";
 /** Smallest automatic payout per reward (base units): about 0.001 SOL, 100 sats, 0.00001 ETH. */
-export const MIN_PAYOUT: Record<string, bigint> = { sol: 1_000_000n, btc: 100n, eth: 1_000n };
+export const MIN_PAYOUT: Record<string, bigint> = {
+  sol: 1_000_000n, btc: 100n, eth: 1_000n, usdc: 200_000n, // 0.2 USDC
+  // Stocks (8 decimals, a share is ~$100–1,000): about 20 cents' worth.
+  tsla: 50_000n, nvda: 100_000n, aapl: 100_000n, googl: 100_000n, spy: 30_000n, qqq: 30_000n,
+};
 /** Smallest claim (base units): anything above dust. */
-export const MIN_CLAIM: Record<string, bigint> = { sol: 100_000n, btc: 10n, eth: 100n };
+export const MIN_CLAIM: Record<string, bigint> = { sol: 100_000n, btc: 10n, eth: 100n, usdc: 10_000n, tsla: 2_000n, nvda: 4_000n, aapl: 4_000n, googl: 4_000n, spy: 1_000n, qqq: 1_000n };
 
 const conn = () => new Connection(RPC, "confirmed");
 const pk = (v: string) => new PublicKey(v);

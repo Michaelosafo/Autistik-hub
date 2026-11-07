@@ -3,6 +3,7 @@ import ProHero from "@/components/ProHero";
 import { LockTabs } from "@/components/EarnTop";
 import { LOCKER_CHAINS, short } from "@/lib/locker";
 import { lockerTrust } from "@/lib/locker-server";
+import { LINKS } from "@/lib/site";
 
 export const revalidate = 600;
 export const metadata = {
@@ -74,6 +75,10 @@ export default async function LockerTrustPage() {
         <p className="muted" style={{ margin: 0 }}>Find your lock under <Link href="/lockers">Check a token&apos;s locks</Link> and press <b>Certificate</b>.</p>
       </div>
 
+      <div className="card stack" style={{ gap: 6 }}>
+        <h2 style={{ margin: 0 }}>🐞 Found a problem? Tell us first</h2>
+        <p className="muted" style={{ margin: 0 }}>Security researchers: if you find a way to move a locked token early, or any bug in the locker, launch pad or Instant contracts, email <a href={`mailto:${LINKS.email}?subject=Security%20report`}><b>{LINKS.email}</b></a> with the subject &quot;Security report&quot; before posting it publicly. Real findings are credited on this page.</p>
+      </div>
       <div className="card stack" style={{ gap: 6 }}>
         <h2 style={{ margin: 0 }}>Why some scanners don&apos;t show it yet</h2>
         <p className="muted" style={{ margin: 0 }}>Scanners like DexScreener and GoPlus only show locks from lockers on their own lists, and they add new lockers by hand. Ours has been sent to them, with its addresses on every network. Until they add it, this page and your lock&apos;s certificate are the proof. Burned liquidity shows on every scanner straight away.</p>

@@ -4,7 +4,7 @@ import { parseUnits } from "viem";
 import { json } from "@/lib/ai";
 import { launchAccess } from "@/lib/admin";
 import { currentUser, supabaseService } from "@/lib/supabase/server";
-import { CHAINS, SOL_DECIMALS, checkPlan } from "@/lib/launchpad";
+import { CHAINS, SOL_DECIMALS, SOL_REWARD_TOKENS, checkPlan } from "@/lib/launchpad";
 import { PublicKey } from "@solana/web3.js";
 import { SOL_ADDR, connection, buildAddLiquidity, buildBurnLp, buildMint, buildPool, findPool } from "@/lib/solana-launch";
 import { buildClaimLp, buildLockLp } from "@/lib/solana-locker";
@@ -59,8 +59,20 @@ export async function POST(req: Request) {
         if (!name || !symbol) return json({ error: "Add a name and a ticker." }, 400);
         const taken = takenError(await namesTaken(name, symbol));
         if (taken) return json({ error: taken }, 409);
-        const built = await buildMint(owner, { name, symbol, supply: String(SOL_INSTANT_SUPPLY) });
+        // Optional holder rewards: an extra fee on every transfer (1–3%), collected by the AUTISTIK rewards wallet, which
+        // pays the creator's part straight to their wallet and buys the chosen reward for holders (lib/solana-rewards.ts).
+        const reward = typeof b?.reward === "string" && b.reward in SOL_REWARD_TOKENS ? b.reward : "";
+        const feePct = Number(b?.rewardFee), holderPct = Number(b?.holderPercent);
+        if (reward && (![1, 2, 3].includes(feePct) || !(holderPct >= 1 && holderPct <= 100))) return json({ error: "Pick a reward fee (1–3%) and how much of it goes to holders." }, 400);
+        const built = await buildMint(owner, { name, symbol, supply: String(SOL_INSTANT_SUPPLY), ...(reward ? { reward, buyTax: feePct } : {}) });
         await saveLogo("solana", built.mint, b?.logo, me.id).catch(() => {});
+        if (reward && built.creatorFeeBps > 0) {
+          const { error } = await supabaseService().from("sol_reward_coins").insert({
+            mint: built.mint, creator: owner, reward, fee_bps: built.creatorFeeBps, platform_bps: built.platformBps,
+            holder_bps: Math.round(holderPct * 100), tax_wallet: owner, user_id: me.id,
+          });
+          if (error) return json({ error: "Couldn't set up holder rewards. Try again." }, 500);
+        }
         return json(built);
       }
       case "instant-pool": {
