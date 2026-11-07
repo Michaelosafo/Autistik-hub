@@ -19,6 +19,7 @@ import AddLiquidity from "@/components/AddLiquidity";
 import VerifySource from "@/components/VerifySource";
 import { SolanaClaim, SolanaHolderRewards } from "@/components/SolanaLaunch";
 import { InstantFees } from "@/components/InstantLaunch";
+import CoinSpace from "@/components/rooms/CoinSpace";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +136,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
         </div>
         <div className="stack">
           <TrendingPay chain={c.key} token={token} promotedUntil={promotedUntil} />
+          <CoinSpace chain={c.key} token={token} symbol={launch.symbol} signedIn={!!user} canHost={!!user && (launch.user_id === user.id)} />
           {instant && launch.pad && <InstantFees chain={c.key} pad={launch.pad} token={token as `0x${string}`} creator={launch.creator} />}
           {!listed && !sol && !instant && <HolderRewards chain={c.key} token={token as `0x${string}`} />}
           {!listed && !sol && !instant && <TokenControls chain={c.key} token={token} unlockAt={launch.lp_unlock_at} lock={lock} />}

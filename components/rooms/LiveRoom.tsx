@@ -8,7 +8,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 type Me = { id: string; alias: string; color: string | null; avatar_url: string | null };
 type Role = "host" | "speaker" | "listener";
 type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number };
-type Room = { id: string; title: string; host_id: string; ended_at: string | null };
+type Room = { id: string; title: string; host_id: string; ended_at: string | null; chain?: string | null; token?: string | null };
 
 const ICE: RTCConfiguration = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }, { urls: "stun:stun.cloudflare.com:3478" }] };
 const MAX_SPEAKERS = 6;
@@ -270,7 +270,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       <div className="room-top">
         <span className="room-live"><i />Live</span>
         <h1>{room.title}</h1>
-        <small className="muted">{list.length} {list.length === 1 ? "person" : "people"} here</small>
+        <small className="muted">{list.length} {list.length === 1 ? "person" : "people"} here{room.token && room.chain ? <> · <Link href={`/launchpad/${room.chain}/${room.token}`} target="_blank">View the coin</Link></> : null}</small>
       </div>
 
       {!joined ? (
@@ -328,6 +328,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
               <button type="button" className={"room-btn" + (hand ? " on" : "")} onClick={raiseHand}>{hand ? "Lower hand" : "Raise hand"}</button>
             )}
             {canSpeak && <button type="button" className={"room-btn" + (cam ? " on" : "")} onClick={toggleCam}>{cam ? "Camera off" : "🎥 Camera"}</button>}
+            {isHost && <a className="room-btn" href="/launchpad/new" target="_blank" rel="noopener">🚀 Launch</a>}
             {isHost && <DropPanel roomId={room.id} onDropped={(text) => { setDrop(text); send("drop", { text }); }} />}
             <button type="button" className="room-btn" onClick={() => { navigator.clipboard?.writeText(location.href).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }}>Share</button>
             {isHost ? <button type="button" className="room-btn end" onClick={endRoom}>End live</button>

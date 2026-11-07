@@ -363,6 +363,7 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
         <a className="btn small" href={`https://dexscreener.com/${c.dexscreener}/${done.pool}`} target="_blank" rel="noopener noreferrer">DexScreener</a>
         <a className="btn small" href={`${c.explorer}/tx/${done.hash}`} target="_blank" rel="noopener noreferrer">Transaction</a>
       </div>
+      <Link className="btn small" href={`/launchpad/${net}/${done.token}#space`} style={{ alignSelf: "flex-start" }}>🎙️ Go live in a Space for ${done.symbol}</Link>
       <div className="field"><span>Contract address</span><span className="mono" style={{ overflowWrap: "anywhere" }}>{done.token}</span></div>
       {!done.listed && <small className="muted">Your coin is live, but we couldn&apos;t add it to the Board just now.</small>}
       <button type="button" className="linkish" onClick={() => { setDone(null); setF({ name: "", symbol: "", buy: "0", logo: "", description: "", website: "", x: "", telegram: "" }); setAgree(false); }}>Launch another</button>
