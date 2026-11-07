@@ -164,8 +164,10 @@ export async function lockerTrust(): Promise<TrustCheck[]> {
       return {
         ...base,
         locks: count.ok ? Number(count.v) : null,
-        noOwner: !owner.ok, // the call fails: there is no owner function at all
-        noAdmin: !admin.ok,
+        // The call fails because there is no such function. Only trusted when the chain answered the lock count, so a
+        // network problem never shows as a pass.
+        noOwner: count.ok ? !owner.ok : null,
+        noAdmin: count.ok ? !admin.ok : null,
         notUpgradeable: slot.ok ? !slot.v || /^0x0*$/.test(String(slot.v)) : null,
       };
     } catch (e) { return { ...base, locks: null, noOwner: null, noAdmin: null, notUpgradeable: null, error: (e as Error).message.slice(0, 80) }; }
