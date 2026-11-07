@@ -17,6 +17,7 @@ import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { launchAccess } from "@/lib/admin";
 import AddLiquidity from "@/components/AddLiquidity";
 import VerifySource from "@/components/VerifySource";
+import LogoEverywhere from "@/components/LogoEverywhere";
 import { SolanaClaim, SolanaHolderRewards } from "@/components/SolanaLaunch";
 import { InstantFees } from "@/components/InstantLaunch";
 import CoinSpace from "@/components/rooms/CoinSpace";
@@ -128,6 +129,7 @@ export default async function TokenPage({ params }: { params: { chain: string; t
               <a className="btn small" href={`${c.explorer}/token/${token}`} target="_blank" rel="noopener noreferrer">Explorer</a>
             </div>
             {!listed && !sol && <VerifySource chain={c.key} token={token} />}
+            {!listed && !sol && <LogoEverywhere chain={c.key} token={token} explorer={c.explorer} pair={launch.pair || null} hasLogo={!!logoRow?.url} />}
             {listed ? (
               <p className="muted"><>Listed {listedAt(launch.created_at)}{row ? "" : " by the AUTISTIK team"}. </> {String(launch.tx_hash || "").startsWith("liquidity:") ? <>Its liquidity was added through AUTISTIK, but the token wasn&apos;t made with the full Launch Pad flow, so we don&apos;t vouch for its tax, owner or liquidity lock.</> : <>This token was launched somewhere else, not on the AUTISTIK Launch Pad, so we don&apos;t know its tax, owner or liquidity lock.</>} Check the contract on the explorer before buying.</p>
             ) : instant ? <p className="muted">Instant launch on {listedAt(launch.created_at)}: no bonding curve and no liquidity from the creator. All 1,000,000,000 coins went straight into a {sol ? "Raydium concentrated" : `${c.dex} v3`} pool, and that pool position is locked forever {sol ? "with Raydium's lock program" : "in the AUTISTIK Instant Launch contract"}, so the liquidity can&apos;t be removed by anyone. {sol ? "Minting and freezing are switched off." : "No tax, no owner, no minting."}</p>

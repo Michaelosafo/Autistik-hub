@@ -7,6 +7,7 @@ import ProfileSheet from "@/components/rooms/ProfileSheet";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import Emo from "@/components/Emo";
 import SpeakerOut from "./SpeakerOut";
+import Ctl from "./Ctl";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -518,19 +519,16 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
 
           {canRun && <DropPanel roomId={room.id} onDropped={(text) => { setDrop(text); send("drop", { text }); }} />}
 
-          <div className="room-bar lv-bar">
-            {canSpeak ? (
-              <button type="button" className={"room-btn" + (muted ? "" : " on")} onClick={toggleMute}>{muted ? "🎙️ Unmute" : "🔴 Mute"}</button>
-            ) : (
-              <button type="button" className={"room-btn" + (hand ? " on" : "")} onClick={raiseHand}>{hand ? "Lower hand" : "✋ Raise hand"}</button>
-            )}
+          <div className="lv-ctl" role="toolbar" aria-label="Live controls">
+            {canSpeak
+              ? <Ctl icon={muted ? "micOff" : "mic"} label={muted ? "Unmute" : "Mute"} on={!muted} tone={!muted ? "gold" : undefined} onClick={toggleMute} pressed={!muted} />
+              : <Ctl icon="hand" label={hand ? "Lower" : "Raise hand"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
             <SpeakerOut audios={allAudios} />
-            {canSpeak && <button type="button" className={"room-btn" + (cam ? " on" : "")} onClick={toggleCam}>{cam ? "Camera off" : "🎥 Camera"}</button>}
-            {isHost && <button type="button" className={"room-btn rec" + (rec ? " on" : "")} onClick={() => (rec ? stopRec() : startRec())}>{rec ? "⏹ Stop recording" : "🔴 Record"}</button>}
-            {isHost && <a className="room-btn" href="/launchpad/new" target="_blank" rel="noopener">🚀 Launch</a>}
-            <button type="button" className="room-btn" onClick={() => { navigator.clipboard?.writeText(location.href).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }}>🔗 Share</button>
-            {isHost ? <button type="button" className="room-btn end" onClick={endRoom}>End live</button>
-              : <button type="button" className="room-btn" onClick={leave}>Leave</button>}
+            {canSpeak && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
+            {isHost && <Ctl icon={rec ? "stop" : "rec"} label={rec ? "Stop rec" : "Record"} on={rec} tone="red" onClick={() => (rec ? stopRec() : startRec())} pressed={rec} />}
+            {isHost && <Ctl icon="rocket" label="Launch" href="/launchpad/new" />}
+            <Ctl icon="link" label="Share" onClick={() => { navigator.clipboard?.writeText(location.href).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }} />
+            {isHost ? <Ctl icon="end" label="End" tone="red" on onClick={endRoom} /> : <Ctl icon="leave" label="Leave" onClick={leave} />}
           </div>
         </>
       )}
