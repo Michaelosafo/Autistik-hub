@@ -34,6 +34,7 @@ contract InstantV2ForkTest is Test {
         address[] memory rt = new address[](2); rt[0] = USDT; rt[1] = CAKE;
         uint24[] memory rf = new uint24[](2); rf[0] = 100; rf[1] = 2500;
         pad = new AutistikInstantLaunchV2(NPM, ROUTER, address(this), treasury, 6 ether, 5000, address(0), rt, rf);
+        vm.deal(address(pad), 0); // some addresses already hold dust on mainnet
         vm.deal(creator, 10 ether); vm.deal(b1, 10 ether); vm.deal(b2, 10 ether);
     }
 
