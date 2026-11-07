@@ -255,6 +255,10 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     mapping(address => uint256) public owed; // coin a wallet couldn't receive
     /// @notice Holders' part not yet turned into the reward token (a swap failed); retried on the next collection.
     mapping(address => uint256) public rewardPending;
+    /// @notice Team wallets the owner allows to pick a launch's starting market cap (everyone else gets startFdv).
+    mapping(address => bool) public curator;
+    /// @dev The starting market cap for the launch in progress, when a curator picked one (0: use startFdv).
+    uint256 private fdvOverride;
 
     /// @dev Same as v1, so anything that reads v1 launches reads these too.
     event Launched(address indexed token, address indexed pool, address indexed creator, uint256 positionId, uint256 creatorTokens, string name, string symbol);
@@ -277,6 +281,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
     error RewardNotAllowed();
     error NoFirstBuyHere();
     error NoRewardPool();
+    error NotCurator();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -316,11 +321,29 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         string calldata name, string calldata symbol, bytes32 salt, uint256 permitDeadline, bytes calldata permitSig, uint256 deadline,
         Reward calldata reward
     ) external payable nonReentrant returns (address token) {
+        _checkEligible(permitDeadline, salt, permitSig);
+        token = _checkedLaunch(name, symbol, salt, deadline, reward);
+    }
+
+    /// @notice The same launch, at a starting market cap (whole supply, in the chain's coin) the team picks. Only for
+    /// curators (team wallets set by the owner) and the owner, who don't need the Hub's launch permit.
+    function launchAtFdv(
+        string calldata name, string calldata symbol, bytes32 salt, uint256 deadline, Reward calldata reward, uint256 fdv
+    ) external payable nonReentrant returns (address token) {
+        if (!curator[msg.sender] && msg.sender != owner) revert NotCurator();
+        if (fdv == 0 || fdv > 1_000_000 ether) revert BadSettings();
+        fdvOverride = fdv;
+        token = _checkedLaunch(name, symbol, salt, deadline, reward);
+        fdvOverride = 0;
+    }
+
+    function _checkedLaunch(string calldata name, string calldata symbol, bytes32 salt, uint256 deadline, Reward calldata reward)
+        private returns (address token)
+    {
         if (block.timestamp > deadline) revert TooLate();
         if (bytes(name).length == 0 || bytes(name).length > 32 || bytes(symbol).length == 0 || bytes(symbol).length > 12) revert BadName();
         if (msg.value < launchFee) revert FeeTooLow();
         uint24 fee = rewardFeeFor(reward.token, reward.holderBps, reward.fee);
-        _checkEligible(permitDeadline, salt, permitSig);
         token = _launch(name, symbol, salt, reward, fee);
     }
 
@@ -374,8 +397,7 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         bool tokenIs0 = token < weth;
         (address t0, address t1) = tokenIs0 ? (token, weth) : (weth, token);
         // v3 price = token1 per token0. Coin price in the chain's coin = startFdv / SUPPLY.
-        uint256 ratioX192 = tokenIs0 ? Math.mulDiv(startFdv, 1 << 192, SUPPLY) : Math.mulDiv(SUPPLY, 1 << 192, startFdv);
-        uint160 sqrtPrice = uint160(Math.sqrt(ratioX192));
+        uint160 sqrtPrice = _startPrice(tokenIs0);
         pool = positions.createAndInitializePoolIfNecessary(t0, t1, FEE, sqrtPrice);
         (uint160 nowPrice, int24 tick,,,,,) = IV3PoolV2(pool).slot0();
         // Someone could create this pool early at a silly price to buy the supply cheap: refuse (pick a new salt).
@@ -397,6 +419,12 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         ));
         uint256 left = IERC20(token).balanceOf(address(this));
         if (left > 0) IERC20(token).safeTransfer(DEAD, left);
+    }
+
+    /// @dev The pool's starting sqrt price for the starting market cap (a curator's pick, or startFdv).
+    function _startPrice(bool tokenIs0) private view returns (uint160) {
+        uint256 fdv = fdvOverride != 0 ? fdvOverride : startFdv;
+        return uint160(Math.sqrt(tokenIs0 ? Math.mulDiv(fdv, 1 << 192, SUPPLY) : Math.mulDiv(SUPPLY, 1 << 192, fdv)));
     }
 
     function _floor(int24 tick) private pure returns (int24) {
@@ -514,6 +542,11 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         if (token == address(0) || token == NATIVE || address(router) == address(0)) revert BadSettings();
         rewardFee[token] = fee;
         emit RewardTokenSet(token, fee);
+    }
+
+    function setCurator(address who, bool on) external onlyOwner {
+        curator[who] = on;
+        emit SettingsChanged();
     }
 
     function setEligibilitySigner(address s) external onlyOwner {

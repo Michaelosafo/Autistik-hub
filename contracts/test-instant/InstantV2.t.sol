@@ -383,6 +383,34 @@ contract InstantV2Test is Test {
         pad.launch("Instant Dog", "IDOG", salt, dl, abi.encodePacked(r, s, v), block.timestamp + 60, AutistikInstantLaunchV2.Reward(NATIVE, 5000, 0));
     }
 
+    function test_curatorPicksStartingMcap() public {
+        AutistikInstantLaunchV2.Reward memory none = AutistikInstantLaunchV2.Reward(address(0), 0, 0);
+        vm.prank(creator);
+        vm.expectRevert(AutistikInstantLaunchV2.NotCurator.selector);
+        pad.launchAtFdv("Big Dog", "BDOG", bytes32(uint256(30)), block.timestamp + 60, none, 60 ether);
+        vm.prank(buyer);
+        vm.expectRevert(AutistikInstantLaunchV2.NotOwner.selector);
+        pad.setCurator(creator, true);
+        pad.setCurator(creator, true);
+        vm.prank(creator);
+        vm.expectRevert(AutistikInstantLaunchV2.BadSettings.selector);
+        pad.launchAtFdv("Big Dog", "BDOG", bytes32(uint256(30)), block.timestamp + 60, none, 0);
+        vm.prank(creator);
+        address t = pad.launchAtFdv("Big Dog", "BDOG", bytes32(uint256(30)), block.timestamp + 60, none, 60 ether);
+        (, address pool,,,,,) = pad.coinOf(t);
+        (uint160 sp,,,,,,) = V2Pool(pool).slot0();
+        // 10x the default 6 BNB starting cap: sqrt price is sqrt(10) = 3.162x higher (token is token0 here)
+        assertLt(uint160(t), uint160(address(weth)));
+        assertApproxEqRel(uint256(sp), uint256(79228162514264337593543950336) * 244948974 / 1e12, 1e15); // sqrt(6e-8)=2.449e-4
+        // the next normal launch is back at the default
+        address t2 = _launch(0, bytes32(uint256(31)), address(0), 0);
+        (, address pool2,,,,,) = pad.coinOf(t2);
+        (uint160 sp2,,,,,,) = V2Pool(pool2).slot0();
+        assertApproxEqRel(uint256(sp2), uint256(79228162514264337593543950336) * 77459667 / 1e12, 1e15);
+        // the owner can too
+        pad.launchAtFdv("Own Dog", "ODOG", bytes32(uint256(32)), block.timestamp + 60, none, 3 ether);
+    }
+
     function test_ownerManagesRewardList() public {
         MockToken cake = new MockToken("CAKE", 18);
         vm.prank(buyer);
