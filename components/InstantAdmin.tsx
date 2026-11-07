@@ -18,6 +18,7 @@ const TESTNET = defineChain({
 });
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)"]);
 const KEY = "instant-testnet";
+const MIN_DEPLOY_GAS = 6_000_000n;
 type Saved = { pad?: string; token?: string; pool?: string };
 
 export default function InstantAdmin() {
@@ -38,7 +39,7 @@ export default function InstantAdmin() {
     const w = createWalletClient({ chain, transport: custom(eth) }) as any;
     const [account] = await w.requestAddresses();
     try { await w.switchChain({ id: chain.id }); } catch { await w.addChain({ chain }); await w.switchChain({ id: chain.id }); }
-    return { w, chain, account: getAddress(account), pub: createPublicClient({ chain, transport: custom(eth) }) as any };
+    return { w, eth, chain, account: getAddress(account), pub: createPublicClient({ chain, transport: custom(eth) }) as any };
   }
   async function run(fn: () => Promise<string>) {
     setBusy(true); setMsg("");
@@ -98,19 +99,23 @@ export default function InstantAdmin() {
   // ---- mainnet
   const deploy = () => run(async () => {
     if (!info?.team) throw new Error("The AUTISTIK team wallet isn't set on the site.");
-    const { w, chain, account, pub } = await wallet(false);
+    const { eth, account } = await wallet(false);
+    const chain = viemChain(CHAINS.bsc);
     const data = await deployData(info.team, info.team, info.signer || zeroAddress);
     // Set the gas ourselves: phone wallets often guess too low for a contract this big, and the deploy then fails.
     // The estimate also runs the deploy first, so a problem shows here instead of costing gas.
     const rpc = createPublicClient({ chain, transport: http(CHAINS.bsc.rpc) }) as any;
     setMsg("Checking the deploy will work…");
     let gas: bigint;
-    try { gas = ((await rpc.estimateGas({ account, data })) * 140n) / 100n; }
+    // At least 6M: storing a contract this size alone costs ~3M, and some phone wallets ignore a lower limit.
+    try { const est = ((await rpc.estimateGas({ account, data })) * 150n) / 100n; gas = est > MIN_DEPLOY_GAS ? est : MIN_DEPLOY_GAS; }
     catch (e: any) { throw new Error(`The deploy would fail, so nothing was sent: ${String(e?.shortMessage || e?.message || e).split("\n")[0]}`); }
     const [price, bal] = await Promise.all([rpc.getGasPrice(), rpc.getBalance({ address: account })]);
     if (bal < gas * price) throw new Error(`This wallet needs about ${Number(formatEther(gas * price)).toFixed(4)} BNB for gas and has ${Number(formatEther(bal)).toFixed(4)} BNB.`);
-    setMsg(`Confirm in your wallet: deploy Instant Launch on BNB Chain (gas about ${Number(formatEther(gas * price)).toFixed(4)} BNB). Don't change the gas limit.`);
-    const hash = await w.sendTransaction({ account, chain, data, gas });
+    setMsg(`Confirm in your wallet: deploy Instant Launch on BNB Chain (gas about ${Number(formatEther(gas * price)).toFixed(4)} BNB). If your wallet shows a gas limit, it must be ${gas.toLocaleString()} or more; don't lower it.`);
+    // Sent straight to the wallet with the limit under both names wallets use, so it can't swap in its own guess.
+    const hash = (await eth.request({ method: "eth_sendTransaction", params: [{ from: account, data, gas: toHex(gas), gasLimit: toHex(gas), chainId: toHex(56) }] })) as `0x${string}`;
+    const pub = rpc;
     const r = await sent(pub, hash, "Deploy");
     const res = await fetch("/api/launchpad/contracts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: "bsc", kind: "instant", address: r.contractAddress, txHash: hash }) });
     const j = await res.json().catch(() => ({}));
