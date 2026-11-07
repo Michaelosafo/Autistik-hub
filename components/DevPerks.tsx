@@ -9,16 +9,22 @@ const usd = (n: number) => n >= 1000 ? `$${Math.round(n).toLocaleString("en-US")
 export default function DevPerks() {
   const [vol, setVol] = useState(50_000);
   const [share, setShare] = useState(0);
+  const [open, setOpen] = useState(false);
   // Instant: every trade pays the pool 1%, half of it is the creator's (some of that optionally to holders).
   const yours = vol * 0.005;
   const toHolders = (yours * share) / 100;
   const keep = yours - toHolders;
   return (
-    <section className="card stack dev-perks" style={{ gap: 12 }} aria-labelledby="dev-perks-h">
-      <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
-        <h2 id="dev-perks-h" style={{ margin: 0 }}>💛 What you get as a dev</h2>
-        <small className="muted">Free to launch · you only pay the network fee</small>
+    <section className={"dev-perks" + (open ? " open" : "")} aria-labelledby="dev-perks-h">
+      <div className="perk-bar">
+        <span className="perk-bar-t">
+          <b id="dev-perks-h">💛 What you get as a dev</b>
+          <span className="perk-chips"><em>💸 50% of fees</em><em>🎁 Holder rewards</em><em>🔒 Rug-proof</em><em>🤖 Bot shield</em></span>
+        </span>
+        <button type="button" className="btn small primary" aria-expanded={open} aria-controls="dev-perks-more" onClick={() => setOpen(!open)}>{open ? "Close" : "📖 Read before you launch"}</button>
       </div>
+      {open && <div id="dev-perks-more" className="stack" style={{ gap: 12, marginTop: 12 }}>
+      <small className="muted">Free to launch · you only pay the network fee</small>
       <div className="perk-grid">
         <div className="perk"><span>💸</span><b>Half of every trade fee</b><small>Each trade pays 1%: half is yours, sent straight to your wallet automatically.</small></div>
         <div className="perk"><span>⚡</span><b>Live in one tap</b><small>No liquidity, no bonding curve. A name and a picture, and it trades.</small></div>
@@ -46,6 +52,7 @@ export default function DevPerks() {
         </div>
         <small className="muted">An example, not a promise: most new coins trade little or nothing. Instant launch: 0.5% of trading volume goes to the creator. <Link href="/lockers/trust">How we keep it safe</Link></small>
       </div>
+      </div>}
     </section>
   );
 }
