@@ -318,10 +318,9 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         if (rewardToken != address(0)) emit RewardsChosen(token, rewardToken, holderBps);
     }
 
-    /// @dev The pool and the position, then the pool is shut out of holder rewards before anyone can buy.
+    /// @dev The pool and the position, recorded.
     function _setup(address token, uint256 holderBps) private {
         (address pool, uint256 positionId) = _seed(token);
-        AutistikInstantTokenV2(payable(token)).setPool(pool);
         coinOf[token] = Coin(msg.sender, pool, positionId, uint16(creatorShareBps), uint16(holderBps), uint64(block.timestamp));
         unchecked { launches++; }
     }
@@ -345,6 +344,8 @@ contract AutistikInstantLaunchV2 is ReentrancyGuard {
         (uint160 nowPrice, int24 tick,,,,,) = IV3PoolV2(pool).slot0();
         // Someone could create this pool early at a silly price to buy the supply cheap: refuse (pick a new salt).
         if (nowPrice != sqrtPrice) revert PoolTaken();
+        // Shut the pool out of holder rewards before the supply goes in.
+        AutistikInstantTokenV2(payable(token)).setPool(pool);
         int24 lower;
         int24 upper;
         if (tokenIs0) {

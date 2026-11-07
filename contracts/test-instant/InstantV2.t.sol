@@ -179,8 +179,9 @@ contract InstantV2Test is Test {
         assertEq(c.withdrawableRewards(other), 0.1 ether);
         assertEq(c.withdrawableRewards(creator), 0.2 ether);
         // selling into the pool takes the coins out of the reward count
+        address pool = c.pool();
         vm.prank(other);
-        IERC20(t).transfer(c.pool(), 10_000_000 ether);
+        IERC20(t).transfer(pool, 10_000_000 ether);
         assertEq(c.eligibleSupply(), 10_000_000 ether);
         _fees(t, 0.4 ether);
         pad.collectFees(t);
@@ -246,8 +247,9 @@ contract InstantV2Test is Test {
     function test_dustHolder_cantBreakRewards() public {
         address t = _launch(0, bytes32(uint256(17)), NATIVE, 5000);
         _buy(buyer, t, 1 ether);
+        address pool = c_pool(t);
         vm.prank(buyer);
-        IERC20(t).transfer(c_pool(t), 10_000_000 ether - 1); // sells all but 1 wei
+        IERC20(t).transfer(pool, 10_000_000 ether - 1); // sells all but 1 wei
         _fees(t, 0.4 ether);
         pad.collectFees(t);
         assertEq(pad.rewardPending(t), 0.1 ether); // waits
