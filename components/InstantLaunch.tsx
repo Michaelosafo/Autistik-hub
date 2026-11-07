@@ -118,6 +118,8 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
   // Holder rewards (Instant v2 contracts only): off, or a share of the creator's fees paid to holders in a reward.
   const v2 = !sol && (versions[net as InstantChain] ?? 1) >= 2;
   const [rw, setRw] = useState<RewardState>(RW0);
+  // Admin only: launch at a starting market cap of your choice (Instant v2: team wallets the owner allowed, and the owner).
+  const [adminFdv, setAdminFdv] = useState("");
   const picks = sol ? [] : INSTANT_REWARDS[net as InstantChain];
   const canPaste = net === "bsc" || net === "ethereum";
   const rewardLabel = !rw.on ? "" : rw.token === "native" ? c.coin : rw.token === "custom" ? (rw.found?.symbol || "your token") : picks.find((x) => x.address === rw.token)?.symbol || "";
@@ -210,8 +212,9 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
   }
 
   // The creator's first buy is capped at 5% of the supply: about 5% of the starting market cap in BNB.
-  const maxBuy = cfg ? Number(formatEther(cfg.fdv)) * 0.05 : Number(dx.startFdv) * 0.05;
-  const fdv = cfg ? Number(formatEther(cfg.fdv)) : Number(dx.startFdv);
+  const customFdv = admin && v2 && Number(adminFdv) > 0 && (!cfg || Number(adminFdv) !== Number(formatEther(cfg.fdv))) ? Number(adminFdv) : 0;
+  const fdv = customFdv || (cfg ? Number(formatEther(cfg.fdv)) : Number(dx.startFdv));
+  const maxBuy = fdv * 0.05;
   const buys = net === "bsc" ? BUYS : ["0", "0.01", "0.02", "0.05"];
 
   /** The reward choice for the contract, checked against it first (a token it can't buy is refused before you sign). */
@@ -261,7 +264,11 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
       const fee = (await pub.readContract({ address: pad, abi: INSTANT_ABI, functionName: "launchFee" } as any)) as bigint;
       const base = [name, symbol, permit.salt, BigInt(permit.deadline || 0), (permit.signature || "0x") as `0x${string}`, BigInt(Math.floor(Date.now() / 1000) + 20 * 60)] as const;
       let call: any;
-      if (v2) {
+      if (v2 && customFdv) {
+        // Your own starting market cap: only works from a team wallet the owner allowed (or the owner).
+        const reward = await rewardArg(pub);
+        call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launchAtFdv", args: [name, symbol, permit.salt, base[5], reward, parseEther(String(customFdv))], value: fee + parseEther(f.buy || "0") };
+      } else if (v2) {
         const reward = await rewardArg(pub);
         call = { account, address: pad, abi: INSTANT_V2_ABI, functionName: "launch", args: [...base, reward], value: fee + parseEther(f.buy || "0") };
       } else {
@@ -282,6 +289,7 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
       const r = String(e?.shortMessage || e?.message || "");
       setStatus(/NotEligible|PermitUsed/.test(r) ? `The launch was refused: this wallet must hold at least $${MIN_HOLD_USD} of AUTISTIK. Press Launch again to re-check.`
         : /CreatorBuyTooBig/.test(r) ? "Your first buy is more than 5% of the coins. Make it smaller."
+        : /NotCurator/.test(r) ? "Only team wallets can pick the starting market cap. Allow this wallet in Admin: Instant launch (from the team wallet), or clear the market cap box."
         : /NoRewardPool|RewardNotAllowed/.test(r) ? "That reward token can't be bought with the pool fees (no pool with enough liquidity). Pick another reward, or switch rewards off."
         : /PoolTaken/.test(r) ? "Someone tried to set up a pool for this coin first. Nothing was launched. Press Launch again (you'll get a new address)."
         : /TooLate/.test(r) ? "The launch took too long. Nothing was launched. Press Launch again."
@@ -418,6 +426,13 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
             <small className="muted">Holders get {rw.share}% of your share of every trade, paid in {rewardLabel}; you keep {100 - rw.share}%. They claim it any time from your coin page. Fixed at launch: it can&apos;t be changed later.</small>
           </>}
         </div>
+      )}
+      {admin && v2 && (
+        <label className="field lc-admin-fdv">
+          <span>🛠️ Admin: starting market cap ({c.coin}) <small className="muted">only you see this · leave empty for the normal {cfg ? formatEther(cfg.fdv) : dx.startFdv} {c.coin}</small></span>
+          <input value={adminFdv} inputMode="decimal" placeholder={cfg ? formatEther(cfg.fdv) : dx.startFdv} onChange={(e) => setAdminFdv(e.target.value.replace(/[^0-9.]/g, ""))} />
+          {customFdv > 0 && <small className="muted">This coin starts at {customFdv} {c.coin}. Your first buy can be up to {(customFdv * 0.05).toFixed(3)} {c.coin} (5%).</small>}
+        </label>
       )}
       <ul className="lc-facts">
         <li><b>1,000,000,000</b> coins, all in the {dx.dex} pool</li>

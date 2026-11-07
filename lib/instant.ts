@@ -79,6 +79,9 @@ export const INSTANT_START_FDV_BNB = "6";
 export const INSTANT_V2_ABI = parseAbi([
   "struct Reward { address token; uint16 holderBps; uint24 fee; }",
   "function launch(string name, string symbol, bytes32 salt, uint256 permitDeadline, bytes permitSig, uint256 deadline, Reward reward) payable returns (address)",
+  "function launchAtFdv(string name, string symbol, bytes32 salt, uint256 deadline, Reward reward, uint256 fdv) payable returns (address)",
+  "function curator(address) view returns (bool)",
+  "function setCurator(address who, bool on)",
   "function rewardFeeFor(address token, uint256 holderBps, uint24 fee) view returns (uint24)",
   "function rewardFee(address) view returns (uint24)",
   "function rewardPending(address) view returns (uint256)",
@@ -96,7 +99,7 @@ export const INSTANT_V2_ABI = parseAbi([
   "event RewardsChosen(address indexed token, address rewardToken, uint256 holderBps)",
   "event FeesCollected(address indexed token, uint256 eth, uint256 tokens, uint256 toCreatorEth, uint256 toAutistikEth, uint256 toHoldersEth)",
   "event RewardsPaid(address indexed token, address rewardToken, uint256 spentEth, uint256 rewardAmount)",
-  "error NoRewardPool()", "error RewardNotAllowed()", "error BadSettings()", "error NoFirstBuyHere()",
+  "error NotCurator()", "error NoRewardPool()", "error RewardNotAllowed()", "error BadSettings()", "error NoFirstBuyHere()",
   "error CreatorBuyTooBig()", "error PoolTaken()", "error TooLate()", "error NotEligible()", "error PermitUsed()", "error FeeTooLow()",
 ]);
 

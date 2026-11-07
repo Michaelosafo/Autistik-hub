@@ -132,6 +132,19 @@ export default function InstantAdmin() {
     return `✅ Instant Launch v2 (holder rewards) is live on ${c.name} at ${r.contractAddress}. New Instant launches there use it; coins launched before keep working on the old contract.`;
   });
 
+  // Team wallets that may pick a coin's starting market cap (Instant v2). Only the owner (the team wallet) can allow them.
+  const [cur, setCur] = useState("");
+  const allow = (on: boolean) => run(async () => {
+    const who = cur.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(who)) throw new Error("Paste the wallet address to allow.");
+    const { w, chain, account, pub } = await wallet(false, net);
+    const owner = getAddress(await pub.readContract({ address: info.instant, abi: INSTANT_V2_ABI, functionName: "owner" }));
+    if (owner !== account) throw new Error(`Connect the team wallet (${owner.slice(0, 6)}…${owner.slice(-4)}): only it can allow wallets.`);
+    setMsg(`Confirm in your wallet: ${on ? "allow" : "remove"} ${who.slice(0, 6)}…${who.slice(-4)}.`);
+    await sent(pub, await w.writeContract({ account, chain, address: info.instant, abi: INSTANT_V2_ABI, functionName: "setCurator", args: [getAddress(who), on] }), "Save");
+    return on ? `✅ ${who.slice(0, 6)}…${who.slice(-4)} can now pick the starting market cap on ${CHAINS[net].name} (the 🛠️ box on the Instant form).` : "✅ Removed.";
+  });
+
   const link = (a?: string, test = true) => a ? <a href={`${test ? "https://testnet.bscscan.com" : CHAINS[net].explorer}/address/${a}`} target="_blank" rel="noreferrer" className="mono">{a.slice(0, 8)}…{a.slice(-6)}</a> : null;
   return (
     <div id="instant-admin" className="card stack" style={{ gap: 10, borderStyle: "dashed", scrollMarginTop: 80 }}>
@@ -153,7 +166,18 @@ export default function InstantAdmin() {
           <button key={k} type="button" role="radio" aria-checked={net === k} className={"btn small" + (net === k ? " primary" : "")} disabled={busy} onClick={() => setNet(k)}>{CHAINS[k].name} · {INSTANT_DEX[k].dex}</button>
         ))}
       </div>
-      {info?.instant && info.instantVersion >= 2 ? <p style={{ margin: 0 }}>✅ v2 (holder rewards) live on {CHAINS[net].name} at {link(info.instant, false)}. The Create page offers Instant launch with holder rewards there.</p>
+      {info?.instant && info.instantVersion >= 2 ? <>
+        <p style={{ margin: 0 }}>✅ v2 (holder rewards) live on {CHAINS[net].name} at {link(info.instant, false)}. The Create page offers Instant launch with holder rewards there.</p>
+        <div className="stack" style={{ gap: 6 }}>
+          <b>Admin market cap</b>
+          <small className="muted">The team wallet can always launch at a market cap it picks. To use another wallet (e.g. your MetaMask), allow it here, signing with the team wallet. Everyone else always starts at the normal market cap.</small>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <input value={cur} onChange={(e) => setCur(e.target.value.trim())} placeholder="0x… wallet to allow" spellCheck={false} style={{ flex: 1, minWidth: 220 }} />
+            <button className="btn small primary" type="button" disabled={busy} onClick={() => allow(true)}>Allow</button>
+            <button className="btn small" type="button" disabled={busy} onClick={() => allow(false)}>Remove</button>
+          </div>
+        </div>
+      </>
         : <div>{info?.instant && <p style={{ margin: "0 0 6px" }}>Live on {CHAINS[net].name} at {link(info.instant, false)} (v1: no holder rewards). Deploy v2 to switch on holder rewards for new launches; coins already launched keep working.</p>}
           <button className="btn primary small" type="button" disabled={busy || !info} onClick={deploy}>{info?.instant ? "Deploy v2" : "Deploy"} on {CHAINS[net].name}</button> <small className="muted">{net === "ethereum" ? "Gas on Ethereum is about 0.005–0.03 ETH depending on the network. Use MetaMask." : net === "robinhood" ? "Gas on Robinhood Chain is a few cents of ETH: the wallet needs a little ETH on Robinhood Chain. Use MetaMask. Coins launched there have no first buy." : "Costs about 0.01 BNB of gas. Use MetaMask."} Starting market cap above is in {CHAINS[net].coin}.</small></div>}
       {msg && <small className="muted" role="status">{msg}</small>}
