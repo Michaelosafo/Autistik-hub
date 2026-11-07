@@ -4,6 +4,8 @@ import "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../src/AutistikInstantLaunchV2.sol";
 
+contract Sink { receive() external payable {} }
+
 interface IV3Factory { function getPool(address, address, uint24) external view returns (address); }
 
 /// Instant v2 on a copy of BNB Chain: real PancakeSwap v3, real USDT and CAKE. Run with BSC_RPC set.
@@ -17,7 +19,7 @@ contract InstantV2ForkTest is Test {
     address constant NATIVE = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     AutistikInstantLaunchV2 pad;
-    address treasury = makeAddr("treasury");
+    address treasury;
     address creator = makeAddr("creator");
     address b1 = makeAddr("b1");
     address b2 = makeAddr("b2");
@@ -28,6 +30,7 @@ contract InstantV2ForkTest is Test {
         if (bytes(rpc).length == 0) return;
         vm.createSelectFork(rpc);
         on = true;
+        treasury = address(new Sink());
         address[] memory rt = new address[](2); rt[0] = USDT; rt[1] = CAKE;
         uint24[] memory rf = new uint24[](2); rf[0] = 100; rf[1] = 2500;
         pad = new AutistikInstantLaunchV2(NPM, ROUTER, address(this), treasury, 6 ether, 5000, address(0), rt, rf);
