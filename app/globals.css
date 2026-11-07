@@ -5024,3 +5024,15 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .th-skel.short { height: 70px; }
 @keyframes thsk { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .th-dot, .th-skel { animation: none; } }
+
+/* Live: speaker / sound output */
+.spk { position: relative; }
+.spk-pop { position: absolute; bottom: calc(100% + 10px); left: 0; z-index: 950; width: 250px; display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 18px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--surface) 88%, #8B5CF6 12%), var(--surface)); border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); animation: mpup .18s ease; }
+.spk-opt { all: unset; cursor: pointer; padding: 9px 12px; border-radius: 12px; font-weight: 700; font-size: .86rem; background: var(--surface-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spk-opt.sel { color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B); }
+.spk-opt:focus-visible { outline: 2px solid #F0B90B; }
+.spk-vol { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
+.spk-vol input { flex: 1; accent-color: #F0B90B; }
+.spk-tip { opacity: .7; font-size: .74rem; line-height: 1.35; }
