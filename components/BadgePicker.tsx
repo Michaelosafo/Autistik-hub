@@ -8,9 +8,9 @@ import { supabaseBrowser } from "@/lib/supabase/client";
  * Verified members choose which of the 10 badges shows next to their name, everywhere on AUTISTIK. When they've just
  * been verified (no choice yet) it opens straight away and asks them to pick.
  */
-export default function BadgePicker({ current, name }: { current: number | null; name: string }) {
+export default function BadgePicker({ current, name, startOpen, onSaved }: { current: number | null; name: string; startOpen?: boolean; onSaved?: (n: number) => void }) {
   const router = useRouter();
-  const [open, setOpen] = useState(!current);
+  const [open, setOpen] = useState(!current || !!startOpen);
   const [pick, setPick] = useState<number>(current || 1);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -21,6 +21,7 @@ export default function BadgePicker({ current, name }: { current: number | null;
     if (error) { setMsg(error.message || "Couldn't save. Try again."); return; }
     setMsg("✅ Saved. It shows next to your name everywhere.");
     setOpen(false);
+    onSaved?.(pick);
     router.refresh();
   }
   if (!open) return (
