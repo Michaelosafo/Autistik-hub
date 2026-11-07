@@ -117,6 +117,8 @@ export default function WalletPicker() {
   }, [s.solFound, last, mobile]);
 
   if (!s.open) return <ApproveBar />;
+  return <>{sheet()}<ApproveBar /></>;
+  function sheet() {
   const solMode = s.network === "solana";
   const pool = solMode ? solRows : rows;
   const shown = q ? pool.filter((r) => r.name.toLowerCase().includes(q.toLowerCase())) : pool;
@@ -247,4 +249,5 @@ export default function WalletPicker() {
       </div>
     </div>
   );
+}
 }
