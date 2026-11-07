@@ -36,6 +36,10 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
       <ProHero tone="green" kicker="AUTISTIK · LOCKER" title="Lock liquidity &amp; tokens" live={sites.length ? "Live" : false}
         text={<>Lock your pool&apos;s liquidity so it can&apos;t be pulled (no rug pull), or lock team tokens so they can&apos;t be dumped. Nobody, not even the AUTISTIK team, can touch a lock before its date.</>}
         stats={[[sites.length || "Soon", "networks live"], [recent.length, "recent locks"], ["Verified", "open-source code"], ["Auto", "release when due"]]} />
+      <Link href="/lockers/trust" className="trust-cta">
+        <span aria-hidden="true">🛡️</span>
+        <span><b>No owner. No admin. Can&apos;t be changed.</b><small>See the live proof, read straight from the blockchain, and check it yourself in 1 minute →</small></span>
+      </Link>
       <Guide id="lockers" action={{ href: "#lock", label: "Lock my tokens now" }} title="How to lock, in 3 steps" steps={[
         <>Connect your wallet below and pick the network your coin is on.</>,
         <>Choose what to lock: your pool&apos;s <b>LP token</b> (proves the liquidity can&apos;t be pulled) or <b>team tokens</b>. Paste its address and the amount.</>,
@@ -74,7 +78,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
         <div className="card stack" style={{ gap: 8 }}>
           <h2 style={{ margin: 0 }}>🆕 Latest locks</h2>
           {recent.slice(0, 20).map((l) => (
-            <Link key={`${l.chain}-${l.id}`} href={`/lockers?chain=${l.chain}&token=${l.token}`} className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap", color: "inherit", textDecoration: "none" }}>
+            <Link key={`${l.chain}-${l.id}`} href={`/lockers/lock/${l.chain}/${l.id}`} className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap", color: "inherit", textDecoration: "none" }}>
               <span>{l.isLp ? "LP · " : ""}<b>{amt(l.amount)} {l.name}</b>{l.description ? <span className="muted"> · {l.description.slice(0, 60)}</span> : null}</span>
               <span className="muted">{LOCKER_CHAINS[l.chain].name} · {l.done ? "unlocked" : l.unlockDate * 1000 > Date.now() ? `${untilText(l.unlockDate)}` : "unlockable"}</span>
             </Link>
@@ -91,7 +95,7 @@ export default async function LockersPage({ searchParams }: { searchParams: { ch
           <li><b>Share it:</b> the lock shows here, on the token&apos;s analysis page and on the explorer, so buyers can see it.</li>
         </ol>
         <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
-          The locker is open source and has no owner, admin or fees. DexScreener&apos;s safety panel and scanners like GoPlus list locks from lockers they know; new lockers are added to their lists over time. If you need a badge everywhere instantly, burning liquidity always shows.
+          The locker is open source and has no owner, admin or fees (<Link href="/lockers/trust">see the live proof</Link>). DexScreener&apos;s safety panel and scanners like GoPlus list locks from lockers they know; new lockers are added to their lists over time. Until then, share your lock&apos;s <b>certificate</b> and badge: buyers can check it live. Burned liquidity shows everywhere straight away.
         </p>
       </div>
       {admin && (

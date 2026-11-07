@@ -4759,3 +4759,35 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .tik-welcome-go a:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
 :root[data-theme="light"] .tik-welcome-t h1 b{background:linear-gradient(90deg,#C97F00,#D63C74 55%,#7C3AED);-webkit-background-clip:text;background-clip:text}
 @media (max-width:520px){.tik-welcome{grid-template-columns:1fr}.tik-welcome-logo{display:none}}
+
+/* ---- Dev perks (Create page) */
+.dev-perks { background: linear-gradient(135deg, color-mix(in srgb, #facc15 9%, transparent), color-mix(in srgb, #22c55e 7%, transparent)); }
+.perk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.perk { display: flex; flex-direction: column; gap: 3px; padding: 12px; border-radius: 14px; background: color-mix(in srgb, currentColor 4%, transparent); border: 1px solid color-mix(in srgb, currentColor 10%, transparent); transition: transform .15s ease; }
+.perk:hover { transform: translateY(-2px); }
+.perk > span { font-size: 1.6em; line-height: 1; }
+.perk small { opacity: .75; line-height: 1.35; }
+.perk-calc { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; border: 1px dashed color-mix(in srgb, currentColor 22%, transparent); }
+.perk-out { display: flex; gap: 10px; flex-wrap: wrap; }
+.perk-out > div { flex: 1; min-width: 120px; padding: 10px; border-radius: 12px; background: color-mix(in srgb, #22c55e 12%, transparent); display: flex; flex-direction: column; }
+.perk-out b { font-size: 1.35em; }
+.perk-out small { opacity: .75; }
+
+/* ---- Locker proof page and lock certificates */
+.trust-cta { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 14px; text-decoration: none; color: inherit; border: 1px solid color-mix(in srgb, #22c55e 45%, transparent); background: color-mix(in srgb, #22c55e 9%, transparent); }
+.trust-cta > span:first-child { font-size: 1.8em; }
+.trust-cta small { display: block; opacity: .8; }
+.trust-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.trust-tile { display: flex; flex-direction: column; gap: 4px; padding: 12px; border-radius: 14px; border: 1px solid color-mix(in srgb, #22c55e 30%, transparent); background: color-mix(in srgb, #22c55e 6%, transparent); }
+.trust-tile > span { font-size: 1.4em; }
+.trust-tile small { opacity: .78; line-height: 1.35; }
+.trust-table { display: flex; flex-direction: column; gap: 2px; overflow-x: auto; }
+.trust-row { display: grid; grid-template-columns: 1.3fr 1.2fr .9fr .9fr 1fr 1fr .7fr; gap: 8px; padding: 8px 6px; border-radius: 8px; min-width: 640px; align-items: center; font-size: .92em; }
+.trust-row:nth-child(even) { background: color-mix(in srgb, currentColor 4%, transparent); }
+.trust-row.head { font-weight: 600; opacity: .7; font-size: .82em; }
+.lock-cert { border: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+.lock-cert.on { border-color: color-mix(in srgb, #22c55e 55%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, #22c55e 10%, transparent); }
+.lock-bar { height: 10px; border-radius: 99px; background: color-mix(in srgb, currentColor 10%, transparent); overflow: hidden; }
+.lock-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #86efac); border-radius: 99px; }
+.cert-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cert-facts > div { display: flex; flex-direction: column; gap: 2px; }
