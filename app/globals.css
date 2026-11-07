@@ -5084,3 +5084,18 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .lv-ctl > .spk > .ctl { width: 100%; }
 .lv-ctl .ctl { width: auto; }
 .lv-ctl .ctl small { max-width: 100%; }
+
+/* Waiting for approval in the wallet */
+.apb { position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 2000; width: min(520px, calc(100% - 24px));
+  display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 18px; color: var(--ink);
+  background: color-mix(in srgb, var(--surface) 92%, #F0B90B 8%); border: 1px solid color-mix(in srgb, #F0B90B 45%, transparent);
+  box-shadow: 0 22px 50px -18px rgba(0,0,0,.6); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); animation: mpup .2s ease; }
+.apb-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.apb-t b { font-size: .9rem; }
+.apb-t small { font-size: .76rem; opacity: .8; line-height: 1.35; }
+.apb-open { flex: none; }
+.apb-x { all: unset; cursor: pointer; flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; opacity: .6; font-size: 1.1rem; }
+.apb-x:focus-visible { outline: 2px solid #F0B90B; }
+.apb-spin { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid color-mix(in srgb, #F0B90B 30%, transparent); border-top-color: #F0B90B; animation: apbspin .8s linear infinite; }
+@keyframes apbspin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .apb-spin { animation-duration: 2.4s; } .apb { animation: none; } }

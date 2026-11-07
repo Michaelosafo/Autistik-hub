@@ -93,8 +93,10 @@ type State = {
   solFound: Wallet[]; sol: SolConn | null;
   /** A WalletConnect code for one wallet, shown in our own window: scan it with that wallet's app. */
   qr: { uri: string; name: string; logo: string; install?: string; href?: string } | null;
+  /** A request waiting for the member to approve it in their wallet (shown as a bar with an "Open wallet" button). */
+  pending: { name: string; what: string; href?: string; since: number; mobileWc: boolean } | null;
 };
-let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null, qr: null };
+let state: State = { open: false, detected: [], current: null, error: "", busy: "", network: "bsc", solFound: [], sol: null, qr: null, pending: null };
 const subs = new Set<() => void>();
 const set = (p: Partial<State>) => { state = { ...state, ...p }; subs.forEach((f) => f()); };
 export const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f); }; };
@@ -259,9 +261,63 @@ export async function setNetwork(k: NetKey) {
   }
 }
 
+// ---- Approvals: make sure the member always knows where to approve, and can get there in one tap.
+const APPROVE: Record<string, string> = {
+  eth_sendTransaction: "the transaction", eth_signTransaction: "the transaction", personal_sign: "the signature", eth_sign: "the signature",
+  eth_signTypedData: "the signature", eth_signTypedData_v3: "the signature", eth_signTypedData_v4: "the signature",
+  wallet_switchEthereumChain: "the network switch", wallet_addEthereumChain: "adding the network", wallet_watchAsset: "adding the token",
+  eth_requestAccounts: "the connection",
+};
+/** The link that brings a WalletConnect wallet app to the front for a request (the wallet picked when connecting). */
+function wcRequestHref(id?: number): string | undefined {
+  try {
+    const c = JSON.parse(localStorage.getItem("WALLETCONNECT_DEEPLINK_CHOICE") || "null");
+    const base = String(c?.href || "");
+    if (!base) return undefined;
+    const topic = wc?.session?.topic ? `sessionTopic=${encodeURIComponent(wc.session.topic)}` : "";
+    const q = [id ? `requestId=${id}` : "", topic].filter(Boolean).join("&");
+    if (base.includes("://") && !/^https?:/.test(base)) return `${base.endsWith("/") || base.endsWith("://") ? base : base + "/"}wc${q ? "?" + q : ""}`;
+    return `${base.replace(/\/$/, "")}/wc${q ? "?" + q : ""}`;
+  } catch { return undefined; }
+}
+const wcWalletName = () => { try { return String(JSON.parse(localStorage.getItem("WALLETCONNECT_DEEPLINK_CHOICE") || "null")?.name || "") || "your wallet"; } catch { return "your wallet"; } };
+
+/** Wraps the wallet's request() once, so every approval shows the "Approve in <wallet>" bar until it's answered. */
+function watchRequests(name: string, provider: any) {
+  if (!provider || provider.__awWatched || typeof provider.request !== "function") return;
+  provider.__awWatched = true;
+  const orig = provider.request.bind(provider);
+  provider.request = async (args: any) => {
+    const what = APPROVE[args?.method];
+    if (!what) return orig(args);
+    const isWc = provider === wc, mobileWc = isWc && isMobile();
+    const label = isWc ? wcWalletName() : name;
+    const href = mobileWc ? wcRequestHref() : undefined;
+    const mine = { name: label, what, href, since: Date.now(), mobileWc };
+    // Phones: bring the wallet app to the front now (works while the tap is still fresh; otherwise the bar's button does it).
+    let shown = false;
+    const show = () => { shown = true; set({ pending: mine }); };
+    if (mobileWc) { show(); if (href) setTimeout(() => { try { location.href = href; } catch { /* blocked: the button is there */ } }, 300); }
+    // Extensions and wallet browsers usually pop up at once: only show the bar if nothing's been answered after a moment.
+    const t = mobileWc ? null : setTimeout(show, 2500);
+    try { return await orig(args); }
+    catch (e: any) {
+      if (e?.code === -32002 || /already pending/i.test(String(e?.message))) {
+        throw Object.assign(new Error(`${label} already has a request waiting. Open ${label} and approve or reject it, then try again.`), { code: -32002 });
+      }
+      throw e;
+    } finally {
+      if (t) clearTimeout(t);
+      if (shown && state.pending === mine) set({ pending: null });
+    }
+  };
+}
+export const dismissPending = () => set({ pending: null });
+
 function choose(name: string, provider: any) {
   if (name === "WalletConnect") flagWc(true);
   watchChain(provider);
+  watchRequests(name, provider);
   set({ current: { name, provider }, open: false, busy: "", error: "", qr: null });
   try { sessionStorage.setItem("aw-wallet", name); localStorage.setItem("aw-last-wallet", name); } catch { /* private mode */ }
   resolver?.(provider); resolver = null;
@@ -271,13 +327,14 @@ function choose(name: string, provider: any) {
 /** Use a wallet that's installed in this browser. */
 export async function chooseInjected(name: string, provider: any) {
   set({ busy: name, error: "" });
+  watchRequests(name, provider);
   try {
     await provider.request({ method: "eth_requestAccounts" });
     const id = netOf(state.network).chainId;
     if (id) await switchEvm(provider, id).catch(() => { /* they can switch later from the network button */ });
     choose(name, provider);
   } catch (e: any) {
-    set({ busy: "", error: /reject|denied|cancel/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 160) });
+    set({ busy: "", error: /reject|denied|cancel/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 200) });
   }
 }
 
@@ -483,6 +540,7 @@ export async function restoreWallet(): Promise<any | null> {
   if (!p) return null;
   const accts: string[] = await p.request({ method: "eth_accounts" }).catch(() => []);
   if (!accts?.length) return null;
+  watchRequests(name, p);
   set({ current: { name, provider: p } });
   return p;
 }
@@ -618,7 +676,7 @@ function b58decode(str: string): Uint8Array {
 }
 
 /** A Solana WalletConnect session, shaped like a Wallet Standard wallet so the rest of the site can sign with it. */
-function wcSolWallet(name: string, icon: string, up: any, address: string): Wallet {
+function wcSolWallet(name: string, icon: string, up: any, address: string, base?: string): Wallet {
   return {
     version: "1.0.0", name: `${name} (WalletConnect)`, icon: icon as any, chains: ["solana:mainnet"], accounts: [],
     features: {
@@ -628,7 +686,16 @@ function wcSolWallet(name: string, icon: string, up: any, address: string): Wall
         version: "1.0.0", supportedTransactionVersions: ["legacy", 0],
         signTransaction: async ({ transaction }: { transaction: Uint8Array }) => {
           let bin = ""; for (const b of transaction) bin += String.fromCharCode(b);
-          const r: any = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, SOL_MAINNET);
+          // Bring the wallet app forward on phones, with an "Open <wallet>" bar until it's answered.
+          const mobile = isMobile();
+          const topic = up.session?.topic ? `?sessionTopic=${encodeURIComponent(up.session.topic)}` : "";
+          const href = mobile && base ? (base.includes("://") && !/^https?:/.test(base) ? `${base.endsWith("/") || base.endsWith("://") ? base : base + "/"}wc${topic}` : `${base.replace(/\/$/, "")}/wc${topic}`) : undefined;
+          const mine = { name, what: "the transaction", href, since: Date.now(), mobileWc: mobile };
+          set({ pending: mine });
+          if (href) setTimeout(() => { try { location.href = href; } catch { /* the bar's button does it */ } }, 300);
+          let r: any;
+          try { r = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, SOL_MAINNET); }
+          finally { if (state.pending === mine) set({ pending: null }); }
           if (typeof r?.transaction === "string") return [{ signedTransaction: Uint8Array.from(atob(r.transaction), (c) => c.charCodeAt(0)) }];
           if (typeof r?.signature !== "string") throw new Error("The wallet didn't sign.");
           const { PublicKey, VersionedTransaction } = await import("@solana/web3.js");
@@ -669,7 +736,7 @@ async function finishSolWc(t: WcTarget, up: any) {
   const acct = String(up.session?.namespaces?.solana?.accounts?.[0] || "");
   const address = acct.split(":")[2];
   if (!address) throw new Error("The wallet didn't share a Solana account.");
-  await chooseSol(wcSolWallet(t.name, t.logo, up, address));
+  await chooseSol(wcSolWallet(t.name, t.logo, up, address, t.native || t.wc));
   try { localStorage.setItem("aw-sol-wc", JSON.stringify(t)); } catch { /* private mode */ }
 }
 /** A Solana WalletConnect session from before a reload (or the trip to the wallet app). */

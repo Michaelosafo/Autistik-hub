@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
+import ApproveBar from "./ApproveBar";
 import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
@@ -115,7 +116,7 @@ export default function WalletPicker() {
     return out;
   }, [s.solFound, last, mobile]);
 
-  if (!s.open) return null;
+  if (!s.open) return <ApproveBar />;
   const solMode = s.network === "solana";
   const pool = solMode ? solRows : rows;
   const shown = q ? pool.filter((r) => r.name.toLowerCase().includes(q.toLowerCase())) : pool;
