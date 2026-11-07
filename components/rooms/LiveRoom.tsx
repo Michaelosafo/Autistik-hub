@@ -7,7 +7,7 @@ import ProfileSheet from "@/components/rooms/ProfileSheet";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import Emo from "@/components/Emo";
 import SpeakerOut from "./SpeakerOut";
-import Ctl from "./Ctl";
+import Ctl, { MicBtn } from "./Ctl";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -41,6 +41,8 @@ function VideoTile({ stream, mine, label }: { stream: MediaStream; mine?: boolea
  */
 export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const isHost = me.id === room.host_id;
+  // Video is for lives about a coin launch (rooms linked to a coin); other lives are voice only.
+  const coinLive = !!(room.token && room.chain);
   const [ready, setReady] = useState<string | null>(null); // my wallet is linked (short address, shown only to me)
   const [joined, setJoined] = useState(false);
   const [peers, setPeers] = useState<Record<string, Peer>>({});
@@ -175,7 +177,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
 
   // Camera on/off: the video goes along with the voice, so everyone gets a fresh connection with or without it.
   async function toggleCam() {
-    if (!mic.current) return;
+    if (!mic.current || (!cam && !coinLive)) return;
     if (!cam) {
       try {
         const v = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 15 } } });
@@ -521,10 +523,10 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
 
           <div className="lv-ctl" role="toolbar" aria-label="Live controls">
             {canSpeak
-              ? <Ctl icon={muted ? "micOff" : "mic"} label={muted ? "Unmute" : "Mute"} on={!muted} tone={!muted ? "gold" : undefined} onClick={toggleMute} pressed={!muted} />
+              ? <MicBtn muted={muted} talking={!!talking[me.id]} onClick={toggleMute} />
               : <Ctl icon="hand" label={hand ? "Lower" : "Raise hand"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
             <SpeakerOut audios={allAudios} />
-            {canSpeak && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
+            {canSpeak && coinLive && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
             {isHost && <Ctl icon={rec ? "stop" : "rec"} label={rec ? "Stop rec" : "Record"} on={rec} tone="red" onClick={() => (rec ? stopRec() : startRec())} pressed={rec} />}
             {isHost && <Ctl icon="rocket" label="Launch" href="/launchpad/new" />}
             <Ctl icon="link" label="Share" onClick={() => { navigator.clipboard?.writeText(location.href).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }} />

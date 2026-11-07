@@ -5099,3 +5099,32 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .apb-spin { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid color-mix(in srgb, #F0B90B 30%, transparent); border-top-color: #F0B90B; animation: apbspin .8s linear infinite; }
 @keyframes apbspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .apb-spin { animation-duration: 2.4s; } .apb { animation: none; } }
+
+/* ---- Live: the mic ---- */
+.mic { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: 2px; flex: 1 1 0; min-width: 0; max-width: 64px; -webkit-tap-highlight-color: transparent; }
+.mic small { font-size: .64rem; font-weight: 700; letter-spacing: .02em; opacity: .8; white-space: nowrap; }
+.mic-core { position: relative; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; isolation: isolate; transition: transform .14s cubic-bezier(.3,1.6,.5,1), background .2s ease, box-shadow .2s ease; }
+.mic-core svg { width: 18px; height: 18px; position: relative; z-index: 2; transition: transform .2s ease; }
+.mic-ring { position: absolute; inset: -3px; border-radius: 50%; z-index: -1; opacity: 0; transition: opacity .25s ease; }
+.mic:active .mic-core { transform: scale(.9); }
+.mic:focus-visible .mic-core { outline: 2px solid #F0B90B; outline-offset: 4px; }
+/* muted: dark glass, red slash, tiny red dot */
+.mic.off .mic-core { color: #ff6b74; background: radial-gradient(120% 120% at 30% 20%, rgba(255,255,255,.12), rgba(255,255,255,.02) 60%), #1d1730; border: 1px solid rgba(255,107,116,.35); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 6px 14px -8px rgba(0,0,0,.7); }
+.mic.off .mic-core::after { content: ""; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: #ff4d5a; box-shadow: 0 0 0 2px #1d1730; z-index: 3; }
+.mic.off small { color: #ff8a92; }
+/* live: gold core, breathing conic ring */
+.mic.live .mic-core { color: #1b1305; background: radial-gradient(120% 120% at 30% 20%, #FFF1A8, #FFD84D 35%, #F0B90B 70%, #D99400); box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 8px 20px -8px rgba(240,185,11,.85); }
+.mic.live .mic-ring { opacity: 1; background: conic-gradient(from 0deg, #FFD84D, #FF6B9A, #B57CFF, #4FD1FF, #FFD84D); -webkit-mask: radial-gradient(circle, transparent 64%, #000 66%); mask: radial-gradient(circle, transparent 64%, #000 66%); animation: micspin 4s linear infinite, micbreathe 2.4s ease-in-out infinite; }
+.mic.live small { color: #F0B90B; }
+.mic.talk .mic-ring { animation-duration: 1.2s, .7s; }
+.mic.talk .mic-core { box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 0 0 4px rgba(240,185,11,.18), 0 10px 26px -8px rgba(240,185,11,.95); }
+/* level bars (bottom-right) */
+.mic-lv { position: absolute; right: -5px; bottom: -4px; z-index: 3; display: flex; align-items: flex-end; gap: 1.5px; height: 12px; padding: 2px 3px; border-radius: 6px; background: #1d1730; box-shadow: 0 0 0 1.5px rgba(240,185,11,.6); }
+.mic-lv b { display: block; width: 2px; height: 3px; border-radius: 1px; background: #FFD84D; }
+.mic.talk .mic-lv b { animation: miclv .5s ease-in-out infinite alternate; }
+.mic.talk .mic-lv b:nth-child(2) { animation-delay: .15s; }
+.mic.talk .mic-lv b:nth-child(3) { animation-delay: .3s; }
+@keyframes miclv { from { height: 3px; } to { height: 8px; } }
+@keyframes micspin { to { transform: rotate(360deg); } }
+@keyframes micbreathe { 50% { inset: -4px; opacity: .7; } }
+@media (prefers-reduced-motion: reduce) { .mic-ring, .mic-lv b { animation: none !important; } }
