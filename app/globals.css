@@ -5181,3 +5181,8 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .ah-tik-go { display: inline-flex; align-items: center; gap: 12px; }
 .ah-tik-post { padding: 6px 12px; border-radius: 99px; color: #191326 !important; background: linear-gradient(135deg, #FFD84D, #F0B90B); font-size: .8rem; }
 .ah-actions-slim { margin: 4px 0 14px; }
+/* Live controls: a little more room around the mic and record */
+.lv-ctl { gap: 8px !important; padding: 12px 12px 10px !important; }
+.lv-ctl > .mic { margin-right: 4px; }
+.lv-ctl > .ctl.red:not(.on) { margin-left: 2px; }
+@media (max-width: 420px) { .lv-ctl { gap: 3px !important; padding: 10px 6px 8px !important; } .lv-ctl > .mic { margin-right: 2px; } }
