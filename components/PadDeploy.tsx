@@ -157,7 +157,7 @@ export default function PadDeploy() {
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {chain === "bsc" && !info.burner && <button className="btn primary" type="button" disabled={busy} onClick={deployBurner}>1. Deploy AUTISTIK burner</button>}
             {!info.pad && <button className="btn primary" type="button" disabled={busy || (chain === "bsc" && !info.burner) || !info.locker} onClick={deployPad}>{chain === "bsc" ? "2. " : ""}Deploy Launch Pad</button>}
-            {info.pad && (info.padVersion ?? 2) < 4 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v4: holder rewards (BNB/ETH, BTC, ETH)</button>}
+            {info.pad && (info.padVersion ?? 2) < 4 && <button className="btn primary" type="button" disabled={busy || !info.locker} onClick={deployPad}>Upgrade to v4: holder rewards ({[c.coin, ...(REWARD_TOKENS[chain] ?? []).map((t) => t.symbol)].join(", ")})</button>}
             {info.pad && <button className="btn small" type="button" disabled={busy} onClick={sync}>Sync $ amounts (≈${USD.launchFee} launch, ≈${USD.maxWhitelist} whitelist)</button>}
           </div>
           {info.pad && (

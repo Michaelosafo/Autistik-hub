@@ -67,8 +67,16 @@ export const REWARD_TOKENS: Partial<Record<ChainKey, { symbol: string; name: str
   bsc: [
     { symbol: "BTC", name: "Bitcoin (BTCB)", address: "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", decimals: 18 },
     { symbol: "ETH", name: "Ethereum (Binance-Peg ETH)", address: "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", decimals: 18 },
+    { symbol: "USDT", name: "Tether USD (BSC-USD)", address: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 },
+    { symbol: "CAKE", name: "PancakeSwap (CAKE)", address: "0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82", decimals: 18 },
+    { symbol: "AUTISTIK", name: "AUTISTIK", address: "0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9", decimals: 18 },
   ],
-  ethereum: [{ symbol: "BTC", name: "Bitcoin (WBTC)", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8 }],
+  ethereum: [
+    { symbol: "BTC", name: "Bitcoin (WBTC)", address: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", decimals: 8 },
+    { symbol: "USDC", name: "USD Coin", address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 },
+  ],
+  // Robinhood Chain: Paxos USDG, which has a deep USDG/WETH pool on the Uniswap V2 router there.
+  robinhood: [{ symbol: "USDG", name: "Global Dollar (USDG)", address: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", decimals: 6 }],
 };
 
 /** What a creator can pick as the holders' reward on a chain: none, the coin, the listed tokens, or another allowed token. */
@@ -80,10 +88,20 @@ export function rewardChoices(c: LaunchChain) {
  * Solana holder rewards: what the AUTISTIK rewards wallet buys with the holders' part of a coin's fee and sends to its
  * holders (lib/solana-rewards.ts). Keys are what plans store.
  */
-export const SOL_REWARD_TOKENS: Record<string, { symbol: string; name: string; mint: string; decimals: number }> = {
+export const SOL_REWARD_TOKENS: Record<string, { symbol: string; name: string; mint: string; decimals: number; stock?: boolean }> = {
   sol: { symbol: "SOL", name: "SOL", mint: "So11111111111111111111111111111111111111112", decimals: 9 },
   btc: { symbol: "BTC", name: "Bitcoin (cbBTC)", mint: "cbbtcf3aa214zXHbiAZQwf4122FBYbraNdFqgw4iMij", decimals: 8 },
   eth: { symbol: "ETH", name: "Ethereum (Wormhole ETH)", mint: "7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs", decimals: 8 },
+  usdc: { symbol: "USDC", name: "USD Coin", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", decimals: 6 },
+  // Stocks: xStocks by Backed (Token-2022, 8 decimals), bought on Jupiter. Mints checked against Jupiter's token list
+  // (all from Backed's issuer account S7vY…RaS). They track the share price; they aren't shares and aren't offered to
+  // US persons.
+  tsla: { symbol: "TSLAx", name: "Tesla (xStock)", mint: "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB", decimals: 8, stock: true },
+  nvda: { symbol: "NVDAx", name: "Nvidia (xStock)", mint: "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh", decimals: 8, stock: true },
+  aapl: { symbol: "AAPLx", name: "Apple (xStock)", mint: "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp", decimals: 8, stock: true },
+  googl: { symbol: "GOOGLx", name: "Alphabet (xStock)", mint: "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN", decimals: 8, stock: true },
+  spy: { symbol: "SPYx", name: "S&P 500 (xStock)", mint: "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W", decimals: 8, stock: true },
+  qqq: { symbol: "QQQx", name: "Nasdaq 100 (xStock)", mint: "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ", decimals: 8, stock: true },
 };
 
 /** Holder rewards on a launched v4 token. */
