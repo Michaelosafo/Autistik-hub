@@ -1,12 +1,15 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 const VOLUMES = [10_000, 50_000, 250_000, 1_000_000];
 const usd = (n: number) => n >= 1000 ? `$${Math.round(n).toLocaleString("en-US")}` : `$${n.toFixed(n < 10 ? 2 : 0)}`;
 
-/** What a dev gets for launching here, with a little earnings calculator. Shown above the launch choice. */
-export default function DevPerks() {
+/**
+ * The Dev guide: a small button above the launch choice. It opens a pop-up with what a dev gets, an earnings
+ * calculator and (for admins) the admin privileges, so none of it sits in the launch form itself.
+ */
+export default function DevPerks({ admin = false }: { admin?: boolean }) {
   const [vol, setVol] = useState(50_000);
   const [share, setShare] = useState(0);
   const [open, setOpen] = useState(false);
@@ -14,17 +17,23 @@ export default function DevPerks() {
   const yours = vol * 0.005;
   const toHolders = (yours * share) / 100;
   const keep = yours - toHolders;
+  useEffect(() => {
+    if (!open) return;
+    const k = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [open]);
   return (
-    // Closed: just one small button, so the launch form comes straight away.
-    !open ? (
-      <button type="button" className="btn small perk-open" aria-expanded={false} aria-controls="dev-perks-more" onClick={() => setOpen(true)}>✨ Why launch with us? Read</button>
-    ) : (
-    <section className="dev-perks" aria-labelledby="dev-perks-h">
+    <>
+    <button type="button" className="btn small perk-open" aria-haspopup="dialog" onClick={() => setOpen(true)}>📘 Dev guide · read before you launch</button>
+    {open && (
+    <div className="perk-modal" role="presentation" onClick={() => setOpen(false)}>
+    <section className="dev-perks perk-sheet" role="dialog" aria-modal="true" aria-labelledby="dev-perks-h" onClick={(e) => e.stopPropagation()}>
       <div className="perk-bar">
-        <b id="dev-perks-h">💛 Why launch with AUTISTIK</b>
-        <button type="button" className="btn small" aria-expanded={true} aria-controls="dev-perks-more" onClick={() => setOpen(false)}>Close ✕</button>
+        <b id="dev-perks-h">📘 Dev guide: why launch with AUTISTIK</b>
+        <button type="button" className="btn small" onClick={() => setOpen(false)} autoFocus>Close ✕</button>
       </div>
-      {open && <div id="dev-perks-more" className="stack" style={{ gap: 12, marginTop: 12 }}>
+      <div className="stack" style={{ gap: 12, marginTop: 12 }}>
       <small className="muted">Free to launch · you only pay the network fee</small>
       <div className="perk-grid">
         <div className="perk"><span>💸</span><b>Half of every trade fee</b><small>Each trade pays 1%: half is yours, sent straight to your wallet automatically.</small></div>
@@ -53,8 +62,22 @@ export default function DevPerks() {
         </div>
         <small className="muted">An example, not a promise: most new coins trade little or nothing. Instant launch: 0.5% of trading volume goes to the creator. <Link href="/lockers/trust">How we keep it safe</Link></small>
       </div>
-      </div>}
+      {admin && (
+        <div className="perk-calc lc-admin">
+          <b>🛠️ Your admin privileges</b>
+          <ul className="lc-facts" style={{ margin: 0 }}>
+            <li><b>Pick any starting market cap</b> for your Instant launches (everyone else gets the normal one). Choose it in the 🛠️ box on the Instant form, then press <b>🚀 Start</b>.</li>
+            <li><b>No $20 AUTISTIK check</b>: you launch with the admin permit.</li>
+            <li><b>First buy before anyone</b>: up to 5% of the coins at your price, in the same transaction.</li>
+            <li><b>Your creator fees</b> (50% of the 1% pool fee) go to the launching wallet automatically; the team share goes to the team wallet.</li>
+            <li><b>Admin tools</b> at the bottom of the Create page: deploy contracts, allow team wallets, list tokens.</li>
+          </ul>
+        </div>
+      )}
+      </div>
     </section>
-    )
+    </div>
+    )}
+    </>
   );
 }
