@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import FollowButton from "@/components/members/FollowButton";
@@ -149,7 +150,7 @@ export default function MePanel({ me, settings }: {
       <div className="mp-hero">
         <div className="mp-hero-bg" aria-hidden="true" />
         <div className="mp-id">
-          <button type="button" className="mp-photo" onClick={() => setSheet(true)} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
+          <button type="button" className="mp-photo" onClick={(e) => { e.stopPropagation(); setSheet(true); }} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
             <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
           </button>
           <b className="mp-id-n">{sum?.profile?.alias || me.alias}{verified && <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={15} className="vbadge-name" />}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
@@ -163,12 +164,14 @@ export default function MePanel({ me, settings }: {
           </div>
           <div className="mp-id-a">
             <Link className="mp-chip" href="/me">Profile</Link>
-            <button type="button" className="mp-chip mp-badge-chip" onClick={() => setBadge(true)}>{verified ? <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={13} /> : "🏅"} Badge</button>
+            <button type="button" className="mp-chip mp-badge-chip" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBadge(true); }}>{verified ? <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={13} /> : "🏅"} Badge</button>
             <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-chip" />
           </div>
         </div>
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
         {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
+        {/* Opened over the whole page (not inside the panel, whose slide-in would trap and clip them). */}
+        {typeof document !== "undefined" && (sheet || badge || (view && photo)) && createPortal(<>
         {sheet && (
           <div className="mp-sheet-bg" role="dialog" aria-modal="true" aria-label="Profile photo" onClick={(e) => e.target === e.currentTarget && setSheet(false)}>
             <div className="mp-sheet">
@@ -209,6 +212,7 @@ export default function MePanel({ me, settings }: {
             </div>
           </div>
         )}
+        </>, document.body)}
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
       <MadnessLink />
