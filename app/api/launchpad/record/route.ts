@@ -164,6 +164,8 @@ async function recordInstant(chainKey: ChainKey, txHash: string, body: any) {
   await saveInfo(chainKey, row.token, body, owner);
   if (isAChain(chainKey)) await scanToken(chainKey, row.token, { dev: row.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Instant-launched ${row.symbol || row.token} on ${chain.name}`, `/launchpad/${chainKey}/${row.token}`);
+  // Publish the coin's source on the explorer straight away (the keeper retries later if the explorer isn't ready).
+  await submitVerify(chainKey, row.token as `0x${string}`, txHash as `0x${string}`).catch(() => null);
   return json({ launch: row });
 }
 

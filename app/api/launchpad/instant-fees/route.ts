@@ -1,5 +1,6 @@
 import { json } from "@/lib/ai";
 import { runInstantKeeper } from "@/lib/instant-keeper";
+import { verifySweep } from "@/lib/launch-verify";
 import { supabaseService } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -12,5 +13,8 @@ export async function GET() {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
   const { data: go } = await supabaseService().rpc("instant_keeper_lease", { p_seconds: 1500 });
   if (go !== true) return json({ skipped: true });
-  return json(await runInstantKeeper(Date.now() + 50_000).catch((e) => ({ error: (e as Error).message })));
+  const fees = await runInstantKeeper(Date.now() + 35_000).catch((e) => ({ error: (e as Error).message }));
+  // Then make sure every coin launched here is open source on its explorer.
+  const verify = await verifySweep(Date.now() + 18_000).catch((e) => ({ error: (e as Error).message }));
+  return json({ fees, verify });
 }
