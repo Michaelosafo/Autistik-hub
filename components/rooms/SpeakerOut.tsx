@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Ctl from "./Ctl";
 
 type Out = { id: string; label: string };
 const canPick = () => typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
@@ -91,25 +92,21 @@ export default function SpeakerOut({ audios }: { audios: () => HTMLAudioElement[
 
   function toggleLoud() {
     const next = !loud;
-    if (next) {
+    if (next || !on) {
       chain(); // started from the tap, so phones allow the sound
       // Prefer an output named "speaker" when the browser lists one.
       const sp = outs.find((o) => /speaker|haut-parleur|altavoz/i.test(o.label) && !/headphone|ear|bluetooth/i.test(o.label));
       if (sp) setSink(sp.id);
       setOn(true);
     }
-    setLoud(next);
+    setLoud(!on ? true : next);
   }
 
   const ios = typeof navigator !== "undefined" && /iPhone|iPad|iPod/.test(navigator.userAgent);
   return (
     <div className="spk" ref={box}>
-      <span className={"spk-split" + (loud && on ? " loud" : "") + (!on ? " off" : "")}>
-        <button type="button" className="spk-main" aria-pressed={loud && on} onClick={toggleLoud}>
-          {!on ? "🔇 Sound off" : loud ? <>📢 Loudspeaker <b>ON</b></> : "📢 Loudspeaker"}
-        </button>
-        <button type="button" className="spk-more" aria-label="Sound options" aria-expanded={open} onClick={() => setOpen((o) => !o)}>▾</button>
-      </span>
+      <Ctl icon={!on ? "speakerOff" : loud ? "speaker" : "speakerLow"} label={!on ? "Muted" : "Speaker"} on={loud && on} tone={loud && on ? "green" : !on ? "red" : undefined} onClick={toggleLoud} pressed={loud && on} title={loud ? "Loudspeaker on: tap for normal" : "Tap for loudspeaker"} />
+      <button type="button" className="spk-more" aria-label="Sound options" aria-expanded={open} onClick={() => setOpen((o) => !o)}>▾</button>
       {open && (
         <div className="spk-pop" role="dialog" aria-label="Sound output">
           <b>Sound</b>
