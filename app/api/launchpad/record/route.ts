@@ -198,6 +198,8 @@ async function recordSolanaInstant(body: any) {
   const { error } = await supabaseService().from("launches").upsert(row, { onConflict: "tx_hash", ignoreDuplicates: true });
   if (error) return json({ error: /unique|duplicate/i.test(error.message) && /name|symbol/i.test(error.message) ? "Your coin launched, but that name or ticker was already launched here, so it isn't added to the Hub list. It's still live on Raydium." : "Your coin launched, but we couldn't add it to the list. It's still live on Raydium." }, 500);
   await saveInfo("solana", mint, body, owner);
+  // Holder rewards (if chosen at launch) start now that the coin and its Raydium pool are live.
+  await supabaseService().from("sol_reward_coins").update({ active: true, pool }).eq("mint", mint).eq("active", false);
   if (isAChain("solana")) await scanToken("solana", mint, { dev: v.creator, userId: owner }).catch(() => null);
   logActivity(owner, "launch", `Instant-launched ${row.symbol || mint} on Solana`, `/launchpad/solana/${mint}`);
   return json({ launch: row });

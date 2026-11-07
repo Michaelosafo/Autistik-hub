@@ -5,7 +5,7 @@ create table if not exists public.sol_reward_coins (
   mint text primary key,
   creator text not null,
   user_id uuid references auth.users(id) on delete set null,
-  reward text not null check (reward in ('sol', 'btc', 'eth')),
+  reward text not null check (reward in ('sol','btc','eth','usdc','tsla','nvda','aapl','googl','spy','qqq')),
   fee_bps integer not null check (fee_bps between 1 and 1000),          -- the creator's fee on every transfer
   platform_bps integer not null check (platform_bps between 0 and 100), -- the AUTISTIK fee on every transfer
   holder_bps integer not null check (holder_bps between 1 and 10000),   -- share of the creator's fee that goes to holders

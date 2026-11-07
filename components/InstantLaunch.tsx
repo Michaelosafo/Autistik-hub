@@ -5,7 +5,7 @@ import Link from "next/link";
 import PhotoCrop from "@/components/PhotoCrop";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { createPublicClient, createWalletClient, custom, formatEther, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseEventLogs, zeroAddress } from "viem";
-import { CHAINS, MIN_HOLD_USD, viemChain } from "@/lib/launchpad";
+import { CHAINS, MIN_HOLD_USD, SOL_REWARD_TOKENS, viemChain } from "@/lib/launchpad";
 import { INSTANT_ABI, INSTANT_CREATOR_BPS, INSTANT_DEX, INSTANT_REWARDS, INSTANT_TOKEN_V2_ABI, INSTANT_V2_ABI, NATIVE_REWARD, findRewardPool, isInstantChain, type InstantChain } from "@/lib/instant";
 import { useSolWallet } from "@/components/SolanaLaunch";
 import { signAndSend, solErr, solLaunchApi } from "@/lib/sol-wallet";
@@ -121,6 +121,13 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
   const picks = sol ? [] : INSTANT_REWARDS[net as InstantChain];
   const canPaste = net === "bsc" || net === "ethereum";
   const rewardLabel = !rw.on ? "" : rw.token === "native" ? c.coin : rw.token === "custom" ? (rw.found?.symbol || "your token") : picks.find((x) => x.address === rw.token)?.symbol || "";
+  // Solana holder rewards: an extra fee on every transfer, collected and shared out by the AUTISTIK rewards wallet.
+  const [solRw, setSolRw] = useState({ on: false, reward: "sol", fee: 1, share: 50 });
+  const [solRwReady, setSolRwReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!sol || solRwReady !== null) return;
+    fetch("/api/launchpad/solana-rewards?status=1").then((r) => r.json()).then((j) => setSolRwReady(!!j?.ready)).catch(() => setSolRwReady(false));
+  }, [sol, solRwReady]);
   async function checkCustom(addr: string) {
     setRw((x) => ({ ...x, custom: addr, found: undefined, err: "" }));
     if (!isAddress(addr)) return;
@@ -153,7 +160,8 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
     try {
       if (!st.mint) {
         setStatus("Step 1 of 4: confirm your new coin in your wallet…");
-        const r = await solLaunchApi<{ tx: string; mint: string }>("instant-mint", { owner, name, symbol, logo: f.logo });
+        const rewards = solRw.on && solRwReady ? { reward: solRw.reward, rewardFee: solRw.fee, holderPercent: solRw.share } : {};
+        const r = await solLaunchApi<{ tx: string; mint: string }>("instant-mint", { owner, name, symbol, logo: f.logo, ...rewards });
         const sig = await signAndSend(sw, r.tx);
         st = { mint: r.mint, sig }; keepSol(st);
       }
@@ -353,6 +361,37 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
         </div>
         <small className="muted">You buy before anyone else, at the starting price, in the same transaction (so bots can&apos;t jump in front).</small>
       </div>}
+      {sol && (
+        <div className="field lc-rewards">
+          <span>Holder rewards <small className="muted">optional</small></span>
+          {solRwReady === false ? <small className="muted">Holder rewards for Solana Instant coins are switching on soon. Your coin launches without them for now.</small> : <>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Holder rewards">
+              <button type="button" role="radio" aria-checked={!solRw.on} className={"btn small" + (!solRw.on ? " primary" : "")} disabled={!!solStep.mint} onClick={() => setSolRw({ ...solRw, on: false })}>Off</button>
+              <button type="button" role="radio" aria-checked={solRw.on} className={"btn small" + (solRw.on ? " primary" : "")} disabled={!!solStep.mint || !solRwReady} onClick={() => setSolRw({ ...solRw, on: true })}>🎁 Reward my holders</button>
+            </div>
+            {solRw.on && <>
+              <small className="muted">Paid in</small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Reward">
+                {Object.entries(SOL_REWARD_TOKENS).filter(([, t]) => !t.stock).map(([k, t]) => <button key={k} type="button" role="radio" aria-checked={solRw.reward === k} className={"btn small" + (solRw.reward === k ? " primary" : "")} onClick={() => setSolRw({ ...solRw, reward: k })}>{t.symbol}</button>)}
+              </div>
+              <small className="muted">or stocks 📈</small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Stock reward">
+                {Object.entries(SOL_REWARD_TOKENS).filter(([, t]) => t.stock).map(([k, t]) => <button key={k} type="button" role="radio" aria-checked={solRw.reward === k} className={"btn small" + (solRw.reward === k ? " primary" : "")} onClick={() => setSolRw({ ...solRw, reward: k })}>{t.symbol}</button>)}
+              </div>
+              {SOL_REWARD_TOKENS[solRw.reward]?.stock && <small className="muted">xStocks track the share price; they aren&apos;t shares and aren&apos;t offered to US persons.</small>}
+              <small className="muted">Reward fee on every trade</small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Reward fee">
+                {[1, 2, 3].map((n) => <button key={n} type="button" role="radio" aria-checked={solRw.fee === n} className={"btn small" + (solRw.fee === n ? " primary" : "")} onClick={() => setSolRw({ ...solRw, fee: n })}>{n}%</button>)}
+              </div>
+              <small className="muted">How much of it goes to holders</small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }} role="radiogroup" aria-label="Share for holders">
+                {[25, 50, 75, 100].map((n) => <button key={n} type="button" role="radio" aria-checked={solRw.share === n} className={"btn small" + (solRw.share === n ? " primary" : "")} onClick={() => setSolRw({ ...solRw, share: n })}>{n}%</button>)}
+              </div>
+              <small className="muted">Every buy, sell and transfer pays {solRw.fee}% extra: {solRw.share}% of it buys {SOL_REWARD_TOKENS[solRw.reward]?.symbol} for holders (by how much they hold, sent about every 10 minutes) and the rest goes straight to your wallet. Fixed at launch: nobody can change it.</small>
+            </>}
+          </>}
+        </div>
+      )}
       {v2 && (
         <div className="field lc-rewards">
           <span>Holder rewards <small className="muted">optional</small></span>
@@ -385,7 +424,7 @@ function InstantForm({ instants, versions, open, admin }: { instants: Instants; 
         <li>Starting market cap <b>{fdv} {c.coin}</b>. The price rises as people buy</li>
         <li>Liquidity <b>locked forever</b>: nobody can remove it, not you and not AUTISTIK</li>
         {sol ? <>
-          <li>Minting and freezing switched off. A 0.5% fee on every transfer supports AUTISTIK</li>
+          <li>Minting and freezing switched off. A 0.5% fee on every transfer supports AUTISTIK{solRw.on && solRwReady ? <>, plus your {solRw.fee}% reward fee ({solRw.share}% to holders in {SOL_REWARD_TOKENS[solRw.reward]?.symbol})</> : null}</li>
           <li>The pool charges 1% per trade: <b>most of it is yours</b> (Raydium keeps its 16% share), collected on Raydium with the fee NFT you get</li>
           <li>Four quick confirms in your wallet: the coin, the pool, your coins into the pool, the lock</li>
         </> : <>
