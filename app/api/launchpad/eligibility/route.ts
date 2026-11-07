@@ -6,12 +6,14 @@ import { json } from "@/lib/ai";
 import { CHAINS, MIN_HOLD_USD, type ChainKey } from "@/lib/launchpad";
 import { instantOn, padOn, padVersion } from "@/lib/launchpad-server";
 import { vanitySalt } from "@/lib/evm-vanity";
+import { instantSalt } from "@/lib/instant-vanity";
 import { getMarkets } from "@/lib/market";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 import { adminState, launchAccess } from "@/lib/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 30;
 
 const TOKEN = (process.env.NEXT_PUBLIC_TOKEN_ADDRESS || "0x483EC705AC912587Fe7cD75Caf3ecC0A118aA6a9") as `0x${string}`;
 const ERC20 = parseAbi(["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)"]);
@@ -52,7 +54,10 @@ export async function POST(req: Request) {
   const key = process.env.ELIGIBILITY_SIGNER_KEY;
   // Launch Pad v3: the salt that gives this launch a token address ending in "aaaaa" (taken only when it's needed).
   const version = instant ? 0 : await padVersion(chain.key);
-  const salt = async () => (instant ? { salt: toHex(crypto.getRandomValues(new Uint8Array(32))), token: null } : version >= 3 ? await vanitySalt(chain.key, pad, version) : null);
+  // Instant: a salt that gives the coin an address ending in "AAAA" (checked against the launcher before signing).
+  const salt = async () => (instant
+    ? await instantSalt(chain.key, pad, creator, String(body?.name || ""), String(body?.symbol || ""), body?.rewardToken ?? null)
+    : version >= 3 ? await vanitySalt(chain.key, pad, version) : null);
   // Not set up yet: the contract's eligibilitySigner should also be the zero address, so no check happens.
   if (!key) {
     const s = await salt();
