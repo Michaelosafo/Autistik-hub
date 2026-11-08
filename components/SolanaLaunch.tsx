@@ -1,4 +1,5 @@
 "use client";
+import { fmtNum } from "@/lib/num-format";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { parseUnits } from "viem";
 import { getState, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
@@ -140,7 +141,7 @@ function SolCreatePool({ mint, sw, picker, busy, setBusy, setMsg, onCreated }: {
       <label className="field"><span>Tokens</span><input value={tok} onChange={(e) => setTok(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
       {all && <small className="muted">You have {Number(all).toLocaleString("en-US")} tokens · {(Number(have!.sol) / 1e9).toFixed(4)} SOL. <button type="button" className="linkish" onClick={() => setTok(all)}>Use all my tokens</button></small>}
       <label className="field"><span>SOL</span><input value={sol} onChange={(e) => setSol(e.target.value.trim())} inputMode="decimal" placeholder="0.5" /></label>
-      {price && <small className="muted">Starting price: 1 token = {price.toPrecision(4)} SOL</small>}
+      {price && <small className="muted">Starting price: 1 token = {fmtNum(price)} SOL</small>}
       <button className="btn primary" type="button" disabled={!sw || busy || !(Number(tok) > 0) || !(Number(sol) >= 0.01)} onClick={create}>
         {busy ? "Working…" : `Create the pool (${sol || 0} SOL + about ${SOL_POOL_COST} SOL in fees)`}
       </button>
@@ -240,7 +241,7 @@ export function SolAddLiquidity({ mint: fixedMint, pool: fixedPool }: { mint?: s
       {!fixedMint && <input value={mintIn} onChange={(e) => setMintIn(e.target.value)} placeholder="Token address on Solana" spellCheck={false} aria-label="Token address" />}
       {pool && (
         <>
-          <div className="notice">🪙 <b>{pool.symbol || short(mint)}</b> · Raydium pool <span className="mono">{short(pool.pool)}</span> · 1 {symbol} = {(Number(pool.solReserve) / 1e9 / (Number(pool.tokenReserve) / 10 ** pool.decimals)).toPrecision(4)} SOL</div>
+          <div className="notice">🪙 <b>{pool.symbol || short(mint)}</b> · Raydium pool <span className="mono">{short(pool.pool)}</span> · 1 {symbol} = {fmtNum(Number(pool.solReserve) / 1e9 / (Number(pool.tokenReserve) / 10 ** pool.decimals))} SOL</div>
           <label className="field"><span>SOL</span><input value={amtSol} onChange={(e) => onSol(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
           <label className="field"><span>{symbol}</span><input value={amtTok} onChange={(e) => onTok(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
           {picker(busy, setMsg)}

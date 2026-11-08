@@ -4,7 +4,8 @@ import { createPublicClient, encodeFunctionData, formatUnits, getAddress, http, 
 import Avatar from "@/components/Avatar";
 import SignerScope from "@/components/wallet/SignerScope";
 import type { Member, Signer } from "@/components/wallet/types";
-import { amt, api, Logo, short, store, usd, type Holding, type TokenInfo } from "@/components/wallet/util";
+import { amt, api, Logo, short, store, usd, worth, type Holding, type TokenInfo } from "@/components/wallet/util";
+import { plainNum } from "@/lib/num-format";
 import { WCHAINS, isNative, type WChainKey, type WToken } from "@/lib/wallet-chains";
 import { DISPERSE, DISPERSE_ABI, DROP_BATCH, ERC20_DROP_ABI } from "@/lib/room-drops";
 
@@ -62,7 +63,7 @@ export default function LiveWallet({ roomId, address, sol, canAll, people, targe
     <section className="lw" aria-label="Your wallet">
       <button type="button" className="lw-h" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <span><b>💼 Your wallet</b><small className="muted">{address ? ` · ${short(address)}` : ""} · only you see this</small></span>
-        <span className="lw-total">{loaded ? usd(total) : "…"} <i aria-hidden="true">{open ? "▾" : "▸"}</i></span>
+        <span className="lw-total">{loaded ? worth(total) : "…"} <i aria-hidden="true">{open ? "▾" : "▸"}</i></span>
       </button>
       {open && (
         <>
@@ -70,7 +71,7 @@ export default function LiveWallet({ roomId, address, sol, canAll, people, targe
             <button type="button" role="tab" aria-selected={!only} className={!only ? "on" : ""} onClick={() => setOnly(null)}>All</button>
             {chains.map((k) => (
               <button key={k} type="button" role="tab" aria-selected={only === k} className={only === k ? "on" : ""} style={{ ["--net" as any]: COLOR[k] }} onClick={() => setOnly(only === k ? null : k)}>
-                <i className="lw-dot" />{WCHAINS[k].short}<small>{bal[k] === "error" ? "–" : bal[k] ? usd(chainTotal(k)) : "…"}</small>
+                <i className="lw-dot" />{WCHAINS[k].short}<small>{bal[k] === "error" ? "–" : bal[k] ? worth(chainTotal(k)) : "…"}</small>
               </button>
             ))}
           </div>
@@ -81,7 +82,7 @@ export default function LiveWallet({ roomId, address, sol, canAll, people, targe
               <div key={r.chain + r.address} className="lw-row">
                 <span className="lw-logo"><Logo t={r} size={34} /><i style={{ background: COLOR[r.chain] }} title={WCHAINS[r.chain].name} /></span>
                 <span className="grow"><b>{r.symbol}</b><small>{WCHAINS[r.chain].name}{r.priceUsd ? ` · ${usd(r.priceUsd)}` : ""}</small></span>
-                <span className="lw-num"><b>{usd(r.valueUsd)}</b><small>{amt(r.amount)} {r.symbol}</small></span>
+                <span className="lw-num"><b>{worth(r.valueUsd)}</b><small>{amt(r.amount)} {r.symbol}</small></span>
                 {r.chain !== "solana"
                   ? <button type="button" className="btn small primary" onClick={() => setSend({ chain: r.chain, token: r.address, to: null })}>Send</button>
                   : <small className="muted lw-nosend" title="Members' Solana addresses aren't linked to lives yet">View</small>}
@@ -247,7 +248,7 @@ function SendSheet({ roomId, rows, bal, initial, canAll, people, appId, member, 
           <span className="row" style={{ gap: 6 }}>
             <input value={each} inputMode="decimal" onChange={(e) => setEach(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="0.0" aria-label="Amount" disabled={busy} />
             <b>{tok.symbol}</b>
-            {have && n === 1 && <button type="button" className="btn small" disabled={busy} onClick={() => setEach(isNative(c, tok.address) ? String(Math.max(0, have.amount * 0.98)) : formatUnits(BigInt(have.raw), tok.decimals))}>Max</button>}
+            {have && n === 1 && <button type="button" className="btn small" disabled={busy} onClick={() => setEach(isNative(c, tok.address) ? plainNum(Math.max(0, have.amount * 0.98), Math.min(8, tok.decimals)) : formatUnits(BigInt(have.raw), tok.decimals))}>Max</button>}
           </span>
           <small className="muted">You have {have ? amt(have.amount) : "0"} {tok.symbol} on {c.name}{n > 1 && Number(each) > 0 ? ` · ${(Number(each) * n).toLocaleString("en-US")} ${tok.symbol} in total` : ""}. You pay the {c.native.symbol} network fee.</small>
         </label>

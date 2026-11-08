@@ -1,4 +1,5 @@
 "use client";
+import { fmtNum } from "@/lib/num-format";
 import { pickWallet } from "@/lib/connect";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -230,7 +231,7 @@ export default function AddLiquidity({ pads, chain: fixedChain, token: fixedToke
       {pool && (
         <>
           <div className="notice">
-            🪙 <b>{pool.symbol}</b> · {priced ? <>pool price 1 {pool.symbol} = {Number(formatUnits((pool.rCoin * 10n ** BigInt(pool.decimals)) / pool.rToken, 18)).toPrecision(4)} {c.coin}</> : <>no pool yet: the amounts you add set the starting price</>}
+            🪙 <b>{pool.symbol}</b> · {priced ? <>pool price 1 {pool.symbol} = {fmtNum(Number(formatUnits((pool.rCoin * 10n ** BigInt(pool.decimals)) / pool.rToken, 18)))} {c.coin}</> : <>no pool yet: the amounts you add set the starting price</>}
             {bal && <><br /><small>You have {fmt(bal.token, pool.decimals)} {pool.symbol} and {fmt(bal.coin, 18)} {c.coin}</small></>}
           </div>
           {pool.open === false && <div className="notice warn">Trading hasn&apos;t opened for this token yet, so liquidity can&apos;t be added. The creator can press Start trading first.</div>}

@@ -1,4 +1,5 @@
 "use client";
+import { fmtUsd } from "@/lib/num-format";
 /**
  * The three-column layout ("New" in Display → Layout): the menu on the left with the website (Hub) and the App's tools
  * in one place, the page in the middle, and a side column on the right (search, trending tokens, live sessions,
@@ -136,7 +137,7 @@ const TABS = [
   { id: "newest", label: "New launches" },
 ] as const;
 
-const price = (n: number | null) => n == null ? "–" : n >= 1 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : `$${n.toPrecision(3)}`;
+const price = (n: number | null) => n == null ? "–" : n >= 1 ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : fmtUsd(n);
 const when = (iso: string) => {
   const d = new Date(iso), mins = Math.round((Date.now() - d.getTime()) / 60000);
   if (mins < 60) return `${Math.max(mins, 1)}m ago`;

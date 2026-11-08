@@ -6,7 +6,7 @@ import { XCHAIN_LIST } from "@/lib/bridge-chains";
 import { ChainBadge } from "@/components/swap/parts";
 import type { Signer } from "./types";
 import { History, Receive, Send } from "./panels";
-import { amt, api, Logo, short, store, usd, type Holding } from "./util";
+import { amt, api, Logo, short, store, usd, worth, type Holding } from "./util";
 
 /** Each network's own color, for its card and badges. */
 export const CHAIN_COLOR: Record<WChainKey, string> = { bsc: "#F0B90B", base: "#0052FF", ethereum: "#627EEA", arbitrum: "#28A0F0", solana: "#9945FF" };
@@ -48,7 +48,7 @@ export default function Portfolio({ signer, onTrade }: { signer: Signer; onTrade
   const loaded = chains.every((c) => bal[c.key]);
   const total = chains.reduce((s, c) => s + (chainTotal(c.key) || 0), 0);
   const shown = only ? rows.filter((r) => r.chain === only) : rows;
-  const money = (v: number | null | undefined) => (hide ? "••••" : usd(v));
+  const money = (v: number | null | undefined) => (hide ? "••••" : worth(v));
   const copy = (a: string) => { navigator.clipboard?.writeText(a); setCopied(a); setTimeout(() => setCopied(""), 1500); };
   const defaultChain: WChainKey = only ?? rows[0]?.chain ?? (chains[0]?.key || "bsc");
 
@@ -158,7 +158,7 @@ function AssetSheet({ r, hide, logos, onClose, onSend, onReceive, onTrade }: {
         <span className="row" style={{ gap: 10 }}><span className="pf-logo"><Logo t={r} size={40} /><ChainBadge c={xOf(r.chain)} logo={logos[xOf(r.chain).id]} size={16} /></span><span><b>{r.symbol}</b><br /><small className="tx-dim">{r.name} · {c.name}</small></span></span>
         <button type="button" className="btn small" onClick={onClose}>Close</button>
       </div>
-      <div className="pf-asset-val"><b>{hide ? "••••" : usd(r.valueUsd)}</b><small>{hide ? "••" : amt(r.amount)} {r.symbol}{r.priceUsd ? ` · ${usd(r.priceUsd)} each` : ""}</small></div>
+      <div className="pf-asset-val"><b>{hide ? "••••" : worth(r.valueUsd)}</b><small>{hide ? "••" : amt(r.amount)} {r.symbol}{r.priceUsd ? ` · ${usd(r.priceUsd)} each` : ""}</small></div>
       <div className="pf-acts">
         <button type="button" className="pf-act" onClick={onSend}><span>↑</span>Send</button>
         <button type="button" className="pf-act" onClick={onReceive}><span>↓</span>Receive</button>

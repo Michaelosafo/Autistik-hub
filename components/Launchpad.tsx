@@ -1,4 +1,5 @@
 "use client";
+import { fmtNum } from "@/lib/num-format";
 import { pickWallet } from "@/lib/connect";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -448,7 +449,7 @@ function QuickLaunch({ onPlan, disabled, pads, versions = {} }: { onPlan: (p: La
   const price = poolTokens > 0 && liqN > 0 ? liqN / poolTokens : 0;
   const mcap = price * supplyN;
   const num = (n: number) => n >= 1e9 ? `${+(n / 1e9).toFixed(2)}B` : n >= 1e6 ? `${+(n / 1e6).toFixed(2)}M` : n >= 1e3 ? `${+(n / 1e3).toFixed(2)}K` : `${+n.toFixed(4)}`;
-  const tiny = (n: number) => (n === 0 ? "–" : n < 1e-6 ? n.toExponential(2) : n.toPrecision(3));
+  const tiny = (n: number) => (n === 0 ? "–" : fmtNum(n));
   const lp = LOCKS[f.lock];
   const LIQ = sol ? ["0.5", "1", "2", "5"] : f.chain === "bsc" ? ["0.1", "0.25", "0.5", "1"] : ["0.02", "0.05", "0.1", "0.25"];
   const checks: [boolean, string][] = [

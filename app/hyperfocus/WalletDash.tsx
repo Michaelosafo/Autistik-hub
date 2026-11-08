@@ -1,4 +1,5 @@
 "use client";
+import { fmtAmount } from "@/lib/num-format";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -13,7 +14,7 @@ type Holding = { chain: string; chainName: string; address: string; symbol: stri
 type Rewards = { signedIn: boolean; points: number; need: number; rank: number };
 
 const usd = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const amt = (n: number) => (n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : n >= 1 ? n.toFixed(2) : Number(n.toPrecision(3)).toString());
+const amt = (n: number) => (n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : n >= 1 ? n.toFixed(2) : fmtAmount(n));
 const short = (a: string) => (a.length > 14 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 const showTab = (t: string) => { try { history.replaceState(null, "", "#" + t); } catch {} (window as any).HFShowTab?.(t); };
 
