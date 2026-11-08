@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { LiveSlot } from "@/components/rooms/LiveDock";
 import EndedRoom from "@/components/rooms/EndedRoom";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
+import { PRIVY_APP_ID, walletMember } from "@/lib/privy-server";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Live room · AUTISTIK Hub" };
@@ -40,11 +41,14 @@ export default async function RoomPage({ params }: { params: { id: string } }) {
       </div>
     );
   }
-  const { data: me } = await sb.from("profiles").select("id,alias,color,avatar_url,is_verified,is_team,verified_badge").eq("id", user.id).maybeSingle();
+  const [{ data: me }, member] = await Promise.all([
+    sb.from("profiles").select("id,alias,color,avatar_url,is_verified,is_team,verified_badge").eq("id", user.id).maybeSingle(),
+    PRIVY_APP_ID ? walletMember().catch(() => null) : Promise.resolve(null),
+  ]);
   const info = { id: r.id, title: r.title, host_id: r.host_id, ended_at: r.ended_at, chain: r.chain ?? null, token: r.token ?? null, cohosts: r.cohosts ?? [], speakers: r.speakers ?? [] };
   return (
     <div style={{ maxWidth: 820 }}>
-      <LiveSlot room={info} me={{ id: user.id, alias: me?.alias || "Member", color: me?.color ?? null, avatar_url: me?.avatar_url ?? null, is_verified: !!(me as any)?.is_verified && !(me as any)?.is_team, verified_badge: (me as any)?.verified_badge ?? null }} />
+      <LiveSlot room={info} me={{ id: user.id, alias: me?.alias || "Member", color: me?.color ?? null, avatar_url: me?.avatar_url ?? null, is_verified: !!(me as any)?.is_verified && !(me as any)?.is_team, verified_badge: (me as any)?.verified_badge ?? null, wallet: { appId: PRIVY_APP_ID || null, member } }} />
     </div>
   );
 }

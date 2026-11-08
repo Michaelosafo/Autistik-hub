@@ -1,5 +1,6 @@
 import { createPublicClient, getAddress, http, isAddress } from "viem";
 import { json } from "@/lib/ai";
+import { rateLimit } from "@/lib/ratelimit";
 import { CHAINS, viemChain } from "@/lib/launchpad";
 import { DISPERSE, isDropChain } from "@/lib/room-drops";
 import { currentUser, supabaseService } from "@/lib/supabase/server";
@@ -8,31 +9,42 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The room, if the signed-in member runs it (host or co-host). */
-async function runner(id: string) {
+/** The room and whether the signed-in member runs it (host or co-host) or is in it. */
+async function access(id: string) {
   const me = await currentUser();
-  if (!me) return { me: null, room: null };
-  const { data } = await supabaseService().from("live_rooms").select("host_id,cohosts,ended_at").eq("id", id).maybeSingle();
-  const ok = data && (data.host_id === me.id || (data.cohosts || []).includes(me.id));
-  return { me, room: ok ? data : null };
+  if (!me) return { me: null, room: null, runs: false, inRoom: false };
+  const sb = supabaseService();
+  const [{ data }, { data: m }] = await Promise.all([
+    sb.from("live_rooms").select("host_id,cohosts,ended_at").eq("id", id).maybeSingle(),
+    sb.from("live_room_members").select("user_id").eq("room_id", id).eq("user_id", me.id).maybeSingle(),
+  ]);
+  const runs = !!data && (data.host_id === me.id || (data.cohosts || []).includes(me.id));
+  return { me, room: data, runs, inRoom: runs || !!m };
 }
 
 /**
- * Host or co-host only. Everyone who joined the room has a wallet linked to their account (the join gate makes sure).
- * ?count=1: how many. ?user=ID: one person's wallet (send to them by tapping their picture). Otherwise: all of them, so
- * the sender's wallet can send the drop. Addresses are never shown in the room; the sender is left out.
+ * Everyone who joined the room has a wallet linked to their account (the join gate makes sure).
+ * ?user=ID: one person's wallet, so anyone in the room can send them tokens (tap their picture, or Send in their wallet).
+ * ?count=1 / no query: everyone's wallets, for the host and co-hosts to drop to the whole room at once.
+ * Addresses are only handed to the sender's own browser for the transaction, never shown in the room.
  */
 export async function GET(req: Request, { params }: { params: { id: string } }) {
   if (!UUID.test(params.id)) return json({ error: "Unknown room." }, 404);
-  const { me, room } = await runner(params.id);
+  const { me, room, runs, inRoom } = await access(params.id);
   if (!me) return json({ error: "Sign in first." }, 401);
-  if (!room) return json({ error: "Only the host and co-hosts can send drops." }, 403);
+  if (!room || !inRoom) return json({ error: "Join the live first." }, 403);
   const sb = supabaseService();
   const q = new URL(req.url).searchParams;
   const one = q.get("user");
+  if (!one && !runs) return json({ error: "Only the host and co-hosts can send to everyone at once." }, 403);
   let ids: string[];
   if (one) {
     if (!UUID.test(one)) return json({ error: "Unknown person." }, 400);
+    const slow = await rateLimit(req, "room-send-to", 40, 600, me.id);
+    if (slow) return slow;
+    const { data: there } = await sb.from("live_room_members").select("user_id").eq("room_id", params.id).eq("user_id", one).maybeSingle();
+    const { data: r } = await sb.from("live_rooms").select("host_id,cohosts").eq("id", params.id).maybeSingle();
+    if (!there && r?.host_id !== one && !(r?.cohosts || []).includes(one)) return json({ error: "That person isn't in this live." }, 404);
     ids = [one];
   } else {
     const { data } = await sb.from("live_room_members").select("user_id").eq("room_id", params.id).limit(5000);
@@ -55,12 +67,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   return json({ count: wallets.length, recipients: wallets });
 }
 
-/** The sender records a drop (checked on-chain), so the room can show it. */
+/** The sender records a send (checked on-chain), so the room can show it. */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   if (!UUID.test(params.id)) return json({ error: "Unknown room." }, 404);
-  const { me, room } = await runner(params.id);
+  const { me, room, inRoom } = await access(params.id);
   if (!me) return json({ error: "Sign in first." }, 401);
-  if (!room) return json({ error: "Only the host and co-hosts can send drops." }, 403);
+  if (!room || !inRoom) return json({ error: "Join the live first." }, 403);
   const b = await req.json().catch(() => ({}));
   if (!isDropChain(b.chain) || !/^0x[0-9a-fA-F]{64}$/.test(String(b.txHash)) || !(b.token === "native" || isAddress(b.token))) return json({ error: "Missing details." }, 400);
   const c = CHAINS[b.chain];

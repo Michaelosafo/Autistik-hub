@@ -26,5 +26,5 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   if (!address) return json({ wallet: false, canCreate: !!(user.email && user.email_confirmed_at) });
   await sb.from("live_room_members").upsert({ room_id: params.id, user_id: user.id, joined_at: new Date().toISOString() });
   const a = getAddress(address);
-  return json({ wallet: true, short: `${a.slice(0, 6)}…${a.slice(-4)}` });
+  return json({ wallet: true, short: `${a.slice(0, 6)}…${a.slice(-4)}`, address: a }); // only to the member themselves
 }

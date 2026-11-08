@@ -9,7 +9,7 @@ const PrivyWallet = dynamic(() => import("./PrivyWallet"), { ssr: false, loading
 const BrowserWallet = dynamic(() => import("./BrowserWallet"), { ssr: false, loading });
 
 /** If the built-in wallet can't start (e.g. a wrong app ID in the settings), fall back to outside wallets instead of a blank page. */
-class Fallback extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+export class Fallback extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   componentDidCatch(e: unknown) { console.error("Built-in wallet failed to start:", e); }

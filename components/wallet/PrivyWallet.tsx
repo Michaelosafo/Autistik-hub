@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { PrivyProvider, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useExportWallet as useSolExport, useSignTransaction, useWallets as useSolWallets } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
@@ -26,7 +26,16 @@ const SOL_RPC = WCHAINS.solana.rpc;
  */
 export default function PrivyWallet({ appId, member, start, app }: { appId: string; member: Member | null; start: Start; app?: "wallet" | "stake" | "swap" }) {
   return (
-    <PrivyProvider appId={appId} config={{
+    <PrivyProvider appId={appId} config={privyConfig()}>
+      <Inner member={member} start={start} app={app} />
+    </PrivyProvider>
+  );
+}
+
+
+/** Privy's settings for the built-in AUTISTIK wallet (the wallet page and the live rooms use the same ones). */
+function privyConfig(): any {
+  return {
       // Only the email they joined the Hub with (a code is sent to it), or their own wallet.
       loginMethods: ["email", "wallet"],
       appearance: {
@@ -43,10 +52,7 @@ export default function PrivyWallet({ appId, member, start, app }: { appId: stri
       supportedChains: XCHAIN_LIST.filter((c) => c.viem).map((c) => c.viem),
       defaultChain: bsc,
       solana: { rpcs: { "solana:mainnet": { rpc: createSolanaRpc(SOL_RPC), rpcSubscriptions: createSolanaRpcSubscriptions(SOL_RPC.replace(/^http/, "ws")), blockExplorerUrl: "https://solscan.io" } } },
-    }}>
-      <Inner member={member} start={start} app={app} />
-    </PrivyProvider>
-  );
+  };
 }
 
 const typedJson = (typed: { domain: any; types: any; primaryType: string; message: any }) => JSON.stringify({
@@ -92,7 +98,8 @@ const fromPrivy = (ev: any): Signer["evm"] => ev ? {
   },
 } : null;
 
-function Inner({ member, start, app }: { member: Member | null; start: Start; app?: "wallet" | "stake" | "swap" }) {
+/** The member's wallet as a Signer: the built-in AUTISTIK wallet or one they connected. */
+function useHubSigner(member: Member | null): { signer: Signer; gate: ReactNode | null; note: ReactNode | null } {
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
   const { wallets: solWallets } = useSolWallets();
@@ -155,9 +162,23 @@ function Inner({ member, start, app }: { member: Member | null; start: Start; ap
   // An authenticator app is required before the built-in wallet can be used (Privy then asks for its code to sign).
   const usesBuilt = (!!evmBuilt && evm === evmBuilt) || (!!solEmbedded && sw === solEmbedded);
   const hasAuthenticator = enrolled || !!user?.mfaMethods?.includes("totp");
-  if (ready && authenticated && usesBuilt && !hasAuthenticator) {
-    return <AuthenticatorGate email={privyEmail} onDone={() => setEnrolled(true)} onSignOut={signer.logout} />;
-  }
+  const gate = ready && authenticated && usesBuilt && !hasAuthenticator ? <AuthenticatorGate email={privyEmail} onDone={() => setEnrolled(true)} onSignOut={signer.logout} /> : null;
   const note = mismatch ? <div className="notice warn" role="alert">{mismatch}</div> : null;
+  return { signer, gate, note };
+}
+
+function Inner({ member, start, app }: { member: Member | null; start: Start; app?: "wallet" | "stake" | "swap" }) {
+  const { signer, gate, note } = useHubSigner(member);
+  if (gate) return <>{gate}</>;
   return <>{note}{app === "stake" ? <StakeApp signer={signer} start={start} /> : app === "swap" ? <SwapApp signer={signer} start={start} /> : <WalletApp signer={signer} start={start} member={member} />}</>;
+}
+
+/** The member's wallet for other screens (live rooms): gives the Signer to its children. */
+export function PrivySigner({ appId, member, children }: { appId: string; member: Member | null; children: (s: Signer) => ReactNode }) {
+  return <PrivyProvider appId={appId} config={privyConfig()}><SignerInner member={member}>{children}</SignerInner></PrivyProvider>;
+}
+function SignerInner({ member, children }: { member: Member | null; children: (s: Signer) => ReactNode }) {
+  const { signer, gate, note } = useHubSigner(member);
+  if (gate) return <>{gate}</>;
+  return <>{note}{children(signer)}</>;
 }

@@ -56,12 +56,12 @@ export default function ProfileSheet({ id, alias, onClose, act }: { id: string; 
           {c?.me ? <Link className="btn small" href="/me">✏️ Edit profile</Link>
             : <button type="button" className={"btn small" + (c?.iFollow ? "" : " primary")} disabled={!c || busy} onClick={follow}>{c?.iFollow ? "Following ✓" : "+ Follow"}</button>}
           {c?.handle && <Link className="btn small" href={`/u/${c.handle}`} target="_blank">Full profile</Link>}
+          {c && !c.me && <button type="button" className="btn small primary" onClick={act.send}>🎁 Send tokens</button>}
         </div>
         {act.canRun && !c?.me && (
           <div className="lv-sheet-run">
             <small className="muted">Run the live</small>
             <div className="lv-sheet-btns">
-              <button type="button" className="btn small primary" onClick={act.send}>🎁 Send tokens</button>
               {act.role === "listener" && <button type="button" className="btn small" onClick={act.invite}>🎙️ Invite to speak</button>}
               {act.role !== "listener" && act.role !== "host" && !act.muted && act.mute && <button type="button" className="btn small" onClick={act.mute}>🔇 Mute</button>}
               {act.role === "speaker" && <button type="button" className="btn small" onClick={act.moveDown}>↓ Move to listeners</button>}
