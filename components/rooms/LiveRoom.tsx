@@ -8,13 +8,16 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import Emo from "@/components/Emo";
 import SpeakerOut from "./SpeakerOut";
 import Ctl, { MicBtn } from "./Ctl";
+import LiveChat from "./LiveChat";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type Me = { id: string; alias: string; color: string | null; avatar_url: string | null; is_verified?: boolean; verified_badge?: number | null };
+export type LiveMe = { id: string; alias: string; color: string | null; avatar_url: string | null; is_verified?: boolean; verified_badge?: number | null };
+export type LiveRoomInfo = { id: string; title: string; host_id: string; ended_at: string | null; chain?: string | null; token?: string | null; cohosts?: string[] | null; speakers?: string[] | null };
+type Me = LiveMe;
+type Room = LiveRoomInfo;
 type Role = "host" | "cohost" | "speaker" | "listener";
 type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number; ver?: boolean; vb?: number | null };
-type Room = { id: string; title: string; host_id: string; ended_at: string | null; chain?: string | null; token?: string | null; cohosts?: string[] | null };
 
 // Connection helpers. STUN finds each phone's public address; a TURN relay (from /api/rooms/ice, when set up) carries
 // the voice when two networks won't connect directly, which is common on mobile data.
@@ -32,6 +35,16 @@ const MAX_STAGE = 8; // host + co-hosts + speakers
 const MAX_COHOSTS = 3;
 const REACTIONS = ["🚀", "💎", "❤️", "😂", "👏", "🔥"];
 const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** A tiny silent sound, played on the Join tap so phones (iPhone especially) let the room's voices play later. */
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+/** Remembers the live you're in, so coming back to the site takes you straight back in. */
+export const LIVE_KEY = "live-in";
+export function rememberLive(id: string, title: string) { try { localStorage.setItem(LIVE_KEY, JSON.stringify({ id, title, t: Date.now() })); } catch {} }
+export function forgetLive(id?: string) { try { const c = JSON.parse(localStorage.getItem(LIVE_KEY) || "null"); if (!id || c?.id === id) localStorage.removeItem(LIVE_KEY); } catch {} }
+export function rememberedLive(): { id: string; title: string; t: number } | null {
+  try { const c = JSON.parse(localStorage.getItem(LIVE_KEY) || "null"); return c && Date.now() - c.t < 8 * 3600e3 ? c : null; } catch { return null; }
+}
 
 /** A live video tile (a speaker's camera). */
 function VideoTile({ stream, mine, label }: { stream: MediaStream; mine?: boolean; label: string }) {
@@ -41,24 +54,40 @@ function VideoTile({ stream, mine, label }: { stream: MediaStream; mine?: boolea
   return <div className="room-video"><video ref={ref} autoPlay playsInline muted style={mine ? { transform: "scaleX(-1)" } : undefined} /><small>{label}</small></div>;
 }
 
+function MicIcon({ off }: { off: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {off ? <path d="M15 9.3V6a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 4.6 2.5M5 11a7 7 0 0 0 11.3 5.5M19 11a7 7 0 0 1-.6 2.8M12 18v3M3 3l18 18" />
+        : <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></>}
+    </svg>
+  );
+}
+
 /**
- * A live room (voice, camera optional), like an X Space, built for launches.
- *  - Everyone joins with a wallet linked to their account (WalletGate), kept private, so the host can drop tokens to
- *    everyone at once or to one person by tapping their picture.
- *  - The host can make up to 3 co-hosts to run the call with them (invite speakers, move people down, send drops).
- *  - The room shows pictures and follower counts only; tap a picture for the person's card (posts, coins, follow).
+ * A live room (voice, camera optional for coin lives).
+ *  - Everyone joins with a wallet linked to their account (WalletGate), kept private, so the host can drop tokens.
+ *  - Listeners speak only when the host (or a co-host) invites them, or when the host turns on Open mic.
+ *  - The host can mute one speaker or everyone, make up to 3 co-hosts, and record the live (saved to their profile,
+ *    the room's page, and their own device).
+ *  - Comments, pictures and emoji go in the room's chat, kept after the live ends.
+ *  - The live keeps playing while you move around the site (LiveDock shows a small player), and coming back to the
+ *    site takes you back into a live you didn't leave.
  * Voice and video go straight between browsers (WebRTC); the site only passes the connection messages (Supabase
- * Realtime). Nothing is recorded.
+ * Realtime).
  */
-export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
+export default function LiveRoom({ room, me, mini = false, autoJoin = false, onState }: {
+  room: Room; me: Me; mini?: boolean; autoJoin?: boolean; onState?: (s: { joined: boolean; ended: boolean }) => void;
+}) {
   const isHost = me.id === room.host_id;
   // Video is for lives about a coin launch (rooms linked to a coin); other lives are voice only.
   const coinLive = !!(room.token && room.chain);
   const [ready, setReady] = useState<string | null>(null); // my wallet is linked (short address, shown only to me)
   const [joined, setJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [peers, setPeers] = useState<Record<string, Peer>>({});
-  const [speakers, setSpeakers] = useState<string[]>([room.host_id]);
+  const [speakers, setSpeakers] = useState<string[]>([...new Set([room.host_id, ...(room.speakers || [])])]);
   const [cohosts, setCohosts] = useState<string[]>(room.cohosts || []);
+  const [openMic, setOpenMic] = useState(false); // host setting: anyone can come up to speak without waiting
   const [hand, setHand] = useState(false);
   const [muted, setMuted] = useState(true);
   const [ended, setEnded] = useState(!!room.ended_at);
@@ -71,15 +100,17 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const [sheet, setSheet] = useState<Peer | null>(null);
   const [sendTo, setSendTo] = useState<{ id: string; alias: string } | null>(null);
   const [floaters, setFloaters] = useState<{ k: number; e: string; x: number; big?: boolean }[]>([]);
+  const [needTap, setNeedTap] = useState(false);
   // 🔥 MORE FIRE: the room's signature reaction. Everyone sees a burst of flames and the counter climbs.
   const [fires, setFires] = useState(0);
   const [blaze, setBlaze] = useState(false);
-  // Recording (host only): everyone's voice mixed into one audio file, saved to the host's profile when stopped.
+  // Recording (host only): everyone's voice mixed into one audio file, saved when stopped.
   const [rec, setRec] = useState(false); // I'm recording (host)
   const [recOn, setRecOn] = useState(false); // the room is being recorded (everyone sees 🔴 REC)
   const [recSecs, setRecSecs] = useState(0);
-  const [saved, setSaved] = useState<{ id: string; pinned: boolean } | null>(null);
+  const [saved, setSaved] = useState<{ id: string; pinned: boolean; url: string } | null>(null);
   const [saving, setSaving] = useState("");
+  const [local, setLocal] = useState<{ url: string; name: string } | null>(null); // the last recording, to save on this device
 
   const chan = useRef<any>(null);
   const mic = useRef<MediaStream | null>(null);
@@ -93,41 +124,85 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const recBytes = useRef(0);
   const recStart = useRef(0);
   const audios = useRef(new Map<string, HTMLAudioElement>());
+  const pool = useRef<HTMLAudioElement[]>([]);
   const allAudios = useCallback(() => [...audios.current.values()], []);
   const speakersRef = useRef(speakers);
   speakersRef.current = speakers;
   const cohostsRef = useRef(cohosts);
   cohostsRef.current = cohosts;
+  const openRef = useRef(openMic);
+  openRef.current = openMic;
+  const joinedRef = useRef(joined);
+  joinedRef.current = joined;
 
   const isCohost = cohosts.includes(me.id);
   const canRun = isHost || isCohost;
   const roleOf = useCallback((id: string): Role => (id === room.host_id ? "host" : cohosts.includes(id) ? "cohost" : speakers.includes(id) ? "speaker" : "listener"), [room.host_id, cohosts, speakers]);
   const myRole = roleOf(me.id);
   const canSpeak = myRole !== "listener";
+  const onStageNow = (id: string) => id === room.host_id || speakersRef.current.includes(id) || cohostsRef.current.includes(id);
+
+  useEffect(() => { onState?.({ joined, ended }); }, [joined, ended]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function send(event: string, payload: any) { chan.current?.send({ type: "broadcast", event, payload: { ...payload, from: me.id } }); }
+
+  // ---- sound out: a few audio players made on the Join tap, so phones allow them to play the voices later.
+  function makeAudio() {
+    const a = document.createElement("audio");
+    a.autoplay = true; (a as any).playsInline = true; a.setAttribute("playsinline", "");
+    a.style.display = "none";
+    document.body.appendChild(a);
+    return a;
+  }
+  function unlockAudio() {
+    while (pool.current.length + audios.current.size < MAX_STAGE + 2) pool.current.push(makeAudio());
+    for (const a of pool.current) { if (!a.srcObject) { a.src = SILENT; a.play().catch(() => {}); } }
+    for (const a of audios.current.values()) if (a.paused) a.play().catch(() => {});
+    try { const c = meterCtx(); if (c.state === "suspended") c.resume().catch(() => {}); } catch {}
+    setNeedTap(false);
+  }
+  function takeAudio() {
+    const a = pool.current.pop() || makeAudio();
+    a.pause(); a.removeAttribute("src");
+    return a;
+  }
+  function giveBack(a: HTMLAudioElement) {
+    try { a.pause(); } catch {}
+    a.srcObject = null; a.muted = false;
+    pool.current.push(a);
+  }
 
   function closePc(key: string) {
     const pc = pcs.current.get(key);
     if (pc) { try { pc.close(); } catch {} pcs.current.delete(key); }
     pendingIce.current.delete(key);
     const a = audios.current.get(key);
-    if (a) { a.srcObject = null; a.remove(); audios.current.delete(key); }
+    if (a) { audios.current.delete(key); giveBack(a); }
     voices.current.delete(key);
     try { mixSrc.current.get(key)?.disconnect(); } catch {}
     mixSrc.current.delete(key);
     const [from, to] = key.split(">");
-    if (to === me.id) setVideos((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
+    if (to === me.id) {
+      setVideos((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
+      levels.current.get(from)?.(); levels.current.delete(from);
+    }
   }
 
-  // Connection details that arrive before the other side's offer/answer is applied wait here (they used to be dropped,
-  // which often left phones on mobile data unable to connect: no sound).
+  // Connection details that arrive before the other side's offer/answer is applied wait here.
   const pendingIce = useRef(new Map<string, RTCIceCandidateInit[]>());
   const retries = useRef(new Map<string, number>());
   async function flushIce(key: string, pc: RTCPeerConnection) {
     const q = pendingIce.current.get(key);
     pendingIce.current.delete(key);
     for (const c of q || []) await pc.addIceCandidate(c).catch(() => {});
+  }
+
+  function retry(key: string, to: string) {
+    const n = (retries.current.get(key) || 0) + 1;
+    if (n > 5 || !mic.current || !joinedRef.current) return false;
+    retries.current.set(key, n);
+    callPeer(to);
+    return true;
   }
 
   function newPc(key: string, remote: string) {
@@ -143,11 +218,11 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
         return;
       }
       let a = audios.current.get(key);
-      if (!a) { a = document.createElement("audio"); a.autoplay = true; (a as any).playsInline = true; document.body.appendChild(a); audios.current.set(key, a); }
+      if (!a) { a = takeAudio(); audios.current.set(key, a); }
       a.srcObject = e.streams[0] || new MediaStream([e.track]);
       voices.current.set(key, a.srcObject as MediaStream);
       if (recorder.current) mixIn(key, a.srcObject as MediaStream);
-      a.play().catch(() => setMsg("Tap anywhere to hear the room."));
+      a.play().catch(() => { setNeedTap(true); });
       watchLevel(remote, a.srcObject as MediaStream);
     };
     pc.onconnectionstatechange = () => {
@@ -158,9 +233,8 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       setTimeout(() => {
         if (pcs.current.get(key) !== pc || pc.connectionState === "connected") return;
         const [from, to] = key.split(">");
-        const n = (retries.current.get(key) || 0) + 1;
-        if (from === me.id && n <= 4 && mic.current) { retries.current.set(key, n); callPeer(to); }
-        else if (pc.connectionState === "failed") { closePc(key); if (to === me.id) setMsg("A voice couldn't connect on this network. Try Wi-Fi, or leave and rejoin."); }
+        if (from === me.id && retry(key, to)) return;
+        if (pc.connectionState === "failed") { closePc(key); if (to === me.id) setMsg("A voice couldn't connect on this network. Try Wi-Fi, or leave and rejoin."); }
       }, st === "failed" ? 800 : 4000);
     };
     return pc;
@@ -177,23 +251,31 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     send("offer", { to, key, sdp: pc.localDescription });
+    // No answer (the message got lost, or they weren't ready yet): call again.
+    setTimeout(() => { if (pcs.current.get(key) === pc && pc.signalingState === "have-local-offer") retry(key, to); }, 6000);
   }
 
-  // Who's talking: a simple loudness meter per voice.
+  // Who's talking: a simple loudness meter per voice, all on one shared audio engine (phones allow only a few).
+  const meter = useRef<AudioContext | null>(null);
+  function meterCtx() {
+    if (!meter.current) meter.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    return meter.current;
+  }
   const levels = useRef(new Map<string, () => void>());
   function watchLevel(id: string, stream: MediaStream) {
     levels.current.get(id)?.();
     try {
-      const ctx = new AudioContext();
+      const ctx = meterCtx();
       const an = ctx.createAnalyser(); an.fftSize = 256;
-      ctx.createMediaStreamSource(stream).connect(an);
+      const src = ctx.createMediaStreamSource(stream);
+      src.connect(an);
       const buf = new Uint8Array(an.frequencyBinCount);
       const t = setInterval(() => {
         an.getByteFrequencyData(buf);
         const v = buf.reduce((s, x) => s + x, 0) / buf.length;
         setTalking((m) => (m[id] === v > 18 ? m : { ...m, [id]: v > 18 }));
       }, 250);
-      levels.current.set(id, () => { clearInterval(t); ctx.close().catch(() => {}); });
+      levels.current.set(id, () => { clearInterval(t); try { src.disconnect(); } catch {} });
     } catch { /* no meter on this browser */ }
   }
 
@@ -239,7 +321,9 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const runners = () => [room.host_id, ...cohostsRef.current];
 
   async function join() {
-    setMsg("");
+    if (chan.current || joining) return;
+    setMsg(""); setJoining(true);
+    unlockAudio();
     const sb = supabaseBrowser();
     const ch = sb.channel(`room:${room.id}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
     chan.current = ch;
@@ -250,23 +334,31 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       setPeers(next);
       for (const k of [...pcs.current.keys()]) { const [a, b] = k.split(">"); if (!next[a] || !next[b]) closePc(k); }
       // The host's lists of speakers and co-hosts are the ones that count.
-      const h = st[room.host_id]?.[0];
-      if (h?.speakers && !isHost) setSpeakers(h.speakers);
-      if (h?.cohosts && !isHost) setCohosts(h.cohosts);
-      if (!isHost) setRecOn(!!h?.rec);
+      const h = st[room.host_id]?.[st[room.host_id].length - 1];
+      if (h && !isHost) {
+        if (h.speakers) { setSpeakers(h.speakers); speakersRef.current = h.speakers; }
+        if (h.cohosts) { setCohosts(h.cohosts); cohostsRef.current = h.cohosts; }
+        setRecOn(!!h.rec);
+        setOpenMic(!!h.open);
+      }
     });
     ch.on("broadcast", { event: "offer" }, async ({ payload }: any) => {
-      // Voice only from people on stage (host, co-hosts, speakers).
-      if (payload.to !== me.id || !(speakersRef.current.includes(payload.from) || runners().includes(payload.from))) return;
+      if (payload.to !== me.id) return;
+      // Voice only from people on stage. A new speaker's call can arrive a moment before the news that they were
+      // invited up: wait a few seconds for it instead of dropping the call (that left people unable to hear them).
+      for (let i = 0; i < 25 && !onStageNow(payload.from); i++) await sleep(300);
+      if (!onStageNow(payload.from) || !chan.current) return;
       await loadIce();
       const early = pendingIce.current.get(payload.key);
       const pc = newPc(payload.key, payload.from);
       if (early) pendingIce.current.set(payload.key, early);
-      await pc.setRemoteDescription(payload.sdp);
-      await flushIce(payload.key, pc);
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      send("answer", { to: payload.from, key: payload.key, sdp: pc.localDescription });
+      try {
+        await pc.setRemoteDescription(payload.sdp);
+        await flushIce(payload.key, pc);
+        const ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        send("answer", { to: payload.from, key: payload.key, sdp: pc.localDescription });
+      } catch { closePc(payload.key); }
     });
     ch.on("broadcast", { event: "answer" }, async ({ payload }: any) => {
       if (payload.to !== me.id) return;
@@ -291,7 +383,14 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       setSpeakers(payload.speakers); speakersRef.current = payload.speakers;
       if (isHost) track("host", false, mutedRef.current);
     });
-    ch.on("broadcast", { event: "cohosts" }, ({ payload }: any) => { if (payload.from === room.host_id) setCohosts(payload.cohosts); });
+    ch.on("broadcast", { event: "cohosts" }, ({ payload }: any) => { if (payload.from === room.host_id) { setCohosts(payload.cohosts); cohostsRef.current = payload.cohosts; } });
+    ch.on("broadcast", { event: "open" }, ({ payload }: any) => { if (payload.from === room.host_id) setOpenMic(!!payload.on); });
+    // Muted by the host or a co-host (one person, or everyone on stage). You can unmute again yourself.
+    ch.on("broadcast", { event: "mute" }, ({ payload }: any) => {
+      if (!runners().includes(payload.from) || (payload.to !== me.id && payload.to !== "*") || payload.from === me.id) return;
+      if (payload.to === "*" && me.id === room.host_id) return;
+      if (!mutedRef.current) { setMicOn(false); setMsg(payload.to === "*" ? "The host muted everyone. Tap your mic to talk again." : "The host muted you. Tap your mic to talk again."); }
+    });
     ch.on("broadcast", { event: "cam" }, ({ payload }: any) => {
       if (payload.on === false) setVideos((v) => { const n = { ...v }; delete n[payload.from]; return n; });
     });
@@ -301,21 +400,32 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     ch.on("broadcast", { event: "react" }, ({ payload }: any) => { if (REACTIONS.includes(payload.e)) float(payload.e); });
     ch.on("broadcast", { event: "end" }, ({ payload }: any) => { if (payload.from === room.host_id) { setEnded(true); leave(); } });
     ch.subscribe(async (status: string) => {
-      if (status !== "SUBSCRIBED") { if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setMsg("Couldn't connect to the room. Check your internet and try again."); return; }
+      if (status !== "SUBSCRIBED") {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setMsg("Couldn't connect to the room. Check your internet and try again."); setJoining(false); try { ch.unsubscribe(); } catch {} chan.current = null; }
+        return;
+      }
+      if (joinedRef.current) { await track(myRoleRef.current, false, mutedRef.current); return; } // reconnected
       if (isHost) await startMic();
       await track(isHost ? "host" : "listener", false, true);
-      setJoined(true);
-      if (isHost) setMsg("You're live but muted. Tap the mic to talk.");
+      setJoined(true); setJoining(false);
+      rememberLive(room.id, room.title);
+      if (isHost) setMsg("You're live but muted. Tap the mic under your picture to talk.");
     });
   }
 
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const myRoleRef = useRef(myRole);
+  myRoleRef.current = myRole;
   async function track(role: Role, h: boolean, m: boolean) {
-    await chan.current?.track({ alias: me.alias, color: me.color, avatar_url: me.avatar_url, ver: !!me.is_verified, vb: me.verified_badge ?? null, role, hand: h, muted: m, at: Date.now(), ...(isHost ? { speakers: speakersRef.current, cohosts: cohostsRef.current, rec: !!recorder.current } : {}) });
+    await chan.current?.track({ alias: me.alias, color: me.color, avatar_url: me.avatar_url, ver: !!me.is_verified, vb: me.verified_badge ?? null, role, hand: h, muted: m, at: Date.now(), ...(isHost ? { speakers: speakersRef.current, cohosts: cohostsRef.current, rec: !!recorder.current, open: openRef.current } : {}) });
   }
 
+  // Back to the site after leaving it: go straight back into the live you were in.
+  useEffect(() => { if (autoJoin && ready && !joined && !ended && !chan.current) join(); }, [autoJoin, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // My role changed (invited up or moved down): start or stop sending my voice.
+  const wasSpeaker = useRef(false);
   useEffect(() => {
     if (!joined) return;
     (async () => {
@@ -323,8 +433,10 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
         if (await startMic()) Object.keys(peers).forEach((id) => { if (id !== me.id && !pcs.current.has(`${me.id}>${id}`)) callPeer(id); });
         setPeers((p) => ({ ...p }));
         setHand(false);
-      } else if (mic.current) stopMic();
-      await track(myRole, canSpeak ? false : hand, muted);
+        if (!isHost && !wasSpeaker.current) setMsg("You're on stage. Tap the mic under your picture to talk.");
+      } else if (mic.current) { stopMic(); setMuted(true); if (wasSpeaker.current) setMsg("You're listening again."); }
+      wasSpeaker.current = canSpeak;
+      await track(myRole, canSpeak ? false : hand, canSpeak ? mutedRef.current : true);
     })();
   }, [joined, myRole]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -333,6 +445,11 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     if (!joined || !canSpeak || !mic.current) return;
     Object.keys(peers).forEach((id) => { if (id !== me.id && !pcs.current.has(`${me.id}>${id}`)) callPeer(id); });
   }, [peers, joined, canSpeak]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Someone moved back to listening: stop playing their voice here.
+  useEffect(() => {
+    for (const k of [...pcs.current.keys()]) { const [from, to] = k.split(">"); if (to === me.id && !onStageNow(from)) closePc(k); }
+  }, [speakers, cohosts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Follower counts for the pictures (public numbers), fetched for new faces only.
   const asked = useRef(new Set<string>());
@@ -343,43 +460,91 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     fetch(`/api/rooms/followers?ids=${fresh.slice(0, 80).join(",")}`).then((r) => r.json()).then((m) => setFollowers((f) => ({ ...f, ...m }))).catch(() => {});
   }, [peers]);
 
-  function leave() {
+  // Lock screen / notification shade: show what's playing, so the phone treats the live like a call or a podcast.
+  useEffect(() => {
+    const ms = (navigator as any).mediaSession;
+    if (!ms || typeof (window as any).MediaMetadata === "undefined") return;
+    if (joined) {
+      try { ms.metadata = new (window as any).MediaMetadata({ title: room.title, artist: "AUTISTIK Live", artwork: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] }); ms.playbackState = "playing"; } catch {}
+    } else { try { ms.metadata = null; ms.playbackState = "none"; } catch {} }
+  }, [joined, room.title]);
+
+  // Coming back to the page after the phone was locked or the app was in the background: wake the sound up.
+  useEffect(() => {
+    if (!joined) return;
+    const wake = () => {
+      if (document.visibilityState !== "visible") return;
+      audios.current.forEach((a) => { if (a.paused) a.play().catch(() => setNeedTap(true)); });
+      if (meter.current?.state === "suspended") meter.current.resume().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("pageshow", wake);
+    return () => { document.removeEventListener("visibilitychange", wake); window.removeEventListener("pageshow", wake); };
+  }, [joined]);
+
+  function leave(forget = true) {
     stopMic();
     for (const k of [...pcs.current.keys()]) closePc(k);
     levels.current.forEach((f) => f()); levels.current.clear();
-    chan.current?.unsubscribe(); chan.current = null;
-    setJoined(false); setPeers({});
+    try { chan.current?.unsubscribe(); } catch {}
+    chan.current = null;
+    setJoined(false); setJoining(false); setPeers({}); setHand(false);
+    if (forget) forgetLive(room.id);
   }
-  useEffect(() => () => leave(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (recorder.current) { try { recorder.current.stop(); } catch {} }
+    leave(false);
+    for (const a of pool.current) a.remove();
+    pool.current = [];
+    meter.current?.close().catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function toggleMute() {
-    const next = !muted;
-    mic.current?.getAudioTracks().forEach((t) => (t.enabled = !next));
-    setMuted(next); track(myRole, false, next);
+  function setMicOn(on: boolean) {
+    mic.current?.getAudioTracks().forEach((t) => (t.enabled = on));
+    setMuted(!on); mutedRef.current = !on;
+    track(myRoleRef.current, false, !on);
   }
-  function raiseHand() { const h = !hand; setHand(h); track(myRole, h, true); }
+  function toggleMute() {
+    if (!canSpeak) return;
+    if (!mic.current) { startMic().then((ok) => ok && setMicOn(true)); return; }
+    setMicOn(!!mutedRef.current);
+  }
+  function raiseHand() { const h = !hand; setHand(h); track(myRole, h, true); if (h) setMsg(openMic ? "Coming up to speak…" : "Hand raised. The host can invite you up to speak."); }
 
   // ---- running the stage (host and co-hosts)
   async function setSpeakerList(list: string[]) {
     setSpeakers(list); speakersRef.current = list;
     send("speakers", { speakers: list });
-    if (isHost) await track("host", false, muted);
+    if (isHost) {
+      await track("host", false, mutedRef.current);
+      supabaseBrowser().from("live_rooms").update({ speakers: list.filter((x) => x !== room.host_id) }).eq("id", room.id).then(() => {}, () => {});
+    }
   }
   const stageCount = () => new Set([room.host_id, ...cohostsRef.current, ...speakersRef.current]).size;
-  const invite = (id: string) => { if (stageCount() >= MAX_STAGE) { setMsg(`Up to ${MAX_STAGE} people on stage at a time.`); return; } setSpeakerList([...new Set([...speakers, id])]); };
-  const moveDown = (id: string) => setSpeakerList(speakers.filter((s) => s !== id));
+  const invite = (id: string) => { if (speakersRef.current.includes(id)) return; if (stageCount() >= MAX_STAGE) { setMsg(`Up to ${MAX_STAGE} people on stage at a time.`); return; } setSpeakerList([...new Set([...speakersRef.current, id])]); };
+  const moveDown = (id: string) => setSpeakerList(speakersRef.current.filter((s) => s !== id));
   async function setCohostList(list: string[]) {
     setCohosts(list); cohostsRef.current = list;
     send("cohosts", { cohosts: list });
     await supabaseBrowser().from("live_rooms").update({ cohosts: list }).eq("id", room.id);
-    await track("host", false, muted);
+    await track("host", false, mutedRef.current);
   }
   const makeCohost = (id: string) => {
     if (cohosts.length >= MAX_COHOSTS) { setMsg(`Up to ${MAX_COHOSTS} co-hosts.`); return; }
     setCohostList([...cohosts, id]);
-    if (!speakers.includes(id)) setSpeakerList([...speakers, id]);
+    if (!speakersRef.current.includes(id)) setSpeakerList([...speakersRef.current, id]);
   };
   const removeCohost = (id: string) => setCohostList(cohosts.filter((c) => c !== id));
+  const muteOne = (id: string) => { send("mute", { to: id }); setMsg("Muted. They can unmute again if they need to."); };
+  const muteAll = () => { send("mute", { to: "*" }); setMsg("Everyone on stage is muted."); };
+  function toggleOpen() {
+    const on = !openMic;
+    setOpenMic(on); openRef.current = on;
+    send("open", { on });
+    track("host", false, mutedRef.current);
+    setMsg(on ? "Open mic: anyone can come up to speak (up to 8 on stage). Their mic starts muted." : "Invite only: people raise a hand and you invite them to speak.");
+  }
+
   // ---- recording (host only)
   function mixIn(key: string, stream: MediaStream) {
     if (!mixCtx.current || !mixDest.current || mixSrc.current.has(key) || !stream.getAudioTracks().length) return;
@@ -387,9 +552,10 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   }
   async function startRec() {
     if (recorder.current || !isHost) return;
-    if (!confirm("Record this live? Everyone will see 🔴 REC, and you can pin the recording to your profile.")) return;
+    if (!confirm("Record this live? Everyone will see 🔴 REC. When you stop, it's saved to the live's page and your profile, and you can save it on your device.")) return;
     try {
-      const ctx = new AudioContext();
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      await ctx.resume().catch(() => {});
       mixCtx.current = ctx; mixDest.current = ctx.createMediaStreamDestination();
       if (mic.current) mixIn("me", mic.current);
       voices.current.forEach((st, k) => mixIn(k, st));
@@ -405,7 +571,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
       recorder.current = r;
       setRec(true); setRecOn(true); setSaved(null); setRecSecs(0);
       send("rec", { on: true });
-      track("host", false, muted);
+      track("host", false, mutedRef.current);
     } catch { setMsg("This browser can't record. Try Chrome or Safari on a recent phone or computer."); }
   }
   function stopRec(): Promise<void> {
@@ -414,7 +580,7 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
     recorder.current = null;
     setRec(false); setRecOn(false);
     send("rec", { on: false });
-    track("host", false, muted);
+    track("host", false, mutedRef.current);
     return new Promise((done) => {
       r.onstop = async () => {
         mixSrc.current.forEach((n) => { try { n.disconnect(); } catch {} }); mixSrc.current.clear();
@@ -424,17 +590,20 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
         chunks.current = [];
         const secs = Math.round((Date.now() - recStart.current) / 1000);
         if (blob.size < 2000) { setMsg("The recording was too short to save."); done(); return; }
+        const ext = type.includes("mp4") ? "m4a" : "webm";
+        // Keep a copy here first, so it can be saved on this device even if the upload fails.
+        setLocal((old) => { if (old) URL.revokeObjectURL(old.url); return { url: URL.createObjectURL(blob), name: `${room.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "live"}-${new Date().toISOString().slice(0, 10)}.${ext}` }; });
         setSaving("Saving your recording…");
         try {
           const sb = supabaseBrowser();
-          const path = `${me.id}/${room.id}-${Date.now()}.${type.includes("mp4") ? "m4a" : "webm"}`;
+          const path = `${me.id}/${room.id}-${Date.now()}.${ext}`;
           const up = await sb.storage.from("live-recordings").upload(path, blob, { contentType: type, upsert: false });
           if (up.error) throw up.error;
           const url = sb.storage.from("live-recordings").getPublicUrl(path).data.publicUrl;
           const { data, error } = await sb.from("live_recordings").insert({ room_id: room.id, title: room.title.slice(0, 120), path, url, duration_s: secs, size_bytes: blob.size }).select("id").single();
           if (error || !data) throw error || new Error("save");
-          setSaved({ id: data.id, pinned: false }); setSaving("");
-        } catch { setSaving("Couldn't save the recording. Check your connection."); }
+          setSaved({ id: data.id, pinned: false, url }); setSaving("");
+        } catch { setSaving("Couldn't upload the recording. Save it on your device below."); }
         done();
       };
       try { r.stop(); } catch { done(); }
@@ -489,38 +658,56 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
   const hands = audience.filter((p) => p.hand);
   const badge = { host: "Host", cohost: "Co-host", speaker: "Speaker", listener: "" } as const;
 
+  // Open mic: the host's page brings up anyone who asks, while there's room on stage.
+  useEffect(() => {
+    if (!isHost || !openMic || !joined) return;
+    for (const p of hands) if (stageCount() < MAX_STAGE) invite(p.id);
+  }, [hands.map((h) => h.id).join(","), openMic, joined]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (ended) return (
     <div className="room card stack">
       <b>This live has ended.</b>
+      {local && isHost && <a className="btn" href={local.url} download={local.name}>⬇️ Save the recording on this device</a>}
+      {saved && <a className="btn" href={`/spaces/${room.id}`}>🎧 Listen back on the live&apos;s page</a>}
       <Link className="btn primary" href="/spaces">See other lives</Link>
     </div>
   );
 
-  return (
-    <div className={"lv stack" + (blaze ? " blaze" : "")} onClick={() => audios.current.forEach((a) => a.paused && a.play().catch(() => {}))}>
-      <div className="lv-top">
-        <span className="room-live"><i />Live</span>
-        <h1>{room.title}</h1>
-        <small className="muted">👥 {list.length} here{room.token && room.chain ? <> · <Link href={`/launchpad/${room.chain}/${room.token}`} target="_blank">View the coin</Link></> : null}</small>
-      </div>
+  const myTile = (p: Peer) => p.id === me.id;
 
-      {!ready ? (
+  return (
+    <div className={mini ? "lv-mini" : "lv stack" + (blaze ? " blaze" : "")} onClick={() => { if (needTap || [...audios.current.values()].some((a) => a.paused)) unlockAudio(); }}>
+      {mini ? (
+        <Link href={`/spaces/${room.id}`} className="lv-mini-t" title="Open the live">
+          <span className="room-live"><i />Live</span>
+          <span className="lv-mini-txt"><b>{room.title}</b><small>{onStage.filter((p) => talking[p.id] && !p.muted).map((p) => p.alias).slice(0, 2).join(", ") || `${list.length} here`}{recOn ? " · 🔴 REC" : ""}</small></span>
+        </Link>
+      ) : (
+        <div className="lv-top">
+          <span className="room-live"><i />Live</span>
+          <h1>{room.title}</h1>
+          <small className="muted">👥 {list.length} here{openMic ? " · 🎙️ Open mic" : ""}{room.token && room.chain ? <> · <Link href={`/launchpad/${room.chain}/${room.token}`} target="_blank">View the coin</Link></> : null}</small>
+        </div>
+      )}
+
+      {!mini && !ready ? (
         <WalletGate roomId={room.id} meId={me.id} isHost={isHost} onReady={setReady} />
-      ) : !joined ? (
+      ) : !mini && !joined ? (
         <div className="lv-gate">
           <div className="lv-gate-ic" aria-hidden="true">{isHost ? "🎙️" : "🎧"}</div>
           <b>{isHost ? "You're the host" : "You're in"}</b>
-          <p>{isHost ? "Your microphone starts muted." : "Listen, react and raise your hand to speak."} <small className="muted">🔒 Drops go to your wallet {ready}, only you see this.</small></p>
-          <button type="button" className="btn primary" onClick={join}>{isHost ? "Start the live" : "Join the live"}</button>
+          <p>{isHost ? "Your microphone starts muted." : "Listen, comment, react, and raise your hand to speak."} <small className="muted">🔒 Drops go to your wallet {ready}, only you see this.</small></p>
+          <button type="button" className="btn primary" disabled={joining} onClick={join}>{joining ? "Joining…" : isHost ? "Start the live" : "Join the live"}</button>
         </div>
-      ) : (
+      ) : !mini ? (
         <>
+          {needTap && <button type="button" className="lv-tap" onClick={unlockAudio}>🔊 Tap here to hear the room</button>}
           {recOn && <div className="lv-rec" role="status"><i />REC{rec ? ` ${Math.floor(recSecs / 60)}:${String(recSecs % 60).padStart(2, "0")}` : ""} <small>This live is being recorded</small></div>}
-          {(saving || saved) && isHost && (
+          {(saving || saved || local) && isHost && (
             <div className="lv-saved" role="status">
-              {saving || (saved?.pinned ? "📌 Pinned to your profile." : "✅ Recording saved to your profile.")}
+              <span>{saving || (saved?.pinned ? "📌 Saved and pinned to your profile." : saved ? "✅ Recording saved to this live's page and your profile." : "")}</span>
               {saved && !saved.pinned && <button type="button" className="btn small primary" onClick={pinSaved}>📌 Pin to my profile</button>}
-              {saved && <a className="btn small" href={`/members/${me.id}`} target="_blank" rel="noopener">View</a>}
+              {local && <a className="btn small" href={local.url} download={local.name}>⬇️ Save on my device</a>}
             </div>
           )}
           {drop && <div className="room-drop-banner" role="status">{drop} <small>Check your wallet.</small></div>}
@@ -531,18 +718,47 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
             </section>
           )}
 
+          {canRun && (
+            <div className="lv-runbar" role="group" aria-label="Host controls">
+              <small>Host controls</small>
+              <button type="button" className="btn small" onClick={muteAll} disabled={onStage.filter((p) => p.id !== me.id && !p.muted).length === 0}>🔇 Mute everyone</button>
+              {isHost && <button type="button" className={"btn small" + (openMic ? " primary" : "")} onClick={toggleOpen} aria-pressed={openMic}>{openMic ? "🎙️ Open mic: on" : "✋ Invite only"}</button>}
+            </div>
+          )}
+
           <section className="lv-stage" aria-label="On stage">
-            {onStage.map((p) => (
-              <button type="button" key={p.id} className={"lv-face big" + (talking[p.id] && !p.muted ? " talking" : "")} onClick={() => setSheet(p)} aria-label={`${p.alias}, ${badge[roleOf(p.id)]}`}>
-                <span className="lv-ring"><Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
-                <span className="lv-name">{p.alias}{p.ver && <VerifiedBadge n={p.vb} size={15} className="vbadge-name" />}{p.muted ? " 🔇" : ""}</span>
-                <span className={"lv-role " + roleOf(p.id)}>{badge[roleOf(p.id)]}</span>
-                <span className="lv-f">{fmt(followers[p.id] ?? 0)} followers</span>
-              </button>
-            ))}
+            {onStage.map((p) => {
+              const role = roleOf(p.id);
+              const mine = myTile(p);
+              const isTalking = talking[p.id] && !p.muted && !(mine && muted);
+              const pMuted = mine ? muted : p.muted;
+              return (
+                <div key={p.id} className={"lv-box" + (isTalking ? " talking" : "") + (mine ? " me" : "")}>
+                  <button type="button" className={"lv-face big" + (isTalking ? " talking" : "")} onClick={() => setSheet(p)} aria-label={`${p.alias}, ${badge[role]}`}>
+                    <span className="lv-ring"><Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
+                    <span className="lv-name">{mine ? "You" : p.alias}{p.ver && <VerifiedBadge n={p.vb} size={15} className="vbadge-name" />}</span>
+                    <span className={"lv-role " + role}>{badge[role]}</span>
+                  </button>
+                  {/* The mic for this person, right under their name. */}
+                  <div className="lv-box-ctl">
+                    {mine ? (
+                      <button type="button" className={"lv-mic" + (pMuted ? " off" : " on") + (isTalking ? " talk" : "")} onClick={toggleMute} aria-pressed={!pMuted}>
+                        <MicIcon off={pMuted} /> {pMuted ? "Unmute" : isTalking ? "Speaking" : "Mute"}
+                      </button>
+                    ) : (
+                      <span className={"lv-mic-st" + (pMuted ? " off" : " on")} title={pMuted ? "Muted" : "Mic on"}><MicIcon off={pMuted} />{pMuted ? "Muted" : isTalking ? "Speaking" : "Mic on"}</span>
+                    )}
+                    {!mine && canRun && role !== "host" && !p.muted && <button type="button" className="lv-mini-btn" onClick={() => muteOne(p.id)}>Mute</button>}
+                    {!mine && canRun && role === "speaker" && <button type="button" className="lv-mini-btn" onClick={() => moveDown(p.id)}>Move down</button>}
+                    {mine && role === "speaker" && <button type="button" className="lv-mini-btn" onClick={() => setSpeakerList(speakersRef.current.filter((s) => s !== me.id))}>Leave stage</button>}
+                  </div>
+                  <span className="lv-f">{fmt(followers[p.id] ?? 0)} followers</span>
+                </div>
+              );
+            })}
           </section>
 
-          {canRun && hands.length > 0 && (
+          {canRun && hands.length > 0 && !openMic && (
             <section className="lv-hands" aria-label="Raised hands">
               <small>✋ Want to speak</small>
               {hands.map((p) => <button key={p.id} type="button" className="lv-hand" onClick={() => invite(p.id)}><Avatar className="avatar lv-av xs" alias={p.alias} color={p.color} url={p.avatar_url} /> {p.alias} · Invite</button>)}
@@ -551,10 +767,17 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
 
           <section className="lv-crowd" aria-label="Listening">
             {audience.map((p) => (
-              <button type="button" key={p.id} className="lv-face" onClick={() => setSheet(p)} title={p.alias} aria-label={`${p.alias}, ${followers[p.id] ?? 0} followers`}>
-                <span className="lv-ring">{p.hand && <i className="lv-handdot" aria-hidden="true">✋</i>}<Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
-                <span className="lv-f">{fmt(followers[p.id] ?? 0)}</span>
-              </button>
+              <div key={p.id} className={"lv-box sm" + (myTile(p) ? " me" : "")}>
+                <button type="button" className="lv-face" onClick={() => setSheet(p)} title={p.alias} aria-label={`${p.alias}, ${followers[p.id] ?? 0} followers`}>
+                  <span className="lv-ring">{p.hand && <i className="lv-handdot" aria-hidden="true">✋</i>}<Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
+                  <span className="lv-name sm">{myTile(p) ? "You" : p.alias}</span>
+                </button>
+                {myTile(p) ? (
+                  <button type="button" className={"lv-mic off" + (hand ? " hand" : "")} onClick={raiseHand} aria-pressed={hand}>{openMic ? "🎙️ Speak" : hand ? "✋ Lower" : "✋ Ask to speak"}</button>
+                ) : canRun ? (
+                  <button type="button" className="lv-mini-btn" onClick={() => invite(p.id)}>{p.hand ? "✋ Invite" : "Invite"}</button>
+                ) : <span className="lv-f">{fmt(followers[p.id] ?? 0)}</span>}
+              </div>
             ))}
             {!audience.length && <small className="muted">No listeners yet. Share the link so people can join.</small>}
           </section>
@@ -568,35 +791,41 @@ export default function LiveRoom({ room, me }: { room: Room; me: Me }) {
 
           <div className="lv-react" role="group" aria-label="React">{REACTIONS.map((e) => <button key={e} type="button" onClick={() => react(e)} aria-label={`React ${e}`}><Emo e={e} size={30} /></button>)}</div>
 
+          <LiveChat roomId={room.id} me={me} canModerate={canRun} />
+
           {canRun && <DropPanel roomId={room.id} onDropped={(text) => { setDrop(text); send("drop", { text }); }} />}
-
-          <div className="lv-ctl" role="toolbar" aria-label="Live controls">
-            {canSpeak
-              ? <MicBtn muted={muted} talking={!!talking[me.id]} onClick={toggleMute} />
-              : <Ctl icon="hand" label={hand ? "Lower" : "Raise hand"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
-            <SpeakerOut audios={allAudios} />
-            {canSpeak && coinLive && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
-            {isHost && <Ctl icon={rec ? "stop" : "rec"} label={rec ? "Stop rec" : "Record"} on={rec} tone="red" onClick={() => (rec ? stopRec() : startRec())} pressed={rec} />}
-            {isHost && <Ctl icon="rocket" label="Launch" href="/launchpad/new" />}
-            <Ctl icon="link" label="Share" onClick={() => { navigator.clipboard?.writeText(location.href).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }} />
-            {isHost ? <Ctl icon="end" label="End" tone="red" on onClick={endRoom} /> : <Ctl icon="leave" label="Leave" onClick={leave} />}
-          </div>
         </>
-      )}
-      {msg && <small className="muted" role="status">{msg}</small>}
-      {joined && <small className="lv-credit">Animated emoji: <a href="https://googlefonts.github.io/noto-emoji-animation/" target="_blank" rel="noopener noreferrer">Noto Emoji by Google</a>, CC BY 4.0.</small>}
+      ) : null}
 
-      {sheet && (
+      {/* The controls stay in the same place in the full room and the small player, so the sound never restarts. */}
+      {(joined || !mini) && (
+        <div className={"lv-ctl" + (mini ? " mini" : "")} role="toolbar" aria-label="Live controls" style={!joined ? { display: "none" } : undefined}>
+          {canSpeak
+            ? <MicBtn muted={muted} talking={!!talking[me.id]} onClick={toggleMute} />
+            : <Ctl icon="hand" label={openMic ? "Speak" : hand ? "Lower" : "Ask to speak"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
+          <SpeakerOut audios={allAudios} />
+          {!mini && canSpeak && coinLive && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
+          {isHost && <Ctl icon={rec ? "stop" : "rec"} label={rec ? "Stop rec" : "Record"} on={rec} tone="red" onClick={() => (rec ? stopRec() : startRec())} pressed={rec} />}
+          {!mini && isHost && <Ctl icon="rocket" label="Launch" href="/launchpad/new" />}
+          {!mini && <Ctl icon="link" label="Share" onClick={() => { navigator.clipboard?.writeText(`${location.origin}/spaces/${room.id}`).then(() => setMsg("Link copied. Share it so people can join.")).catch(() => {}); }} />}
+          {isHost ? <Ctl icon="end" label="End" tone="red" on onClick={endRoom} /> : <Ctl icon="leave" label="Leave" onClick={() => leave()} />}
+        </div>
+      )}
+      {!mini && msg && <small className="muted" role="status">{msg}</small>}
+      {!mini && joined && <small className="lv-credit">Your live keeps playing while you browse the site. Animated emoji: <a href="https://googlefonts.github.io/noto-emoji-animation/" target="_blank" rel="noopener noreferrer">Noto Emoji by Google</a>, CC BY 4.0.</small>}
+
+      {!mini && sheet && (
         <ProfileSheet id={sheet.id} alias={sheet.alias} onClose={() => setSheet(null)} act={{
-          role: roleOf(sheet.id), canRun, isHost,
+          role: roleOf(sheet.id), canRun, isHost, muted: sheet.muted,
           invite: () => { invite(sheet.id); setSheet(null); },
           moveDown: () => { moveDown(sheet.id); setSheet(null); },
           makeCohost: () => { makeCohost(sheet.id); setSheet(null); },
           removeCohost: () => { removeCohost(sheet.id); setSheet(null); },
+          mute: () => { muteOne(sheet.id); setSheet(null); },
           send: () => { setSendTo({ id: sheet.id, alias: sheet.alias }); setSheet(null); },
         }} />
       )}
-      {sendTo && (
+      {!mini && sendTo && (
         <div className="lv-sheet-wrap" role="presentation" onClick={() => setSendTo(null)}>
           <div className="lv-sheet" onClick={(e) => e.stopPropagation()}>
             <DropPanel key={sendTo.id} roomId={room.id} target={sendTo} button={false} onClose={() => setSendTo(null)}

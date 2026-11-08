@@ -5186,3 +5186,81 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .lv-ctl > .mic { margin-right: 4px; }
 .lv-ctl > .ctl.red:not(.on) { margin-left: 2px; }
 @media (max-width: 420px) { .lv-ctl { gap: 3px !important; padding: 10px 6px 8px !important; } .lv-ctl > .mic { margin-right: 2px; } }
+
+/* ---- Live room: each person in a box with their mic under their name; host controls; comments; small player ---- */
+.lv-stage { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+.lv-box { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 8px 10px; border-radius: 18px; min-width: 0;
+  background: color-mix(in srgb, var(--surface) 70%, transparent); border: 1px solid var(--line); transition: border-color .2s ease, box-shadow .2s ease; }
+.lv-box.talking { border-color: #22c55e; box-shadow: 0 0 0 3px color-mix(in srgb, #22c55e 22%, transparent); }
+.lv-box.me { border-color: color-mix(in srgb, #F0B90B 60%, var(--line)); }
+.lv-box.sm { padding: 8px 4px; gap: 5px; border-radius: 14px; }
+.lv-crowd { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+.lv-name.sm { font-size: .78em; font-weight: 600; }
+.lv-box-ctl { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.lv-mic { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 99px; font-weight: 800; font-size: .78em; -webkit-tap-highlight-color: transparent; }
+.lv-mic.off { color: #fff; background: #3b2c4f; box-shadow: inset 0 0 0 1px rgba(229,72,77,.6); }
+.lv-mic.on { color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B); box-shadow: 0 6px 16px -6px rgba(240,185,11,.7); }
+.lv-mic.on.talk { background: linear-gradient(135deg, #4ade80, #22c55e); }
+.lv-mic.hand { color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B); }
+.lv-mic:focus-visible, .lv-mini-btn:focus-visible { outline: 2px solid #a855f7; outline-offset: 2px; }
+.lv-box.sm .lv-mic { padding: 4px 8px; font-size: .7em; }
+.lv-mic-st { display: inline-flex; align-items: center; gap: 4px; font-size: .74em; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: color-mix(in srgb, currentColor 8%, transparent); }
+.lv-mic-st.off { color: #E5484D; }
+.lv-mic-st.on { color: #16a34a; }
+.lv-mini-btn { all: unset; cursor: pointer; font-size: .72em; font-weight: 700; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); }
+.lv-mini-btn:hover { border-color: #a855f7; }
+.lv-runbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 10px; border-radius: 14px; background: color-mix(in srgb, #a855f7 9%, transparent); }
+.lv-runbar small { font-weight: 800; opacity: .75; margin-right: 4px; }
+.lv-tap { all: unset; cursor: pointer; align-self: stretch; text-align: center; padding: 12px; border-radius: 14px; font-weight: 800; color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B); animation: lvpulse 1.4s ease-in-out infinite; }
+.room-ended { display: inline-flex; font-size: .72em; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; opacity: .65; }
+
+.lv-chat { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); }
+.lv-chat-h { display: flex; justify-content: space-between; align-items: center; }
+.lv-chat-list { display: flex; flex-direction: column; gap: 10px; max-height: 360px; min-height: 80px; overflow-y: auto; overscroll-behavior: contain; padding-right: 2px; }
+.lv-msg { display: flex; gap: 8px; align-items: flex-start; }
+.lv-msg-av { width: 30px !important; height: 30px !important; border-radius: 50% !important; font-size: .8em; flex: none; }
+.lv-msg-b { min-width: 0; flex: 1; }
+.lv-msg-top { display: flex; align-items: baseline; gap: 6px; }
+.lv-msg-top b { font-size: .86em; }
+.lv-msg-top small { font-size: .7em; opacity: .55; }
+.lv-msg.mine .lv-msg-top b { color: #a855f7; }
+.lv-msg p { margin: 2px 0 0; font-size: .93em; overflow-wrap: anywhere; white-space: pre-wrap; }
+.lv-msg img { display: block; margin-top: 6px; max-width: min(260px, 100%); max-height: 260px; border-radius: 12px; object-fit: cover; }
+.lv-msg-x { all: unset; cursor: pointer; margin-left: auto; font-size: .75em; opacity: .4; padding: 0 4px; }
+.lv-msg-x:hover { opacity: .9; }
+.lv-chat-new { all: unset; cursor: pointer; position: absolute; left: 50%; transform: translateX(-50%); bottom: 64px; padding: 4px 12px; border-radius: 99px; font-size: .78em; font-weight: 800; color: #fff; background: #a855f7; box-shadow: 0 6px 16px -6px rgba(168,85,247,.8); }
+.lv-chat-f { display: flex; gap: 6px; align-items: center; }
+.lv-chat-f input:not([type=file]) { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface-2); color: inherit; font: inherit; }
+.lv-chat-ic { all: unset; cursor: pointer; width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 50%; font-size: 1.15em; background: var(--surface-2); }
+.lv-chat-ic.on { box-shadow: 0 0 0 2px #a855f7; }
+.lv-chat-ic:focus-visible { outline: 2px solid #a855f7; }
+.lv-emo { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); gap: 4px; padding: 6px; border-radius: 14px; background: var(--surface-2); }
+.lv-emo button { all: unset; cursor: pointer; text-align: center; font-size: 1.35em; padding: 4px 0; border-radius: 10px; }
+.lv-emo button:hover, .lv-emo button:focus-visible { background: color-mix(in srgb, #a855f7 18%, transparent); }
+
+.lv-past { display: flex; flex-direction: column; gap: 6px; }
+.lv-past-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 14px; text-decoration: none; color: inherit; background: var(--surface-2); }
+.lv-past-row:hover { box-shadow: inset 0 0 0 1px #a855f7; }
+.lv-past-t { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.lv-past-t b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-past-tag { font-size: .72em; font-weight: 800; padding: 3px 9px; border-radius: 99px; background: color-mix(in srgb, currentColor 8%, transparent); white-space: nowrap; }
+.lv-past-tag.rec { color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B); }
+
+/* The small player while you browse the site */
+.lv-dock { display: none; }
+.lv-dock.on { display: block; position: fixed; z-index: 960; right: 16px; bottom: 16px; width: min(380px, calc(100vw - 24px)); }
+@media (max-width: 860px) { .lv-dock.on { left: 12px; right: 12px; width: auto; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); } }
+.lv-mini { display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 12px; border-radius: 20px; color: var(--ink);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--surface) 86%, #8B5CF6 14%), var(--surface)); border: 1px solid color-mix(in srgb, #a855f7 40%, var(--line)); box-shadow: 0 18px 44px -16px rgba(0,0,0,.55); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.lv-mini-t { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; text-decoration: none; color: inherit; }
+.lv-mini-txt { display: flex; flex-direction: column; min-width: 0; }
+.lv-mini-txt b, .lv-mini-txt small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-mini-txt small { font-size: .72em; opacity: .7; }
+.lv-mini .lv-ctl.mini { position: static; padding: 0; margin: 0; gap: 2px; flex-wrap: nowrap; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.lv-mini .lv-ctl.mini .ctl, .lv-mini .lv-ctl.mini .mic { width: 44px; }
+.lv-mini .lv-ctl.mini small { display: none; }
+.lv-mini .lv-ctl.mini .spk-more { display: none; }
+.lv-mini .spk-pop { bottom: calc(100% + 14px); left: auto; right: 0; }
+.lv-back { display: flex !important; align-items: center; gap: 6px; padding: 10px 10px 10px 14px; border-radius: 20px; color: var(--ink); background: var(--surface); border: 1px solid color-mix(in srgb, #a855f7 40%, var(--line)); box-shadow: 0 18px 44px -16px rgba(0,0,0,.55); }
+.lv-back-x { all: unset; cursor: pointer; padding: 4px 8px; opacity: .6; }
+@media (prefers-reduced-motion: reduce) { .lv-tap { animation: none; } }

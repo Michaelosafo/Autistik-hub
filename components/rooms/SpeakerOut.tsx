@@ -77,7 +77,8 @@ export default function SpeakerOut({ audios }: { audios: () => HTMLAudioElement[
     return () => clearInterval(t);
   }, [loud, on, vol, sink, audios]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => () => { ctx.current?.close().catch(() => {}); }, []);
+  // Closing: give the voices back to the normal players, so the room never goes silent.
+  useEffect(() => () => { for (const a of srcs.current.keys()) a.muted = false; srcs.current.clear(); ctx.current?.close().catch(() => {}); }, []);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
