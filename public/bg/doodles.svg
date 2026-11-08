@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 520" width="520" height="520">
+  <!-- A tile of small AUTISTIK doodles, repeated faintly behind every page. -->
+  <defs>
+    <linearGradient id="s" x1="0" x2="1"><stop offset="0" stop-color="#E5484D"/><stop offset=".5" stop-color="#F0B90B"/><stop offset="1" stop-color="#6141D4"/></linearGradient>
+    <g id="derp">
+      <circle r="22" fill="#8B6CF6"/>
+      <circle cx="-8" cy="-3" r="7" fill="#fff"/><circle cx="9" cy="-5" r="9" fill="#fff"/>
+      <circle cx="-10" cy="-1" r="3" fill="#141830"/><circle cx="12" cy="-8" r="4" fill="#141830"/>
+      <path d="M-9 8c6 8 16 8 20 0" fill="#2A1450"/><path d="M5 10c1 6 7 8 9 3" fill="#FF6B9A"/>
+      <path d="M-14-18c6-10 22-10 28 0z" fill="#FF9BC0"/>
+    </g>
+    <path id="inf" d="M-12-8c-7 0-11 4-11 8s4 8 11 8c5 0 8-4 12-8 4-4 7-8 12-8 7 0 11 4 11 8s-4 8-11 8c-5 0-8-4-12-8-4-4-7-8-12-8z" fill="none" stroke="url(#s)" stroke-width="3.5" stroke-linecap="round"/>
+    <path id="spk" d="M0-10l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/>
+  </defs>
+
+  <use href="#derp" transform="translate(70 80) rotate(-12)"/>
+  <use href="#derp" transform="translate(360 300) rotate(14) scale(.9)"/>
+  <use href="#inf" transform="translate(260 60) rotate(-10)"/>
+  <use href="#inf" transform="translate(110 400) rotate(16)"/>
+  <use href="#inf" transform="translate(450 470) rotate(-6) scale(.8)"/>
+
+  <g fill="#F0B90B"><use href="#spk" transform="translate(180 200)"/><use href="#spk" transform="translate(470 120) scale(.7)"/><use href="#spk" transform="translate(30 270) scale(.6)"/></g>
+  <g fill="#8B6CF6"><use href="#spk" transform="translate(300 450) scale(.8)"/><use href="#spk" transform="translate(420 200) scale(.5)"/></g>
+
+  <!-- rocket -->
+  <g transform="translate(220 320) rotate(40)" fill="none" stroke="#6141D4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0-22c9 8 11 22 6 34H-6c-5-12-3-26 6-34z"/><circle cy="-6" r="3.5"/><path d="M-6 6l-7 7 1-12M6 6l7 7-1-12M-3 14l3 8 3-8"/>
+  </g>
+  <!-- chart going up -->
+  <g transform="translate(400 50)" fill="none" stroke="#22C55E" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-24 14l14-10 10 6 22-20"/><path d="M14-12h10v10"/>
+  </g>
+
+  <g font-family="Unbounded, Arial Rounded MT Bold, sans-serif" font-weight="800" fill="#6141D4">
+    <text x="120" y="160" font-size="20" transform="rotate(-8 120 160)">gm</text>
+    <text x="300" y="190" font-size="15" transform="rotate(6 300 190)">wen moon?</text>
+    <text x="20" y="490" font-size="15" transform="rotate(-6 20 490)">big brain</text>
+    <text x="250" y="400" font-size="13" transform="rotate(-14 250 400)">brrr</text>
+  </g>
+</svg>
