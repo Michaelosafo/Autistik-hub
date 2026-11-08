@@ -14,8 +14,8 @@ type Card = {
 };
 export type SheetActions = {
   role: "host" | "cohost" | "speaker" | "listener";
-  canRun: boolean; isHost: boolean;
-  invite: () => void; moveDown: () => void; makeCohost: () => void; removeCohost: () => void; send: () => void;
+  canRun: boolean; isHost: boolean; muted?: boolean;
+  invite: () => void; moveDown: () => void; makeCohost: () => void; removeCohost: () => void; send: () => void; mute?: () => void;
 };
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -63,6 +63,7 @@ export default function ProfileSheet({ id, alias, onClose, act }: { id: string; 
             <div className="lv-sheet-btns">
               <button type="button" className="btn small primary" onClick={act.send}>🎁 Send tokens</button>
               {act.role === "listener" && <button type="button" className="btn small" onClick={act.invite}>🎙️ Invite to speak</button>}
+              {act.role !== "listener" && act.role !== "host" && !act.muted && act.mute && <button type="button" className="btn small" onClick={act.mute}>🔇 Mute</button>}
               {act.role === "speaker" && <button type="button" className="btn small" onClick={act.moveDown}>↓ Move to listeners</button>}
               {act.isHost && act.role !== "cohost" && act.role !== "host" && <button type="button" className="btn small" onClick={act.makeCohost}>⭐ Make co-host</button>}
               {act.isHost && act.role === "cohost" && <button type="button" className="btn small" onClick={act.removeCohost}>Remove co-host</button>}

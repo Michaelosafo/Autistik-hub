@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { NavTrail } from "@/components/BackButton";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
+import LiveDock from "@/components/rooms/LiveDock";
 import Welcome from "@/components/Welcome";
 import WalletGate from "@/components/WalletGate";
 import { headers } from "next/headers";
@@ -49,7 +50,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <noscript><style>{`.welcome{display:none}`}</style></noscript>
         <Welcome />
         {user && needWallet && <WalletGate uid={user.id} />}
-        <Shell me={me}>{children}</Shell>
+        {/* Keeps a live playing while members move around the site. */}
+        <LiveDock><Shell me={me}>{children}</Shell></LiveDock>
         <BotFab />
         {/* Remembers the pages visited in this tab, for the "← Back" buttons. */}
         <Suspense fallback={null}><NavTrail /></Suspense>

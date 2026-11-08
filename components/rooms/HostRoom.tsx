@@ -33,7 +33,7 @@ export default function HostRoom({ open: o0 }: { open?: boolean }) {
         <button type="button" className="btn primary" disabled={busy} onClick={start}>{busy ? "Starting…" : "Start"}</button>
         <button type="button" className="btn" onClick={() => setOpen(false)}>Cancel</button>
       </div>
-      <small className="muted">You talk (camera optional), people listen, and you can invite up to 5 people to speak. Listeners can connect a wallet privately, and you can drop tokens to all of them at once. Nothing is recorded.</small>
+      <small className="muted">You talk, people listen and comment, and only people you invite can speak (or turn on Open mic). You can mute anyone, record the live and save it, and drop tokens to everyone at once.</small>
       {msg && <small className="muted" role="status">{msg}</small>}
     </div>
   );

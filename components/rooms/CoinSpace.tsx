@@ -34,7 +34,7 @@ export default function CoinSpace({ chain, token, symbol, canHost, signedIn, com
 
   async function start() {
     const t = title.trim();
-    if (t.length < 3) { setMsg("Give your Space a short title."); return; }
+    if (t.length < 3) { setMsg("Give your live a short title."); return; }
     setBusy(true); setMsg("");
     const sb = supabaseBrowser();
     const { data: { user } } = await sb.auth.getUser();
@@ -43,7 +43,7 @@ export default function CoinSpace({ chain, token, symbol, canHost, signedIn, com
     await sb.from("live_rooms").update({ ended_at: new Date().toISOString() }).eq("host_id", user.id).is("ended_at", null);
     const { data, error } = await sb.from("live_rooms").insert({ title: t.slice(0, 80), ...(token ? { chain, token } : {}) }).select("id").single();
     setBusy(false);
-    if (error || !data) { setMsg("Couldn't start the Space. Try again."); return; }
+    if (error || !data) { setMsg("Couldn't start the live. Try again."); return; }
     router.push(`/spaces/${data.id}`);
   }
 
@@ -58,9 +58,9 @@ export default function CoinSpace({ chain, token, symbol, canHost, signedIn, com
       ))}
       {canHost && (open ? (
         <div className="card stack" style={{ gap: 8 }}>
-          <b>🎙️ {token ? `Host a Space for $${symbol}` : "Host a Space before you launch"}</b>
-          <input value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} aria-label="Space title" />
-          <small className="muted">Voice (and camera if you like). Talk about your project, invite people up to speak, and drop tokens to listeners. {token ? "Everyone on this coin's page sees you're live." : "While you're live, press 🚀 Launch in the room: it opens launching in a new tab so your Space keeps going."} Nothing is recorded.</small>
+          <b>🎙️ {token ? `Host a live for $${symbol}` : "Host a live before you launch"}</b>
+          <input value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} aria-label="Live title" />
+          <small className="muted">Voice (and camera if you like). Talk about your project, invite people up to speak, and drop tokens to listeners. {token ? "Everyone on this coin's page sees you're live." : "While you're live, press 🚀 Launch in the room: it opens launching in a new tab so your live keeps going."} You can record it if you like.</small>
           <div className="row" style={{ gap: 6 }}>
             <button type="button" className="btn small primary" disabled={busy} onClick={start}>{busy ? "Starting…" : "🎙️ Go live"}</button>
             <button type="button" className="btn small" onClick={() => setOpen(false)}>Cancel</button>
@@ -69,7 +69,7 @@ export default function CoinSpace({ chain, token, symbol, canHost, signedIn, com
         </div>
       ) : (
         <button type="button" className="btn small coin-space-btn" onClick={() => (signedIn ? setOpen(true) : router.push(`/login?next=${encodeURIComponent(location.pathname)}`))}>
-          🎙️ {token ? (live.length ? "Host another Space" : `Host a Space for $${symbol}`) : "Host a Space / VC before launch"}
+          🎙️ {token ? (live.length ? "Host another live" : `Host a live for $${symbol}`) : "Host a live before launch"}
         </button>
       ))}
     </div>
