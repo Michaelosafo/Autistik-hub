@@ -1,3 +1,4 @@
+import { fmtUsd } from "@/lib/num-format";
 import { CHAINS, type ChainKey } from "@/lib/launchpad";
 
 /** Live market numbers for one token, from DexScreener's public API. */
@@ -62,7 +63,7 @@ export async function getMarkets(tokens: { chain: ChainKey; token: string }[]): 
 export function usd(n: number | null | undefined) {
   if (n === null || n === undefined) return "–";
   if (n === 0) return "$0";
-  if (n < 0.01) return "$" + n.toPrecision(3);
+  if (n < 0.01) return fmtUsd(n);
   if (n < 1000) return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   return "$" + Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 }

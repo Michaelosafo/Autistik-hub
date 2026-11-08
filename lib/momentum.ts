@@ -1,3 +1,4 @@
+import { fmtUsd } from "@/lib/num-format";
 /**
  * Momentum: tokens with unusual volume and buying right now, scored for how likely a quick move up (like 2x) is,
  * with a suggested buy range, take-profit steps and a stop. Pure scoring here; fetching is in momentum-server.ts.
@@ -42,8 +43,8 @@ export const usd = (v: number | null | undefined) => {
   if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
   if (v >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
   if (v >= 1) return `$${v.toFixed(2)}`;
-  // Small prices: keep 4 significant digits.
-  return `$${v.toPrecision(4).replace(/\.?0+$/, "")}`;
+  // Small prices: 4 meaningful digits, never an exponent.
+  return fmtUsd(v);
 };
 const pctTxt = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(Math.abs(v) >= 10 ? 0 : 1)}%`;
 

@@ -5298,3 +5298,4 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .lw-amt { display: flex; flex-direction: column; gap: 4px; }
 .lw-amt input { font-size: 1.1em; font-weight: 800; }
 .lw-done { font-weight: 800; color: #16a34a; }
+.sc-have-to { margin-top: 6px; font-size: .8em; opacity: .75; }

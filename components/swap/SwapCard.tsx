@@ -1,8 +1,9 @@
 "use client";
+import { plainNum } from "@/lib/num-format";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { WCHAINS, type WChainKey } from "@/lib/wallet-chains";
 import { XCHAIN_BY_KEY, XCHAIN_LIST, XCHAINS, isXNative, xNative, type XChain, type XToken } from "@/lib/bridge-chains";
-import { amt, api, store, usd, type Holding } from "@/components/wallet/util";
+import { amt, api, store, usd, worth, type Holding } from "@/components/wallet/util";
 import { ChainBadge, NetGrid, TokenLogo } from "./parts";
 
 /** What a swap form hands the card: the amount being typed, the balance, and the price it found. */
@@ -21,7 +22,7 @@ export type Owners = { evm?: string | null; sol?: string | null };
 export const toX = (net: XChain, t: XToken): XToken => (isXNative(net, t.address) ? { ...t, address: xNative(net) } : t);
 const same = (a: XToken | null, b: XToken | null) => !!a && !!b && a.address.toLowerCase() === b.address.toLowerCase();
 const ownerOn = (net: XChain, o: Owners) => (net.kind === "solana" ? o.sol : o.evm) || null;
-const money = (v: number | null | undefined) => (v && v > 0 ? usd(v) : "$0.00");
+const money = (v: number | null | undefined) => (v && v > 0 ? worth(v) : "$0.00");
 
 const Chevron = ({ up }: { up?: boolean }) => (
   <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
@@ -54,6 +55,21 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
       .then((v) => v ? save(v) : api<{ token: XToken }>("x-detect", { address: t.address }).then((d) => save(d.token.priceUsd)).catch(() => save(0)));
   }, [fk]); // eslint-disable-line react-hooks/exhaustive-deps
   const price = from.token?.priceUsd && from.token.priceUsd > 0 ? from.token.priceUsd : looked[fk] || null;
+  // What you already hold of the coin you're getting, shown under it.
+  const [toHave, setToHave] = useState<{ amount: number; value: number | null } | null>(null);
+  const tk = to.token ? `${to.net.id}:${to.token.address.toLowerCase()}` : "";
+  useEffect(() => {
+    setToHave(null);
+    const o = ownerOn(to.net, owners);
+    if (!to.token || !o || !to.net.wchain) return;
+    let live = true;
+    holdings(to.net.wchain, o).then((l) => {
+      if (!live) return;
+      const h = l.find((x) => same(toX(to.net, x), to.token));
+      setToHave({ amount: h?.amount ?? 0, value: h?.valueUsd ?? 0 });
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [tk, owners.evm, owners.sol]); // eslint-disable-line react-hooks/exhaustive-deps
   const [inDollars, setInDollars] = useState(true);
   const pricing = !!from.token && !price && looked[fk] === undefined;
   const dollars = inDollars && (!!price || pricing);
@@ -64,19 +80,19 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
     if (!dollars) return;
     if (typedRef.current) { typedRef.current = false; return; }
     const n = Number(io.amount);
-    setUsdText(io.amount && n > 0 && price ? String(Math.round(n * price * 100) / 100) : "");
+    setUsdText(io.amount && n > 0 && price ? plainNum(Math.round(n * price * 100) / 100, 2) : "");
   }, [io.amount, price, dollars]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!dollars || !price || !usdText || io.amount) return;
     const n = Number(usdText);
-    if (n > 0) { typedRef.current = true; io.setAmount(String(Math.floor((n / price) * 1e8) / 1e8)); }
+    if (n > 0) { typedRef.current = true; io.setAmount(plainNum(Math.floor((n / price) * 1e8) / 1e8)); }
   }, [price]); // eslint-disable-line react-hooks/exhaustive-deps
   function typeDollars(v: string) {
     const clean = v.replace(",", ".").replace(/[^\d.]/g, "").replace(/^(\d*\.\d{0,2}).*$/, "$1");
     setUsdText(clean);
     typedRef.current = true;
     const n = Number(clean);
-    io.setAmount(clean && n > 0 && price ? String(Math.floor((n / price) * 1e8) / 1e8) : "");
+    io.setAmount(clean && n > 0 && price ? plainNum(Math.floor((n / price) * 1e8) / 1e8) : "");
   }
   const shown = dollars ? usdText : io.amount;
   const len = shown.length + (dollars ? 1 : 0);
@@ -122,6 +138,7 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
             ? <><b>{io.outUsd ? usd(io.outUsd) : Number(io.amount) > 0 ? "$ –" : "$0.00"}</b><small>{io.out} {to.token?.symbol || ""}</small></>
             : <><b>{io.out}</b>{io.outUsd ? <small>{usd(io.outUsd)}</small> : null}</>}</span>
         </div>
+        {toHave && <div className="sc-have sc-have-to" title="What you already hold of this coin">In your wallet: {amt(toHave.amount)} {to.token?.symbol || ""}{toHave.value ? ` · ${money(toHave.value)}` : ""}</div>}
         {io.toExtra}
       </div>
       {sheet && (

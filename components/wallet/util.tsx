@@ -1,4 +1,5 @@
 "use client";
+import { fmtAmount, fmtUsd, fmtValue } from "@/lib/num-format";
 import { useState } from "react";
 import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } from "viem";
 import { KYBER_ROUTER, isTokenAddress, type WChain, type WToken } from "@/lib/wallet-chains";
@@ -18,8 +19,12 @@ export async function api<T = any>(action: string, body: unknown): Promise<T> {
   if (!r.ok) throw new Error(d.error || "Something went wrong. Please try again.");
   return d;
 }
-export const usd = (v: number | null | undefined) => v == null || !isFinite(v) ? "–" : v >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e4 ? `$${(v / 1e3).toFixed(1)}K` : v >= 1 ? `$${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : v > 0 ? `$${v.toPrecision(4).replace(/\.?0+$/, "")}` : "$0";
-export const amt = (v: number) => !isFinite(v) || v === 0 ? "0" : v < 0.0001 ? v.toPrecision(3) : v < 1 ? v.toFixed(6).replace(/0+$/, "") : v < 10_000 ? v.toLocaleString("en-US", { maximumFractionDigits: 4 }) : v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+/** Prices and dollar amounts, never in exponent form ($1,234.56 · $0.0₆1234). See lib/num-format.ts. */
+export const usd = (v: number | null | undefined) => fmtUsd(v);
+/** What a balance is worth: like usd, but dust reads "<$0.01". */
+export const worth = (v: number | null | undefined) => fmtValue(v);
+/** Token amounts, rounded and readable (1,234.5678 · 0.0012 · 1.25M), never in exponent form. */
+export const amt = (v: number) => fmtAmount(v);
 export const pct = (v: number | null | undefined) => (v == null ? "–" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`);
 export const raw2num = (raw: string, d: number) => Number(BigInt(raw)) / 10 ** d;
 export const short = (a: string) => a.slice(0, 6) + "…" + a.slice(-4);

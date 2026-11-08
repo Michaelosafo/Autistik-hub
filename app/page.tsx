@@ -1,3 +1,4 @@
+import { fmtUsd } from "@/lib/num-format";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
@@ -63,7 +64,7 @@ const FUND: [IconName, string, string][] = [
 
 const pct = (v: number | null | undefined) => (v == null ? "–" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`);
 const tone = (v: number | null | undefined) => (v == null ? "" : v >= 0 ? "up" : "down");
-const usd = (v: number | null | undefined) => (v == null ? "–" : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : v >= 1 ? `$${v.toFixed(2)}` : `$${v.toPrecision(3)}`);
+const usd = (v: number | null | undefined) => (v == null ? "–" : v >= 1e6 ? `$${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}K` : v >= 1 ? `$${v.toFixed(2)}` : fmtUsd(v));
 
 /** The website's front page: what AUTISTIK is, with one button into the App. */
 export default async function Home() {

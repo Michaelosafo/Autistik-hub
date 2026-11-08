@@ -5,7 +5,7 @@ import type { Signer } from "./types";
 import { GAS_RESERVE } from "./MarketForm";
 import { Receive, Send } from "./panels";
 import { LISTINGS } from "@/lib/listings";
-import { addTrade, amt, api, friendlyError, Logo, pct, raw2num, runTrade, usd, type Holding, type Quote, type TokenInfo } from "./util";
+import { addTrade, amt, api, friendlyError, Logo, pct, raw2num, runTrade, usd, worth, type Holding, type Quote, type TokenInfo } from "./util";
 
 type Badge = "safer" | "caution" | "risky" | "scam";
 type Coin = { token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number; liquidity: number; mcap: number | null; ageHours: number | null; badge: Badge; reasons: string[]; autistik?: "launchpad" | "listed" };
@@ -52,7 +52,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
     <div className="sm">
       <section className="sm-top">
         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-          <div><small>Your balance</small><div className="sm-total">{holdings ? usd(total) : "…"}</div><small>{nat ? `${amt(nat.amount)} ${c.native.symbol} ready to spend` : ""}</small></div>
+          <div><small>Your balance</small><div className="sm-total">{holdings ? worth(total) : "…"}</div><small>{nat ? `${amt(nat.amount)} ${c.native.symbol} ready to spend` : ""}</small></div>
           <select className="tx-net" value={c.key} onChange={(e) => onChain(e.target.value as WChainKey)} aria-label="Network">
             {WCHAIN_LIST.map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
           </select>
@@ -107,7 +107,7 @@ export default function SimpleMode({ c, onChain, signer, owner, holdings, balanc
           <button key={h.address} type="button" className="sm-coin" onClick={() => setSell(h)}>
             <Logo t={h} size={34} />
             <span className="grow"><b>{h.symbol}</b><small>{amt(h.amount)}</small></span>
-            <span className="sm-num"><b>{usd(h.valueUsd)}</b></span>
+            <span className="sm-num"><b>{worth(h.valueUsd)}</b></span>
             <span className="sm-sell">Sell</span>
           </button>
         ))}

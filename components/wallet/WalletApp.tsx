@@ -9,7 +9,7 @@ import OrderForm, { OpenOrders } from "./OrderForm";
 import SimpleMode from "./SimpleMode";
 import Portfolio from "./Portfolio";
 import { Assets, History, Receive, Security, Send, Welcome } from "./panels";
-import { api, pct, short, store, TokenPicker, usd, type Holding, type Market, type TokenInfo } from "./util";
+import { api, pct, short, store, TokenPicker, usd, worth, type Holding, type Market, type TokenInfo } from "./util";
 
 /** The token each network opens on. */
 const FEATURED: Record<WChainKey, string> = {
@@ -139,7 +139,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
           <div className="hide-sm"><dt>24h buys / sells</dt><dd><span className="up">{mkt?.buys24 ?? "–"}</span> / <span className="down">{mkt?.sells24 ?? "–"}</span></dd></div>
         </dl>
         <div className="tx-acct">
-          <span className="tx-acct-bal">{holdings ? usd(total) : "…"}</span>
+          <span className="tx-acct-bal">{holdings ? worth(total) : "…"}</span>
           <span className="tx-dim">{signer.using === "external" ? "Your wallet" : signer.mode === "privy" ? "AUTISTIK wallet" : "Wallet"}{owner ? ` · ${short(owner)}` : ""}</span>
           <span className="tx-acct-btns">
             <button type="button" className="tx-mini" onClick={() => { setBtab("receive"); document.querySelector(".tx-bottom")?.scrollIntoView({ behavior: "smooth" }); }}>↓ Receive</button>

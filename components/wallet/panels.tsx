@@ -4,7 +4,7 @@ import { encodeFunctionData, erc20Abi, getAddress, isAddress } from "viem";
 import { FEE_PERCENT, WCHAINS, isNative, isTokenAddress, toUnits, type WChain, type WToken } from "@/lib/wallet-chains";
 import type { Member, Signer } from "./types";
 import { GAS_RESERVE } from "./MarketForm";
-import { amt, api, friendlyError, Logo, sendSol, store, usd, waitEvm, type Holding, type TokenInfo, type Trade } from "./util";
+import { amt, api, friendlyError, Logo, sendSol, store, usd, waitEvm, worth, type Holding, type TokenInfo, type Trade } from "./util";
 
 /** First visit: pick the built-in AUTISTIK wallet or connect your own. */
 export function Welcome({ signer, member }: { signer: Signer; member?: Member | null }) {
@@ -60,7 +60,7 @@ export function Assets({ c, holdings, onPick, onAdd }: { c: WChain; holdings: Ho
           {list.map((h) => (
             <button key={h.address} type="button" className="tx-tr" role="row" onClick={() => onPick(h)} title={`Trade ${h.symbol}`}>
               <span className="tx-asset"><Logo t={h} size={24} /><b>{h.symbol}</b></span>
-              <span className="n">{amt(h.amount)}</span><span className="n hide-sm">{usd(h.priceUsd)}</span><span className="n">{usd(h.valueUsd)}</span>
+              <span className="n">{amt(h.amount)}</span><span className="n hide-sm">{usd(h.priceUsd)}</span><span className="n">{worth(h.valueUsd)}</span>
             </button>
           ))}
         </div>
