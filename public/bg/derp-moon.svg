@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 560">
+  <!-- Derp riding a rocket to the moon. -->
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9B7CFF"/><stop offset="1" stop-color="#5B36D6"/></linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#FFE27A" stop-opacity="0"/><stop offset=".5" stop-color="#F0B90B"/><stop offset="1" stop-color="#E5484D"/></linearGradient>
+  </defs>
+  <!-- moon -->
+  <circle cx="540" cy="100" r="78" fill="#FFF3C4" stroke="#F0B90B" stroke-width="6"/>
+  <circle cx="512" cy="80" r="14" fill="#F7DE8A"/><circle cx="566" cy="128" r="10" fill="#F7DE8A"/><circle cx="560" cy="68" r="7" fill="#F7DE8A"/>
+  <!-- speed lines -->
+  <g stroke="#8B6CF6" stroke-width="6" stroke-linecap="round" opacity=".6"><path d="M20 420h90M50 460h70M30 380h60"/></g>
+  <g transform="translate(300 360) rotate(-28)">
+    <!-- flame -->
+    <path d="M-240 0c40-34 90-34 120-14v28c-30 20-80 20-120-14z" fill="url(#flame)"/>
+    <!-- rocket -->
+    <path d="M-130-46h220c46 0 86 26 100 46-14 20-54 46-100 46h-220z" fill="#ECEEF6" stroke="#141830" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M190 0c-14-20-54-46-100-46v92c46 0 86-26 100-46z" fill="#E5484D" stroke="#141830" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M-110-46l-40-40h60l40 40zM-110 46l-40 40h60l40-40z" fill="#6141D4" stroke="#141830" stroke-width="6" stroke-linejoin="round"/>
+    <circle cx="40" cy="0" r="20" fill="#22D3EE" stroke="#141830" stroke-width="6"/>
+    <!-- infinity on the side -->
+    <path d="M-62-2c-8 0-13 4-13 9s5 9 13 9c6 0 10-4 15-9 5-5 9-9 15-9 8 0 13 4 13 9s-5 9-13 9c-6 0-10-4-15-9-5-5-9-9-15-9z" fill="none" stroke="#F0B90B" stroke-width="5" stroke-linecap="round" transform="translate(0 -7)"/>
+    <!-- Derp sitting on top, holding on -->
+    <g transform="translate(-30 -112)">
+      <path d="M0-70c56 0 90 32 90 86 0 50-36 76-90 76S-90 66-90 16c0-54 34-86 90-86z" fill="url(#body)"/>
+      <path d="M-60-52c-10-16 0-36 18-36 4-20 28-28 42-16 14-14 40-8 46 10 20-2 32 16 24 32" fill="#FFB3CC" stroke="#E0457B" stroke-width="5" stroke-linejoin="round"/>
+      <circle cx="-26" cy="0" r="24" fill="#fff" stroke="#141830" stroke-width="5"/><circle cx="34" cy="-6" r="30" fill="#fff" stroke="#141830" stroke-width="5"/>
+      <circle cx="-16" cy="8" r="10" fill="#141830"/><circle cx="46" cy="-16" r="13" fill="#141830"/>
+      <path d="M-30 36c20 26 66 26 82-4-26 8-54 10-82 4z" fill="#2A1450" stroke="#141830" stroke-width="4"/>
+      <path d="M22 44c4 16 22 22 30 8 4-8-4-16-12-18z" fill="#FF6B9A" stroke="#141830" stroke-width="4"/>
+      <path d="M-80 20c-20 10-34 26-40 46M80 20c20 6 34 20 40 40" stroke="#6E4CE8" stroke-width="20" stroke-linecap="round" fill="none"/>
+    </g>
+  </g>
+  <g font-family="Unbounded, Arial Rounded MT Bold, sans-serif" font-weight="800" fill="#6141D4"><text x="60" y="540" font-size="30" transform="rotate(-6 60 540)">TO THE MOON</text></g>
+</svg>

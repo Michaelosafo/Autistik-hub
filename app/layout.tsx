@@ -5,6 +5,7 @@ import { NavTrail } from "@/components/BackButton";
 import type { Metadata, Viewport } from "next";
 import Shell from "@/components/Shell";
 import LiveDock from "@/components/rooms/LiveDock";
+import SiteBackdrop from "@/components/SiteBackdrop";
 import Welcome from "@/components/Welcome";
 import WalletGate from "@/components/WalletGate";
 import { headers } from "next/headers";
@@ -48,6 +49,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         {/* Without JavaScript the welcome can't close, so it isn't shown at all. */}
         <noscript><style>{`.welcome{display:none}`}</style></noscript>
+        {/* The faint, funny artwork behind every page (changes over time and between pages). */}
+        <SiteBackdrop />
         <Welcome />
         {user && needWallet && <WalletGate uid={user.id} />}
         {/* Keeps a live playing while members move around the site. */}

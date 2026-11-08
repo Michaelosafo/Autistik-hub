@@ -5300,15 +5300,39 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
 .lw-done { font-weight: 800; color: #16a34a; }
 .sc-have-to { margin-top: 6px; font-size: .8em; opacity: .75; }
 
-/* ---- Site background: Derp (the AUTISTIK mascot) and a faint doodle pattern behind every page.
-   Drawn on fixed layers under everything, so it stays put while pages scroll. Calm mode turns it off. ---- */
-body::before, body::after { content: ""; position: fixed; pointer-events: none; z-index: -1; }
-body::before { inset: 0; background: url(/bg/doodles.svg) 0 0 / 460px 460px repeat; opacity: .11; }
-body::after { right: -60px; bottom: -30px; width: min(72vw, 560px); aspect-ratio: 600 / 640; background: url(/bg/derp.svg) center / contain no-repeat; opacity: .12; transform: rotate(-9deg); }
-@media (max-width: 860px) { body::after { right: -50px; bottom: 60px; width: 78vw; opacity: .10; } body::before { background-size: 380px 380px; } }
-:root[data-theme="dark"] body::before { opacity: .16; }
-:root[data-theme="dark"] body::after { opacity: .10; }
-html[data-calm="on"] body::before, html[data-calm="on"] body::after { display: none; }
-@media print { body::before, body::after { display: none; } }
+/* ---- Site background (components/SiteBackdrop.tsx): faint, funny scenes that take turns behind every page.
+   Fixed under everything, so they stay put while pages scroll. Calm mode turns them off. ---- */
+.sbg { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.sbg-scene { position: absolute; inset: 0; transition: opacity 2.4s ease; }
+.sbg-scene.on { opacity: 1; animation: sbgin 2.4s ease; }
+.sbg-scene.off { opacity: 0; }
+@keyframes sbgin { from { opacity: 0; } }
+.sbg-scene::before { content: ""; position: absolute; inset: 0; opacity: .5; }
+.sbg-violet::before { background: radial-gradient(55% 40% at 12% 12%, rgba(97,65,212,.20), transparent 70%), radial-gradient(50% 40% at 90% 90%, rgba(240,185,11,.16), transparent 70%); }
+.sbg-gold::before { background: radial-gradient(60% 45% at 85% 85%, rgba(240,185,11,.26), transparent 70%), radial-gradient(50% 40% at 10% 15%, rgba(97,65,212,.18), transparent 70%); }
+.sbg-cyan::before { background: radial-gradient(55% 40% at 80% 20%, rgba(34,211,238,.20), transparent 70%), radial-gradient(50% 40% at 15% 85%, rgba(97,65,212,.18), transparent 70%); }
+.sbg-pink::before { background: radial-gradient(60% 45% at 70% 70%, rgba(255,122,168,.22), transparent 70%); }
+.sbg-night::before { background: radial-gradient(60% 45% at 85% 15%, rgba(240,185,11,.18), transparent 70%), radial-gradient(60% 50% at 20% 90%, rgba(97,65,212,.20), transparent 70%); }
+.sbg-aurora::before { opacity: .9; background: radial-gradient(45% 30% at 15% 20%, rgba(97,65,212,.24), transparent 70%), radial-gradient(40% 28% at 90% 35%, rgba(240,185,11,.24), transparent 70%), radial-gradient(50% 32% at 25% 80%, rgba(236,72,153,.18), transparent 70%), radial-gradient(45% 30% at 85% 90%, rgba(34,211,238,.22), transparent 70%); }
+.sbg-tile { position: absolute; inset: -40px; background-repeat: repeat; opacity: .11; animation: sbgpan 140s linear infinite; }
+.sbg-cyan .sbg-tile { opacity: .13; }
+.sbg-dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(20,24,48,.12) 1px, transparent 1.2px); background-size: 18px 18px; }
+@keyframes sbgpan { to { transform: translate(40px, 40px); } }
+.sbg-hero { position: absolute; opacity: .12; user-select: none; animation: sbgfloat 9s ease-in-out infinite; }
+.sbg-hero.tall { right: -50px; bottom: -20px; width: min(66vw, 540px); --r: -8deg; }
+.sbg-hero.round { right: -70px; bottom: -40px; width: min(64vw, 520px); border-radius: 50%; opacity: .14; --r: -10deg; }
+.sbg-hero.wide { left: 50%; bottom: 4vh; width: min(94vw, 900px); margin-left: calc(min(94vw, 900px) / -2); opacity: .13; --r: -4deg; }
+@keyframes sbgfloat { 0%, 100% { transform: rotate(var(--r, 0deg)) translateY(0); } 50% { transform: rotate(var(--r, 0deg)) translateY(-12px); } }
+.sbg-hero { transform: rotate(var(--r, 0deg)); }
+@media (max-width: 860px) {
+  .sbg-hero.tall, .sbg-hero.round { width: 80vw; right: -40px; bottom: 70px; }
+  .sbg-hero.wide { bottom: 90px; }
+}
+:root[data-theme="dark"] .sbg-tile { opacity: .16; }
+:root[data-theme="dark"] .sbg-hero { opacity: .10; }
+:root[data-theme="dark"] .sbg-dots { background-image: radial-gradient(rgba(244,238,255,.10) 1px, transparent 1.2px); }
+html[data-calm="on"] .sbg { display: none; }
+@media (prefers-reduced-motion: reduce) { .sbg-scene, .sbg-scene.on, .sbg-tile, .sbg-hero { animation: none; transition: none; } }
+@media print { .sbg { display: none; } }
 /* The app screens painted their own solid colour; let the background show through. */
 .ax { background: transparent; }
