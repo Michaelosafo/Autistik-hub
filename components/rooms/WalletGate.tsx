@@ -9,14 +9,14 @@ import { linkMessage } from "@/lib/wallet";
  * one (or their free AUTISTIK wallet can be linked) they go straight in. Otherwise: create the free wallet, or connect
  * their own (one signature, no fee). The address is never shown to anyone in the room.
  */
-export default function WalletGate({ roomId, meId, isHost, onReady }: { roomId: string; meId: string; isHost: boolean; onReady: (short: string) => void }) {
+export default function WalletGate({ roomId, meId, isHost, onReady }: { roomId: string; meId: string; isHost: boolean; onReady: (short: string, address: string | null) => void }) {
   const [state, setState] = useState<"checking" | "need" | "busy">("checking");
   const [canCreate, setCanCreate] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function check() {
     const r = await fetch(`/api/rooms/${roomId}/me`, { method: "POST" }).then((x) => x.json()).catch(() => null);
-    if (r?.wallet) { onReady(r.short); return true; }
+    if (r?.wallet) { onReady(r.short, r.address ?? null); return true; }
     if (r?.error) setMsg(r.error);
     setCanCreate(!!r?.canCreate);
     setState("need");

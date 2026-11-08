@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
-import { DropPanel } from "@/components/rooms/RoomDrops";
+import LiveWallet from "./LiveWallet";
+import type { Member } from "@/components/wallet/types";
 import ProfileSheet from "@/components/rooms/ProfileSheet";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import Emo from "@/components/Emo";
@@ -12,7 +13,9 @@ import LiveChat from "./LiveChat";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-export type LiveMe = { id: string; alias: string; color: string | null; avatar_url: string | null; is_verified?: boolean; verified_badge?: number | null };
+export type LiveMe = { id: string; alias: string; color: string | null; avatar_url: string | null; is_verified?: boolean; verified_badge?: number | null;
+  /** For the wallet in the room: the built-in wallet's app ID and the member's wallet details. */
+  wallet?: { appId: string | null; member: Member | null } };
 export type LiveRoomInfo = { id: string; title: string; host_id: string; ended_at: string | null; chain?: string | null; token?: string | null; cohosts?: string[] | null; speakers?: string[] | null };
 type Me = LiveMe;
 type Room = LiveRoomInfo;
@@ -82,6 +85,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   // Video is for lives about a coin launch (rooms linked to a coin); other lives are voice only.
   const coinLive = !!(room.token && room.chain);
   const [ready, setReady] = useState<string | null>(null); // my wallet is linked (short address, shown only to me)
+  const [myAddr, setMyAddr] = useState<string | null>(null);
   const [joined, setJoined] = useState(false);
   const [joining, setJoining] = useState(false);
   const [peers, setPeers] = useState<Record<string, Peer>>({});
@@ -133,6 +137,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const openRef = useRef(openMic);
   openRef.current = openMic;
   const joinedRef = useRef(joined);
+  const peersRef = useRef(peers);
+  peersRef.current = peers;
   joinedRef.current = joined;
 
   const isCohost = cohosts.includes(me.id);
@@ -394,7 +400,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     ch.on("broadcast", { event: "cam" }, ({ payload }: any) => {
       if (payload.on === false) setVideos((v) => { const n = { ...v }; delete n[payload.from]; return n; });
     });
-    ch.on("broadcast", { event: "drop" }, ({ payload }: any) => { if (runners().includes(payload.from)) setDrop(String(payload.text || "").slice(0, 160)); });
+    ch.on("broadcast", { event: "drop" }, ({ payload }: any) => { if (peersRef.current[payload.from]) setDrop(String(payload.text || "").slice(0, 160)); });
     ch.on("broadcast", { event: "fire" }, () => fireBurst());
     ch.on("broadcast", { event: "rec" }, ({ payload }: any) => { if (payload.from === room.host_id) setRecOn(!!payload.on); });
     ch.on("broadcast", { event: "react" }, ({ payload }: any) => { if (REACTIONS.includes(payload.e)) float(payload.e); });
@@ -691,7 +697,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       )}
 
       {!mini && !ready ? (
-        <WalletGate roomId={room.id} meId={me.id} isHost={isHost} onReady={setReady} />
+        <WalletGate roomId={room.id} meId={me.id} isHost={isHost} onReady={(s, a) => { setReady(s); setMyAddr(a); }} />
       ) : !mini && !joined ? (
         <div className="lv-gate">
           <div className="lv-gate-ic" aria-hidden="true">{isHost ? "🎙️" : "🎧"}</div>
@@ -793,7 +799,10 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
 
           <LiveChat roomId={room.id} me={me} canModerate={canRun} />
 
-          {canRun && <DropPanel roomId={room.id} onDropped={(text) => { setDrop(text); send("drop", { text }); }} />}
+          <LiveWallet roomId={room.id} address={myAddr} sol={me.wallet?.member?.sol ?? null} canAll={canRun}
+            people={list.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, alias: p.alias, color: p.color, avatar_url: p.avatar_url }))}
+            target={sendTo} onTargetDone={() => setSendTo(null)} appId={me.wallet?.appId ?? null} member={me.wallet?.member ?? null}
+            onSent={(text) => { setDrop(text); send("drop", { text }); }} />
         </>
       ) : null}
 
@@ -824,14 +833,6 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
           mute: () => { muteOne(sheet.id); setSheet(null); },
           send: () => { setSendTo({ id: sheet.id, alias: sheet.alias }); setSheet(null); },
         }} />
-      )}
-      {!mini && sendTo && (
-        <div className="lv-sheet-wrap" role="presentation" onClick={() => setSendTo(null)}>
-          <div className="lv-sheet" onClick={(e) => e.stopPropagation()}>
-            <DropPanel key={sendTo.id} roomId={room.id} target={sendTo} button={false} onClose={() => setSendTo(null)}
-              onDropped={(text) => { setDrop(text); send("drop", { text }); }} />
-          </div>
-        </div>
       )}
     </div>
   );
