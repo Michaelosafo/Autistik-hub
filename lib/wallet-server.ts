@@ -366,7 +366,11 @@ export type EvmTx = { kind: "evm"; to: `0x${string}`; data: `0x${string}`; value
 export type SolTx = { kind: "solana"; tx: string };
 
 /** Turns a quote into a transaction for the member's own wallet. The tokens always go back to that same wallet. */
-export async function build(c: WChain, q: Quote, from: string, slippageBps: number): Promise<EvmTx | SolTx> {
+/**
+ * The transaction for a quote. `trusted` is only for the server's own wallets (the AI trader trades the owner's own
+ * money, so it doesn't pay the app fee to the owner's treasury): it allows a fee-free Kyber route. Member swaps never pass it.
+ */
+export async function build(c: WChain, q: Quote, from: string, slippageBps: number, trusted = false): Promise<EvmTx | SolTx> {
   if (!okFee(q.feeBps)) throw new Error("Prices changed. Please get a new quote.");
   if (q.kind === "jupiter") {
     if (!SOL_RE.test(from)) throw new Error("That isn't a Solana wallet address.");
@@ -405,7 +409,7 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
   // KyberSwap: the fee must still be ours (a quote from the browser can't redirect it).
   const fee = q.route?.extraFee;
   // The Wallet's own fee can't be dropped; any fee (Wallet or chat) can only ever go to the treasury.
-  if (TREASURY && FEE_BPS > 0 && (!fee || ![FEE_BPS, CHAT_FEE_BPS].includes(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
+  if (TREASURY && FEE_BPS > 0 && !(trusted && q.feeBps === 0 && !fee) && (!fee || ![FEE_BPS, CHAT_FEE_BPS].includes(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
   if (fee && (!TREASURY || String(fee.feeReceiver).toLowerCase() !== TREASURY.toLowerCase() || !okFee(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
   const j = await getJson(`${KYBER}/${c.kyber}/api/v1/route/build`, { method: "POST", headers: KYBER_HEADERS, timeout: 15_000, body: JSON.stringify({
     routeSummary: q.route, sender: who, recipient: who, slippageTolerance: slippageBps, source: "autistik-hub", enableGasEstimation: false,

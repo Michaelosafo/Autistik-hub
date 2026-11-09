@@ -225,8 +225,8 @@ async function liveBuy(token: string, bnb: number, tax: number) {
   const pc = walletChainClient(C) as any;
   const wei = BigInt(Math.floor(bnb * 1e18));
   const before: bigint = await pc.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
-  const q = await quote(C, C.native.address, token, wei);
-  const tx = (await build(C, q, account.address, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)))) as EvmTx;
+  const q = await quote(C, C.native.address, token, wei, 0);
+  const tx = (await build(C, q, account.address, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)), true)) as EvmTx;
   const { hash } = await sendSwap(tx, wei, C.native.address);
   const after: bigint = await pc.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
   return { hash, raw: after - before };
@@ -239,8 +239,8 @@ async function liveSell(token: string, raw: bigint, tax: number) {
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
   const before: bigint = await pc.getBalance({ address: account.address });
-  const q = await quote(C, token, C.native.address, amount);
-  const tx = (await build(C, q, account.address, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)))) as EvmTx;
+  const q = await quote(C, token, C.native.address, amount, 0);
+  const tx = (await build(C, q, account.address, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)), true)) as EvmTx;
   const { hash, gas } = await sendSwap(tx, amount, token);
   const after: bigint = await pc.getBalance({ address: account.address });
   return { hash, received: Number(after - before + gas) / 1e18 };
