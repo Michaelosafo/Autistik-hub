@@ -8,7 +8,7 @@ import { createPublicClient, erc20Abi, getAddress, http } from "viem";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { MAX_SLIPPAGE_BPS, WCHAINS, WSOL, type WChain, type WChainKey } from "@/lib/wallet-chains";
 import { CHAT_FEE_BPS, balances, market, quote as engineQuote, riskOf, type Quote } from "@/lib/wallet-server";
-import { relayQuote, type RelayQuote } from "@/lib/relay";
+import { relayFeeOn, relayQuote, type RelayQuote } from "@/lib/relay";
 import { XCHAINS, XCHAIN_BY_KEY, isXAddress, isXNative, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
 import { xDetect, xQuote, xTokens } from "@/lib/bridge-server";
 import { chainKey, clean, readSwap, type SwapAsk } from "@/lib/swap-read";
@@ -226,7 +226,7 @@ export async function planSwap(input: string | SwapAsk, who: { evm: string | nul
         feeBps: CHAT_FEE_BPS, feeWallet: FEE_WALLET, topupUsd });
       const feeUsd = (q.relayerUsd ?? 0) > 0 ? q.relayerUsd : null;
       return { ...base, ...none, via: "relay", toAmount: q.toAmount, toAmountMin: q.toAmountMin, fromUsd: q.fromUsd, toUsd: q.toUsd, gasUsd: q.gasUsd, feeUsd,
-        tool: "Relay", seconds: q.seconds, slipBps, feeBps: FEE_WALLET ? CHAT_FEE_BPS : 0, costUsd: (q.gasUsd ?? 0) + (feeUsd ?? 0) || null,
+        tool: "Relay", seconds: q.seconds, slipBps, feeBps: relayFeeOn && FEE_WALLET ? CHAT_FEE_BPS : 0, costUsd: (q.gasUsd ?? 0) + (feeUsd ?? 0) || null,
         // The top-up arrives as gas coin, so it counts as value received.
         netUsd: q.toUsd != null ? q.toUsd + (q.topupUsd ?? 0) - (q.gasUsd ?? 0) : null, relay: q, topupUsd: q.topupUsd };
     };

@@ -10,7 +10,10 @@ import { SOLANA_ID, isXNative, type XChain } from "@/lib/bridge-chains";
 const API = "https://api.relay.link";
 const RELAY_SOLANA = 792703809;
 const RELAY_SOL_NATIVE = "11111111111111111111111111111111";
-const HEADERS: Record<string, string> = { "content-type": "application/json", accept: "application/json", ...(process.env.RELAY_API_KEY ? { "x-api-key": process.env.RELAY_API_KEY } : {}) };
+const KEY = (process.env.RELAY_API_KEY || "").trim();
+const HEADERS: Record<string, string> = { "content-type": "application/json", accept: "application/json", ...(KEY ? { "x-api-key": KEY } : {}) };
+/** Relay only takes an app fee (and serves /quote/v2) with an API key from relay.link; without one, routes carry no fee. */
+export const relayFeeOn = !!KEY;
 
 const rid = (c: XChain) => (c.id === SOLANA_ID ? RELAY_SOLANA : c.id);
 const cur = (c: XChain, a: string) => (isXNative(c, a) ? (c.kind === "solana" ? RELAY_SOL_NATIVE : "0x0000000000000000000000000000000000000000") : a);
@@ -39,9 +42,9 @@ export async function relayQuote(p: {
     originCurrency: cur(p.from, p.fromToken), destinationCurrency: cur(p.to, p.toToken),
     amount: p.amount.toString(), tradeType: "EXACT_INPUT", slippageTolerance: String(p.slippageBps), referrer: "autistik.io",
   };
-  if (p.feeBps > 0 && p.feeWallet) body.appFees = [{ recipient: p.feeWallet, fee: String(p.feeBps) }];
+  if (KEY && p.feeBps > 0 && p.feeWallet) body.appFees = [{ recipient: p.feeWallet, fee: String(p.feeBps) }];
   if (p.topupUsd && p.from.id !== p.to.id) { body.topupGas = true; body.topupGasAmount = String(Math.round(p.topupUsd * 1e6)); }
-  const r = await fetch(`${API}/quote/v2`, { method: "POST", headers: HEADERS, body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  const r = await fetch(`${API}/${KEY ? "quote/v2" : "quote"}`, { method: "POST", headers: HEADERS, body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(15_000) });
   const j: any = await r.json().catch(() => null);
   if (!r.ok || !j?.steps) throw new Error(String(j?.message || "No Relay route.").slice(0, 150));
 
