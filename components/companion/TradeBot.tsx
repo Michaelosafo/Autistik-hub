@@ -18,10 +18,11 @@ import { STOP_SLIPPAGE_DEFAULT } from "@/lib/orders";
 import { plainNum } from "@/lib/num-format";
 
 export type TradeIntent = { action: Action; amount?: number; pct?: number; mult?: number };
-type Action = "buy" | "sell" | "limit" | "tp" | "sl" | "orders" | "info";
+type Action = "buy" | "sell" | "limit" | "tp" | "sl" | "orders" | "scan" | "info";
 type Found = { chain: WChainKey; token: TokenInfo; market: Market | null };
 
 const ACTIONS: { id: Action; label: string; tone: string; hint: string }[] = [
+  { id: "scan", label: "Scan & review", tone: "scan", hint: "Safety scan and a buy-or-sell read" },
   { id: "buy", label: "Buy", tone: "buy", hint: "Buy now at the market price" },
   { id: "sell", label: "Sell", tone: "sell", hint: "Sell now at the market price" },
   { id: "limit", label: "Limit buy", tone: "buy", hint: "Buy automatically if the price drops" },
@@ -51,6 +52,7 @@ export function findTradeRequest(text: string): { ca: string; intent?: TradeInte
   if ((m = t.match(/\bsell\b\s*(all|[\d.]+\s*%)?/))) return { ca, intent: { action: "sell", pct: m[1] === "all" ? 100 : m[1] ? parseFloat(m[1]) : undefined } };
   if ((m = t.match(/\bbuy\b\s*([\d.]+)?/))) return { ca, intent: { action: "buy", amount: n(m[1]) } };
   if (/\borders?\b/.test(t)) return { ca, intent: { action: "orders" } };
+  if (/\b(scan|review|check|safe|audit|rug)\b/.test(t)) return { ca, intent: { action: "scan" } };
   return { ca };
 }
 
@@ -146,7 +148,7 @@ function Flow({ c, t, m, signer, intent, onStep }: { c: WChain; t: TokenInfo; m:
           <div className="tb-btns grid">
             {ACTIONS.map((a) => {
               const off = (a.id === "limit" || a.id === "tp" || a.id === "sl" || a.id === "orders") && !contract;
-              return <button key={a.id} type="button" className={`tb-btn ${a.tone}`} disabled={off || contract === undefined && a.id !== "buy" && a.id !== "sell"} title={off ? `Auto orders aren't open on ${c.name} yet` : a.hint} onClick={() => setAction(a.id)}>{a.label}<small>{off ? "Not on this network yet" : a.hint}</small></button>;
+              return <button key={a.id} type="button" className={`tb-btn ${a.tone}`} disabled={off || (contract === undefined && !["buy", "sell", "scan"].includes(a.id))} title={off ? `Auto orders aren't open on ${c.name} yet` : a.hint} onClick={() => setAction(a.id)}>{a.label}<small>{off ? "Not on this network yet" : a.hint}</small></button>;
             })}
           </div>
         </div>
@@ -160,6 +162,7 @@ function Flow({ c, t, m, signer, intent, onStep }: { c: WChain; t: TokenInfo; m:
               presetMove={intent?.action === action ? (action === "tp" ? intent.mult : intent.pct) : undefined} onDone={() => { load(); setAction("orders"); }} />
           )}
           {action === "orders" && signer.evm && <OpenOrders c={c} signer={signer} owner={signer.evm.address} />}
+          {action === "scan" && <ScanStep c={c} t={t} canOrder={!!contract} onAction={setAction} />}
         </div>
       )}
     </>
@@ -333,5 +336,76 @@ function OrderStep({ c, t, m, signer, contract, kind, hold, presetMove, onDone }
         : <button type="button" className={`tb-go ${kind === "limit" ? "buy" : kind === "tp" ? "gold" : "sell"}`} disabled={!!problem} onClick={go}>{problem || `Set ${what.toLowerCase()}`}</button>}
       {err && <div className="aw-risk danger">{err}</div>}
     </>
+  );
+}
+
+type Review = {
+  chainName: string; path: string; symbol: string | null;
+  verdict: { kind: "buy" | "wait" | "careful" | "sell" | "avoid"; emoji: string; title: string; summary: string; score: number; reasons: { level: string; text: string }[] };
+  hold: { short: { level: string; title: string }; long: { level: string; title: string } };
+  trust: { score: number | null; level: string; title: string; checks: { key: string; name: string; state: "ok" | "warn" | "bad"; text: string }[] };
+  holders: { top: number; topShare: number | null; devPct: number | null; bundle: { level: string; title: string } | null };
+  know: { level: string; text: string }[];
+};
+
+/** Scan & review: the built-in scanner's read on this coin, then the next step (buy, set a stop-loss…). */
+function ScanStep({ c, t, canOrder, onAction }: { c: WChain; t: TokenInfo; canOrder: boolean; onAction: (a: Action) => void }) {
+  const [r, setR] = useState<Review | null>(null);
+  const [err, setErr] = useState("");
+  const [k, setK] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setR(null); setErr("");
+    fetch("/api/analytics/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: c.key, token: t.address }) })
+      .then(async (res) => { const d = await res.json().catch(() => ({})); if (!res.ok) throw new Error(d.error || "The scan didn't work. Try again."); return d as Review; })
+      .then((d) => live && setR(d)).catch((e) => live && setErr(e.message));
+    return () => { live = false; };
+  }, [k]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (err) return <><div className="aw-risk danger">{err}</div><button type="button" className="tb-chip" onClick={() => setK((n) => n + 1)}>Try again</button></>;
+  if (!r) return <div className="tb-load"><span className="aw-spin" />Scanning {t.symbol}: safety, top 40 wallets, the dev and recent trades… (up to 30 seconds)</div>;
+  const v = r.verdict;
+  const tone = (l: string) => (l === "good" || l === "ok" ? "ok" : l === "bad" || l === "weak" ? "bad" : "warn");
+  return (
+    <div className="tb-scan">
+      <div className={`tb-verdict ${v.kind}`}>
+        <span className="tb-verdict-e" aria-hidden="true">{v.emoji}</span>
+        <div><b>{v.title}</b><p>{v.summary}</p></div>
+      </div>
+      {v.kind !== "avoid" && (
+        <div className="tb-meter" aria-label={`Buy score ${v.score} out of 100`}><i style={{ left: `${Math.max(2, Math.min(98, v.score))}%` }} /><small>Sell</small><small>Wait</small><small>Buy</small></div>
+      )}
+      <div className="tb-scan-grid">
+        <div className={`tb-trust ${r.trust.level}`}>
+          <small>Trust score</small>
+          <b>{r.trust.score == null ? "?" : r.trust.score}<span>/100</span></b>
+          <em>{r.trust.title}</em>
+        </div>
+        <div className="tb-holds">
+          <span><small>Day trade</small><b className={tone(r.hold.short.level)}>{r.hold.short.title}</b></span>
+          <span><small>Long term</small><b className={tone(r.hold.long.level)}>{r.hold.long.title}</b></span>
+          <span><small>Top {r.holders.top || 40} wallets hold</small><b>{r.holders.topShare != null ? `${r.holders.topShare}%` : "–"}</b></span>
+          <span><small>Dev holds</small><b>{r.holders.devPct != null ? `${r.holders.devPct}%` : "–"}</b></span>
+          {r.holders.bundle && <span><small>Bundles</small><b className={r.holders.bundle.level === "low" ? "ok" : r.holders.bundle.level === "high" ? "bad" : "warn"}>{r.holders.bundle.title}</b></span>}
+        </div>
+      </div>
+      <ul className="tb-checks">
+        {r.trust.checks.map((ch) => <li key={ch.key} className={ch.state}><b>{ch.name}</b> {ch.text}</li>)}
+      </ul>
+      {(v.reasons.length > 0 || r.know.length > 0) && (
+        <details className="tb-why" open>
+          <summary>Why, and what buyers should know</summary>
+          <ul>{[...v.reasons, ...r.know].slice(0, 8).map((x, i) => <li key={i} className={tone(x.level)}>{x.text}</li>)}</ul>
+        </details>
+      )}
+      <p className="tb-q">What next?</p>
+      <div className="tb-btns">
+        {v.kind !== "avoid" && <button type="button" className="tb-chip" onClick={() => onAction("buy")}>Buy</button>}
+        {canOrder && <button type="button" className="tb-chip" onClick={() => onAction("sl")}>Set a stop-loss</button>}
+        {canOrder && <button type="button" className="tb-chip" onClick={() => onAction("tp")}>Set take profit</button>}
+        <a className="tb-chip" href={r.path} target="_blank" rel="noopener noreferrer">Full scan report ↗</a>
+      </div>
+      <small className="tb-dim">Worked out automatically from blockchain activity on {r.chainName}. It can be wrong and isn&apos;t financial advice.</small>
+    </div>
   );
 }
