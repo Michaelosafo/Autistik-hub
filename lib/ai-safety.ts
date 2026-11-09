@@ -7,6 +7,9 @@
  *  3. Buy tax and sell tax are each 2% or less. GoPlus, Honeypot.is (BNB Chain / Ethereum) and the wallet's own
  *     check must all agree.
  *  4. It isn't a honeypot and the owner has no dangerous powers (mint, hidden owner, blacklist, pause, tax change…).
+ *  5. The project has its own socials: an X account or X community, or a Telegram group (from DexScreener, or
+ *     GeckoTerminal's token info when DexScreener has none). A link to someone else's post or to a famous account
+ *     (Elon, Binance, CZ…) doesn't count, since copycat coins borrow those. A website is a bonus, not required.
  * A honeypot / not-yet-sellable coin comes back with honeypot: true, so the trader puts it on its watch list and
  * re-checks it every minute: it's bought only once it can be sold and passes everything above while under $60K.
  * Server only.
@@ -19,13 +22,15 @@ export const SAFETY = {
   LP_LOCKED: 0.9, // share of the pool that must be locked or burned
   MAX_HOLDER: 0.15, // creator / owner may hold at most 15%
   WATCH_HOURS: 6, // a watched honeypot is dropped after this long
+  REQUIRE_SOCIALS: true, // the project must have its own X or Telegram
 };
 
 export type RiskIn = { honeypot?: boolean; level?: string; buyTax?: number; sellTax?: number } | null | undefined;
 export type Gate =
-  | { ok: true; mcap: number; buyTax: number; sellTax: number }
+  | { ok: true; mcap: number; buyTax: number; sellTax: number; socials: Socials }
   | { ok: false; reason: string; honeypot: boolean; mcap: number | null };
 type Fail = { reason: string; honeypot: boolean } | null;
+export type Socials = { x: string | null; tg: string | null; web: string | null };
 type Taxes = { buy: number; sell: number };
 
 const num = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
@@ -41,14 +46,71 @@ const GOPLUS_ID: Record<string, number> = { bsc: 56, ethereum: 1, robinhood: 466
 const HONEYPOT_IS_ID: Record<string, number> = { bsc: 56, ethereum: 1 };
 const DEAD = /^0x0{40}$|^0x0{36}dead$/i;
 
+const GT_NET: Record<string, string> = { bsc: "bsc", ethereum: "eth", solana: "solana" };
+// Accounts copycat coins list as "their" X. A link to one of these isn't the project's own account.
+const FAMOUS = new Set(["elonmusk", "binance", "cz_binance", "bnbchain", "bnbchaindevs", "heyibinance", "ethereum", "vitalikbuterin",
+  "solana", "coinbase", "base", "jessepollak", "pumpdotfun", "four_meme_", "dexscreener", "realdonaldtrump", "potus", "whitehouse",
+  "x", "twitter", "tesla", "spacex", "openai", "nasa", "robinhoodapp", "brian_armstrong", "saylor", "aeyakovenko"]);
+
+// Link hosts that are charts, explorers or launchpads, not the project's own website.
+const NOT_WEB = ["dexscreener.com", "geckoterminal.com", "pump.fun", "four.meme", "gmgn.ai", "birdeye.so", "bscscan.com", "etherscan.io",
+  "solscan.io", "youtube.com", "youtu.be", "tiktok.com", "instagram.com", "facebook.com", "linktr.ee"];
+
+/** The project's own X / Telegram / website from a list of links (tweets and famous accounts don't count). */
+export function pickSocials(links: { type?: string; url?: string }[]): Socials {
+  const out: Socials = { x: null, tg: null, web: null };
+  for (const l of links) {
+    const url = String(l?.url || "").trim();
+    let u: URL;
+    try { u = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`); } catch { continue; }
+    const host = u.hostname.replace(/^www\./, "").toLowerCase();
+    const parts = u.pathname.split("/").filter(Boolean);
+    if (host === "x.com" || host === "twitter.com" || host === "mobile.twitter.com") {
+      if (parts[0] === "i" && parts[1] === "communities" && parts[2]) out.x ??= u.href;                 // X community
+      else if (parts.length === 1 && /^[A-Za-z0-9_]{1,15}$/.test(parts[0]) && !FAMOUS.has(parts[0].toLowerCase())) out.x ??= u.href;
+    } else if (host === "t.me" || host === "telegram.me") {
+      if (parts[0] && !/^(share|addstickers|addemoji|proxy|socks|iv)$/i.test(parts[0])) out.tg ??= u.href;
+    } else if (!NOT_WEB.some((d) => host === d || host.endsWith(`.${d}`))) {
+      out.web ??= u.href;
+    }
+  }
+  return out;
+}
+
+/** Market cap of the coin's deepest DexScreener pool, and the socials DexScreener lists for it. */
+export async function dexInfo(chain: string, token: string): Promise<{ mcap: number | null; links: { type?: string; url?: string }[] }> {
+  const pairs = await get(`https://api.dexscreener.com/tokens/v1/${chain}/${token}`);
+  const mine = (Array.isArray(pairs) ? pairs : []).filter((p: any) => String(p?.baseToken?.address || "").toLowerCase() === token.toLowerCase());
+  const best = [...mine].sort((a: any, b: any) => num(b?.liquidity?.usd) - num(a?.liquidity?.usd))[0];
+  const links = mine.flatMap((p: any) => [...(p?.info?.socials || []), ...(p?.info?.websites || []).map((w: any) => ({ type: "website", url: w?.url }))]);
+  return { mcap: best ? num(best.marketCap) || num(best.fdv) || null : null, links };
+}
+
 /** Market cap of the coin's deepest DexScreener pool (null if it has no pool yet). */
 export async function dexMcap(chain: string, token: string): Promise<number | null> {
-  const pairs = await get(`https://api.dexscreener.com/tokens/v1/${chain}/${token}`);
-  const best = (Array.isArray(pairs) ? pairs : [])
-    .filter((p: any) => String(p?.baseToken?.address || "").toLowerCase() === token.toLowerCase())
-    .sort((a: any, b: any) => num(b?.liquidity?.usd) - num(a?.liquidity?.usd))[0];
-  if (!best) return null;
-  return num(best.marketCap) || num(best.fdv) || null;
+  return (await dexInfo(chain, token)).mcap;
+}
+
+/** Socials from GeckoTerminal's token info (it reads the coin's own metadata), for coins without a DexScreener profile. */
+async function gtLinks(chain: string, token: string): Promise<{ type?: string; url?: string }[]> {
+  if (!GT_NET[chain]) return [];
+  const a = (await get(`https://api.geckoterminal.com/api/v2/networks/${GT_NET[chain]}/tokens/${token}/info`))?.data?.attributes;
+  if (!a) return [];
+  return [
+    ...(a.twitter_handle ? [{ type: "twitter", url: `https://x.com/${a.twitter_handle}` }] : []),
+    ...(a.telegram_handle ? [{ type: "telegram", url: `https://t.me/${a.telegram_handle}` }] : []),
+    ...(Array.isArray(a.websites) ? a.websites.map((w: string) => ({ type: "website", url: w })) : []),
+  ];
+}
+
+/** The project's socials: DexScreener first, GeckoTerminal if DexScreener has no X / Telegram. */
+export async function projectSocials(chain: string, token: string, dexLinks: { type?: string; url?: string }[]): Promise<Socials> {
+  let s = pickSocials(dexLinks);
+  if (!s.x && !s.tg) {
+    const more = pickSocials(await gtLinks(chain, token));
+    s = { x: s.x || more.x, tg: s.tg || more.tg, web: s.web || more.web };
+  }
+  return s;
 }
 
 /** GoPlus (BNB Chain, Ethereum, Robinhood Chain): honeypot, owner powers, taxes, pool lock, creator share. */
@@ -112,7 +174,8 @@ async function rugcheck(token: string, maxTax: number, tax: Taxes): Promise<Fail
  */
 export async function safetyGate(chain: string, token: string, risk: RiskIn, maxTax: number): Promise<Gate> {
   const limit = maxTax > 0 ? Math.min(maxTax, SAFETY.MAX_TAX) : SAFETY.MAX_TAX;
-  const mcap = await dexMcap(chain, token);
+  const info = await dexInfo(chain, token);
+  const mcap = info.mcap;
   const no = (f: NonNullable<Fail>): Gate => ({ ok: false, reason: f.reason, honeypot: f.honeypot, mcap });
   if (mcap == null) return no({ reason: "no DexScreener pool or market cap yet", honeypot: false });
   if (mcap < SAFETY.MCAP_MIN || mcap > SAFETY.MCAP_MAX) return no({ reason: `market cap ${usd(mcap)} is outside ${usd(SAFETY.MCAP_MIN)}–${usd(SAFETY.MCAP_MAX)}`, honeypot: false });
@@ -121,6 +184,9 @@ export async function safetyGate(chain: string, token: string, risk: RiskIn, max
   if (risk.level === "danger") return no({ reason: "flagged as dangerous", honeypot: false });
   const tax: Taxes = { buy: num(risk.buyTax), sell: num(risk.sellTax) };
   if (tax.buy > limit || tax.sell > limit) return no({ reason: `tax too high (buy ${pct(tax.buy)}, sell ${pct(tax.sell)}; max ${pct(limit)})`, honeypot: false });
+
+  const socials = await projectSocials(chain, token, info.links);
+  if (SAFETY.REQUIRE_SOCIALS && !socials.x && !socials.tg) return no({ reason: "no project socials (no own X account or Telegram group)", honeypot: false });
 
   let checks: Promise<Fail>[];
   if (chain === "solana") checks = [rugcheck(token, limit, tax)];
@@ -131,5 +197,5 @@ export async function safetyGate(chain: string, token: string, risk: RiskIn, max
   // A honeypot result wins, so the coin is watched rather than forgotten.
   const f = fails.find((x) => x.honeypot) || fails[0];
   if (f) return no(f);
-  return { ok: true, mcap, buyTax: +tax.buy.toFixed(2), sellTax: +tax.sell.toFixed(2) };
+  return { ok: true, mcap, buyTax: +tax.buy.toFixed(2), sellTax: +tax.sell.toFixed(2), socials };
 }
