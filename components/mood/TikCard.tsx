@@ -15,7 +15,7 @@ import { refreshTrending, type Hot } from "./useTrending";
 type CardProps = {
   t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null;
   /** In a thread: who the Tik being replied to is by, and "Reply" to this person. */
-  parentAlias?: string; onReplyTo?: (who: { id: string; alias: string }) => void;
+  parentAlias?: string;
 };
 export default function TikCard(props: CardProps) {
   const { t, me, onRemoved } = props;
@@ -35,7 +35,7 @@ export default function TikCard(props: CardProps) {
   return <TikBody {...props} />;
 }
 
-function TikBody({ t, me, onRemoved, compact, hot, parentAlias, onReplyTo }: CardProps) {
+function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   const box = useRef<HTMLElement>(null);
   const [viewers, setViewers] = useState(false);
   // Counts as seen once it's at least half on screen for a second (the author's own looks don't count).
@@ -115,7 +115,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, onReplyTo }: Car
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>
             {likes > 0 && <span>{likes}</span>}
           </button>
-          {!t.reply_to && (
+          {(
             <button type="button" className={"tik-act" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open}>
               <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
               <span>{replies > 0 ? replies : "Reply"}</span>
@@ -125,12 +125,6 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, onReplyTo }: Car
             <button type="button" className={"tik-act tickle" + (tickled ? " on" : "")} onClick={tickle} aria-pressed={tickled} aria-label={tickled ? "Undo Tickle" : "Tickle: repost to everyone"} title={tickled ? "Undo Tickle" : "Tickle (repost)"}>
               <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" /></svg>
               <span>{tickles > 0 ? tickles : "Tickle"}</span>
-            </button>
-          )}
-          {t.reply_to && onReplyTo && a && (
-            <button type="button" className="tik-act" onClick={() => onReplyTo({ id: a.id, alias: a.alias })}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
-              <span>Reply</span>
             </button>
           )}
           {!t.reply_to && (me === t.author_id
@@ -160,23 +154,19 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, onReplyTo }: Car
   );
 }
 
+/** The replies under one Tik or one comment; each reply can have its own replies underneath (a thread). */
 function Replies({ tik, me, onCount }: { tik: Tik; me: string | null; onCount: (d: number) => void }) {
   const [k, setK] = useState(0);
-  // Who the reply is to: the Tik's author, or a person in the thread (tap Reply on their reply).
-  const [to, setTo] = useState<{ id: string; alias: string } | null>(null);
   const owner = tik.author?.alias || "them";
   const { tiks, setTiks, more, loadMore } = useTiks({ replyTo: tik.id, limit: 20, refreshKey: k });
   return (
     <div className="tik-replies">
       {tiks === null ? <small className="muted">Loading replies…</small> : tiks.map((r) => (
-        <TikCard key={r.id} t={r} me={me} compact parentAlias={tik.author?.handle || tik.author?.alias} onReplyTo={(w) => setTo(w.id === me ? null : w)}
+        <TikCard key={r.id} t={r} me={me} compact parentAlias={tik.author?.handle || tik.author?.alias}
           onRemoved={(id) => { setTiks((x) => x?.filter((y) => y.id !== id) ?? null); onCount(-1); }} />
       ))}
       {more && <button type="button" className="tik-more" onClick={loadMore}>More replies</button>}
-      {me ? <>
-        {to && <div className="tik-to">Replying to <b>{to.alias}</b><button type="button" onClick={() => setTo(null)} aria-label="Reply to the Tik instead">✕</button></div>}
-        <TikComposer replyTo={tik.id} replyUser={to?.id ?? null} compact placeholder={`Reply to ${to?.alias || owner}…`} onPosted={() => { setK((n) => n + 1); onCount(1); setTo(null); }} />
-      </> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
+      {me ? <TikComposer replyTo={tik.id} compact placeholder={`Reply to ${owner}…`} onPosted={() => { setK((n) => n + 1); onCount(1); }} /> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
     </div>
   );
 }

@@ -5793,3 +5793,42 @@ html[data-app="android"] .appbar{display:none}
 .tik-viewers ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
 .tik-viewers li a{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none}
 .tik-viewers li small{margin-left:auto;color:var(--muted)}
+/* Threads: replies sit under the comment they answer; deep threads stop indenting after three levels. */
+.tik-replies .tik-replies{margin-left:18px;padding-left:10px;border-left:2px solid var(--line)}
+.tik-replies .tik-replies .tik-replies .tik-replies{margin-left:0;padding-left:0;border-left:0}
+
+/* ---------- Member profile: clean, centred ---------- */
+.pp{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.pp-head{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:0 16px 18px;border-radius:24px;background:var(--surface);border:1px solid var(--line);overflow:hidden}
+.pp-cover{align-self:stretch;height:92px;margin:0 -16px;background:linear-gradient(120deg,#7c5cff,#ff6b9a 55%,#f0b90b)}
+.pp-head.team .pp-cover{background:linear-gradient(120deg,#c98a00,#f0b90b 55%,#ffe08a)}
+.pp-av{width:104px!important;height:104px!important;font-size:40px!important;margin-top:-56px;box-shadow:0 0 0 5px var(--surface)}
+.pp-name{margin:4px 0 0;font-size:1.55em;line-height:1.15;display:inline-flex;align-items:center;gap:8px;overflow-wrap:anywhere}
+.pp-sub{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 10px;color:var(--muted);font-size:.9em}
+.pp-tag{font-size:.82em;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink)}
+.pp-tag.gold{background:rgba(240,185,11,.18);color:#c98a00}
+.pp-stats{display:flex;gap:6px;width:100%;max-width:360px;margin-top:6px}
+.pp-stats > *{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px 4px;border-radius:14px;color:var(--ink);text-decoration:none}
+.pp-stats a:hover{background:var(--surface-2)}
+.pp-stats b{font-size:1.15em}
+.pp-stats small{color:var(--muted);font-size:.78em}
+.pp-acts{display:flex;gap:8px;width:100%;max-width:420px;margin-top:6px}
+.pp-acts > *{flex:1}
+.pp .pp-btn{all:unset;box-sizing:border-box;cursor:pointer;text-align:center;padding:10px 12px;border-radius:12px;font-weight:800;font-size:.9em;background:var(--surface-2);color:var(--ink)}
+.pp .pp-btn.primary{background:#F0B90B;color:#111}
+.pp-acts .btn{width:100%;justify-content:center;border-radius:12px}
+.pp-list{display:flex;flex-direction:column;border-radius:20px;background:var(--surface);border:1px solid var(--line);overflow:hidden}
+.pp-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px}
+.pp-row + .pp-row{border-top:1px solid var(--line)}
+.pp-row > span{color:var(--muted);font-size:.88em}
+.pp-row > b{font-size:.92em;text-align:right;overflow-wrap:anywhere}
+.pp-row.col{flex-direction:column;align-items:flex-start}
+.pp-ok{color:#22c55e}
+.pp-groups{display:flex;flex-wrap:wrap;gap:6px}
+.pp-groups a{padding:5px 12px;border-radius:999px;background:var(--surface-2);color:var(--ink);text-decoration:none;font-weight:700;font-size:.85em}
+.pp-card{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:20px;background:var(--surface);border:1px solid var(--line)}
+.pp-card h2{margin:0;font-size:1.05em}
+.pp-privacy{display:flex;flex-direction:column;gap:8px}
+.pp-seg{display:flex;padding:3px;border-radius:12px;background:var(--surface-2)}
+.pp-seg button{all:unset;flex:1;cursor:pointer;text-align:center;padding:8px 6px;border-radius:9px;font-weight:700;font-size:.88em}
+.pp-seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.15)}
