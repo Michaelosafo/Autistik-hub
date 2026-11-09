@@ -8,14 +8,15 @@ import { megafuelCheck, megafuelSend, ultraExecute, ultraSwap } from "@/lib/gasl
 import { balances, build, market, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
 import { XCHAINS, isXAddress, isXChain } from "@/lib/bridge-chains";
 import { xChainLogos, xDetect, xQuote, xStatus, xTokens } from "@/lib/bridge-server";
+import { planSwap } from "@/lib/swap-plan";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const LIMITS: Record<string, [number, number]> = {
   token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60], "sol-ultra": [15, 60], "gas-check": [40, 60], "gas-send": [20, 60],
-  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60],
+  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60], "x-plan": [15, 60],
 };
 
 /**
@@ -144,6 +145,15 @@ async function cross(action: string, b: any) {
         const slip = Math.round(Number(b.slippageBps));
         if (!(slip >= 10 && slip <= MAX_SLIPPAGE_BPS)) return json({ error: `Slippage must be between 0.1% and ${MAX_SLIPPAGE_BPS / 100}%.` }, 400);
         return json({ quote: await xQuote({ from, to, fromToken: b.fromToken, toToken: b.toToken, amount: BigInt(b.amount), fromAddress: b.fromAddress, toAddress: b.toAddress, slippageBps: slip }) });
+      }
+      case "x-plan": {
+        // Swap by message: every route for what the member typed, cheapest first, paying out only to their own wallets.
+        const text = String(b.text || "").slice(0, 400);
+        const evm = typeof b.evm === "string" && /^0x[0-9a-fA-F]{40}$/.test(b.evm) ? b.evm : null;
+        const sol = typeof b.sol === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(b.sol) ? b.sol : null;
+        if (!text.trim()) return json({ error: "Tell me what to swap." }, 400);
+        if (!evm && !sol) return json({ error: "Connect a wallet first." }, 400);
+        return json({ plan: await planSwap(text, { evm, sol }) });
       }
       case "x-status": {
         if (!isXChain(b.fromChain) || !isXChain(b.toChain) || typeof b.hash !== "string" || !/^(0x[0-9a-fA-F]{64}|[1-9A-HJ-NP-Za-km-z]{64,90})$/.test(b.hash)) return json({ error: "Bad transfer." }, 400);
