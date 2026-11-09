@@ -69,19 +69,20 @@ export default function TikHome({ admin }: { admin?: boolean }) {
             {FILTERS.map(([id, l]) => <button key={id} type="button" role="tab" aria-selected={f === id} onClick={() => setF(id)}>{l}</button>)}
           </div>
           {acts.length === 0 ? <small className="th-dim">Nothing here yet.</small> : acts.map((a, i) => (
-            <Link key={i} href={a.href} className={"th-a k-" + a.kind}>
+            <Link key={i} href={a.href} className={"th-a k-" + a.kind} style={{ ["--ac" as any]: a.who?.color || "#F0B90B" }}>
               <span className="th-a-av">
                 {a.who ? <Avatar className="avatar th-av" alias={a.who.alias} color={a.who.color} url={a.who.avatar_url} /> : <span className="th-av th-av-sys">A</span>}
                 <i aria-hidden="true">{ICON[a.kind] || "✨"}</i>
               </span>
               <span className="th-a-t">
-                <span>{a.who && <b>{a.who.alias}{a.who.v && <VerifiedBadge n={a.who.vb} size={13} className="vbadge-name" />}</b>} {a.text}</span>
+                <span className="th-a-h">
+                  <b>{a.who ? a.who.alias : "AUTISTIK"}{a.who?.v && <VerifiedBadge n={a.who.vb} size={13} className="vbadge-name" />}</b>
+                  <span className="th-a-sep" aria-hidden="true">·</span>
+                  <small>{ago(a.at)}</small>
+                  <em>{LABEL[a.kind] || "New"}</em>
+                </span>
+                <span className="th-a-x">{a.text}</span>
               </span>
-              <span className="th-a-r">
-                <em>{LABEL[a.kind] || "New"}</em>
-                <small>{ago(a.at)}</small>
-              </span>
-            </Link>
           ))}
         </section>
 
