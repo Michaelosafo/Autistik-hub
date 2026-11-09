@@ -272,8 +272,8 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
         </aside>
 
         <main>
-          <div className="topbar mini">
-            {!path.startsWith("/companions") && <TrendingButton />}
+          <div className={"topbar mini" + (path.startsWith("/companions") ? " ai-hide" : "")}>
+            <TrendingButton />
             <LangPicker />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
