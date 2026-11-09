@@ -5947,6 +5947,14 @@ html[data-app="android"] .appbar{display:none}
 .ait-chain:disabled{cursor:default}
 .ait-chain:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
 
+/* AI trader: chain picker */
+.ait-chains{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.ait-chain{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1.5px solid transparent}
+.ait-chain small{color:var(--muted);font-size:.78em}
+.ait-chain.on{border-color:#F0B90B;background:rgba(240,185,11,.1)}
+.ait-chain:disabled{cursor:default}
+.ait-chain:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
+
 /* ---------- TIK: every post in its own box ---------- */
 .mood-feed,.mad-feed,.ptik .mad-feed,.mp-mood .mood-feed{gap:14px}
 :is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik:not(.compact),
@@ -6001,3 +6009,24 @@ html[data-app="android"] .appbar{display:none}
 .th-a.k-joined .th-a-r em{background:rgba(34,197,94,.14);color:#16a34a}
 .th-a.k-drop .th-a-r em,.th-a.k-recording .th-a-r em,.th-a.k-live-ended .th-a-r em{background:rgba(59,158,255,.14);color:#3B9EFF}
 .th-act .th-chips{padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:0}
+
+/* ---------- TIK: every post is its own clean card (like the AI trader's boxes) ---------- */
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) :is(.mad-feed,.mood-feed,.tik-main,.tik-focus){gap:12px}
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik,
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik-tickled{
+  position:relative;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:16px 18px;
+  box-shadow:0 1px 2px rgba(16,12,40,.04),0 8px 24px -16px rgba(16,12,40,.18)}
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik:hover{border-color:color-mix(in srgb,var(--ac,#B57CFF) 45%,var(--line));box-shadow:0 1px 2px rgba(16,12,40,.04),0 12px 28px -16px color-mix(in srgb,var(--ac,#B57CFF) 45%,transparent)}
+/* Tickle: one card, the original inside it */
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik-tickled{padding:12px 4px 4px}
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik-tickled > .tik{background:transparent;border:0;box-shadow:none;padding-top:6px}
+.tik-tickled .tik-tickled-by{padding:0 0 0 18px}
+/* Comments sit inside their post's card, without cards of their own */
+body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik-replies .tik{background:transparent;border:0;box-shadow:none;border-radius:0;padding:8px 4px 8px 0}
+.tik-replies{margin-top:8px;padding-top:10px;border-top:1px solid var(--line)}
+.tik-replies .tik-replies{margin-top:0;padding-top:0;border-top:0}
+/* The avatar ring takes the poster's colour, so each post looks like theirs */
+.tik:not(.compact) > .tik-av .me-av{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ac,#B57CFF)}
+/* Writing box: same card */
+body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,12,40,.04),0 8px 24px -16px rgba(16,12,40,.18)}
+@media (max-width:560px){body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik{padding:14px}}
