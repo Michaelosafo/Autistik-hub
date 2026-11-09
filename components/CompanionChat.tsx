@@ -18,6 +18,7 @@ import { useStickToBottom } from "@/lib/use-stick-bottom";
 import TradeBot, { findTradeRequest, type TradeIntent } from "@/components/companion/TradeBot";
 import SwapBot from "@/components/companion/SwapBot";
 import { looksLikeSwap, readBuy, type BuyAsk } from "@/lib/swap-read";
+import { appNoMoney } from "@/lib/android-app";
 import type { Member } from "@/components/wallet/types";
 
 type Msg =
@@ -153,7 +154,13 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     setInput("");
     if (draw || DRAW_RE.test(text)) return makePicture(text);
     // "buy $1 of 0x…" (a dollar amount, or a coin to pay with): the swap bot asks what to pay with, then buys.
+    // In the Google Play app there's no buying, selling or swapping (coin scans still work).
+    const noMoney = appNoMoney();
     const buy = readBuy(text);
+    if ((buy || looksLikeSwap(text)) && noMoney) {
+      edit(id, (x) => ({ ...x, msgs: [...x.msgs, { kind: "me", text }, { kind: "sys", text: "Buying, selling and swapping aren't part of the app. I can still scan any coin for you: paste its address." }], at: Date.now() }));
+      return;
+    }
     if (buy) {
       edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : `Buy ${buy.ca.slice(0, 6)}…`, msgs: [...x.msgs, { kind: "me", text }, { kind: "swap", text, at: Date.now(), buy }], at: Date.now(),
         turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: `(Opened the buy bot for ${buy.ca})` }] }));
@@ -162,7 +169,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     // A pasted coin address: the trading bot takes over (no AI message used).
     const trade = findTradeRequest(text);
     if (trade) {
-      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : `Trade ${trade.ca.slice(0, 6)}…`, msgs: [...x.msgs, { kind: "me", text }, { kind: "trade", ca: trade.ca, intent: trade.intent, at: Date.now() }], at: Date.now(),
+      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : `Trade ${trade.ca.slice(0, 6)}…`, msgs: [...x.msgs, { kind: "me", text }, { kind: "trade", ca: trade.ca, intent: noMoney ? { action: "scan" } : trade.intent, at: Date.now() }], at: Date.now(),
         turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: `(Opened the trading bot for ${trade.ca})` }] }));
       return;
     }
@@ -359,7 +366,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
               if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
               if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
               if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} at={m.at} buy={m.buy} latest={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
-              if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} at={m.at} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
+              if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} at={m.at} scanOnly={appNoMoney()} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "drawing") return (
                 <div key={i} className="msgrow"><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
               );
@@ -400,7 +407,8 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
         <div className="sheet-back" onClick={() => setSheet(null)}>
           <div className="sheet stack" role="dialog" aria-modal="true" aria-label={sheet === "pass" ? "Assistant Pass" : sheet === "privacy" ? "Privacy" : "Help now"} onClick={(e) => e.stopPropagation()}>
             <button className="sheet-x" type="button" onClick={() => setSheet(null)} aria-label="Close">✕</button>
-            {sheet === "pass" && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => { setNeedPass(false); setSheet(null); }} />}
+            {sheet === "pass" && appNoMoney() && <div className="notice">Passes can't be bought in the app.</div>}
+            {sheet === "pass" && !appNoMoney() && <AIPass refreshKey={passKey} highlight={needPass} onPaid={() => { setNeedPass(false); setSheet(null); }} />}
             {sheet === "privacy" && (
               <div className="card stack">
                 <h3>🔒 Privacy</h3>

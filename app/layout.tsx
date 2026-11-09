@@ -8,7 +8,8 @@ import LiveDock from "@/components/rooms/LiveDock";
 import SiteBackdrop from "@/components/SiteBackdrop";
 import Welcome from "@/components/Welcome";
 import WalletGate from "@/components/WalletGate";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { APP_COOKIE, APP_CSS, APP_MONEY } from "@/lib/android-app";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -23,6 +24,8 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const nonce = headers().get("x-nonce") ?? undefined;
+  // Inside the Google Play app (Community version): no wallet or money features.
+  const appNoMoney = !APP_MONEY && cookies().get(APP_COOKIE)?.value === "android";
   const sb = supabaseServer();
   const user = await currentUser();
   let needWallet = false;
@@ -35,10 +38,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     me = { id: user.id, avatar_url: (data as any)?.avatar_url ?? null, alias: data?.alias ?? "Member", color: /^#[0-9a-f]{6}$/i.test(data?.color || "") ? data!.color : "#6141D4", is_admin: owner === true, mfa: !!user.factors?.some((f) => f.status === "verified") };
   }
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning {...(appNoMoney ? { "data-app": "android" } : {})}>
       <head>
         {/* Applies saved comfort settings before the page paints, so there's no flash of bright colours or motion. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";d.dataset.theme=l.getItem("theme3")==="dark"?"dark":"light"}catch(e){}` }} />
+        {appNoMoney && <style dangerouslySetInnerHTML={{ __html: APP_CSS }} />}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         {/* Wallet connections start faster with these already open. */}
@@ -52,7 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* The faint, funny artwork behind every page (changes over time and between pages). */}
         <SiteBackdrop />
         <Welcome />
-        {user && needWallet && <WalletGate uid={user.id} />}
+        {user && needWallet && !appNoMoney && <WalletGate uid={user.id} />}
         {/* Keeps a live playing while members move around the site. */}
         <LiveDock><Shell me={me}>{children}</Shell></LiveDock>
         <BotFab />
