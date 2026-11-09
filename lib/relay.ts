@@ -4,7 +4,7 @@
  * different shape). Relay's app fee (the chat fee) goes to the marketing wallet: it builds up as a USDC balance at
  * relay.link that the wallet's owner claims any time. Server only; nothing here holds keys or moves money.
  */
-import { getAddress } from "viem";
+import { encodeFunctionData, erc20Abi, getAddress } from "viem";
 import { SOLANA_ID, isXNative, type XChain } from "@/lib/bridge-chains";
 
 const API = "https://api.relay.link";
@@ -61,8 +61,10 @@ export async function relayQuote(p: {
       if (st.id === "approve") {
         // approve(spender, amount) on the coin being paid, for no more than the swap.
         if (native || to !== getAddress(p.fromToken) || !data.startsWith("0x095ea7b3")) throw new Error("Unexpected Relay approval. Stopped for your safety.");
-        if (BigInt("0x" + data.slice(74, 138)) > p.amount) throw new Error("Relay asked to approve too much. Stopped for your safety.");
-        txs.push({ kind: "approve", chainId: p.from.id, to, data, value: "0" });
+        // Relay asks for an unlimited approval: rewrite it to exactly this swap's amount (nothing left lying around).
+        const spender = getAddress("0x" + data.slice(34, 74));
+        const exact = encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, p.amount] });
+        txs.push({ kind: "approve", chainId: p.from.id, to, data: exact, value: "0" });
       } else {
         // Exact input: the gas top-up comes out of the amount, never on top of it.
         if (value > (native ? p.amount : 0n)) throw new Error("Relay route asked for too much. Stopped for your safety.");
