@@ -86,7 +86,7 @@ export default function GoLive({ resume }: { resume: { id: string; title: string
       <div className="wv-cam">
         <video ref={vid} playsInline muted />
         {state === "live" && <em className="wv-live big">LIVE · {mmss}</em>}
-        {state === "ended" && <div className="wv-wait">Stream ended. The recording will appear under Past streams in a few minutes.</div>}
+        {state === "ended" && <div className="wv-wait">Stream ended. Thanks for going live!</div>}
       </div>
       {state !== "ended" && (
         <div className="wv-ctl">
@@ -103,10 +103,10 @@ export default function GoLive({ resume }: { resume: { id: string; title: string
           {state === "live" ? <button type="button" className="btn danger" onClick={end}>End stream</button>
             : <button type="button" className="btn primary" disabled={state === "connecting" || (!id && !title.trim())} onClick={start}>{state === "connecting" ? "Connecting…" : id ? "Reconnect" : "🎥 Go live"}</button>}
           {id && <Link className="btn small" href={`/watch/${id}`} target="_blank">Open the viewer page (and chat) ↗</Link>}
-          <small className="muted">Everyone on TIK can watch. Streams are recorded and saved under Past streams; you can delete them any time.</small>
+          <small className="muted">Everyone on TIK can watch while you&apos;re live. Live streams aren&apos;t saved: to keep one, record it on your phone and upload it under Videos.</small>
         </div>
       )}
-      {state === "ended" && <div className="row" style={{ gap: 8 }}>{id && <Link className="btn primary" href={`/watch/${id}`}>See your stream</Link>}<Link className="btn" href="/mood?tab=streams">Back to Livestreams</Link></div>}
+      {state === "ended" && <div className="row" style={{ gap: 8 }}>{id && <Link className="btn primary" href={`/watch/${id}`}>See your stream</Link>}<Link className="btn" href="/mood?tab=videos">Upload a video</Link><Link className="btn" href="/mood?tab=streams">Back to Livestreams</Link></div>}
       {msg && <div className="notice warn">{msg}</div>}
     </div>
   );

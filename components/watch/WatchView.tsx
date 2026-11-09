@@ -7,6 +7,7 @@ import Avatar from "@/components/Avatar";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { fmtCount, playerUrl, playUid, type Video } from "@/lib/stream-shared";
 import { ago, videoApi, withAuthors, type Author, type VideoRow } from "./data";
+import LivePlayer from "./LivePlayer";
 
 type Comment = { id: number; user_id: string; body: string; created_at: string; author?: Author | null };
 
@@ -17,6 +18,7 @@ export default function WatchView({ video, me, admin }: { video: Video; me: stri
   const [list, setList] = useState<Comment[]>([]);
   const [text, setText] = useState("");
   const [msg, setMsg] = useState("");
+  const [whep, setWhep] = useState<string | null>(null);
   const sb = useRef(supabaseBrowser()).current;
   const live = v.kind === "stream" && v.status === "live";
   const uid = playUid(v);
@@ -38,12 +40,14 @@ export default function WatchView({ video, me, admin }: { video: Video; me: stri
     return () => { sb.removeChannel(ch); };
   }, [video.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A stream: keep its state fresh (live → ended → recording ready).
+  // A stream: its live playback address, and its state kept fresh (waiting → live → ended).
   useEffect(() => {
-    if (v.kind !== "stream" || (v.status === "ended" && v.rec_uid)) return;
-    const t = setInterval(() => videoApi<{ status: string; rec_uid: string | null }>("sync", { id: v.id }).then((s) => setV((x) => ({ ...x, status: s.status, rec_uid: s.rec_uid ?? x.rec_uid }))).catch(() => {}), 20_000);
+    if (v.kind !== "stream" || v.status === "ended" || v.status === "failed") return;
+    const check = () => videoApi<{ status: string; whep: string | null }>("sync", { id: v.id }).then((s) => { setV((x) => ({ ...x, status: s.status })); if (s.whep) setWhep(s.whep); }).catch(() => {});
+    check();
+    const t = setInterval(check, 20_000);
     return () => clearInterval(t);
-  }, [v.kind, v.status, v.rec_uid, v.id]);
+  }, [v.kind, v.status, v.id]);
 
   async function like() {
     if (!me) return router.push(`/login?next=/watch/${v.id}`);
@@ -67,8 +71,11 @@ export default function WatchView({ video, me, admin }: { video: Video; me: stri
   return (
     <div className={"wv-watch" + (v.kind === "fun" ? " fun" : "")}>
       <div className="wv-player">
-        {uid ? <iframe src={playerUrl(uid, { autoplay: live || v.kind === "fun", muted: v.kind === "fun", loop: v.kind === "fun" })} title={v.title} allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowFullScreen />
-          : <div className="wv-wait">{v.kind === "stream" ? (v.status === "waiting" ? "Starting soon…" : "The stream has ended. The recording will be here in a few minutes.") : "Getting this video ready…"}</div>}
+        {v.kind === "stream" ? (
+          live && whep ? <LivePlayer whep={whep} />
+            : <div className="wv-wait">{v.status === "waiting" ? "Starting soon…" : v.status === "live" ? "Connecting…" : "This stream has ended. Live streams are watched live and aren't saved."}</div>
+        ) : uid ? <iframe src={playerUrl(uid, { autoplay: live || v.kind === "fun", muted: v.kind === "fun", loop: v.kind === "fun" })} title={v.title} allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowFullScreen />
+          : <div className="wv-wait">Getting this video ready…</div>}
       </div>
       <div className="wv-info">
         <h1>{live && <em className="wv-live">LIVE</em>}{v.title}</h1>
