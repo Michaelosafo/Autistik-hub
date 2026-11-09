@@ -5984,3 +5984,20 @@ html[data-app="android"] .appbar{display:none}
 .ait-b-pct i{display:block;height:4px;border-radius:4px;background:currentColor;align-self:flex-end}
 .ait-b-pct.up i{background:#22c55e}
 .ait-b-pct.down i{background:#E5484D}
+
+/* TIK Home "Happening now": a clean list like the AI trader's coins */
+.th-act .th-a{padding:11px 6px;border-radius:0}
+.th-act .th-a + .th-a{border-top:1px solid var(--line)}
+.th-act .th-a:hover{background:var(--surface-2);border-radius:12px}
+.th-act .th-a:hover + .th-a{border-top-color:transparent}
+.th-act .th-av{width:38px!important;height:38px!important}
+.th-act .th-a-t{flex:1;font-size:.9rem}
+.th-a-r{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:auto}
+.th-a-r em{font-style:normal;font-size:.7rem;font-weight:800;padding:3px 9px;border-radius:99px;background:var(--surface-2);color:var(--ink)}
+.th-a-r small{font-size:.7rem;color:var(--muted)}
+.th-a.k-launch .th-a-r em{background:rgba(240,185,11,.16);color:#C98A00}
+.th-a.k-live .th-a-r em{background:rgba(229,72,77,.14);color:#E5484D}
+.th-a.k-tik .th-a-r em{background:rgba(181,124,255,.16);color:#9B5CFF}
+.th-a.k-joined .th-a-r em{background:rgba(34,197,94,.14);color:#16a34a}
+.th-a.k-drop .th-a-r em,.th-a.k-recording .th-a-r em,.th-a.k-live-ended .th-a-r em{background:rgba(59,158,255,.14);color:#3B9EFF}
+.th-act .th-chips{padding-bottom:8px;border-bottom:1px solid var(--line);margin-bottom:0}
