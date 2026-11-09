@@ -203,7 +203,10 @@ async function rugCheck(chain: string, token: string): Promise<string | null> {
   const lp: any[] = Array.isArray(r.lp_holders) ? r.lp_holders : [];
   const dead = (a: string) => /^0x0{40}$|^0x0{36}dead$/i.test(a) || /^0x000000000000000000000000000000000000dead$/i.test(a);
   const safe = lp.reduce((a, h) => a + (h?.is_locked === 1 || h?.is_locked === "1" || dead(String(h?.address || "")) ? Number(h?.percent) || 0 : 0), 0);
-  if (lp.length && safe < 0.8) return `only ${Math.round(safe * 100)}% of the pool is locked or burned`;
+  if (!lp.length) return "can't see who owns the pool";
+  if (safe < 0.8) return `only ${Math.round(safe * 100)}% of the pool is locked or burned`;
+  const creator = Number(r.creator_percent) || 0, owner = Number(r.owner_percent) || 0;
+  if (creator > 0.15 || owner > 0.15) return `the creator still holds ${Math.round(Math.max(creator, owner) * 100)}% of the coins`;
   return null;
 }
 
