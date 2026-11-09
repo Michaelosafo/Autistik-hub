@@ -8,6 +8,8 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
+import RichText from "./RichText";
+import { canStyle } from "./tik-styles";
 import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
 
@@ -57,6 +59,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   const [replies, setReplies] = useState(t.replies);
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(false);
+  const [menu, setMenu] = useState(false);
   const a = t.author;
 
   async function like() {
@@ -98,50 +101,67 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
       </Link>
       <div className="tik-main">
         <div className="tik-head">
-          <b>{a?.alias || "Member"}</b>
+          <Link href={a ? `/members/${a.id}` : "#"} className="tik-name">{a?.alias || "Member"}</Link>
           {a?.is_verified && <VerifiedBadge n={a.verified_badge} size={15} className="vbadge-name" />}
           {a?.is_team && <span className="tik-team">Team</span>}
-          <small className="tik-time">{ago(t.created_at)}</small>
+          {a?.handle && <span className="tik-handle">@{a.handle}</span>}
+          <span className="tik-dotsep" aria-hidden="true">·</span>
+          <time className="tik-time" dateTime={t.created_at} title={new Date(t.created_at).toLocaleString()}>{ago(t.created_at)}</time>
+          <div className="tik-menu-wrap">
+            <button type="button" className="tik-menu-btn" aria-label="More" aria-expanded={menu} onClick={() => setMenu(!menu)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+            </button>
+            {menu && (
+              <>
+                <div className="tik-menu-bg" onClick={() => setMenu(false)} />
+                <div className="tik-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setMenu(false); copyLink(); }}>🔗 Copy link</button>
+                  {a && <Link role="menuitem" href={`/members/${a.id}`} onClick={() => setMenu(false)}>👤 View profile</Link>}
+                  {me && me === t.author_id && <button type="button" role="menuitem" className="danger" onClick={() => { setMenu(false); remove(); }}>🗑 Delete</button>}
+                </div>
+              </>
+            )}
+          </div>
         </div>
         {t.reply_to && (t.to?.alias || parentAlias) && <small className="tik-replying">Replying to <b>@{t.to?.handle || t.to?.alias || parentAlias}</b></small>}
-        <p className="tik-body">{t.body}</p>
+        {t.style && !t.reply_to && canStyle(t.body, !!t.image_url)
+          ? <div className={`tik-style s-${t.style}`}><p><RichText text={t.body} /></p></div>
+          : <p className="tik-body"><RichText text={t.body} /></p>}
         {t.image_url && (
           <button type="button" className="tik-img" onClick={() => setZoom(true)} aria-label="View the picture">
             <img src={t.image_url} alt="" loading="lazy" />
           </button>
         )}
         <div className="tik-actions">
-          <button type="button" className={"tik-act" + (liked ? " on" : "")} onClick={like} aria-pressed={liked} aria-label={liked ? "Unlike" : "Like"}>
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>
-            {likes > 0 && <span>{likes}</span>}
+          <button type="button" className={"tik-act reply" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${replies} replies`} title="Reply">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
+            <span>{replies > 0 ? replies : ""}</span>
           </button>
-          {(
-            <button type="button" className={"tik-act" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
-              <span>{replies > 0 ? replies : "Reply"}</span>
-            </button>
-          )}
           {!t.reply_to && (
             <button type="button" className={"tik-act tickle" + (tickled ? " on" : "")} onClick={tickle} aria-pressed={tickled} aria-label={tickled ? "Undo Tickle" : "Tickle: repost to everyone"} title={tickled ? "Undo Tickle" : "Tickle (repost)"}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" /></svg>
-              <span>{tickles > 0 ? tickles : "Tickle"}</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" /></svg>
+              <span>{tickles > 0 ? tickles : ""}</span>
             </button>
           )}
+          <button type="button" className={"tik-act like" + (liked ? " on" : "")} onClick={like} aria-pressed={liked} aria-label={liked ? "Unlike" : "Like"} title="Like">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>
+            <span>{likes > 0 ? likes : ""}</span>
+          </button>
           {!t.reply_to && (me === t.author_id
-            ? <button type="button" className="tik-act" onClick={() => setViewers(true)} aria-label={`${t.views ?? 0} views: see who`} title="See who viewed">
-                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+            ? <button type="button" className="tik-act views" onClick={() => setViewers(true)} aria-label={`${t.views ?? 0} views: see who`} title="See who viewed">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
                 <span>{t.views ?? 0}</span>
               </button>
-            : (t.views ?? 0) > 0 && <span className="tik-act static" aria-label={`${t.views} views`}>
-                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
-                <span>{t.views}</span>
+            : <span className="tik-act views static" aria-label={`${t.views ?? 0} views`} title="Views">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+                <span>{(t.views ?? 0) > 0 ? t.views : ""}</span>
               </span>)}
-          <button type="button" className={"tik-act" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik">
-            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></svg>
-            <span>{copied ? "Copied!" : "Copy link"}</span>
+          <button type="button" className={"tik-act share" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik" title="Copy link">
+            <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg>
+            <span>{copied ? "Copied" : ""}</span>
           </button>
-          {me && me === t.author_id && <button type="button" className="tik-act del" onClick={remove}>Delete</button>}
         </div>
+        {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}><i aria-hidden="true" />Show {replies} {replies === 1 ? "reply" : "replies"}</button>}
         {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
         {viewers && typeof document !== "undefined" && createPortal(<Viewers tikId={t.id} count={t.views ?? 0} onClose={() => setViewers(false)} />, document.body)}
       </div>
