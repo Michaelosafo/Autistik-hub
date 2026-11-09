@@ -123,9 +123,9 @@ export async function readChart(chain: string, pool: string, ageHours = 99): Pro
   const net = MOMENTUM_CHAINS.find((c) => c.key === chain)?.gt;
   if (!net || !pool) return null;
   const agg = ageHours < 2 ? 1 : 5;
-  const j = await gt(`/networks/${net}/pools/${pool}/ohlcv/minute?aggregate=${agg}&limit=${agg === 1 ? 120 : 72}&currency=usd`).catch(() => null);
+  const j = await gt(`/networks/${net}/pools/${pool}/ohlcv/minute?aggregate=${agg}&limit=${agg === 1 ? 120 : 72}&currency=usd`).catch((e) => { chartErr = (e as Error).message; return null; });
   const rows: number[][] = (j?.data?.attributes?.ohlcv_list || []).slice().reverse(); // oldest first: [t, o, h, l, c, v]
-  if (rows.length < 12) return null;
+  if (rows.length < 12) { if (j) chartErr = `only ${rows.length} candles`; return null; }
   const cl = rows.map((r) => num(r[4])), hi = rows.map((r) => num(r[2])), lo = rows.map((r) => num(r[3])), vo = rows.map((r) => num(r[5]));
   const close = cl[cl.length - 1], high = Math.max(...hi), low = Math.min(...lo);
   const r = rsiSeries(cl);
@@ -140,10 +140,18 @@ export async function readChart(chain: string, pool: string, ageHours = 99): Pro
   };
 }
 
+/** Why the last chart read failed (for the activity log). */
+export let chartErr = "";
+
 /** Chart rules each setup must pass (on top of the buying pressure). */
 export function chartOk(c: SCand): string | null {
   const k = c.chart;
-  if (!k) return "no chart yet";
+  if (!k) {
+    // No candles to read (too new, or the chart service is busy): a hype entry can still be judged on the price path
+    // (rising over 5, 15 and 30 minutes, not a vertical spike) plus the buying pressure it already passed. Dips need the chart.
+    if (c.setup === "hype" && c.ch.m5 >= 0 && c.ch.m15 > 0 && c.ch.m30 >= 0 && c.ch.m5 < 25 && c.ch.h1 < 150) return null;
+    return `no chart yet${chartErr ? ` (${chartErr})` : ""}`;
+  }
   if (c.setup === "hype") {
     if (k.close < k.ema9 || k.ema9 < k.ema21) return "price under its short averages";
     if (k.rsi > 82) return `RSI ${k.rsi.toFixed(0)}: overheated`;
