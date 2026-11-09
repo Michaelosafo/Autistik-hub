@@ -94,7 +94,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   }
 
   return (
-    <article ref={box} className={"tik" + (compact ? " compact" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
+    <article ref={box} style={{ ["--ac" as any]: a?.color || "#B57CFF" }} className={"tik" + (compact ? " compact" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
       {hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
