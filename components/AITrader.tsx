@@ -12,9 +12,10 @@ type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
   max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number; max_hold_hours: number; daily_loss_limit: number;
   use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean; manual_active: boolean; away_take_profit: number;
+  hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
 };
 type P = {
-  id: string; mode: string; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
+  id: string; mode: string; chain: string; strategy?: string | null; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number; why: string | null;
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
@@ -153,6 +154,8 @@ export default function AITrader() {
         {!live && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how much pretend BNB?", "1"); if (v) act("reset", "reset", { start: Number(v) }, "Practice account reset."); }}>Reset practice account</button>}
       </section>
 
+      <Strategy s={s} busy={!!busy} onAct={act} />
+
       <section className="card stack">
         <b>Where it looks</b>
         <div className="ait-chains">
@@ -273,7 +276,7 @@ function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: 
               <div key={p.id} className="ait-b">
                 {p.logo ? <img src={p.logo} alt="" width={36} height={36} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
                 <div className="ait-b-name">
-                  <b>{p.symbol}</b>
+                  <b>{p.symbol} {p.strategy && <span className={"ait-tag " + p.strategy}>{p.strategy === "hype" ? "🔥 Hype" : "📉 Dip"}</span>}</b>
                   <small className="muted">{chainName(p.chain)} · {tab === "open" ? `bought ${ago(p.opened_at)}` : `sold ${p.closed_at ? ago(p.closed_at) : ""}`}</small>
                   <small className="muted">{fmtAmount(Number(p.spent))} → {fmtAmount(w)} BNB · {fmtUsd(Number(p.entry_usd))} → {price ? fmtUsd(price) : "–"}</small>
                 </div>
@@ -328,5 +331,37 @@ function KeyTools({ busy, onAct, importOnly }: { busy: boolean; onAct: (n: strin
       )}
       {err && <small role="status">{err}</small>}
     </div>
+  );
+}
+
+/** How it picks coins: small-cap HYPE and DIP setups, the market-cap window, the target and the stop. */
+function Strategy({ s, busy, onAct }: { s: S; busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
+  const [f, setF] = useState<Record<string, string>>({});
+  const v = (k: keyof S) => f[k as string] ?? String(s[k]);
+  const field = (k: keyof S, label: string, unit: string, hint: string) => (
+    <label key={k as string}><span>{label}</span><span className="ait-in">{unit === "$" && <em>$</em>}<input inputMode="decimal" value={v(k)} onChange={(e) => setF({ ...f, [k]: e.target.value })} />{unit !== "$" && <em>{unit}</em>}</span><small>{hint}</small></label>
+  );
+  return (
+    <section className="card stack">
+      <b>Strategy</b>
+      <small className="muted">The AI looks for small coins and reads each one&apos;s 5-minute chart (RSI, moving averages, higher lows, volume) plus who is buying and selling right now, and the buzz on X and Telegram, before it buys. It skips a round when nothing is clean. Coins this small can make big moves but often rug: keep each trade small.</small>
+      <div className="ait-chains">
+        <button type="button" className={"ait-chain" + (s.hype_on ? " on" : "")} aria-pressed={s.hype_on} disabled={busy} onClick={() => onAct("hype", "settings", { hype_on: !s.hype_on }, `Hype setup ${s.hype_on ? "off" : "on"}.`)}>
+          <b>{s.hype_on ? "✓ " : ""}🔥 Hype</b><small>Buys early when people are piling in: more buyers every few minutes, volume speeding up, not yet a vertical candle</small>
+        </button>
+        <button type="button" className={"ait-chain" + (s.dip_on ? " on" : "")} aria-pressed={s.dip_on} disabled={busy} onClick={() => onAct("dip", "settings", { dip_on: !s.dip_on }, `Dip setup ${s.dip_on ? "off" : "on"}.`)}>
+          <b>{s.dip_on ? "✓ " : ""}📉 Buy the dip</b><small>After a coin ran and dropped 30–75% in fear, buys when buyers come back (higher low, RSI turning up)</small>
+        </button>
+      </div>
+      {!s.hype_on && !s.dip_on && <small className="muted">Both off: it uses the older trending-coins mode.</small>}
+      <div className="ait-form">
+        {field("mcap_min", "Smallest market cap", "$", "Skips coins worth less")}
+        {field("mcap_max", "Biggest market cap", "$", "Skips coins worth more")}
+        {field("micro_min_liq", "Smallest pool", "$", "Skips coins with less liquidity than this")}
+        {field("target_profit", "Target profit", "%", "Sells when up this much (the AI may set its own between +50% and +300%)")}
+        {field("strat_stop", "Stop-loss", "%", "Cuts the loss here (the AI may tighten or widen it, 15–45%)")}
+      </div>
+      <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={busy || !Object.keys(f).length} onClick={() => onAct("strat", "settings", Object.fromEntries(Object.entries(f).map(([k, x]) => [k, Number(x)])), "Strategy saved.").then(() => setF({}))}>Save strategy</button>
+    </section>
   );
 }
