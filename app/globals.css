@@ -5969,3 +5969,18 @@ html[data-app="android"] .appbar{display:none}
 .tik-replies .tik-replies{margin-top:0;padding-top:0;border-top:0}
 /* The composer gets a box too */
 :is(.ptik,.mad,.mp-mood) .tik-new:not(.reply){background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:0 10px 28px -20px rgba(0,0,0,.55)}
+
+/* AI trader: coins it bought */
+.ait-sum{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:.9em}
+.ait-sum .up b,.ait-b-pct.up b{color:#22c55e}
+.ait-sum .down b,.ait-b-pct.down b{color:#E5484D}
+.ait-bl{display:flex;flex-direction:column}
+.ait-b{display:flex;align-items:center;gap:12px;padding:10px 2px}
+.ait-b + .ait-b{border-top:1px solid var(--line)}
+.ait-b img,.ait-b .ait-ph{width:36px;height:36px;border-radius:50%;flex:none;object-fit:cover}
+.ait-b-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.ait-b-name small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ait-b-pct{flex:none;width:96px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:.95em}
+.ait-b-pct i{display:block;height:4px;border-radius:4px;background:currentColor;align-self:flex-end}
+.ait-b-pct.up i{background:#22c55e}
+.ait-b-pct.down i{background:#E5484D}
