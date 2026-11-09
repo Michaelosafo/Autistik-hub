@@ -5532,23 +5532,23 @@ a.tb-chip { color: inherit; text-decoration: none; }
 .nx.chat-page .chat.lux.gpt.ai-app { height: calc(100dvh - 24px); }
 main:has(.ai-app) > .site-note { display: none; }
 
-/* The message box: one slim row (type, picture, mic, send), with a bright gold edge so it's easy to find. */
-.ai-dock { padding: 6px 14px 10px; gap: 4px; }
-.ai-composer { flex-direction: row; align-items: flex-end; gap: 6px; padding: 5px 6px 5px 16px; border-radius: 20px;
-  border: 2px solid #E9B65A; background: rgba(var(--wc), .07);
-  box-shadow: 0 0 0 4px rgba(233,182,90,.14), 0 8px 26px -10px rgba(233,182,90,.55); }
-.ai-composer:focus-within { border-color: #F7D27A; box-shadow: 0 0 0 5px rgba(247,210,122,.22), 0 10px 30px -10px rgba(233,182,90,.7); }
-.ai-composer textarea { flex: 1; min-width: 0; min-height: 24px; max-height: 140px; padding: 8px 0; font-size: 1em; line-height: 1.4; }
-.ai-composer textarea::placeholder { color: rgba(var(--wc), .7); font-weight: 600; }
-.ai-composer .ai-tools { flex: none; gap: 4px; padding-bottom: 1px; }
-.ai-composer .ai-grow { display: none; }
-.ai-composer .ai-mode { display: none; }
-.ai-composer .ai-tool, .ai-composer .ai-send { width: 34px; height: 34px; }
-.ai-composer .ai-send { border-radius: 50%; box-shadow: 0 4px 12px -4px rgba(224,149,43,.8); }
-.ai-note { font-size: .66em; }
-.ai-main.empty .ai-dock { justify-content: center; }
-:root[data-theme="light"] .ai-composer { background: #fff; border-color: #D99A2B; box-shadow: 0 0 0 4px rgba(217,154,43,.14), 0 8px 24px -10px rgba(217,154,43,.5); }
-:root[data-theme="light"] .ai-composer textarea::placeholder { color: #6b6380; }
-@media (max-width: 860px) { .ai-dock { padding: 4px 8px 8px; } .ai-composer { padding: 4px 5px 4px 12px; } }
+/* The message box: the usual look, just more compact, so the replies get the room. */
+.ai-dock { padding: 4px 14px 8px; gap: 4px; }
+.ai-composer { padding: 8px 10px 6px 14px; gap: 4px; border-radius: 18px; }
+.ai-composer textarea { min-height: 30px; max-height: 120px; font-size: .95em; line-height: 1.4; padding: 2px 0; }
+.ai-composer .ai-tool, .ai-composer .ai-send { width: 30px; height: 30px; }
+.ai-note { font-size: .64em; }
+@media (max-width: 860px) { .ai-dock { padding: 4px 8px 6px; } .ai-composer textarea { min-height: 28px; } }
+
+/* Replies: smaller text and tighter spacing, so more of each answer fits on screen. */
+.chat.lux.gpt .msgs { font-size: .9em; gap: 10px; padding-top: 10px; }
+.chat.lux.gpt .msgs .msg.me { padding: 8px 12px; }
+.ai-pager { padding-top: 4px; padding-bottom: 2px; font-size: .78em; }
+.ai-pager button { padding: 5px 10px; }
 .nx.chat-page .nx-main { padding-bottom: 0; min-height: 0; }
 .nx.chat-page .nx-page { padding: 12px 12px 12px; }
+/* AI chat page: the buttons at the top right (Trending, language, theme, account) are hidden, so the chat is bigger. */
+.topbar.mini.ai-hide { display: none; }
+main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app { height: calc(100dvh - 24px); }
+.ax:has(.ai-app) .ax-wbox { display: none; }
+@media (max-width: 860px) { main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app { height: calc(100dvh - 84px - env(safe-area-inset-bottom)); } }

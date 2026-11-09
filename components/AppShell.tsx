@@ -174,10 +174,13 @@ export default function AppShell({ admin, me, onMe, children }: {
           ))}
         </nav>
         <div className="ax-right">
-          {!path.startsWith("/companions") && <TrendingButton />}
-          <LangPicker />
-          <ThemeToggle />
-          <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>
+          {/* The AI chat page keeps only the menu up here, so the chat gets the room. */}
+          {!path.startsWith("/companions") && <>
+            <TrendingButton />
+            <LangPicker />
+            <ThemeToggle />
+            <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>
+          </>}
           <button type="button" className="ax-burger" aria-expanded={more} aria-haspopup="menu" onClick={() => setMore(!more)}><Burger open={more} /><span>Menu</span></button>
           {/* Only the owner's account gets this; the admin page itself checks again on the server. */}
           {admin && <Link href="/admin" className="ax-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
