@@ -40,7 +40,8 @@ export async function relayQuote(p: {
   const body: Record<string, unknown> = {
     user: p.user, recipient: p.recipient, originChainId: rid(p.from), destinationChainId: rid(p.to),
     originCurrency: cur(p.from, p.fromToken), destinationCurrency: cur(p.to, p.toToken),
-    amount: p.amount.toString(), tradeType: "EXACT_INPUT", slippageTolerance: String(p.slippageBps), referrer: "autistik.io",
+    amount: p.amount.toString(), tradeType: "EXACT_INPUT", slippageTolerance: String(p.slippageBps),
+    ...(KEY ? { referrer: "autistik.io" } : {}), // keyless quotes are refused with a referrer
   };
   if (KEY && p.feeBps > 0 && p.feeWallet) body.appFees = [{ recipient: p.feeWallet, fee: String(p.feeBps) }];
   if (p.topupUsd && p.from.id !== p.to.id) { body.topupGas = true; body.topupGasAmount = String(Math.round(p.topupUsd * 1e6)); }
