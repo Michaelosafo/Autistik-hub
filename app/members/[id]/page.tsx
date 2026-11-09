@@ -4,17 +4,17 @@ import { notFound } from "next/navigation";
 import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
 import BadgePicker from "@/components/BadgePicker";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import Recordings from "@/components/rooms/Recordings";
 import FollowButton from "@/components/members/FollowButton";
 import ShareProfile from "@/components/members/ShareProfile";
 import ActivityList from "@/components/members/ActivityList";
-import MemberName from "@/components/members/MemberName";
+import { ActivityPrivacy, MessageButton } from "@/components/members/ProfileButtons";
 import { loadProfiles, memberActivity, memberCard } from "@/lib/members";
 import HoldingsCard from "@/components/members/HoldingsCard";
 import HoldingsShare from "@/components/members/HoldingsShare";
 import { sharedHoldings } from "@/lib/holdings";
-import { badgesFor } from "@/lib/badges";
-import { CHANNELS, GROUPS } from "@/lib/groups";
+import { GROUPS } from "@/lib/groups";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,11 @@ export const metadata = { title: "Member · AUTISTIK Hub" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * A member's profile: photo, name with their verified badge, @username, followers / following / lives, Follow,
+ * Message and Share; then a short info list, groups and activity (if they let you see it). Your own profile also has
+ * your settings: name, badge, who sees your activity, holdings sharing.
+ */
 export default async function MemberPage({ params, searchParams }: { params: { id: string }; searchParams: { share?: string } }) {
   const sb = supabaseServer();
   const user = await currentUser();
@@ -36,13 +41,11 @@ export default async function MemberPage({ params, searchParams }: { params: { i
   }
   if (!UUID.test(params.id)) notFound();
 
-  const [[prof], { data: pts }, { data: pro }, { data: groups }, { data: posts }, { data: st }, card, activity] = await Promise.all([
+  const [[prof], { data: pro }, { data: groups }, { data: vis }, card, activity] = await Promise.all([
     loadProfiles(sb, [params.id]),
-    sb.from("member_points").select("posts,sessions,support,points").eq("user_id", params.id).maybeSingle(),
     sb.from("practitioners").select("role").eq("user_id", params.id).maybeSingle(),
     sb.from("group_members").select("group_id").eq("user_id", params.id),
-    sb.from("posts").select("id,channel,body,created_at,hidden").eq("author_id", params.id).eq("hidden", false).order("created_at", { ascending: false }).limit(10),
-    sb.from("app_settings").select("qualify_points,round_name").eq("id", 1).maybeSingle(),
+    sb.from("profiles").select("activity_visibility").eq("id", params.id).maybeSingle(),
     memberCard(sb, params.id),
     memberActivity(sb, params.id, 30),
   ]);
@@ -50,113 +53,81 @@ export default async function MemberPage({ params, searchParams }: { params: { i
   if (!prof) notFound();
 
   const mine = prof.id === user.id;
-  const p = { posts: pts?.posts ?? 0, sessions: pts?.sessions ?? 0, support: pts?.support ?? 0, points: pts?.points ?? 0 };
-  const badges = badgesFor({ ...p, isAdmin: prof.is_admin, practitioner: !!pro, qualify: st?.qualify_points ?? 50, joined: prof.created_at });
+  const p = prof as any;
+  const verified = !!(p.is_verified || prof.is_team);
+  const visibility = (vis as any)?.activity_visibility || "everyone";
   const joinedGroups = GROUPS.filter((g) => (groups || []).some((x: any) => x.group_id === g.id));
   let wallet: string | null = null;
   if (mine) {
     const { data: w } = await sb.from("wallets").select("address").eq("user_id", user.id).maybeSingle();
     wallet = w?.address ?? null;
   }
+  const canSeeActivity = mine || visibility === "everyone" || (visibility === "followers" && !!card?.i_follow);
 
   return (
-    <div className="stack" style={{ maxWidth: 860 }}>
-      <div className={prof.is_team ? "card profile-head team" : "card profile-head"}>
-        <Avatar className="avatar big" alias={prof.alias} color={prof.color} url={prof.avatar_url} />
-        <div className="stack" style={{ gap: 4, minWidth: 0, flex: 1 }}>
-          <div className="label">{mine ? "Your profile" : prof.is_team ? `AUTISTIK team${prof.team_title ? ` · ${prof.team_title}` : ""}` : "Member profile"}</div>
-          <h1 style={{ overflowWrap: "anywhere" }}><MemberName m={prof} link={false} handle={false} /></h1>
-          {prof.handle && <span className="mhandle big">@{prof.handle}</span>}
-          <span className="muted" style={{ fontSize: ".9em" }}>Joined {new Date(prof.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })}{pro ? ` · ${pro.role}` : ""}</span>
-          {card && (
-            <div className="follow-stats">
-              <Link href={`/members?tab=followers&id=${prof.id}`}><b>{card.followers}</b> follower{card.followers === 1 ? "" : "s"}</Link>
-              <Link href={`/members?tab=following&id=${prof.id}`}><b>{card.following}</b> following</Link>
-              <span><b>{card.lives}</b> live session{card.lives === 1 ? "" : "s"}</span>
-              {card.wallet && <span className="chip-flag ok" title="This name is tied to a verified wallet. The address stays private.">✓ Wallet connected</span>}
-              {card.follows_me && !mine && <span className="badge v">Follows you</span>}
-            </div>
-          )}
+    <div className="pp">
+      <section className={"pp-head" + (prof.is_team ? " team" : "")}>
+        <div className="pp-cover" aria-hidden="true" />
+        <Avatar className="avatar pp-av" alias={prof.alias} color={prof.color} url={prof.avatar_url} />
+        <h1 className="pp-name">{prof.alias}{verified && <VerifiedBadge n={p.verified_badge} size={22} className="vbadge-name" title={prof.is_team ? "AUTISTIK team" : "Verified by AUTISTIK"} />}</h1>
+        <div className="pp-sub">
+          {prof.handle && <span>@{prof.handle}</span>}
+          {prof.is_team && <span className="pp-tag gold">AUTISTIK team{prof.team_title ? ` · ${prof.team_title}` : ""}</span>}
+          {pro && <span className="pp-tag">{pro.role}</span>}
+          {card?.follows_me && !mine && <span className="pp-tag">Follows you</span>}
         </div>
-        <div className="profile-act stack" style={{ gap: 8, alignItems: "flex-end" }}>
-          {card && !mine && <FollowButton id={prof.id} initial={card.i_follow} />}
-          <ShareProfile handle={prof.handle ?? null} id={prof.id} name={prof.alias} small />
-          {mine && !prof.handle && <small className="muted">Set an @handle below to get a short link.</small>}
-        </div>
-      </div>
-      {badges.length > 0 && (
-        <div className="card stack">
-          <h2>Badges</h2>
-          <div className="badges">
-            {badges.map((b) => <span key={b.id} className="badge-pill" title={b.why}><span aria-hidden="true">{b.emoji}</span> {b.label}<span className="sr-only">: {b.why}</span></span>)}
+        {card && (
+          <div className="pp-stats">
+            <Link href={`/members?tab=followers&id=${prof.id}`}><b>{card.followers}</b><small>Followers</small></Link>
+            <Link href={`/members?tab=following&id=${prof.id}`}><b>{card.following}</b><small>Following</small></Link>
+            <span><b>{card.lives}</b><small>Lives</small></span>
           </div>
+        )}
+        <div className="pp-acts">
+          {mine ? <a className="pp-btn primary" href="#pp-edit">Edit profile</a> : card && <FollowButton id={prof.id} initial={card.i_follow} />}
+          {!mine && <MessageButton id={prof.id} />}
+          <ShareProfile handle={prof.handle ?? null} id={prof.id} name={prof.alias} className="pp-btn" />
         </div>
-      )}
+      </section>
 
-      <div className="grid2" style={{ alignItems: "start" }}>
-        <div className="card stack">
-          <h2>{st?.round_name || "This round"}</h2>
-          <table><tbody>
-            <tr><th>Points</th><td className="num"><b>{p.points}</b></td></tr>
-            <tr><th>Posts</th><td className="num">{p.posts}</td></tr>
-            <tr><th>Sessions</th><td className="num">{p.sessions}</td></tr>
-            <tr><th>Hearts received</th><td className="num">{p.support}</td></tr>
-          </tbody></table>
-          {mine && <Link href="/rewards" style={{ fontSize: ".9em" }}>How points work →</Link>}
-        </div>
-        <div className="card stack">
-          <h2>Groups</h2>
-          {joinedGroups.length ? (
-            <div className="stack" style={{ gap: 6 }}>{joinedGroups.map((g) => <Link key={g.id} href={`/community?g=${g.id}`} data-g={g.id} className="group-link"><b>{g.name}</b> <span className="muted">· {g.tag}</span></Link>)}</div>
-          ) : <p className="muted">{mine ? "You haven't joined a group yet." : "Hasn't joined a group yet."} {mine && <Link href="/community">Find a group</Link>}</p>}
-        </div>
-      </div>
+      <section className="pp-list">
+        {prof.handle && <div className="pp-row"><span>Username</span><b>@{prof.handle}</b></div>}
+        <div className="pp-row"><span>Joined</span><b>{new Date(prof.created_at).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</b></div>
+        {card?.wallet && <div className="pp-row"><span>Wallet</span><b className="pp-ok">✓ Connected</b></div>}
+        {mine && <div className="pp-row"><span>Your wallet (only you see this)</span><b className="mono">{wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : <Link href="/wallet">Set up</Link>}</b></div>}
+        {joinedGroups.length > 0 && (
+          <div className="pp-row col"><span>Groups</span>
+            <div className="pp-groups">{joinedGroups.map((g) => <Link key={g.id} href={`/community?g=${g.id}`} data-g={g.id}>{g.name}</Link>)}</div>
+          </div>
+        )}
+      </section>
+
+      <section className="pp-card">
+        <h2>Activity</h2>
+        {canSeeActivity && activity ? (
+          <ActivityList items={activity} empty={mine ? "Nothing yet. Scan a coin, join a live session or follow someone and it shows here." : "Nothing to show yet."} />
+        ) : (
+          <p className="muted">{visibility === "followers" ? `Only ${prof.alias}'s followers can see their activity. Follow to see it.` : `${prof.alias} keeps their activity private.`}</p>
+        )}
+      </section>
 
       <Recordings userId={params.id} mine={mine} />
-      {mine && (
-        <div className="grid2" style={{ alignItems: "start" }}>
-          <div className="stack">
-            <ProfileEdit alias={prof.alias} color={prof.color || "#6141D4"} handle={prof.handle ?? null} />
-            {((prof as any).is_verified || prof.is_team) && <BadgePicker current={(prof as any).verified_badge ?? null} name={prof.alias} />}
-            <BadgeApply verified={!!(prof as any).is_verified} team={!!prof.is_team} />
-          </div>
-          <div className="card stack">
-            <h2>Private to you</h2>
-            <table><tbody>
-              <tr><th>Wallet</th><td className="mono" style={{ overflowWrap: "anywhere" }}>{wallet || <Link href="/rewards">Link a wallet</Link>}</td></tr>
-            </tbody></table>
-            <p className="muted" style={{ fontSize: ".85em" }}>Only you can see this box. Other members see your nickname, @handle, badges, groups and activity, and that a wallet is connected. Never your email or wallet address. Your holdings only if you share them (below).</p>
-          </div>
-        </div>
-      )}
 
       {(holdings || mine) && (
-        <div className="grid2" style={{ alignItems: "start" }}>
-          {holdings ? <HoldingsCard items={holdings} mine={mine} how={mine ? ({ public: "Everyone can see", followers: "Followers can see" } as Record<string, string>)[prof.holdings_share || ""] || "Only you can see" : searchParams.share ? "Shared with you" : prof.holdings_share === "followers" ? "Shared with followers" : "Shared publicly"} />
-            : <div className="card stack"><h2>Holdings</h2><div className="empty"><Link href="/rewards">Link a wallet</Link> to see your holdings here.</div></div>}
-          {mine && prof.holdings_share !== undefined && <HoldingsShare uid={prof.id} initial={(prof.holdings_share as any) || "private"} />}
-        </div>
+        holdings ? <HoldingsCard items={holdings} mine={mine} how={mine ? ({ public: "Everyone can see", followers: "Followers can see" } as Record<string, string>)[prof.holdings_share || ""] || "Only you can see" : searchParams.share ? "Shared with you" : prof.holdings_share === "followers" ? "Shared with followers" : "Shared publicly"} />
+          : <section className="pp-card"><h2>Holdings</h2><div className="empty"><Link href="/wallet">Set up your wallet</Link> to see your holdings here.</div></section>
       )}
 
-      <div className="card stack">
-        <h2>Activity</h2>
-        {activity ? (
-          <>
-            <ActivityList items={activity} empty={mine ? "Nothing yet. Scan a coin, join a live session or follow someone and it shows here." : "Nothing to show yet."} />
-            <p className="muted" style={{ fontSize: ".82em" }}>Shows coins scanned, launches, locks, posts, live sessions and follows. Swaps and trades are never shown, and holdings only when the member chooses to share them.</p>
-          </>
-        ) : (
-          <>
-            {!posts?.length && <div className="empty">No posts yet.</div>}
-            {(posts || []).map((x: any) => (
-              <div key={x.id} className="stack" style={{ gap: 2, borderTop: "1px solid var(--line)", paddingTop: 10 }} data-g={CHANNELS[x.channel]?.group.id}>
-                <span className="where" style={{ fontSize: ".82em" }}>{CHANNELS[x.channel]?.group.name} › #{CHANNELS[x.channel]?.name} · {new Date(x.created_at).toLocaleDateString()}</span>
-                <p style={{ overflowWrap: "anywhere" }}>{x.body.length > 280 ? x.body.slice(0, 280) + "…" : x.body}</p>
-              </div>
-            ))}
-          </>
-        )}
-      </div>
+      {mine && (
+        <section className="pp-card" id="pp-edit">
+          <h2>Your settings</h2>
+          <ActivityPrivacy uid={prof.id} initial={visibility} />
+          {prof.holdings_share !== undefined && <HoldingsShare uid={prof.id} initial={(prof.holdings_share as any) || "private"} />}
+          <ProfileEdit alias={prof.alias} color={prof.color || "#6141D4"} handle={prof.handle ?? null} />
+          {verified && <BadgePicker current={p.verified_badge ?? null} name={prof.alias} />}
+          <BadgeApply verified={!!p.is_verified} team={!!prof.is_team} />
+        </section>
+      )}
     </div>
   );
 }
