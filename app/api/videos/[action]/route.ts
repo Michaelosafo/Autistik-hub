@@ -20,8 +20,9 @@ const clean = (s: unknown, n: number) => String(s ?? "").replace(/\s+/g, " ").tr
 type Row = { id: string; author_id: string; kind: string; cf_uid: string | null; rec_uid: string | null; status: string; created_at: string; started_at: string | null; updated_at: string; hidden: boolean };
 
 /** Brings a row up to date with Cloudflare: upload finished, stream live or over, recording ready. */
-async function sync(v: Row): Promise<Partial<Row>> {
+async function sync(v: Row): Promise<Partial<Row> & { whep?: string | null }> {
   const up: Record<string, unknown> = {};
+  let whep: string | null = null;
   if (!v.cf_uid) return up;
   if (v.kind !== "stream") {
     if (v.status === "ready" || v.status === "failed") return up;
@@ -35,6 +36,7 @@ async function sync(v: Row): Promise<Partial<Row>> {
   } else {
     if (v.status === "waiting" || v.status === "live") {
       const i = await liveInputInfo(v.cf_uid).catch(() => null);
+      whep = i?.whep ?? null;
       if (i?.connected && v.status === "waiting") Object.assign(up, { status: "live", started_at: new Date().toISOString() });
       // Off air for over a minute (or never started within 2 hours): the stream is over.
       const quiet = Date.now() - Date.parse(v.updated_at) > 90_000;
@@ -50,7 +52,7 @@ async function sync(v: Row): Promise<Partial<Row>> {
     up.updated_at = new Date().toISOString();
     await supabaseService().from("videos").update(up).eq("id", v.id);
   }
-  return up as Partial<Row>;
+  return { ...(up as Partial<Row>), whep };
 }
 
 async function loadRow(id: unknown): Promise<Row | null> {
@@ -91,8 +93,10 @@ export async function POST(req: Request, { params }: { params: { action: string 
     if (!streamReady()) return json({ status: v.status });
     const slow = await rateLimit(req, "video-sync", 120, 60);
     if (slow) return slow;
-    const up = await sync(v).catch(() => ({}));
-    return json({ status: up.status ?? v.status, rec_uid: up.rec_uid ?? v.rec_uid });
+    const up: Partial<Row> & { whep?: string | null } = await sync(v).catch(() => ({}));
+    const status = up.status ?? v.status;
+    // A live stream is watched over WebRTC (WHEP): its public playback address.
+    return json({ status, rec_uid: up.rec_uid ?? v.rec_uid, whep: status === "live" || status === "waiting" ? up.whep ?? null : null });
   }
 
   const user = await currentUser();

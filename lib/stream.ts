@@ -1,6 +1,7 @@
 /**
- * Cloudflare Stream: uploads (converted to play on any phone), short clips, and live video from the browser (WHIP),
- * recorded automatically. Set in Vercel: CF_ACCOUNT_ID, CF_STREAM_TOKEN (an API token with Stream: Edit) and
+ * Cloudflare Stream: uploads (converted to play on any phone), short clips, and live video from the browser: the host
+ * sends with WHIP and viewers watch with WHEP (both WebRTC). Browser broadcasts can't be recorded or played as HLS,
+ * so a live stream is watched live only. Set in Vercel: CF_ACCOUNT_ID, CF_STREAM_TOKEN (an API token with Stream: Edit) and
  * NEXT_PUBLIC_CF_STREAM_HOST (the "customer-xxxx.cloudflarestream.com" host shown in the Stream dashboard).
  * Server only: the token never reaches the browser.
  */
@@ -40,8 +41,8 @@ export async function newLiveInput(name: string, author: string) {
   return { uid: r.uid, whip: r.webRTC.url };
 }
 export async function liveInputInfo(uid: string) {
-  const r = await cf<{ uid: string; webRTC?: { url?: string }; status?: { current?: { state?: string } } | null }>(`/live_inputs/${encodeURIComponent(uid)}`);
-  return { whip: r.webRTC?.url ?? null, connected: r.status?.current?.state === "connected" };
+  const r = await cf<{ uid: string; webRTC?: { url?: string }; webRTCPlayback?: { url?: string }; status?: { current?: { state?: string } } | null }>(`/live_inputs/${encodeURIComponent(uid)}`);
+  return { whip: r.webRTC?.url ?? null, whep: r.webRTCPlayback?.url ?? null, connected: r.status?.current?.state === "connected" };
 }
 /** The newest recording of a live input, once there is one. */
 export async function liveRecording(uid: string): Promise<string | null> {

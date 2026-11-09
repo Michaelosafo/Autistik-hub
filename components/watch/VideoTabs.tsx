@@ -85,12 +85,11 @@ export function FunTab({ signedIn }: { signedIn: boolean }) {
 
 export function StreamsTab({ signedIn }: { signedIn: boolean }) {
   const [live, setLive] = useState<VideoRow[] | null>(null);
-  const [past, setPast] = useState<VideoRow[] | null>(null);
+
   useEffect(() => {
     if (!videosOn()) return;
     const load = () => fetch("/api/videos/live").then((r) => r.json()).then((d) => withAuthors((d.live || []).map((v: any) => ({ ...v, kind: "stream" })))).then(setLive).catch(() => setLive([]));
     load();
-    listVideos("stream", { status: ["ended"], limit: 24 }).then((l) => setPast(l.filter((v) => v.rec_uid))).catch(() => setPast([]));
     const t = setInterval(load, 30_000);
     return () => clearInterval(t);
   }, []);
@@ -101,10 +100,7 @@ export function StreamsTab({ signedIn }: { signedIn: boolean }) {
       {live === null ? <small className="muted">Loading…</small> : live.length === 0 ? <div className="card muted">Nobody is streaming right now. Start one: camera or screen, straight from your browser.</div> : (
         <div className="wv-grid">{live.map((v) => <Card key={v.id} v={v} />)}</div>
       )}
-      <div className="wv-head"><b>Past streams</b></div>
-      {past === null ? <small className="muted">Loading…</small> : past.length === 0 ? <div className="card muted">Finished streams are saved here.</div> : (
-        <div className="wv-grid">{past.map((v) => <Card key={v.id} v={v} />)}</div>
-      )}
+      <small className="muted">Live streams are watched live and aren&apos;t saved. Want people to watch later? Upload it under Videos.</small>
     </section>
   );
 }
