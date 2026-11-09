@@ -5,10 +5,11 @@ import { isMomentumChain } from "@/lib/momentum";
 import { discover } from "@/lib/momentum-server";
 import { FEE_BPS, MAX_SLIPPAGE_BPS, WCHAINS, isTokenAddress, isWChain } from "@/lib/wallet-chains";
 import { megafuelCheck, megafuelSend, ultraExecute, ultraSwap } from "@/lib/gasless";
-import { balances, build, market, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
+import { CHAT_FEE_BPS, balances, build, market, quote, solBroadcast, solStatus, solTransfer, tokenInfo, type Quote } from "@/lib/wallet-server";
 import { XCHAINS, isXAddress, isXChain } from "@/lib/bridge-chains";
 import { xChainLogos, xDetect, xQuote, xStatus, xTokens } from "@/lib/bridge-server";
-import { planSwap } from "@/lib/swap-plan";
+import { fundingChoices, planSwap, type SwapAsk } from "@/lib/swap-plan";
+import { relayStatus } from "@/lib/relay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export const maxDuration = 60;
 
 const LIMITS: Record<string, [number, number]> = {
   token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60], "sol-ultra": [15, 60], "gas-check": [40, 60], "gas-send": [20, 60],
-  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60], "x-plan": [15, 60],
+  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60], "x-plan": [15, 60], "x-fund": [15, 60], "x-relay-status": [90, 60],
 };
 
 /**
@@ -69,7 +70,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
         if (!isTokenAddress(chain!, b.tokenIn) || !isTokenAddress(chain!, b.tokenOut)) return json({ error: "Pick both tokens." }, 400);
         if (b.tokenIn.toLowerCase() === b.tokenOut.toLowerCase()) return json({ error: "Pick two different tokens." }, 400);
         if (!/^\d{1,78}$/.test(String(b.amount)) || BigInt(b.amount) <= 0n) return json({ error: "Enter an amount." }, 400);
-        return json({ quote: await quote(chain!, b.tokenIn, b.tokenOut, BigInt(b.amount)) });
+        // From the AI chat (b.chat): the chat's fee to the marketing wallet.
+        return json({ quote: await quote(chain!, b.tokenIn, b.tokenOut, BigInt(b.amount), b.chat === true ? CHAT_FEE_BPS : FEE_BPS) });
       }
       case "build": {
         const q = b.quote as Quote;
@@ -77,7 +79,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
         const slip = Math.round(Number(b.slippageBps));
         if (!(slip >= 10 && slip <= MAX_SLIPPAGE_BPS)) return json({ error: `Slippage must be between 0.1% and ${MAX_SLIPPAGE_BPS / 100}%.` }, 400);
         // Solana with no AUTISTIK fee: Jupiter Ultra, so the network fee can be paid by Jupiter or by AUTISTIK.
-        if (chain!.kind === "solana" && FEE_BPS === 0) return json({ tx: await ultraSwap(q.tokenIn, q.tokenOut, BigInt(q.amountIn), b.from) });
+        if (chain!.kind === "solana" && FEE_BPS === 0 && !q.feeBps) return json({ tx: await ultraSwap(q.tokenIn, q.tokenOut, BigInt(q.amountIn), b.from) });
         return json({ tx: await build(chain!, q, b.from, slip) });
       }
       case "sol-ultra": {
@@ -151,9 +153,31 @@ async function cross(action: string, b: any) {
         const text = String(b.text || "").slice(0, 400);
         const evm = typeof b.evm === "string" && /^0x[0-9a-fA-F]{40}$/.test(b.evm) ? b.evm : null;
         const sol = typeof b.sol === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(b.sol) ? b.sol : null;
-        if (!text.trim()) return json({ error: "Tell me what to swap." }, 400);
         if (!evm && !sol) return json({ error: "Connect a wallet first." }, 400);
+        // A request worked out already (a buy, after the member picked what to pay with), or the text to read.
+        if (b.ask) {
+          const a = b.ask, sym = (v: unknown) => (typeof v === "string" && /^[A-Za-z0-9.]{1,12}$/.test(v) ? v.toUpperCase() : null);
+          const key = (v: unknown) => (typeof v === "string" && /^[a-z]{2,12}$/.test(v) ? v : null);
+          const amount = Number(a.amount);
+          if (!(amount > 0 && amount <= 1_000_000) || !["coin", "usd"].includes(a.unit) || !sym(a.from)) return json({ error: "Bad request." }, 400);
+          if (a.toAddress != null && !/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(String(a.toAddress))) return json({ error: "Bad coin address." }, 400);
+          const ask: SwapAsk = { amount, unit: a.unit, from: sym(a.from)!, fromChain: key(a.fromChain), to: sym(a.to) || "", toChain: key(a.toChain), toAddress: a.toAddress ?? null };
+          return json({ plan: await planSwap(ask, { evm, sol }) });
+        }
+        if (!text.trim()) return json({ error: "Tell me what to swap." }, 400);
         return json({ plan: await planSwap(text, { evm, sol }) });
+      }
+      case "x-fund": {
+        const evm = typeof b.evm === "string" && /^0x[0-9a-fA-F]{40}$/.test(b.evm) ? b.evm : null;
+        const sol = typeof b.sol === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(b.sol) ? b.sol : null;
+        const usd = Number(b.usd);
+        if (!evm && !sol) return json({ error: "Connect a wallet first." }, 400);
+        if (!(usd > 0 && usd <= 1_000_000) || !/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/.test(String(b.ca))) return json({ error: "Bad request." }, 400);
+        return json(await fundingChoices(String(b.ca), usd, { evm, sol }));
+      }
+      case "x-relay-status": {
+        if (typeof b.requestId !== "string" || !/^[0-9a-zA-Z]{10,100}$/.test(b.requestId)) return json({ error: "Bad request." }, 400);
+        return json({ status: await relayStatus(b.requestId) });
       }
       case "x-status": {
         if (!isXChain(b.fromChain) || !isXChain(b.toChain) || typeof b.hash !== "string" || !/^(0x[0-9a-fA-F]{64}|[1-9A-HJ-NP-Za-km-z]{64,90})$/.test(b.hash)) return json({ error: "Bad transfer." }, 400);

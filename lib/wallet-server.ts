@@ -19,6 +19,16 @@ const TREASURY = (() => {
 const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 /** The AUTISTIK marketing wallet on Solana (NEXT_PUBLIC_SOLANA_FEE_WALLET). Without it, Solana swaps are free (no fee). */
 const SOL_TREASURY = solFeeWallet();
+/**
+ * The fee on swaps done from the AI chat (Believer's swap and trade bots), in basis points, paid to the marketing
+ * wallet (the treasury). CHAT_SWAP_FEE_BPS in Vercel changes it (30 = 0.3%, at most 100; 0 turns it off).
+ */
+export const CHAT_FEE_BPS = (() => {
+  const n = Number(process.env.CHAT_SWAP_FEE_BPS ?? 30);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : 30;
+})();
+/** A fee a quote may carry: the Wallet's, the chat's, or none. */
+const okFee = (bps: unknown) => bps === 0 || bps === FEE_BPS || bps === CHAT_FEE_BPS;
 const KYBER = "https://aggregator-api.kyberswap.com";
 const KYBER_HEADERS = { "x-client-id": "autistik-hub", "content-type": "application/json" };
 const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
@@ -231,9 +241,10 @@ export type Quote = {
 /** EVM fee side: take it in the coin or a stablecoin, never in a random token that might be hard to sell. */
 const feeSide = (c: WChain, tokenIn: string) => (isNative(c, tokenIn) || c.tokens.some((t) => t.address.toLowerCase() === tokenIn.toLowerCase() && /USD/.test(t.symbol)) ? "currency_in" : "currency_out");
 
-export async function quote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint): Promise<Quote> {
-  if (c.kind === "solana") return jupQuote(c, tokenIn, tokenOut, amountIn);
-  try { return await kyberQuote(c, tokenIn, tokenOut, amountIn); }
+export async function quote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, feeBps: number = FEE_BPS): Promise<Quote> {
+  if (!okFee(feeBps)) feeBps = FEE_BPS;
+  if (c.kind === "solana") return jupQuote(c, tokenIn, tokenOut, amountIn, true, feeBps);
+  try { return await kyberQuote(c, tokenIn, tokenOut, amountIn, true, feeBps); }
   catch (e) {
     // Brand-new tokens (like ones launched on AUTISTIK minutes ago) may not be in the aggregator yet: use the DEX directly.
     const v2 = await v2Quote(c, tokenIn, tokenOut, amountIn).catch(() => null);
@@ -242,15 +253,15 @@ export async function quote(c: WChain, tokenIn: string, tokenOut: string, amount
   }
 }
 
-async function kyberQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true): Promise<Quote> {
+async function kyberQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true, bps: number = FEE_BPS): Promise<Quote> {
   const q = new URLSearchParams({ tokenIn, tokenOut, amountIn: amountIn.toString(), gasInclude: "true", source: "autistik-hub" });
-  if (TREASURY && withFee && FEE_BPS > 0) q.set("feeAmount", String(FEE_BPS)), q.set("isInBps", "true"), q.set("chargeFeeBy", feeSide(c, tokenIn)), q.set("feeReceiver", TREASURY);
+  if (TREASURY && withFee && bps > 0) q.set("feeAmount", String(bps)), q.set("isInBps", "true"), q.set("chargeFeeBy", feeSide(c, tokenIn)), q.set("feeReceiver", TREASURY);
   const j = await getJson(`${KYBER}/${c.kyber}/api/v1/routes?${q}`, { headers: KYBER_HEADERS });
   const s = j?.data?.routeSummary;
   if (!s || j.code !== 0) throw new Error(j?.message || "No route found for this pair.");
   const inUsd = num(s.amountInUsd) || null, outUsd = num(s.amountOutUsd) || null;
   return { kind: "kyber", chain: c.key, tokenIn, tokenOut, amountIn: String(s.amountIn), amountOut: String(s.amountOut), inUsd, outUsd,
-    impact: inUsd && outUsd ? Math.max(0, ((inUsd - outUsd) / inUsd) * 100) : null, feeBps: TREASURY && withFee && FEE_BPS > 0 ? FEE_BPS : 0, gasUsd: num(s.gasUsd) || null, route: s };
+    impact: inUsd && outUsd ? Math.max(0, ((inUsd - outUsd) / inUsd) * 100) : null, feeBps: TREASURY && withFee && bps > 0 ? bps : 0, gasUsd: num(s.gasUsd) || null, route: s };
 }
 
 const V2_ABI = parseAbi([
@@ -284,26 +295,26 @@ async function solFeeAccount(tokenIn: string, tokenOut: string): Promise<string 
 }
 
 /** The 0.5% fee in SOL: taken from the SOL paid in (buys) or the SOL received (sells). */
-const solFeeOf = (lamports: bigint) => (lamports * BigInt(FEE_BPS)) / 10_000n;
+const solFeeOf = (lamports: bigint, bps: number) => (lamports * BigInt(bps)) / 10_000n;
 
 /**
  * Jupiter quote. Whenever SOL is on one side, the 0.5% fee is a plain SOL transfer to the marketing wallet in the same
  * transaction (no token accounts needed): on a buy it comes off the SOL paid in, on a sell off the SOL received.
  * Other pairs (USDC and a token) pay Jupiter's platform fee into the marketing wallet's USDC account, if it has one.
  */
-async function jupQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true): Promise<Quote> {
-  const solSide = withFee && FEE_BPS > 0 && SOL_TREASURY ? (tokenIn === WSOL ? "in" : tokenOut === WSOL ? "out" : null) : null;
-  const feeAccount = withFee && FEE_BPS > 0 && !solSide ? await solFeeAccount(tokenIn, tokenOut) : null;
-  const feeIn = solSide === "in" ? solFeeOf(amountIn) : 0n;
+async function jupQuote(c: WChain, tokenIn: string, tokenOut: string, amountIn: bigint, withFee = true, bps: number = FEE_BPS): Promise<Quote> {
+  const solSide = withFee && bps > 0 && SOL_TREASURY ? (tokenIn === WSOL ? "in" : tokenOut === WSOL ? "out" : null) : null;
+  const feeAccount = withFee && bps > 0 && !solSide ? await solFeeAccount(tokenIn, tokenOut) : null;
+  const feeIn = solSide === "in" ? solFeeOf(amountIn, bps) : 0n;
   // Room in the transaction for the fee transfer.
   const q = new URLSearchParams({ inputMint: tokenIn, outputMint: tokenOut, amount: (amountIn - feeIn).toString(), slippageBps: "100", restrictIntermediateTokens: "true", maxAccounts: "54" });
-  if (feeAccount) q.set("platformFeeBps", String(FEE_BPS));
+  if (feeAccount) q.set("platformFeeBps", String(bps));
   const j = await getJson(`${JUP}/swap/v1/quote?${q}`);
   if (!j?.outAmount) throw new Error(j?.error || "No route found for this pair.");
-  const feeOut = solSide === "out" ? solFeeOf(BigInt(j.outAmount)) : 0n;
+  const feeOut = solSide === "out" ? solFeeOf(BigInt(j.outAmount), bps) : 0n;
   const inUsd = num(j.swapUsdValue) || null;
   return { kind: "jupiter", chain: c.key, tokenIn, tokenOut, amountIn: (BigInt(j.inAmount) + feeIn).toString(), amountOut: (BigInt(j.outAmount) - feeOut).toString(), inUsd, outUsd: null,
-    impact: num(j.priceImpactPct) * 100, feeBps: solSide || feeAccount ? FEE_BPS : 0, gasUsd: null, route: { quote: j, feeAccount, solSide } };
+    impact: num(j.priceImpactPct) * 100, feeBps: solSide || feeAccount ? bps : 0, gasUsd: null, route: { quote: j, feeAccount, solSide } };
 }
 
 const ix = (i: any) => new TransactionInstruction({
@@ -318,7 +329,8 @@ async function jupSwapWithSolFee(q: Quote, from: string, slippageBps: number): P
   // Everything is worked out again from Jupiter's quote: the browser can't change the fee or where it goes.
   if (quote.inputMint !== q.tokenIn || quote.outputMint !== q.tokenOut || (side === "in" ? q.tokenIn : q.tokenOut) !== WSOL) throw new Error("Prices changed. Please get a new quote.");
   const inAmt = BigInt(quote.inAmount), outAmt = BigInt(quote.outAmount);
-  const fee = side === "in" ? solFeeOf(BigInt(q.amountIn)) : solFeeOf(outAmt);
+  if (!okFee(q.feeBps) || !q.feeBps) throw new Error("Prices changed. Please get a new quote.");
+  const fee = side === "in" ? solFeeOf(BigInt(q.amountIn), q.feeBps) : solFeeOf(outAmt, q.feeBps);
   if (side === "in" && inAmt + fee !== BigInt(q.amountIn)) throw new Error("Prices changed. Please get a new quote.");
   if (fee <= 0n) throw new Error("That amount is too small to swap.");
   const j = await getJson(`${JUP}/swap/v1/swap-instructions`, { method: "POST", headers: { "content-type": "application/json" }, timeout: 15_000, body: JSON.stringify({
@@ -355,6 +367,7 @@ export type SolTx = { kind: "solana"; tx: string };
 
 /** Turns a quote into a transaction for the member's own wallet. The tokens always go back to that same wallet. */
 export async function build(c: WChain, q: Quote, from: string, slippageBps: number): Promise<EvmTx | SolTx> {
+  if (!okFee(q.feeBps)) throw new Error("Prices changed. Please get a new quote.");
   if (q.kind === "jupiter") {
     if (!SOL_RE.test(from)) throw new Error("That isn't a Solana wallet address.");
     if (q.route?.solSide) {
@@ -363,7 +376,7 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
     }
     // The fee account is worked out again here, never taken from the browser.
     // A quote that should carry the fee must carry it (a quote from the browser can't drop it).
-    if (FEE_BPS > 0 && SOL_TREASURY && (q.tokenIn === WSOL || q.tokenOut === WSOL)) throw new Error("Prices changed. Please get a new quote.");
+    if (FEE_BPS > 0 && q.feeBps !== CHAT_FEE_BPS && SOL_TREASURY && (q.tokenIn === WSOL || q.tokenOut === WSOL)) throw new Error("Prices changed. Please get a new quote.");
     const feeAccount = q.feeBps ? await solFeeAccount(q.tokenIn, q.tokenOut) : null;
     if (q.feeBps && !feeAccount) throw new Error("Prices changed. Please get a new quote.");
     const quoteResponse = { ...q.route.quote, slippageBps };
@@ -391,7 +404,9 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
   }
   // KyberSwap: the fee must still be ours (a quote from the browser can't redirect it).
   const fee = q.route?.extraFee;
-  if (TREASURY && FEE_BPS > 0 && (!fee || Number(fee.feeAmount) !== FEE_BPS || String(fee.feeReceiver).toLowerCase() !== TREASURY.toLowerCase())) throw new Error("Prices changed. Please get a new quote.");
+  // The Wallet's own fee can't be dropped; any fee (Wallet or chat) can only ever go to the treasury.
+  if (TREASURY && FEE_BPS > 0 && (!fee || ![FEE_BPS, CHAT_FEE_BPS].includes(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
+  if (fee && (!TREASURY || String(fee.feeReceiver).toLowerCase() !== TREASURY.toLowerCase() || !okFee(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
   const j = await getJson(`${KYBER}/${c.kyber}/api/v1/route/build`, { method: "POST", headers: KYBER_HEADERS, timeout: 15_000, body: JSON.stringify({
     routeSummary: q.route, sender: who, recipient: who, slippageTolerance: slippageBps, source: "autistik-hub", enableGasEstimation: false,
   }) });

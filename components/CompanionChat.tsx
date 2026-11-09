@@ -17,7 +17,7 @@ import { Handwritten, WritingNote } from "@/components/Handwriting";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
 import TradeBot, { findTradeRequest, type TradeIntent } from "@/components/companion/TradeBot";
 import SwapBot from "@/components/companion/SwapBot";
-import { looksLikeSwap } from "@/lib/swap-read";
+import { looksLikeSwap, readBuy, type BuyAsk } from "@/lib/swap-read";
 import type { Member } from "@/components/wallet/types";
 
 type Msg =
@@ -26,7 +26,7 @@ type Msg =
   | { kind: "img"; svg: string; title: string; request: string }
   | { kind: "drawing" }
   | { kind: "trade"; ca: string; intent?: TradeIntent; at?: number }
-  | { kind: "swap"; text: string; at?: number }
+  | { kind: "swap"; text: string; at?: number; buy?: BuyAsk | null }
   | { kind: "sys"; text: string };
 type Turn = { role: "user" | "assistant"; content: string };
 type Conv = { id: string; who: CompanionId; title: string; at: number; msgs: Msg[]; turns: Turn[] };
@@ -152,6 +152,13 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     if (!signedIn) { push(id, { kind: "sys", text: "Please sign in to talk with Believer and Purity." }); return; }
     setInput("");
     if (draw || DRAW_RE.test(text)) return makePicture(text);
+    // "buy $1 of 0x…" (a dollar amount, or a coin to pay with): the swap bot asks what to pay with, then buys.
+    const buy = readBuy(text);
+    if (buy) {
+      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : `Buy ${buy.ca.slice(0, 6)}…`, msgs: [...x.msgs, { kind: "me", text }, { kind: "swap", text, at: Date.now(), buy }], at: Date.now(),
+        turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: `(Opened the buy bot for ${buy.ca})` }] }));
+      return;
+    }
     // A pasted coin address: the trading bot takes over (no AI message used).
     const trade = findTradeRequest(text);
     if (trade) {
@@ -351,7 +358,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
               if (shown && !shown.has(i)) return null;
               if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
               if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
-              if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} at={m.at} latest={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
+              if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} at={m.at} buy={m.buy} latest={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} at={m.at} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "drawing") return (
                 <div key={i} className="msgrow"><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
