@@ -5557,7 +5557,8 @@ main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app { height: calc(100dvh - 24p
    The message box is one row (type, then picture, mic and send) that fits the width. ---- */
 @media (max-width: 860px) {
   body:has(.ai-app) .tabbar, body:has(.ai-app) .bot-fab, body:has(.ai-app) .lv-dock, body:has(.ai-app) .site-note { display: none !important; }
-  main:has(.ai-app) > .page, .nx-page:has(.ai-app), .ax-main:has(.ai-app) { padding: 0 !important; }
+  main:has(.ai-app), main:has(.ai-app) > .page, .nx-page:has(.ai-app), .ax-main:has(.ai-app) { padding: 0 !important; min-height: 0 !important; }
+  .chat.lux.gpt.ai-app { border: 0 !important; box-shadow: none !important; }
   body:has(.ai-app) { padding-bottom: 0 !important; }
   .chat.lux.gpt.ai-app, main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app, .nx.chat-page .chat.lux.gpt.ai-app {
     grid-template-columns: minmax(0, 1fr); height: 100dvh; min-height: 0; border-radius: 0; border-left: 0; border-right: 0; }
