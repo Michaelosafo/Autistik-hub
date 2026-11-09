@@ -21,6 +21,7 @@ import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, ty
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
+import { SAFETY, safetyGate, type Gate } from "@/lib/ai-safety";
 
 export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
 export type TradeChain = (typeof TRADE_CHAINS)[number];
@@ -188,26 +189,60 @@ function riskChain(chain: string) {
 const riskFor = (chain: string, token: string) => riskOf(riskChain(chain), token);
 
 /**
- * Rug check (EVM): most of the pool's liquidity must be locked or burned, and the owner must not be able to take
- * coins back, hide ownership or change balances. A small coin whose creator can pull the pool gets skipped.
+ * Rug guard for every buy (lib/ai-safety.ts): DexScreener market cap $1K–$60K, pool at least 90% locked or burned,
+ * buy and sell tax 2% or less (GoPlus, Honeypot.is and the wallet check agree), not a honeypot, no dangerous owner
+ * powers, creator under 15%. If any check can't be done the coin isn't bought. A honeypot goes on the watch list.
  */
-async function rugCheck(chain: string, token: string): Promise<string | null> {
-  if (chain === "solana") return null;
-  const id = chain === "bsc" ? 56 : chain === "ethereum" ? 1 : chain === "robinhood" ? 4663 : 0;
-  if (!id) return null;
-  const j = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${id}?contract_addresses=${token}`, { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => null);
-  const r = j?.result?.[token.toLowerCase()];
-  if (!r) return "no safety data yet";
-  if (r.hidden_owner === "1" || r.can_take_back_ownership === "1" || r.owner_change_balance === "1" || r.selfdestruct === "1") return "the owner keeps dangerous powers";
-  if (r.is_honeypot === "1" || r.cannot_sell_all === "1" || r.transfer_pausable === "1") return "selling can be blocked";
-  const lp: any[] = Array.isArray(r.lp_holders) ? r.lp_holders : [];
-  const dead = (a: string) => /^0x0{40}$|^0x0{36}dead$/i.test(a) || /^0x000000000000000000000000000000000000dead$/i.test(a);
-  const safe = lp.reduce((a, h) => a + (h?.is_locked === 1 || h?.is_locked === "1" || dead(String(h?.address || "")) ? Number(h?.percent) || 0 : 0), 0);
-  if (!lp.length) return "can't see who owns the pool";
-  if (safe < 0.8) return `only ${Math.round(safe * 100)}% of the pool is locked or burned`;
-  const creator = Number(r.creator_percent) || 0, owner = Number(r.owner_percent) || 0;
-  if (creator > 0.15 || owner > 0.15) return `the creator still holds ${Math.round(Math.max(creator, owner) * 100)}% of the coins`;
-  return null;
+async function gate(s: Settings, chain: string, token: string, symbol?: string | null): Promise<Gate> {
+  const risk = await riskFor(chain, token).catch(() => null);
+  const g: Gate = await safetyGate(chain, token, risk, s.max_tax)
+    .catch((e) => ({ ok: false as const, reason: `safety check failed (${String((e as Error)?.message || e).slice(0, 60)})`, honeypot: false, mcap: null }));
+  if (!g.ok && g.honeypot) await watch(chain, token, symbol ?? null, g).catch(() => {});
+  return g;
+}
+
+const WATCH = "honeypot-watch";
+
+/** Puts a honeypot / not-yet-sellable coin on the watch list (once per coin; kept in ai_trader_signals). */
+async function watch(chain: string, token: string, symbol: string | null, g: Extract<Gate, { ok: false }>) {
+  if (g.mcap != null && g.mcap > SAFETY.MCAP_MAX) return;
+  const { data } = await supabaseService().from("ai_trader_signals").upsert(
+    { source: WATCH, who: "rug guard", body: g.reason, url: "watch", chain, token, symbol, mcap: g.mcap, result: `watching: ${g.reason}`.slice(0, 300) },
+    { onConflict: "source,chain,token,url", ignoreDuplicates: true },
+  ).select("id");
+  if (data?.length) await log("watch", `👀 Watching ${symbol || token} on ${CHAIN_NAME[chain] || chain}: ${g.reason}. It's bought only once it can be sold and passes every rug check while under $${SAFETY.MCAP_MAX / 1000}K.`);
+}
+
+/**
+ * Every minute: re-checks the watched honeypots. One is bought only once it can be sold, passes the whole rug guard
+ * and is still between $1K and $60K. It's dropped after 6 hours, or once its market cap goes above $60K.
+ */
+async function recheckWatch(s: Settings) {
+  const sb = supabaseService();
+  const { data } = await sb.from("ai_trader_signals").select("id,chain,token,symbol,at").eq("source", WATCH).like("result", "watching%").order("at", { ascending: true }).limit(8);
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  for (const w of (data || []) as { id: number; chain: string; token: string; symbol: string | null; at: string }[]) {
+    const set = (result: string, mcap?: number | null) => sb.from("ai_trader_signals").update({ result: result.slice(0, 300), ...(mcap != null ? { mcap } : {}) }).eq("id", w.id);
+    const name = w.symbol || w.token;
+    if (Date.now() - Date.parse(w.at) > SAFETY.WATCH_HOURS * 36e5) { await set(`dropped: still not safe after ${SAFETY.WATCH_HOURS}h`); continue; }
+    if (!(chains as string[]).includes(w.chain)) continue;
+    const g = await gate(s, w.chain, w.token, w.symbol);
+    if (!g.ok) {
+      if (g.mcap != null && g.mcap > SAFETY.MCAP_MAX) { await set(`dropped: market cap went above $${SAFETY.MCAP_MAX / 1000}K`, g.mcap); await log("watch", `Stopped watching ${name}: market cap went above $${SAFETY.MCAP_MAX / 1000}K.`); }
+      else await set(`watching: ${g.reason}`, g.mcap);
+      continue;
+    }
+    const room = await buyRoom(s);
+    if (typeof room === "string") { await set(`watching: safe now, but ${room}`, g.mcap); continue; }
+    if (room.held.has(w.token.toLowerCase())) { await set("dropped: already holding", g.mcap); continue; }
+    const f = await resolve({ chain: w.chain, token: w.token }, chains).catch(() => null);
+    if (!f || !f.price) { await set("watching: safe now, waiting for a price", g.mcap); continue; }
+    try {
+      const why = `👀 Was a honeypot; now it sells fine and passed every rug check (buy tax ${g.buyTax}%, sell tax ${g.sellTax}%).`;
+      const out = await executeBuy(s, room.cash, { ...f, mcap: g.mcap, buyTax: g.buyTax }, { sl: s.strat_stop, tp: s.target_profit, why, strategy: "signal" });
+      await set(`bought: ${out}`, g.mcap);
+    } catch (e) { await set(`watching: buy failed (${(e as Error).message.slice(0, 80)})`, g.mcap); }
+  }
 }
 
 /** BNB to spend per trade: the dollar amount if one is set (so it stays e.g. $5 when BNB moves), else the BNB amount. */
@@ -413,9 +448,9 @@ async function candidates(s: Settings, held: Set<string>): Promise<Cand[]> {
   // The honeypot and tax check on the best few.
   const top = list.slice(0, 10);
   const checked = await Promise.all(top.map(async (c) => {
-    const r = await riskFor(c.chain, c.token).catch(() => null);
-    if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) return null;
-    return { ...c, buyTax: r.buyTax, sellTax: r.sellTax };
+    const g = await gate(s, c.chain, c.token, c.symbol);
+    if (!g.ok) return null;
+    return { ...c, mcap: g.mcap, buyTax: g.buyTax, sellTax: g.sellTax };
   }));
   return checked.filter(Boolean) as Cand[];
 }
@@ -464,11 +499,9 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
     // (the AI sees them), not a must. DexScreener signals still need them.
     const bad = chartOk(c);
     if (bad) { rejected.push(`${c.symbol}: ${bad}`); return null; }
-    const r = await riskFor(c.chain, c.token).catch(() => null);
-    if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) { rejected.push(`${c.symbol}: failed the safety check`); return null; }
-    const rug = await rugCheck(c.chain, c.token).catch(() => "rug check failed");
-    if (rug) { rejected.push(`${c.symbol}: ${rug}`); return null; }
-    c.buyTax = r.buyTax; c.sellTax = r.sellTax;
+    const g = await gate(s, c.chain, c.token, c.symbol);
+    if (!g.ok) { rejected.push(`${c.symbol}: ${g.honeypot ? "watching (honeypot) — " : ""}${g.reason}`); return null; }
+    c.buyTax = g.buyTax; c.sellTax = g.sellTax;
     return c;
   }))).filter(Boolean) as SCand[];
   if (!checked.length) return `Found ${found.length} setups; none passed the chart and safety checks (${rejected.slice(0, 3).join("; ")}).`;
@@ -614,15 +647,13 @@ export async function actOnSignal(s: Settings, sig: Signal, flow: Flow | null): 
   const room = await buyRoom(s);
   if (typeof room === "string") return done(`skipped: ${room}`, f);
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding", f);
-  const r = await riskFor(f.chain, f.token).catch(() => null);
-  if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) return done("skipped: failed the safety check", f);
-  const rug = await rugCheck(f.chain, f.token).catch(() => "rug check failed");
-  if (rug) return done(`skipped: ${rug}`, f);
+  const g = await gate(s, f.chain, f.token, f.symbol);
+  if (!g.ok) return done(`${g.honeypot ? "watching: honeypot, bought only once it can be sold — " : "skipped: "}${g.reason}`, f);
   if (!caller && (IMPOSTOR.test(f.symbol.trim()) || f.sells5 < 1)) return done("skipped: copycat name or nobody selling yet", f);
   const label = sig.source === "x" ? `@${sig.who} posted it on X` : sig.source === "telegram" ? `posted in ${sig.who} on Telegram` : sig.source === "dex-profile" ? "fresh DexScreener profile (team just went public)" : sig.source === "dex-boost" ? "fresh DexScreener boost" : "fresh community takeover";
   const why = `${caller ? "📣" : "⚡"} Signal: ${label}. ${f.buys5} buys vs ${f.sells5} sells in 5m, ${f.ch.h1 >= 0 ? "+" : ""}${f.ch.h1.toFixed(0)}% in 1h.`;
   try {
-    const out = await executeBuy(s, room.cash, { ...f, buyTax: r.buyTax }, { sl: s.strat_stop, tp: s.target_profit, why, strategy: caller ? "caller" : "signal" });
+    const out = await executeBuy(s, room.cash, { ...f, mcap: g.mcap, buyTax: g.buyTax }, { sl: s.strat_stop, tp: s.target_profit, why, strategy: caller ? "caller" : "signal" });
     return done(`bought: ${out}`, f);
   } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`, f); }
 }
@@ -644,6 +675,7 @@ export async function runFast() {
   const s = await getSettings();
   if (s.mode === "live" && !(await traderAccount())) return { skipped: "no wallet" };
   await manage(s).catch((e) => log("error", `Exit check failed: ${(e as Error).message}`));
+  if (s.enabled) await recheckWatch(s).catch((e) => log("error", `Watch list check failed: ${(e as Error).message}`));
   if (!s.enabled || !s.signals_on) return { ok: true, buys: "stopped" };
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const out: string[] = [];
