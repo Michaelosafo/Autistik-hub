@@ -4,11 +4,14 @@ import FocusTik from "@/components/mood/FocusTik";
 import LiveNow from "@/components/rooms/LiveNow";
 import { currentUser, supabaseServer } from "@/lib/supabase/server";
 import LogoMark from "@/components/LogoMark";
+import WatchTabs from "@/components/watch/WatchTabs";
+import { FunTab, StreamsTab, VideosTab } from "@/components/watch/VideoTabs";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "TIK · AUTISTIK Hub", description: "Post anything, see what your people are doing, follow each other and join live rooms." };
 
-export default async function MadnessPage({ searchParams }: { searchParams: { tik?: string } }) {
+export default async function MadnessPage({ searchParams }: { searchParams: { tik?: string; tab?: string } }) {
+  const tab = ["live", "streams", "videos", "fun"].includes(searchParams.tab || "") ? searchParams.tab! : "";
   const user = await currentUser();
   const { data: me } = user ? await supabaseServer().from("profiles").select("alias").eq("id", user.id).maybeSingle() : { data: null };
   // A friendly welcome at the top of TIK. The hour is UTC (AUTISTIK is run from Accra, which is UTC); it is only a greeting.
@@ -25,11 +28,22 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
         </div>
         <nav className="tik-welcome-go" aria-label="Get started on TIK">
           <a href="#tik-post">Post a Tik</a>
-          <Link href="/spaces?host=1">Go live</Link>
+          <Link href="/mood?tab=streams">Livestreams</Link>
+          <Link href="/mood?tab=videos">Videos</Link>
           <Link href="/members?tab=find">Find people</Link>
         </nav>
       </section>
-      {!user ? (
+      <WatchTabs tab={tab} />
+      {tab === "live" ? (
+        <section className="stack" aria-label="Live rooms">
+          <div className="wv-head"><b><i className="wv-dot" aria-hidden="true" />Live rooms</b><Link className="btn primary small" href="/spaces?host=1">🎙️ Start a room</Link></div>
+          <LiveNow max={12} />
+          <Link href="/spaces" className="btn small" style={{ alignSelf: "flex-start" }}>All live rooms and past sessions →</Link>
+        </section>
+      ) : tab === "streams" ? <StreamsTab signedIn={!!user} />
+        : tab === "videos" ? <VideosTab signedIn={!!user} />
+        : tab === "fun" ? <FunTab signedIn={!!user} />
+        : !user ? (
         <div className="card stack" style={{ alignItems: "flex-start" }}>
           <p style={{ margin: 0 }}>TIK is for members. Sign in or join free to post and see everyone&apos;s Tiks.</p>
           <Link className="btn primary" href="/login?next=/mood">Sign in / Join</Link>

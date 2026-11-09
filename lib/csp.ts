@@ -35,6 +35,8 @@ export const CONNECT_ALLOW = [
   "https://*.walletconnect.com", "https://*.walletconnect.org", "wss://*.walletconnect.com", "wss://*.walletconnect.org",
   "https://*.web3modal.org", "https://*.reown.com", "wss://*.reown.com",
   // "Are you human" check, Vercel preview toolbar and speed insights.
+  // TIK videos and live streams (Cloudflare Stream): uploads and browser broadcasting.
+  "https://*.cloudflarestream.com",
   "https://challenges.cloudflare.com", "https://vercel.live", "wss://ws-us3.pusher.com", "https://vitals.vercel-insights.com",
   ...(dev ? ["ws:", "http://localhost:*", "http://127.0.0.1:*"] : []),
 ].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i) as string[];
@@ -49,11 +51,11 @@ export function buildCsp(nonce: string) {
     "img-src 'self' data: blob: https:",
     `connect-src 'self' https: wss:${dev ? " ws: http://localhost:* http://127.0.0.1:*" : ""}`,
     // YouTube live sessions play on /live. The built-in wallet (Privy) keeps keys in its own secure frame.
-    "frame-src https://accounts.google.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io https://dexscreener.com https://*.walletconnect.com https://*.walletconnect.org https://verify.walletconnect.org https://verify.walletconnect.com https://secure.walletconnect.org https://*.reown.com",
+    "frame-src https://accounts.google.com https://www.youtube-nocookie.com https://challenges.cloudflare.com https://vercel.live https://auth.privy.io https://*.privy.io https://dexscreener.com https://*.walletconnect.com https://*.walletconnect.org https://verify.walletconnect.org https://verify.walletconnect.com https://secure.walletconnect.org https://*.reown.com https://*.cloudflarestream.com",
     "worker-src 'self' blob:",
     "manifest-src 'self'",
     // Voice notes in Chats are played from the site's own storage (Supabase).
-    "media-src 'self' data: blob: https://*.supabase.co",
+    "media-src 'self' data: blob: https://*.supabase.co https://*.cloudflarestream.com",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
