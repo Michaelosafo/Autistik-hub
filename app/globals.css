@@ -5832,3 +5832,109 @@ html[data-app="android"] .appbar{display:none}
 .pp-seg{display:flex;padding:3px;border-radius:12px;background:var(--surface-2)}
 .pp-seg button{all:unset;flex:1;cursor:pointer;text-align:center;padding:8px 6px;border-radius:9px;font-weight:700;font-size:.88em}
 .pp-seg button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+
+/* ---------- TIK: polished posts, designs and threads ---------- */
+.tik{position:relative;gap:12px;padding:14px 16px;border-radius:20px;transition:border-color .15s,box-shadow .2s,transform .2s}
+.tik:not(.compact):hover{border-color:color-mix(in srgb,var(--line) 40%,#B57CFF 60%);box-shadow:0 10px 30px -18px rgba(124,92,255,.55)}
+.tik > .tik-main{gap:6px}
+.tik-av .me-av{width:44px;height:44px;box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px color-mix(in srgb,var(--line) 70%,#B57CFF 30%)}
+.tik.compact .tik-av .me-av{width:32px;height:32px;box-shadow:none}
+.tik-head{gap:5px;flex-wrap:nowrap;min-width:0;font-size:.93em}
+.tik-name{font-weight:800;color:var(--ink);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.tik-name:hover{text-decoration:underline}
+.tik-handle{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;font-size:.92em}
+.tik-dotsep{color:var(--muted)}
+.tik-head .tik-time{margin-left:0;white-space:nowrap;font-size:.85em}
+.tik-menu-wrap{position:relative;margin-left:auto;flex:none}
+.tik-menu-btn{all:unset;cursor:pointer;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;color:var(--muted)}
+.tik-menu-btn:hover{background:rgba(181,124,255,.14);color:#B57CFF}
+.tik-menu-btn svg{width:18px;height:18px;fill:currentColor}
+.tik-menu-btn:focus-visible{outline:2px solid #B57CFF}
+.tik-menu-bg{position:fixed;inset:0;z-index:20}
+.tik-menu{position:absolute;right:0;top:34px;z-index:21;min-width:180px;display:flex;flex-direction:column;padding:6px;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:0 18px 40px -12px rgba(0,0,0,.45);animation:tikPop .14s ease-out}
+.tik-menu > *{all:unset;cursor:pointer;padding:9px 12px;border-radius:9px;font-weight:700;font-size:.9em;color:var(--ink)}
+.tik-menu > *:hover,.tik-menu > *:focus-visible{background:var(--surface-2)}
+.tik-menu .danger{color:#E5484D}
+@keyframes tikPop{from{opacity:0;transform:translateY(-4px) scale(.97)}to{opacity:1;transform:none}}
+.tik-body{font-size:1.02em;line-height:1.55}
+.rt-link{color:#3B9EFF;text-decoration:none;font-weight:600}
+.rt-link:hover,.rt-at:hover{text-decoration:underline}
+.rt-at{color:#B57CFF;font-weight:700;text-decoration:none}
+.rt-tag{color:#3B9EFF;font-weight:700}
+.rt-coin{color:#C98A00;font-weight:800;padding:0 4px;border-radius:6px;background:rgba(240,185,11,.14)}
+.tik-img{border:1px solid var(--line);border-radius:18px;margin-top:4px}
+.tik-img img{max-height:520px;transition:transform .35s}
+.tik-img:hover img{transform:scale(1.015)}
+/* Designs for short text posts */
+.tik-style{display:grid;place-items:center;min-height:190px;padding:28px 22px;border-radius:18px;text-align:center;color:#fff;margin-top:4px;position:relative;overflow:hidden;
+  text-shadow:0 2px 12px rgba(0,0,0,.25)}
+.tik-style::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 15% 10%,rgba(255,255,255,.28),transparent 45%),radial-gradient(circle at 90% 95%,rgba(0,0,0,.2),transparent 50%);pointer-events:none}
+.tik-style p{position:relative;z-index:1;margin:0;font:800 clamp(1.15rem,3.6vw,1.6rem)/1.3 var(--f-display,inherit);white-space:pre-wrap;overflow-wrap:anywhere}
+.tik-style .rt-link,.tik-style .rt-at,.tik-style .rt-tag{color:#fff;text-decoration:underline;text-decoration-thickness:2px}
+.tik-style .rt-coin{color:#fff;background:rgba(255,255,255,.22)}
+.s-sunset{background:linear-gradient(135deg,#FF8A5B,#FF4F7B 55%,#B24BF3)}
+.s-ocean{background:linear-gradient(135deg,#00C2FF,#2F6BFF 60%,#3E2BD6)}
+.s-grape{background:linear-gradient(135deg,#B57CFF,#7C3AED 55%,#4C1D95)}
+.s-forest{background:linear-gradient(135deg,#2BD67B,#0E9F6E 55%,#065F46)}
+.s-gold{background:linear-gradient(135deg,#FFE08A,#F0B90B 50%,#C98A00)}
+.s-gold,.s-gold p{color:#2A1B00;text-shadow:none}
+.s-night{background:radial-gradient(circle at 70% 20%,#3B2A7A,#120D2B 65%)}
+.s-candy{background:linear-gradient(135deg,#FF9AD5,#FF6BB0 45%,#7FD8FF)}
+.s-fire{background:linear-gradient(160deg,#FFD84D,#FF7A1A 45%,#E5243B)}
+/* Actions: spread out, each with its own colour */
+.tik-actions{justify-content:space-between;max-width:440px;margin:2px 0 0 -8px;gap:0}
+.tik-act{gap:4px;min-width:44px;padding:6px 8px;font-size:.8em;transition:color .15s,background .15s}
+.tik-act span:empty{display:none}
+.tik-act svg{width:18px;height:18px;transition:transform .15s}
+.tik-act:active svg{transform:scale(.85)}
+.tik-act.reply:hover,.tik-act.reply.on{color:#3B9EFF;background:rgba(59,158,255,.12)}
+.tik-act.tickle:hover,.tik-act.tickle.on{color:#2BD67B;background:rgba(43,214,123,.12)}
+.tik-act.like:hover{color:#E0457B;background:rgba(224,69,123,.12)}
+.tik-act.like.on svg{animation:tikLike .35s ease-out}
+.tik-act.views:not(.static):hover{color:#B57CFF;background:rgba(181,124,255,.12)}
+.tik-act.views.static{cursor:default}
+.tik-act.views.static:hover{background:none;color:var(--muted)}
+.tik-act.share:hover,.tik-act.share.on{color:#F0B90B;background:rgba(240,185,11,.12)}
+.tik-act:not(.like) svg,.tik-act:not(.like).on svg{fill:none;stroke:currentColor}
+@keyframes tikLike{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+.tik-show{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;align-self:flex-start;font-size:.84em;font-weight:800;color:#3B9EFF;padding:2px 0}
+.tik-show i{width:22px;height:2px;border-radius:2px;background:currentColor;opacity:.5}
+.tik-show:hover{text-decoration:underline}
+/* Comments: a thread line down from each avatar */
+.tik-replies{gap:2px;padding-top:6px}
+.tik-replies > .tik,.tik-replies > .tik-tickled > .tik{background:transparent;border:0;padding:8px 4px 8px 0;border-radius:0}
+.tik-replies > .tik:hover{box-shadow:none}
+.tik-replies > .tik::before{content:"";position:absolute;left:15px;top:46px;bottom:0;width:2px;border-radius:2px;background:var(--line)}
+.tik-replies > .tik:last-of-type::before{display:none}
+.tik.compact .tik-body{font-size:.96em}
+.tik.compact .tik-actions{max-width:300px}
+.tik-replies .tik-replies{margin-left:6px;padding-left:12px;border-left:2px solid var(--line)}
+.tik-replying{color:var(--muted);font-size:.8em}
+.tik-replying b{color:#B57CFF;font-weight:700}
+/* Composer */
+.tik-new{border-radius:20px;padding:14px;gap:10px;transition:border-color .15s,box-shadow .15s}
+.tik-new:focus-within{border-color:rgba(181,124,255,.6);box-shadow:0 0 0 4px rgba(181,124,255,.12)}
+.tik-new.reply{border-radius:16px;margin-top:4px}
+.tik-new.reply:focus-within{box-shadow:none}
+.tik-new-box{border-radius:14px;transition:background .2s}
+.tik-new textarea:focus-visible{outline:none}
+.tik-new-box.tik-style{min-height:150px;padding:10px;display:flex}
+.tik-new-box.tik-style textarea{background:transparent;color:inherit;text-align:center;font-weight:800;font-size:1.25em;align-self:center;min-height:120px}
+.tik-new-box.tik-style textarea::placeholder{color:rgba(255,255,255,.8)}
+.tik-styles{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.tik-styles button{all:unset;cursor:pointer;width:26px;height:26px;border-radius:9px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);transition:transform .12s}
+.tik-styles button:hover{transform:translateY(-2px)}
+.tik-styles button.none{display:grid;place-items:center;font-weight:900;font-size:.72em;background:var(--surface-2);color:var(--ink)}
+.tik-styles button.on{box-shadow:0 0 0 2px var(--surface),0 0 0 4px #B57CFF}
+.tik-styles button:focus-visible{outline:2px solid #B57CFF;outline-offset:2px}
+.tik-styles small{font-size:.75em}
+.tik-ring{margin-left:auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:.62em;font-weight:800;color:var(--muted);
+  background:radial-gradient(closest-side,var(--surface) 72%,transparent 74%),conic-gradient(#B57CFF var(--p),var(--surface-2) 0)}
+.tik-ring[data-warn]{background:radial-gradient(closest-side,var(--surface) 72%,transparent 74%),conic-gradient(#E5484D var(--p),var(--surface-2) 0);color:#E5484D}
+.tik-new.reply .tik-ring{background:radial-gradient(closest-side,var(--surface-2) 72%,transparent 74%),conic-gradient(#B57CFF var(--p),var(--surface) 0)}
+.tik-post{padding:9px 20px;box-shadow:0 6px 16px -8px rgba(240,185,11,.8);transition:transform .12s,filter .12s}
+.tik-post:not(:disabled):hover{transform:translateY(-1px);filter:brightness(1.05)}
+.tik-tickled-by{display:flex;align-items:center;gap:6px;padding:6px 0 4px 60px;font-weight:700;color:#2BD67B}
+.tik-tickled-by svg{width:14px;height:14px}
+@media (max-width:560px){.tik{padding:12px;gap:10px}.tik-av .me-av{width:38px;height:38px}.tik-handle{display:none}.tik-actions{max-width:none}}
+@media (prefers-reduced-motion:reduce){.tik,.tik-img img,.tik-act svg,.tik-menu{transition:none;animation:none}}

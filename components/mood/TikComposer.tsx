@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { TIK_STYLES, canStyle, type TikStyle } from "./tik-styles";
 
 /** Shrinks a picture to at most 1280px and saves it as WebP (smaller, strips location data). */
 async function shrink(file: File): Promise<Blob> {
@@ -18,6 +19,7 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
   const [pic, setPic] = useState<{ blob: Blob; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [style, setStyle] = useState<TikStyle | null>(null);
   const file = useRef<HTMLInputElement>(null);
 
   async function pick(f: File | undefined) {
@@ -41,18 +43,29 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
       if (error) { setBusy(false); setMsg("Couldn't upload the picture. Try again."); return; }
       image_url = sb.storage.from("tik-images").getPublicUrl(path).data.publicUrl;
     }
-    const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), image_url, reply_to: replyTo ?? null, ...(replyTo && replyUser ? { reply_user: replyUser } : {}) });
+    const useStyle = !replyTo && style && canStyle(text, !!pic) ? style : null;
+    const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), image_url, ...(useStyle ? { style: useStyle } : {}), reply_to: replyTo ?? null, ...(replyTo && replyUser ? { reply_user: replyUser } : {}) });
     setBusy(false);
     if (error) { setMsg(/slow down/i.test(error.message) ? error.message : "Couldn't post. Try again."); return; }
-    setBody(""); if (pic) URL.revokeObjectURL(pic.url); setPic(null);
+    setBody(""); setStyle(null); if (pic) URL.revokeObjectURL(pic.url); setPic(null);
     onPosted?.();
   }
 
+  const styled = !replyTo && !!style && canStyle(body, !!pic);
   return (
     <div className={"tik-new" + (compact ? " compact" : "") + (replyTo ? " reply" : "")}>
+      <div className={"tik-new-box" + (styled ? ` tik-style s-${style}` : "")}>
       <textarea value={body} maxLength={500} rows={compact ? 2 : 3} onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy && body.trim()) { e.preventDefault(); post(); } }}
         placeholder={placeholder || (replyTo ? "Write a reply…" : "What's happening?")} aria-label={replyTo ? "Your reply" : "Your Tik"} />
+      </div>
+      {!replyTo && !pic && (
+        <div className="tik-styles" role="radiogroup" aria-label="Post design">
+          <button type="button" role="radio" aria-checked={!style} className={"none" + (!style ? " on" : "")} onClick={() => setStyle(null)} title="No design">Aa</button>
+          {TIK_STYLES.map((s) => <button key={s} type="button" role="radio" aria-checked={style === s} aria-label={`${s} design`} title={s} className={`s-${s}` + (style === s ? " on" : "")} onClick={() => setStyle(s)} />)}
+          {style && !canStyle(body, false) && <small className="muted">Designs show on posts up to 160 letters.</small>}
+        </div>
+      )}
       {pic && (
         <div className="tik-pic-prev">
           <img src={pic.url} alt="Your picture" />
@@ -69,7 +82,7 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
             <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
           </>
         )}
-        <small className="tik-count">{body.length}/500</small>
+        <span className="tik-ring" style={{ ["--p" as any]: `${Math.min(100, body.length / 5)}%` }} data-warn={body.length > 450 || undefined} title={`${body.length}/500`} aria-label={`${500 - body.length} letters left`}>{body.length > 450 ? 500 - body.length : ""}</span>
         <button type="button" className="tik-post" disabled={busy || !body.trim()} onClick={post}>{busy ? "Posting…" : replyTo ? "Reply" : "Post"}</button>
       </div>
       {msg && <small className="tik-msg" role="status">{msg}</small>}
