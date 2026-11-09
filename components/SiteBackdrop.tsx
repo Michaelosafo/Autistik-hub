@@ -60,6 +60,20 @@ export default function SiteBackdrop() {
     return () => clearInterval(t);
   }, [cur === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Depth: the art drifts a little with the mouse (computers) or as you scroll (phones).
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (still.current) return;
+    let raf = 0, tx = 0, ty = 0;
+    const set = () => { raf = 0; root.current?.style.setProperty("--px", tx.toFixed(3)); root.current?.style.setProperty("--py", ty.toFixed(3)); };
+    const queue = () => { if (!raf) raf = requestAnimationFrame(set); };
+    const move = (e: PointerEvent) => { if (e.pointerType !== "mouse") return; tx = e.clientX / innerWidth - 0.5; ty = e.clientY / innerHeight - 0.5; queue(); };
+    const scroll = () => { if (matchMedia("(hover: hover)").matches) return; ty = Math.max(-0.5, Math.min(0.5, (scrollY % 1600) / 1600 - 0.5)); queue(); };
+    addEventListener("pointermove", move, { passive: true });
+    addEventListener("scroll", scroll, { passive: true });
+    return () => { removeEventListener("pointermove", move); removeEventListener("scroll", scroll); if (raf) cancelAnimationFrame(raf); };
+  }, [cur === null]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The old scene finishes fading out, then goes away.
   useEffect(() => {
     if (prev === null) return;
@@ -71,14 +85,20 @@ export default function SiteBackdrop() {
   const show = prev !== null && prev !== cur ? [prev, cur] : [cur];
   const next = SCENES[(cur + 1) % SCENES.length];
   return (
-    <div className="sbg" aria-hidden="true">
+    <div className="sbg" aria-hidden="true" ref={root}>
       {show.map((i) => {
         const s = SCENES[i];
         return (
           <div key={s.id} className={`sbg-scene sbg-${s.glow}${i === cur ? " on" : " off"}`}>
             {s.tile && <div className="sbg-tile" style={{ backgroundImage: `url(${s.tile})`, backgroundSize: `${s.tileSize}px ${s.tileSize}px` }} />}
             {s.glow === "aurora" && <div className="sbg-dots" />}
-            <img className={`sbg-hero ${s.shape}`} src={s.hero} alt="" decoding="async" />
+            <div className="sbg-aura" />
+            <div className={`sbg-hero ${s.shape}`} style={{ ["--src" as any]: `url(${s.hero})` }}>
+              <i className="sbg-halo" />
+              <img src={s.hero} alt="" decoding="async" />
+              {/* A slow holographic shine that sweeps across the artwork (masked to its shape). */}
+              <i className="sbg-sheen" />
+            </div>
           </div>
         );
       })}
