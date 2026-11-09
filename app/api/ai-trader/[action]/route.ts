@@ -47,6 +47,7 @@ export async function GET(_req: Request, { params }: { params: { action: string 
 
 const NUM: Record<string, [number, number]> = {
   per_trade: [0.001, 10], max_positions: [1, 20], min_liquidity: [1000, 10_000_000], max_tax: [0, 25], min_age_hours: [0, 720],
+  mcap_min: [500, 10_000_000], mcap_max: [1000, 100_000_000], micro_min_liq: [500, 10_000_000], target_profit: [10, 1000], strat_stop: [5, 90],
   stop_loss: [1, 90], take_profit: [1, 2000], trail: [0, 90], max_hold_hours: [1, 720], daily_loss_limit: [0.001, 100],
 };
 
@@ -67,6 +68,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
       if (typeof b.use_ai === "boolean") up.use_ai = b.use_ai;
       if (typeof b.need_socials === "boolean") up.need_socials = b.need_socials;
       if (typeof b.manual_active === "boolean") up.manual_active = b.manual_active;
+      if (typeof b.hype_on === "boolean") up.hype_on = b.hype_on;
+      if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
       if (b.away_take_profit != null && isFinite(Number(b.away_take_profit))) up.away_take_profit = Math.min(2000, Math.max(1, Number(b.away_take_profit)));
       // BNB Chain is always on; Ethereum, Robinhood Chain and Solana are optional.
       if (Array.isArray(b.chains)) up.chains = ["bsc", ...TRADE_CHAINS.filter((c) => c !== "bsc" && b.chains.includes(c))];

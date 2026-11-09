@@ -6041,3 +6041,7 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .ait-keys{display:flex;flex-direction:column;gap:8px}
 .ait-key{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;border:1.5px dashed #E5484D;background:rgba(229,72,77,.06)}
 .ait-key code{font-size:.78em;overflow-wrap:anywhere;user-select:all;padding:8px;border-radius:8px;background:var(--surface)}
+.ait-tag{font-size:.7em;font-weight:800;padding:2px 8px;border-radius:99px;vertical-align:middle}
+.ait-tag.hype{background:rgba(255,122,26,.15);color:#E8590C}
+.ait-tag.dip{background:rgba(59,158,255,.14);color:#3B9EFF}
+.ait-in > em:first-child{margin-right:2px}

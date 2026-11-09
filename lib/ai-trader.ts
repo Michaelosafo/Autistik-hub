@@ -16,6 +16,7 @@ import { createWalletClient, erc20Abi, getAddress, http, isAddress } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
+import { aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
@@ -29,13 +30,14 @@ export type Settings = {
   min_liquidity: number; max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number;
   max_hold_hours: number; daily_loss_limit: number; use_ai: boolean; last_run: string; last_note: string | null;
   manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
+  hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
   status: "open" | "closing" | "closed"; spent: number; qty: number; amount_raw: string | null; decimals: number;
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number;
   why: string | null; buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null;
-  close_reason: string | null; opened_at: string; closed_at: string | null;
+  close_reason: string | null; opened_at: string; closed_at: string | null; strategy: string | null; pool: string | null;
 };
 
 const C = WCHAINS.bsc;
@@ -127,7 +129,7 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop"]) s[k] = n(s[k]);
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
   s.need_socials = s.need_socials !== false;
@@ -249,7 +251,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
     if (price == null) price = (await priceOf(p.chain, p.token)).price;
     if (p.mode === "paper" || p.chain !== "bsc") {
       if (!price) throw new Error("No price to sell at.");
-      received = (n(p.qty) * price * (1 - tax / 100 - PAPER_SLIP)) / (await bnbUsd());
+      received = (n(p.qty) * price * (1 - tax / 100 - (p.strategy ? 0.03 : PAPER_SLIP))) / (await bnbUsd());
       const s = await getSettings();
       await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash + Math.max(0, received) }).eq("id", 1);
     } else {
@@ -289,11 +291,13 @@ async function manage(s: Settings) {
     const ch = (price / n(p.entry_usd) - 1) * 100;
     const ageH = (Date.now() - Date.parse(p.opened_at)) / 36e5;
     let why: string | null = null;
-    const tp = s.manual_active ? n(s.away_take_profit) || n(p.take_profit) : n(p.take_profit);
+    // Setup trades keep the AI's own target; older trades use the "away" take profit while hands-on mode is on.
+    const tp = p.strategy ? n(p.take_profit) : s.manual_active ? n(s.away_take_profit) || n(p.take_profit) : n(p.take_profit);
+    const trailFrom = p.strategy ? 1.5 : 1.1; // setup trades only start trailing once they're up 50%
     if (handsOn) { if (m?.liquidity != null && m.liquidity < s.min_liquidity / 3) await closePosition({ ...p, high_usd: high }, "Liquidity dropped sharply (possible rug)", price); continue; }
     if (ch <= -n(p.stop_loss)) why = `Stop-loss (${ch.toFixed(1)}%)`;
     else if (ch >= tp) why = `Take profit (+${ch.toFixed(1)}%)`;
-    else if (n(p.trail) > 0 && high >= n(p.entry_usd) * 1.1 && price <= high * (1 - n(p.trail) / 100)) why = `Trailing stop (${((price / high - 1) * 100).toFixed(1)}% from the high)`;
+    else if (n(p.trail) > 0 && high >= n(p.entry_usd) * trailFrom && price <= high * (1 - n(p.trail) / 100)) why = `Trailing stop (${((price / high - 1) * 100).toFixed(1)}% from the high)`;
     else if (ageH >= s.max_hold_hours) why = `Held ${Math.round(ageH)}h, the most allowed (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%)`;
     else if (m?.liquidity != null && m.liquidity < s.min_liquidity / 3) why = "Liquidity dropped sharply (possible rug)";
     if (why) await closePosition({ ...p, high_usd: high }, why, price);
@@ -378,7 +382,62 @@ async function pick(s: Settings, list: Cand[]): Promise<{ c: Cand; why: string }
   } catch { return fallback; }
 }
 
+/** HYPE / DIP setups on small coins: scan, read the charts, safety checks, then the AI picks (or skips). */
+async function setupBuy(s: Settings, cash: number, held: Set<string>) {
+  const sb = supabaseService();
+  const { data: recent } = await sb.from("ai_trader_positions").select("token").eq("status", "closed").gte("closed_at", new Date(Date.now() - 12 * 36e5).toISOString());
+  const skip = new Set([...held, ...(recent || []).map((r: any) => String(r.token).toLowerCase())]);
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  const found = await scanSetups(chains, s, skip);
+  if (!found.length) return `Scanned ${chains.length} chain(s): no hype or dip setup between $${Math.round(s.mcap_min / 1000)}K and $${Math.round(s.mcap_max / 1000)}K market cap right now.`;
+  const top = found.slice(0, 8);
+  const boosts = await boosted();
+  const byChain = new Map<string, SCand[]>();
+  for (const c of top) byChain.set(c.chain, [...(byChain.get(c.chain) || []), c]);
+  const infos = new Map<string, Info>();
+  await Promise.all([...byChain].map(async ([chain, cs]) => { const m = await dexInfo(chain, cs.map((c) => c.token)).catch(() => new Map<string, Info>()); for (const [k, v] of m) infos.set(`${chain}:${k}`, v); }));
+  const rejected: string[] = [];
+  const checked = (await Promise.all(top.map(async (c) => {
+    const i = infos.get(`${c.chain}:${c.token.toLowerCase()}`);
+    c.x = !!i?.x; c.tg = !!i?.tg; c.boosted = boosts.has(`${c.chain}:${c.token.toLowerCase()}`);
+    if (s.need_socials && !c.x && !c.tg) { rejected.push(`${c.symbol}: no X or Telegram`); return null; }
+    c.chart = (await readChart(c.chain, c.pool).catch(() => null)) || undefined;
+    const bad = chartOk(c);
+    if (bad) { rejected.push(`${c.symbol}: ${bad}`); return null; }
+    const r = await riskFor(c.chain, c.token).catch(() => null);
+    if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) { rejected.push(`${c.symbol}: failed the safety check`); return null; }
+    c.buyTax = r.buyTax; c.sellTax = r.sellTax;
+    return c;
+  }))).filter(Boolean) as SCand[];
+  if (!checked.length) return `Found ${found.length} setups; none passed the chart and safety checks (${rejected.slice(0, 3).join("; ")}).`;
+  const p = await aiPick(checked.sort((a, b) => b.score - a.score), s.target_profit, s.strat_stop);
+  if (!p) return `Read ${checked.length} clean setups; the AI skipped them all this round (no clean entry).`;
+  const c = p.c;
+  const spend = Math.min(s.per_trade, cash);
+  const bnb = await bnbUsd();
+  let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
+  if (s.mode === "paper" || c.chain !== "bsc") {
+    const slip = Math.min(0.15, 0.01 + ((spend * bnb) / Math.max(1, c.liquidity)) * 2); // small pools move a lot
+    qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - slip)) / c.price;
+    await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash - spend }).eq("id", 1);
+  } else {
+    const r = await liveBuy(getAddress(c.token), spend, c.buyTax ?? 0);
+    const dec = await (walletChainClient(C) as any).readContract({ address: c.token, abi: erc20Abi, functionName: "decimals" }).catch(() => 18);
+    decimals = Number(dec); raw = r.raw.toString(); tx = r.hash;
+    qty = Number(r.raw) / 10 ** decimals;
+  }
+  const { error } = await sb.from("ai_trader_positions").insert({
+    mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
+    entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: p.sl, take_profit: p.tp, trail: 25, why: `${p.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
+    strategy: c.setup, pool: c.pool,
+  });
+  if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); return "Save failed."; }
+  await log("buy", `${c.setup === "hype" ? "🔥" : "📉"} Bought ${c.symbol} on ${CHAIN_NAME[c.chain]} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""}. Target +${p.tp}%, stop -${p.sl}%. ${p.why}`);
+  return `Bought ${c.symbol} (${c.setup}) on ${CHAIN_NAME[c.chain]}.`;
+}
+
 async function buyOne(s: Settings, cash: number, held: Set<string>) {
+  if (s.hype_on || s.dip_on) return setupBuy(s, cash, held);
   const sb = supabaseService();
   const list = await candidates(s, held);
   if (!list.length) return "No coin passed the safety checks this round.";
