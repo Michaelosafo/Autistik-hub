@@ -12,6 +12,7 @@ type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
   max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number; max_hold_hours: number; daily_loss_limit: number;
   use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean; manual_active: boolean; away_take_profit: number;
+  signals_on: boolean; callers: string[]; caller_mcap_max: number;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
 };
 type P = {
@@ -19,7 +20,8 @@ type P = {
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number; why: string | null;
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
-type Data = { settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
+type Sig = { id: number; at: string; source: string; who: string | null; body: string | null; url: string; chain: string; token: string; symbol: string | null; mcap: number | null; result: string | null };
+type Data = { signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
 const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
@@ -86,12 +88,14 @@ export default function AITrader() {
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
         <div className="ait-state">
           <span className={"ait-dot" + (s.enabled ? " on" : "")} aria-hidden="true" />
-          <div><b>{s.enabled ? "Running" : "Paused"}</b> · {live ? "LIVE (real BNB)" : "Practice (pretend BNB)"}<br /><small className="muted">{s.last_note || "Hasn't run yet."} {s.last_run && Date.parse(s.last_run) > 0 ? `· ${ago(s.last_run)}` : ""}</small></div>
+          <div><b>{s.enabled ? "Started: looking for trades" : "Stopped: not buying"}</b> · {live ? "LIVE (real BNB)" : "Practice (pretend BNB)"}<br /><small className="muted">{s.last_note || "Hasn't run yet."} {s.last_run && Date.parse(s.last_run) > 0 ? `· ${ago(s.last_run)}` : ""}</small></div>
         </div>
-        <div className="ait-btns">
-          <button type="button" className={"btn " + (s.enabled ? "" : "primary")} disabled={!!busy} onClick={() => act("toggle", "settings", { enabled: !s.enabled }, s.enabled ? "Paused. Open coins are still watched for exits when you run it." : "Running. It will check every 5 minutes.")}>{s.enabled ? "⏸ Pause" : "▶ Start"}</button>
-          <button type="button" className="btn" disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Running…" : "Run now"}</button>
-        </div>
+        <button type="button" className={"ait-go" + (s.enabled ? " stop" : "")} disabled={!!busy}
+          onClick={() => act("toggle", "settings", { enabled: !s.enabled }, s.enabled ? "Stopped. It won't buy anything until you press Start. Open coins still have their stop-loss and target." : "Started. It checks fresh signals every minute and scans for setups every 5 minutes.")}>
+          {s.enabled ? "■ STOP" : "▶ START"}
+        </button>
+        <small className="muted">{s.enabled ? "Stop halts all buying until you press Start again." : "Start makes it look for trades and buy."} Open coins are always protected by their stop-loss and target.</small>
+        {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>
 
       <section className="ait-stats">
@@ -155,6 +159,7 @@ export default function AITrader() {
       </section>
 
       <Strategy s={s} busy={!!busy} onAct={act} />
+      <Signals d={d} busy={!!busy} onAct={act} />
 
       <section className="card stack">
         <b>Where it looks</b>
@@ -276,7 +281,7 @@ function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: 
               <div key={p.id} className="ait-b">
                 {p.logo ? <img src={p.logo} alt="" width={36} height={36} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
                 <div className="ait-b-name">
-                  <b>{p.symbol} {p.strategy && <span className={"ait-tag " + p.strategy}>{p.strategy === "hype" ? "🔥 Hype" : "📉 Dip"}</span>}</b>
+                  <b>{p.symbol} {p.strategy && <span className={"ait-tag " + p.strategy}>{({ hype: "🔥 Hype", dip: "📉 Dip", signal: "⚡ Signal", caller: "📣 Caller" } as Record<string, string>)[p.strategy] || p.strategy}</span>}</b>
                   <small className="muted">{chainName(p.chain)} · {tab === "open" ? `bought ${ago(p.opened_at)}` : `sold ${p.closed_at ? ago(p.closed_at) : ""}`}</small>
                   <small className="muted">{fmtAmount(Number(p.spent))} → {fmtAmount(w)} BNB · {fmtUsd(Number(p.entry_usd))} → {price ? fmtUsd(price) : "–"}</small>
                 </div>
@@ -362,6 +367,58 @@ function Strategy({ s, busy, onAct }: { s: S; busy: boolean; onAct: (n: string, 
         {field("strat_stop", "Stop-loss", "%", "Cuts the loss here (the AI may tighten or widen it, 15–45%)")}
       </div>
       <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={busy || !Object.keys(f).length} onClick={() => onAct("strat", "settings", Object.fromEntries(Object.entries(f).map(([k, x]) => [k, Number(x)])), "Strategy saved.").then(() => setF({}))}>Save strategy</button>
+    </section>
+  );
+}
+
+const SRC: Record<string, string> = { x: "𝕏", telegram: "✈️ TG", "dex-profile": "DexScreener profile", "dex-boost": "DexScreener boost", "dex-cto": "Community takeover" };
+
+/** Fresh signals: X callers, Telegram groups and DexScreener, acted on within a minute. */
+function Signals({ d, busy, onAct }: { d: Data; busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
+  const s = d.settings;
+  const [add, setAdd] = useState("");
+  const [cap, setCap] = useState("");
+  const callers = s.callers || [];
+  const save = (list: string[], done: string) => onAct("callers", "settings", { callers: list }, done);
+  return (
+    <section className="card stack">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+        <b>⚡ Fresh signals</b>
+        <label className="ait-check" style={{ margin: 0 }}><input type="checkbox" checked={s.signals_on} disabled={busy} onChange={(e) => onAct("sig", "settings", { signals_on: e.target.checked })} /> <span>On</span></label>
+      </div>
+      <small className="muted">Checked every minute. It buys the moment a fresh post lands, if the coin is still small (in your market-cap window, not already up 100% in 1h or 300% in 24h, buyers ahead of sellers). Posts from the callers below may be bigger and already moving (up to the caller limit), as long as the post is under 5 minutes old.</small>
+      <div className="ait-src">
+        <span className="on">✓ DexScreener: new profiles, boosts, takeovers</span>
+        <span className={d.sources.x ? "on" : ""}>{d.sources.x ? "✓ X connected" : "✗ X not connected"}</span>
+        <span className={d.sources.telegram ? "on" : ""}>{d.sources.telegram ? "✓ Telegram bot ready" : "✗ Telegram not connected"}</span>
+      </div>
+      {!d.sources.x && <small className="muted">To read X: get a key from <a href="https://twitterapi.io" target="_blank" rel="noopener noreferrer">twitterapi.io</a> (pay per use, cheap) and add it in Vercel as <code>TWITTERAPI_IO_KEY</code>, or an official X API key as <code>X_BEARER_TOKEN</code>. Then redeploy.</small>}
+      {!d.sources.telegram ? <small className="muted">To read Telegram: make a bot with @BotFather, add its token in Vercel as <code>TELEGRAM_BOT_TOKEN</code>, redeploy, tap Connect, then add the bot to your channels and groups.</small>
+        : d.owner && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => onAct("tg", "tg-hook", {})}>Connect Telegram bot</button>}
+      <div>
+        <small className="muted">Callers on X</small>
+        <div className="ait-callers">
+          {callers.map((h) => <span key={h}>@{h}<button type="button" aria-label={`Remove @${h}`} disabled={busy} onClick={() => save(callers.filter((x) => x !== h), `@${h} removed.`)}>✕</button></span>)}
+          <input className="input" placeholder="@caller" value={add} onChange={(e) => setAdd(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && add.trim()) { save([...callers, add.trim()], `${add.trim()} added.`); setAdd(""); } }} aria-label="Add a caller" />
+        </div>
+      </div>
+      <label className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        <span>Caller coins up to</span>
+        <span className="ait-in" style={{ width: 150 }}><em>$</em><input inputMode="decimal" value={cap || String(s.caller_mcap_max)} onChange={(e) => setCap(e.target.value)} onBlur={() => { if (cap && Number(cap) !== s.caller_mcap_max) onAct("cap", "settings", { caller_mcap_max: Number(cap) }, "Saved."); }} /></span>
+        <small className="muted">market cap</small>
+      </label>
+      <div className="ait-sigs">
+        {!d.signals.length ? <small className="muted">No signals yet. They show here as they land.</small> : d.signals.map((g) => (
+          <div key={g.id} className={"ait-sig" + (g.result?.startsWith("bought") ? " won" : "")}>
+            <span className="ait-sig-src">{SRC[g.source] || g.source}</span>
+            <div className="grow">
+              <b>{g.symbol || `${g.token.slice(0, 6)}…`}</b> <small className="muted">{chainName(g.chain)}{g.mcap ? ` · $${Math.round(g.mcap).toLocaleString("en-US")}` : ""}{g.who && g.source !== "dex-profile" && g.source !== "dex-boost" && g.source !== "dex-cto" ? ` · ${g.source === "x" ? "@" : ""}${g.who}` : ""} · {ago(g.at)}</small>
+              <small className="ait-sig-r">{g.result}</small>
+            </div>
+            {g.url.startsWith("http") && <a href={g.url} target="_blank" rel="noopener noreferrer" className="btn small">Open</a>}
+          </div>
+        ))}
+      </div>
     </section>
   );
 }
