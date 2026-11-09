@@ -174,7 +174,7 @@ export default function AppShell({ admin, me, onMe, children }: {
           ))}
         </nav>
         <div className="ax-right">
-          <TrendingButton />
+          {!path.startsWith("/companions") && <TrendingButton />}
           <LangPicker />
           <ThemeToggle />
           <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>

@@ -59,6 +59,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
   menuPop: ReactNode;
   children: ReactNode;
 }) {
+  const chatPage = path.startsWith("/companions");
   const section = [...MAIN, ...MORE].find((i) => isOn(path, i));
   const [more, setMore] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
@@ -77,7 +78,8 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
     </Link>
   );
   return (
-    <div className="nx">
+    // The AI chat gets the whole middle and right: no top bar, no trending column, no footer.
+    <div className={"nx" + (chatPage ? " chat-page" : "")}>
       <aside className="nx-rail" aria-label="Menu">
         <Link href="/mood" className="nx-brand" aria-label="Open TIK" title="Open TIK">
           <LogoMark size={42} title="AUTISTIK Hub" />
@@ -111,7 +113,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
       </aside>
 
       <main className="nx-main">
-        {path !== "/" && <header className="nx-top">
+        {path !== "/" && !chatPage && <header className="nx-top">
           <b>{section?.name ?? "AUTISTIK Hub"}</b>
           <div className="nx-top-r">
             <TrendingButton />
@@ -121,10 +123,10 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
           </div>
         </header>}
         <div className={path === "/" ? "nx-page home" : "nx-page"}>{children}</div>
-        <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.</footer>
+        {!chatPage && <footer className="site-note">⚠️ Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.</footer>}
       </main>
 
-      <SideColumn app={app} signedIn={!!me} />
+      {!chatPage && <SideColumn app={app} signedIn={!!me} />}
     </div>
   );
 }
