@@ -437,7 +437,7 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
     c.x = !!i?.x; c.tg = !!i?.tg; c.boosted = boosts.has(`${c.chain}:${c.token.toLowerCase()}`);
     // Brand-new small coins rarely have their X / Telegram on DexScreener yet: for chart setups socials are a bonus
     // (the AI sees them), not a must. DexScreener signals still need them.
-    c.chart = (await readChart(c.chain, c.pool).catch(() => null)) || undefined;
+    c.chart = (await readChart(c.chain, c.pool, c.ageHours).catch(() => null)) || undefined;
     const bad = chartOk(c);
     if (bad) { rejected.push(`${c.symbol}: ${bad}`); return null; }
     const r = await riskFor(c.chain, c.token).catch(() => null);

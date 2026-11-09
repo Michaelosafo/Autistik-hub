@@ -66,7 +66,7 @@ async function pools(chain: string, deep: boolean) {
   // Trending (5m, 1h, 6h) plus the newest pools going back a few hours (BNB Chain makes ~100 an hour), so coins that
   // survived their first 20 minutes and are now moving get seen too.
   const pages = deep ? 8 : 3;
-  const paths = [`/networks/${net}/trending_pools?include=base_token&duration=5m&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=1h&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=6h&page=1`,
+  const paths = [`/networks/${net}/trending_pools?include=base_token&duration=5m&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=5m&page=2`, `/networks/${net}/trending_pools?include=base_token&duration=5m&page=3`, `/networks/${net}/trending_pools?include=base_token&duration=1h&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=6h&page=1`,
     ...Array.from({ length: pages }, (_, i) => `/networks/${net}/new_pools?include=base_token&page=${i + 1}`)];
   const lists = await Promise.all(paths.map((p) => gt(p).then((j) => parse(chain, j)).catch(() => [])));
   const seen = new Set<string>();
@@ -80,7 +80,7 @@ export function classify(c: Omit<SCand, "setup" | "score" | "reasons">, s: { hyp
   const accel = c.vol.h1 > 0 ? (c.vol.m15 * 4) / c.vol.h1 : 0; // >1: the last 15 min trade faster than the hour's average
   const reasons: string[] = [];
   // HYPE: crowd piling in, rising but not vertical.
-  if (s.hype_on && c.ch.m15 > 0 && c.ch.m5 > -3 && c.ch.h1 > 5 && c.ch.h1 < 250 && c.ch.m5 < 45 && pressure15 >= 1.3 && buyers15 >= 1.2 && by15 >= 10) {
+  if (s.hype_on && c.ch.m15 > 0 && c.ch.m5 > -3 && c.ch.h1 > 5 && c.ch.h1 < 250 && c.ch.m5 < 45 && pressure15 >= 1.25 && buyers15 >= 1.05 && by15 >= 7) {
     reasons.push(`${b15} buys vs ${s15} sells in 15m`, `${by15} buyers vs ${sl15} sellers`, `volume ${accel.toFixed(1)}× its hourly pace`);
     const score = Math.min(pressure15, 4) * 12 + Math.min(buyers15, 4) * 10 + Math.min(accel, 4) * 8 + Math.min(c.ch.h1, 120) * 0.15 + Math.log10(Math.max(1, c.liquidity)) * 4 - (c.ch.m5 > 25 ? 10 : 0);
     return { ...c, setup: "hype", score: Math.round(score), reasons };
@@ -111,13 +111,17 @@ function rsiSeries(cl: number[], n = 14): number[] {
   return out;
 }
 
-/** 5-minute candles for the last ~6 hours, boiled down to what a trader looks at. */
-export async function readChart(chain: string, pool: string): Promise<Chart | null> {
+/**
+ * The chart, boiled down to what a trader looks at: 5-minute candles (last ~6 hours) for coins older than 2 hours,
+ * 1-minute candles for younger ones (a 30-minute-old coin has no 5-minute history worth reading yet).
+ */
+export async function readChart(chain: string, pool: string, ageHours = 99): Promise<Chart | null> {
   const net = MOMENTUM_CHAINS.find((c) => c.key === chain)?.gt;
   if (!net || !pool) return null;
-  const j = await gt(`/networks/${net}/pools/${pool}/ohlcv/minute?aggregate=5&limit=72&currency=usd`).catch(() => null);
+  const agg = ageHours < 2 ? 1 : 5;
+  const j = await gt(`/networks/${net}/pools/${pool}/ohlcv/minute?aggregate=${agg}&limit=${agg === 1 ? 120 : 72}&currency=usd`).catch(() => null);
   const rows: number[][] = (j?.data?.attributes?.ohlcv_list || []).slice().reverse(); // oldest first: [t, o, h, l, c, v]
-  if (rows.length < 16) return null;
+  if (rows.length < 12) return null;
   const cl = rows.map((r) => num(r[4])), hi = rows.map((r) => num(r[2])), lo = rows.map((r) => num(r[3])), vo = rows.map((r) => num(r[5]));
   const close = cl[cl.length - 1], high = Math.max(...hi), low = Math.min(...lo);
   const r = rsiSeries(cl);
@@ -186,7 +190,7 @@ export async function scanSetups(chains: string[], s: { hype_on: boolean; dip_on
     if (skip.has(c.token.toLowerCase()) || c.price <= 0) continue;
     if (c.mcap < s.mcap_min || c.mcap > s.mcap_max) continue;
     if (c.liquidity < s.micro_min_liq) continue;
-    if (c.ageHours < 0.3) continue; // the first 20 minutes are the rug zone
+    if (c.ageHours < 0.15) continue; // the first 9 minutes are the worst rug zone
     const k = classify(c, s);
     if (k) out.push(k);
   }
