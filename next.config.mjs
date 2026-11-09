@@ -57,7 +57,7 @@ const nextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
           // The Launch Pad guide uses the microphone (voice); nothing uses the camera, location or payments API.
-          { key: "Permissions-Policy", value: "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)" },
+          { key: "Permissions-Policy", value: "camera=(self), geolocation=(), payment=(), usb=(), microphone=(self), display-capture=(self)" },
         ],
       },
     ];
