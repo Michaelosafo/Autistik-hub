@@ -13,7 +13,7 @@ export const APP_MONEY = process.env.NEXT_PUBLIC_APP_MONEY === "1";
 export const APP_BLOCKED = ["/wallet", "/swap", "/trade", "/buy", "/perps", "/launchpad", "/liquidity", "/lockers", "/stake", "/susu", "/fund", "/rewards", "/pro", "/arena", "/board"];
 export const appBlocked = (path: string) => !APP_MONEY && APP_BLOCKED.some((p) => path === p || path.startsWith(p + "/"));
 /** Wallet API calls that move money (read-only lookups like a coin scan stay). */
-export const APP_BLOCKED_API = /^\/api\/(wallet\/(quote|build|x-plan|x-fund|x-quote|sol-send|sol-ultra|sol-transfer|gas-send|momo-link)|orders\/(?!cron)|hyperfocus\/paid\/(quote|join))/;
+export const APP_BLOCKED_API = /^\/api\/(wallet\/(quote|build|x-plan|x-fund|x-quote|sol-send|sol-ultra|sol-transfer|gas-send|momo-link)|momo\/start|orders\/(?!cron)|hyperfocus\/paid\/(quote|join))/;
 
 /** In the browser: the cookie, or the referrer on the app's very first page. */
 export function isAndroidApp(): boolean {

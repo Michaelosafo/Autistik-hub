@@ -63,7 +63,7 @@ export default async function LivePage() {
   return (
     <div className="stack">
       <ProHero tone="coral" kicker="AUTISTIK · LIVE HUB" title="Live with the team" live={live.length ? "On now" : false}
-        text="The team hosts live sessions here: X Spaces, YouTube streams, AMAs and Q&As. Connect your wallet when you join, so airdrops for the session reach you."
+        text="The team hosts live sessions here: live audio rooms, video streams, AMAs and Q&As. Connect your wallet when you join, so airdrops for the session reach you."
         stats={[[live.length, "live now"], [upcoming.length, "coming up"], ["Wallet", "airdrops"]]} />
 
       <div className="steps-card card">

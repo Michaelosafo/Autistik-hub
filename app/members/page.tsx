@@ -106,7 +106,7 @@ export default async function MembersPage({ searchParams }: { searchParams: { ta
   return (
     <div className="stack" style={{ maxWidth: 860 }}>
       <div className="page-head"><div className="label">Members</div><h1>Follow each other</h1>
-        <p className="muted">Like X: everyone has a nickname and an @handle you can search. Team accounts wear a gold <span className="team-badge">✓ TEAM</span> badge, so you always know it&apos;s really us.</p></div>
+        <p className="muted">Everyone has a nickname and an @handle you can search. Team accounts wear a gold <span className="team-badge">✓ TEAM</span> badge, so you always know it&apos;s really us.</p></div>
       <nav className="chips" aria-label="Members">
         {tabs.map(([t, name]) => <Link key={t} className="chip" aria-current={tab === t ? "page" : undefined} href={`/members?tab=${t}`}>{name}{t === "following" && following.size ? ` (${following.size})` : ""}</Link>)}
         <Link className="chip" href="/live">Live hub</Link>
