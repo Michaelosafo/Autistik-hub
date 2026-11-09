@@ -100,12 +100,14 @@ const same = (a: unknown, b: string, c: XChain) => c.kind === "solana" ? String(
  * Every answer is checked: right networks, right coins, right amount, paying out to `toAddress`, and (EVM) only
  * through the LI.FI contract.
  */
-export async function xQuote(p: { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST" }): Promise<XQuote> {
+export async function xQuote(p: { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST"; feeBps?: number }): Promise<XQuote> {
+  // LI.FI only pays a fee once the site is registered with it (LIFI_INTEGRATOR); then it goes to the wallet set there.
+  const feeBps = INTEGRATOR ? (p.feeBps ?? xFeeBps) : 0;
   const q = new URLSearchParams({
     fromChain: String(p.from.id), toChain: String(p.to.id), fromToken: p.fromToken, toToken: p.toToken, fromAmount: p.amount.toString(),
     fromAddress: p.fromAddress, toAddress: p.toAddress, slippage: String(p.slippageBps / 10_000), integrator: INTEGRATOR || "autistik-hub",
   });
-  if (xFeeBps) q.set("fee", String(xFeeBps / 10_000));
+  if (feeBps) q.set("fee", String(feeBps / 10_000));
   if (p.order) q.set("order", p.order);
   const j = await lifi(`/quote?${q}`, 20_000);
   const a = j?.action, e = j?.estimate, tx = j?.transactionRequest;
@@ -133,7 +135,7 @@ export async function xQuote(p: { from: XChain; to: XChain; fromToken: string; t
     fromChain: p.from.id, toChain: p.to.id, fromToken: p.fromToken, toToken: p.toToken, fromAddress: p.fromAddress, toAddress: p.toAddress,
     fromAmount: p.amount.toString(), toAmount: String(e.toAmount), toAmountMin: String(e.toAmountMin || e.toAmount),
     fromUsd: num(e.fromAmountUSD) || null, toUsd: num(e.toAmountUSD) || null,
-    gasUsd: sum(e.gasCosts), feeUsd: sum(e.feeCosts, (f) => !f?.included), feeBps: xFeeBps,
+    gasUsd: sum(e.gasCosts), feeUsd: sum(e.feeCosts, (f) => !f?.included), feeBps,
     seconds: num(e.executionDuration) || null,
     tool: String(j.tool || ""), toolName: String(j.toolDetails?.name || j.tool || "LI.FI"), toolLogo: j.toolDetails?.logoURI || null,
     steps, evm, sol, at: Date.now(),

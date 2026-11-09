@@ -7,6 +7,8 @@ export type SwapAsk = {
   unit: "coin" | "usd" | "pct" | "all";
   from: string; fromChain: string | null;
   to: string; toChain: string | null; // "cheapest" = any network, whichever costs least
+  /** Buying a coin by its contract address (its network is found from the address). */
+  toAddress?: string | null;
 };
 /** Words people use for networks. */
 const CHAIN_WORDS: Record<string, string> = {
@@ -73,4 +75,31 @@ export function looksLikeSwap(text: string): boolean {
   if (/\b(convert|swap|exchange|bridge|change|turn|move)\b/.test(t) && /\b(to|for|into)\b/.test(t)) return true;
   // "sell $1 of autistik", "approved sell half my sol to usdt"
   return /\bsell\b/.test(t) && /(\d|\b(all|half|everything|max)\b)/.test(t);
+}
+
+const CA_RE = /\b0x[a-fA-F0-9]{40}\b|(?:^|\s)([1-9A-HJ-NP-Za-km-z]{32,44})(?=\s|$)/;
+export type BuyAsk = { ca: string; amount: number; unit: "usd" | "coin"; pay: string | null; payChain: string | null };
+/**
+ * "buy 1 usd worth of 0x…", "approved buy $5 of <address> with my eth on base", "buy 0.1 bnb of 0x…".
+ * Only a buy with a dollar amount or a named coin to pay with: "buy 0.1 0x…" (the chain's own coin) stays with the
+ * trading bot.
+ */
+export function readBuy(text: string): BuyAsk | null {
+  const m = text.match(CA_RE);
+  const ca = m ? (m[0].startsWith("0x") ? m[0] : m[1]) : null;
+  if (!ca) return null;
+  const t = text.replace(ca, " ").toLowerCase().replace(/,/g, "")
+    .replace(new RegExp(APPROVED_RE.source, "gi"), " ")
+    .replace(/(\d[\d.]*)\s*(?:usd|dollars?|bucks|\$)(?![a-z])/g, "$$$1").replace(/\s+/g, " ").trim();
+  if (!/\bbuy\b/.test(t)) return null;
+  const w = t.match(/\b(?:with|using|from|pay(?:ing)?(?: with)?)\s+(?:my\s+)?([a-z][a-z0-9]{1,9})(?:\s+(?:on|in)\s+(?:the\s+)?([a-z]+))?/);
+  let pay = w ? clean(w[1]) : null;
+  let payChain = w?.[2] ? chainKey(w[2]) : null;
+  if (pay && chainKey(pay) && !["BNB", "ETH", "SOL", "AVAX", "MATIC", "POL"].includes(pay)) { payChain = chainKey(pay); pay = null; } // "with base"
+  const usd = t.match(/\$([\d.]+)/);
+  if (usd && Number(usd[1]) > 0) return { ca, amount: Number(usd[1]), unit: "usd", pay, payChain };
+  // "buy 0.1 bnb of 0x…": the amount in the coin named
+  const coin = t.match(/\bbuy\s+([\d.]+)\s*([a-z][a-z0-9]{1,9})\b/);
+  if (coin && Number(coin[1]) > 0 && !["of", "worth", "tokens", "token", "coins"].includes(coin[2])) return { ca, amount: Number(coin[1]), unit: "coin", pay: clean(coin[2]), payChain };
+  return null;
 }

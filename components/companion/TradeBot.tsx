@@ -57,7 +57,9 @@ function findTradeAction(text: string, ca: string): { ca: string; intent?: Trade
   if ((m = t.match(/\b(?:sl|stop(?:\s*-?\s*loss)?)\b[^\d]*([\d.]+)\s*%/))) return { ca, intent: { action: "sl", pct: n(m[1]) } };
   if ((m = t.match(/\blimit\b[^\d]*([\d.]+)\s*%/))) return { ca, intent: { action: "limit", pct: n(m[1]) } };
   if ((m = t.match(/\bsell\b\s*(all|[\d.]+\s*%)?/))) return { ca, intent: { action: "sell", pct: m[1] === "all" ? 100 : m[1] ? parseFloat(m[1]) : undefined } };
-  if ((m = t.match(/\bbuy\b\s*([\d.]+)?/))) return { ca, intent: { action: "buy", amount: n(m[1]) } };
+  // "buy 1 usd" / "buy $1" is a dollar amount (the swap bot handles it), never 1 BNB.
+  if ((m = t.match(/\bbuy\b\s*([\d.]+)?(?!\s*(?:usd|dollars?|bucks|\$))/)) && !/\$\s*\d|\d\s*(?:usd|dollars?|bucks|\$)/.test(t)) return { ca, intent: { action: "buy", amount: n(m[1]) } };
+  if (/\bbuy\b/.test(t)) return { ca, intent: { action: "buy" } };
   if (/\borders?\b/.test(t)) return { ca, intent: { action: "orders" } };
   if (/\b(scan|review|check|safe|audit|rug)\b/.test(t)) return { ca, intent: { action: "scan" } };
   return { ca };
@@ -203,7 +205,7 @@ function MarketStep({ c, t, m, signer, owner, side, hold, preset, auto, onDone }
   useEffect(() => {
     setQ(null); setQErr(""); setAck(false);
     if (!raw || raw <= 0n) return;
-    const tm = setTimeout(() => api<{ quote: Quote }>("quote", { chain: c.key, tokenIn: from.address, tokenOut: to.address, amount: raw.toString() })
+    const tm = setTimeout(() => api<{ quote: Quote }>("quote", { chain: c.key, tokenIn: from.address, tokenOut: to.address, amount: raw.toString(), chat: true })
       .then((d) => setQ(d.quote)).catch((e) => setQErr(e.message)), 400);
     return () => clearTimeout(tm);
   }, [amount]); // eslint-disable-line react-hooks/exhaustive-deps
