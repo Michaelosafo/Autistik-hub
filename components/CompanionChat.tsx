@@ -314,6 +314,10 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
 
         <section className={"ai-main" + (empty ? " empty" : "")}>
           <header className="ai-head">
+            {/* On phones the site's bars are hidden here, so this is the way back to the rest of the site. */}
+            <Link href="/" className="ai-menu ai-home" aria-label="Back to the site">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+            </Link>
             <button type="button" className="ai-menu" onClick={() => setSide(true)} aria-label="Open chats" aria-expanded={side}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
             </button>
