@@ -55,6 +55,11 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
   const [side, setSide] = useState(false);
   const mood: Mood = "okay";
   const [sheet, setSheet] = useState<null | "pass" | "privacy" | "help">(null);
+  // Focus view (default): one question and answer fills the box; Previous / Next steps through the chat.
+  const [focus, setFocus] = useState(true);
+  const [page, setPage] = useState<number | null>(null); // null = the newest
+  useEffect(() => { try { if (localStorage.getItem("ai-focus") === "0") setFocus(false); } catch {} }, []);
+  const setFocusMode = (on: boolean) => { setFocus(on); setPage(null); try { localStorage.setItem("ai-focus", on ? "1" : "0"); } catch {} };
   const ctl = useRef<AbortController | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -92,8 +97,11 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [sheet]);
-  useStickToBottom(box, [active]);
-  useEffect(() => { box.current?.scrollTo({ top: box.current.scrollHeight }); }, [conv.msgs.length, active]);
+  // Following the newest reply; stepping back to an earlier question shows it from the top instead.
+  useStickToBottom(box, [active, focus], page != null);
+  useEffect(() => { if (page != null) box.current?.scrollTo({ top: 0 }); }, [page]);
+  useEffect(() => { setPage(null); }, [conv.msgs.length, active]);
+  useEffect(() => { box.current?.scrollTo({ top: focus ? 0 : box.current.scrollHeight }); }, [conv.msgs.length, active, focus]);
   // The composer grows with what you type, up to a limit.
   useEffect(() => { const t = field.current; if (t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 220) + "px"; } }, [input]);
 
@@ -227,6 +235,15 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
 
   const recent = useMemo(() => convs.filter((x) => x.msgs.length).sort((a, b) => b.at - a.at), [convs]);
   const list = conv.msgs;
+  // One question and its answer at a time ("page"), so nobody has to scroll back through the whole chat.
+  const groups = useMemo(() => {
+    const g: number[][] = [];
+    list.forEach((m, i) => { if (m.kind === "me" || !g.length) g.push([i]); else g[g.length - 1].push(i); });
+    return g;
+  }, [list]);
+  const last = groups.length - 1;
+  const at = page == null || page > last ? last : page;
+  const shown = focus && groups.length > 1 ? new Set(groups[at] || []) : null;
   const empty = list.length === 0;
 
   const composer = (
@@ -306,8 +323,19 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
             </button>
           </header>
 
-          <div className="msgs" ref={box} aria-live="polite">
+          {groups.length > 1 && (
+            <nav className="ai-pager" aria-label="Step through this chat">
+              <button type="button" onClick={() => setPage(Math.max(0, at - 1))} disabled={!focus || at === 0} aria-label="Previous question">‹ Previous</button>
+              <span>{focus ? `${at + 1} of ${groups.length}` : `${groups.length} messages`}</span>
+              <button type="button" onClick={() => setPage(at + 1 >= last ? null : at + 1)} disabled={!focus || at >= last} aria-label="Next question">Next ›</button>
+              <span className="ai-pager-grow" />
+              {focus && at < last && <button type="button" className="ai-pager-new" onClick={() => setPage(null)}>Newest ↓</button>}
+              <button type="button" className="ai-pager-mode" aria-pressed={!focus} onClick={() => setFocusMode(!focus)}>{focus ? "Show all" : "One at a time"}</button>
+            </nav>
+          )}
+          <div className={"msgs" + (shown ? " focus" : "")} ref={box} aria-live="polite">
             {list.map((m, i) => {
+              if (shown && !shown.has(i)) return null;
               if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
               if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
               if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;

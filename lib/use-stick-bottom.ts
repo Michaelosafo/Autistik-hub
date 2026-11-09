@@ -5,10 +5,10 @@ import { useEffect, type RefObject } from "react";
  * Keeps a chat's newest message in view as replies arrive, get written out or gain buttons, so nobody has to
  * drag to see what was said. If the person scrolls up to re-read, it stops following until they come back down.
  */
-export function useStickToBottom(ref: RefObject<HTMLElement>, deps: unknown[] = []) {
+export function useStickToBottom(ref: RefObject<HTMLElement>, deps: unknown[] = [], off = false) {
   useEffect(() => {
     const box = ref.current;
-    if (!box) return;
+    if (!box || off) return;
     let stick = true;
     const onScroll = () => { stick = box.scrollHeight - box.scrollTop - box.clientHeight < 160; };
     const follow = () => { if (stick) box.scrollTop = box.scrollHeight; };
@@ -20,5 +20,5 @@ export function useStickToBottom(ref: RefObject<HTMLElement>, deps: unknown[] = 
     follow();
     return () => { box.removeEventListener("scroll", onScroll); mo.disconnect(); ro.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, off]);
 }
