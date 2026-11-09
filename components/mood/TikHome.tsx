@@ -83,6 +83,7 @@ export default function TikHome({ admin }: { admin?: boolean }) {
                 </span>
                 <span className="th-a-x">{a.text}</span>
               </span>
+            </Link>
           ))}
         </section>
 
