@@ -119,7 +119,7 @@ export default function Privacy() {
         <ul className="stack" style={{ margin: 0, paddingLeft: 20, gap: 6 }}>
           <li><b>See or copy</b> the data we hold about you.</li>
           <li><b>Correct</b> anything that is wrong.</li>
-          <li><b>Delete</b> your account and the data linked to it.</li>
+          <li><b>Delete</b> your account and the data linked to it, any time: <a href="/account/delete">autistik.io/account/delete</a> (in the app: Menu → Delete account).</li>
           <li><b>Turn off</b> push notifications, alerts and 2-step verification at any time in the Hub.</li>
           <li><b>Disconnect Google:</b> you can remove AUTISTIK Hub&apos;s access at <a href="https://myaccount.google.com/connections" target="_blank" rel="noopener noreferrer">myaccount.google.com/connections</a>.</li>
         </ul>

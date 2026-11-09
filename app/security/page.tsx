@@ -27,6 +27,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: { n
         ? <AccountSecurity step={mfa} next={next} email={user.email || "your account"} welcome={welcome} />
         : <div className="row"><Link className="btn primary" href="/login?next=/security">Sign in to set it up</Link></div>}
       <AuthenticatorGuide />
+      <p className="muted">Want to leave? <Link href="/account/delete">Delete your account</Link></p>
     </div>
   );
 }
