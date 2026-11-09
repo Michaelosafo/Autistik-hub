@@ -67,7 +67,7 @@ export default async function AppHome() {
           <h2><span className="ah-tik-dot" aria-hidden="true" />What&apos;s happening</h2>
           <span className="ah-tik-go"><Link href="/mood#tik-post" className="ah-tik-post">✍️ Post a Tik</Link><Link href="/mood">Open TIK →</Link></span>
         </div>
-        <TikHome admin={!!adm?.admin} />
+        <TikHome admin={!!adm?.staff} />
       </section>
       <nav className="ah-actions ah-actions-slim" aria-label="Quick actions">
         {ACTIONS.map((a) => (

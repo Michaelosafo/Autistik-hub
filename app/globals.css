@@ -6025,3 +6025,16 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .th-act .th-chips{border-bottom:0;padding-bottom:2px}
 .th-act .th-a-t > .th-a-h{display:flex;align-items:center;gap:5px;width:100%;-webkit-line-clamp:unset;overflow:visible}
 .th-act .th-a-t > .th-a-x{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+
+/* AI trader: who's in control, live wallet, quick sell */
+.ait-ctrl{display:flex;flex-direction:column;gap:10px;border-width:1.5px}
+.ait-ctrl.you{border-color:#22c55e;background:linear-gradient(135deg,rgba(34,197,94,.08),transparent 60%),var(--surface)}
+.ait-ctrl.ai{border-color:#B57CFF;background:linear-gradient(135deg,rgba(181,124,255,.10),transparent 60%),var(--surface)}
+.ait-ctrl-h{display:flex;gap:12px;align-items:flex-start}
+.ait-ctrl-h .grow{display:flex;flex-direction:column;gap:2px}
+.ait-ctrl-ic{font-size:1.6em;line-height:1}
+.ait-wallet{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:14px;background:var(--surface-2)}
+.ait-addr{font-size:.8em;overflow-wrap:anywhere}
+.ait-sell{all:unset;cursor:pointer;margin-top:2px;padding:4px 12px;border-radius:99px;font-weight:800;font-size:.75em;background:#E5484D;color:#fff}
+.ait-sell:disabled{opacity:.5;cursor:default}
+.ait-sell:focus-visible{outline:2px solid #E5484D;outline-offset:2px}

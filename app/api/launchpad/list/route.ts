@@ -27,7 +27,7 @@ function clean(chain: ChainKey, raw: string) {
 // needs a trading pool on DexScreener (its pool, name and ticker come from there, never from the request). Listed
 // tokens show on the board, in Trending and in New listings like a paid listing, without the trending slot.
 export async function POST(req: Request) {
-  if (!(await adminState()).admin) return json({ error: "Admins only." }, 403);
+  if (!(await adminState()).staff) return json({ error: "Admins only." }, 403);
   const body = await req.json().catch(() => null);
   const chain = body?.chain as ChainKey;
   if (!CHAINS[chain]) return json({ error: "Pick the chain the tokens are on." }, 400);
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
 // Admin only: takes a listed token off the Launch Pad. Tokens launched here stay: they're on-chain launches.
 export async function DELETE(req: Request) {
-  if (!(await adminState()).admin) return json({ error: "Admins only." }, 403);
+  if (!(await adminState()).staff) return json({ error: "Admins only." }, 403);
   const body = await req.json().catch(() => null);
   const chain = body?.chain as ChainKey;
   const token = CHAINS[chain] ? clean(chain, String(body?.token || "")) : null;

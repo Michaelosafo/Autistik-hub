@@ -132,7 +132,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
   const v = await loadRow(b.id);
   if (!v) return json({ error: "Video not found." }, 404);
   const mine = v.author_id === user.id;
-  const admin = !mine && (await adminState()).admin;
+  const admin = !mine && (await adminState()).staff;
   if (!mine && !admin) return json({ error: "That's not your video." }, 403);
 
   switch (a) {
@@ -158,7 +158,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
       return json({ ok: true });
     }
     case "hide": {
-      if (!admin && !(await adminState()).admin) return json({ error: "Admins only." }, 403);
+      if (!admin && !(await adminState()).staff) return json({ error: "Admins only." }, 403);
       await sb.from("videos").update({ hidden: b.hidden !== false, updated_at: new Date().toISOString() }).eq("id", v.id);
       return json({ ok: true });
     }

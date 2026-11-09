@@ -17,7 +17,7 @@ export default async function SessionsPage() {
   if (user) {
     const { data } = await sb.from("rsvps").select("session_id");
     for (const r of data || []) seats[r.session_id] = (seats[r.session_id] || 0) + 1;
-    admin = (await adminState()).admin;
+    admin = (await adminState()).staff;
   }
   return (
     <div className="stack">

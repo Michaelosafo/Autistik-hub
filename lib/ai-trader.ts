@@ -13,7 +13,7 @@
  * Server only.
  */
 import { createWalletClient, erc20Abi, getAddress, http, isAddress } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
 import { WCHAINS } from "@/lib/wallet-chains";
@@ -28,6 +28,7 @@ export type Settings = {
   enabled: boolean; mode: "paper" | "live"; chains: TradeChain[]; need_socials: boolean; paper_cash: number; paper_start: number; per_trade: number; max_positions: number;
   min_liquidity: number; max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number;
   max_hold_hours: number; daily_loss_limit: number; use_ai: boolean; last_run: string; last_note: string | null;
+  manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -43,10 +44,50 @@ const PAPER_SLIP = 0.01; // paper: assume 1% lost to price impact each way
 const GAS_KEEP = 0.003; // BNB always left in the live wallet for gas
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 
-export function traderAccount() {
-  const k = process.env.AI_TRADER_KEY?.trim();
-  if (!k || !/^0x[0-9a-fA-F]{64}$/.test(k)) return null;
-  return privateKeyToAccount(k as `0x${string}`);
+/**
+ * The live trading wallet: AI_TRADER_KEY in Vercel if set, otherwise the wallet created from the Admin panel, whose
+ * key is kept encrypted in the database Vault (only the server can read it; it's never shown or sent anywhere).
+ */
+let cached: ReturnType<typeof privateKeyToAccount> | null = null;
+export async function traderAccount() {
+  if (cached) return cached;
+  let k = process.env.AI_TRADER_KEY?.trim() || "";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(k)) {
+    const { data } = await supabaseService().rpc("ai_trader_key_get");
+    k = typeof data === "string" ? data : "";
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(k)) return null;
+  cached = privateKeyToAccount(k as `0x${string}`);
+  return cached;
+}
+
+/** Owner: makes the live trading wallet (once). Returns its address to send BNB to. */
+export async function createTraderWallet(): Promise<string> {
+  if (await traderAccount()) throw new Error("The AI trader already has a wallet.");
+  const key = generatePrivateKey();
+  const { error } = await supabaseService().rpc("ai_trader_key_set", { p_key: key });
+  if (error) throw new Error(error.message);
+  cached = privateKeyToAccount(key);
+  await log("settings", `Live trading wallet created: ${cached.address}`);
+  return cached.address;
+}
+
+/** Owner: sends the wallet's BNB (all but the gas for this transfer) to an address the owner typed. */
+export async function withdrawBnb(to: string): Promise<{ hash: string; bnb: number }> {
+  const account = await traderAccount();
+  if (!account) throw new Error("There's no trading wallet yet.");
+  if (!isAddress(to)) throw new Error("That isn't a BNB Chain address.");
+  const pc = walletChainClient(C) as any;
+  const bal: bigint = await pc.getBalance({ address: account.address });
+  const price: bigint = await pc.getGasPrice();
+  const fee = price * 21000n * 2n;
+  if (bal <= fee) throw new Error("Not enough BNB to cover the transfer fee.");
+  const w = createWalletClient({ account, chain: C.viem, transport: http(C.rpc, { timeout: 20_000 }) }) as any;
+  const value = bal - fee;
+  const hash = await w.sendTransaction({ to: getAddress(to), value, gas: 21000n, gasPrice: price });
+  await pc.waitForTransactionReceipt({ hash, timeout: 60_000 });
+  await log("settings", `Withdrew ${(Number(value) / 1e18).toFixed(5)} BNB to ${to}.`);
+  return { hash, bnb: Number(value) / 1e18 };
 }
 
 export async function log(kind: string, text: string) {
@@ -56,7 +97,7 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit"]) s[k] = n(s[k]);
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
   s.need_socials = s.need_socials !== false;
@@ -113,7 +154,7 @@ const riskFor = (chain: string, token: string) => riskOf(riskChain(chain), token
 
 /** Live wallet: BNB balance (in BNB). */
 export async function liveBalance(): Promise<{ address: string; bnb: number } | null> {
-  const a = traderAccount();
+  const a = await traderAccount();
   if (!a) return null;
   const wei = await walletChainClient(C).getBalance({ address: a.address });
   return { address: a.address, bnb: Number(wei) / 1e18 };
@@ -122,7 +163,7 @@ export async function liveBalance(): Promise<{ address: string; bnb: number } | 
 // ---------------------------------------------------------------- Live swaps
 
 async function sendSwap(tx: EvmTx, amountIn: bigint, tokenIn: string) {
-  const account = traderAccount()!;
+  const account = (await traderAccount())!;
   const pc = walletChainClient(C) as any;
   const w = createWalletClient({ account, chain: C.viem, transport: http(C.rpc, { timeout: 20_000 }) }) as any;
   if (tx.spender) {
@@ -139,7 +180,7 @@ async function sendSwap(tx: EvmTx, amountIn: bigint, tokenIn: string) {
 }
 
 async function liveBuy(token: string, bnb: number, tax: number) {
-  const account = traderAccount()!;
+  const account = (await traderAccount())!;
   const pc = walletChainClient(C) as any;
   const wei = BigInt(Math.floor(bnb * 1e18));
   const before: bigint = await pc.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
@@ -151,7 +192,7 @@ async function liveBuy(token: string, bnb: number, tax: number) {
 }
 
 async function liveSell(token: string, raw: bigint, tax: number) {
-  const account = traderAccount()!;
+  const account = (await traderAccount())!;
   const pc = walletChainClient(C) as any;
   const have: bigint = await pc.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
   const amount = raw > have ? have : raw;
@@ -182,7 +223,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       const s = await getSettings();
       await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash + Math.max(0, received) }).eq("id", 1);
     } else {
-      if (!traderAccount()) throw new Error("AI_TRADER_KEY isn't set, so live positions can't be sold here.");
+      if (!(await traderAccount())) throw new Error("There's no trading wallet, so live positions can't be sold here.");
       const r = await liveSell(getAddress(p.token), BigInt(p.amount_raw || "0"), tax);
       received = r.received; sellTx = r.hash;
     }
@@ -198,8 +239,15 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
   }
 }
 
+/** An admin had the AI trader page open in the last 10 minutes. */
+export const ACTIVE_MS = 10 * 60_000;
+export const adminActive = (s: Settings) => !!s.admin_seen_at && Date.now() - Date.parse(s.admin_seen_at) < ACTIVE_MS;
+
 async function manage(s: Settings) {
   const sb = supabaseService();
+  // Hands-on: while an admin is around, they close trades themselves (only a pulled pool still sells automatically).
+  // When nobody is around, the AI takes over and sells at the "away" take profit (50% by default) or the stop rules.
+  const handsOn = s.manual_active && adminActive(s);
   const { data } = await sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]);
   for (const p of (data || []) as Position[]) {
     const m = await priceOf(p.chain, p.token).catch(() => null);
@@ -211,8 +259,10 @@ async function manage(s: Settings) {
     const ch = (price / n(p.entry_usd) - 1) * 100;
     const ageH = (Date.now() - Date.parse(p.opened_at)) / 36e5;
     let why: string | null = null;
+    const tp = s.manual_active ? n(s.away_take_profit) || n(p.take_profit) : n(p.take_profit);
+    if (handsOn) { if (m?.liquidity != null && m.liquidity < s.min_liquidity / 3) await closePosition({ ...p, high_usd: high }, "Liquidity dropped sharply (possible rug)", price); continue; }
     if (ch <= -n(p.stop_loss)) why = `Stop-loss (${ch.toFixed(1)}%)`;
-    else if (ch >= n(p.take_profit)) why = `Take profit (+${ch.toFixed(1)}%)`;
+    else if (ch >= tp) why = `Take profit (+${ch.toFixed(1)}%)`;
     else if (n(p.trail) > 0 && high >= n(p.entry_usd) * 1.1 && price <= high * (1 - n(p.trail) / 100)) why = `Trailing stop (${((price / high - 1) * 100).toFixed(1)}% from the high)`;
     else if (ageH >= s.max_hold_hours) why = `Held ${Math.round(ageH)}h, the most allowed (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%)`;
     else if (m?.liquidity != null && m.liquidity < s.min_liquidity / 3) why = "Liquidity dropped sharply (possible rug)";
@@ -337,7 +387,7 @@ export async function runTrader({ force = false } = {}) {
   const s = await getSettings();
   if (!s.enabled && !force) return { skipped: "paused" };
   const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", 1); return { note: t }; };
-  if (s.mode === "live" && !traderAccount()) return note("Live mode needs AI_TRADER_KEY in Vercel. Nothing was traded.");
+  if (s.mode === "live" && !(await traderAccount())) return note("Live mode needs a trading wallet (create one on the AI trader page). Nothing was traded.");
 
   await manage(s);
 

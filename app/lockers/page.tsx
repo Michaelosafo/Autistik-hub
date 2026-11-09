@@ -18,7 +18,7 @@ export const metadata = { title: "Lockers · AUTISTIK Hub", description: "Lock l
 const amt = (v: string) => Number(v).toLocaleString("en-US", { maximumFractionDigits: Number(v) < 1 ? 6 : 0 });
 
 export default async function LockersPage({ searchParams }: { searchParams: { chain?: string; token?: string } }) {
-  const [sites, { admin }] = await Promise.all([lockerSites(), adminState()]);
+  const [sites, { staff: admin }] = await Promise.all([lockerSites(), adminState()]);
   const qChain = isLockerChain(searchParams.chain) ? searchParams.chain : "bsc";
   const qToken = searchParams.token && isAddress(searchParams.token.trim()) ? getAddress(searchParams.token.trim()) : null;
   const [recent, check] = await Promise.all([

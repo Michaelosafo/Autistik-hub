@@ -15,7 +15,7 @@ const body = (hex: string) => { const h = hex.toLowerCase().replace(/^0x/, ""); 
 
 /** Admin only: saves a locker the admin just deployed, after checking on-chain that it is exactly our contract. */
 export async function POST(req: Request) {
-  if (!(await adminState()).admin) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  if (!(await adminState()).staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
   const { chain, txHash } = await req.json().catch(() => ({}));
   if (!isLockerChain(chain)) return json({ error: "Unknown chain." }, 400);
   const input = typeof txHash === "string" ? txHash.trim() : "";
