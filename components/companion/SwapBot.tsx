@@ -60,6 +60,8 @@ function Flow({ text, at, buy, signer }: { text: string; at?: number; buy: BuyAs
   const [step, setStep] = useState("");
   const [done, setDone] = useState<{ text: string; link?: string; pending?: boolean; failed?: string } | null>(null);
   const [autoNote, setAutoNote] = useState("");
+  const [picking, setPicking] = useState(false);       // showing "pay with something else"
+  const [payingWith, setPayingWith] = useState("");
   const asked = useRef(false), fired = useRef(false), body = useRef<Record<string, unknown> | null>(null);
   const evm = signer.evm?.address ?? null, sol = signer.sol?.address ?? null;
   const approved = isApproved(text);
@@ -69,8 +71,9 @@ function Flow({ text, at, buy, signer }: { text: string; at?: number; buy: BuyAs
     api<{ plan: Plan }>("x-plan", { ...b, evm, sol }).then((d) => setPlan(d.plan)).catch((e) => setErr(e.message || "Couldn't plan that."));
   }
   /** Buy by address: pay with this coin on this network. */
-  function payWith(f: { symbol: string; chain: string | null }) {
-    setFund(null);
+  function payWith(f: { symbol: string; chain: string | null }, keep?: Fund | null) {
+    if (keep !== undefined) setFund(keep);
+    setPicking(false); setPayingWith(`${f.symbol}${f.chain ? ` on ${XCHAIN_BY_KEY[f.chain]?.name ?? f.chain}` : ""}`);
     loadPlan({ ask: { amount: buy!.amount, unit: buy!.unit, from: f.symbol, fromChain: f.chain, toAddress: buy!.ca } });
   }
 
@@ -88,9 +91,10 @@ function Flow({ text, at, buy, signer }: { text: string; at?: number; buy: BuyAs
           : `You don't have $${buy.amount} in BNB, ETH, SOL, USDT or USDC on any network (plus gas) to buy ${f.token.symbol}. Add funds to your wallet first.`);
         return;
       }
-      // Only one way to pay: no need to ask.
-      if (list.length === 1) return payWith({ symbol: list[0].symbol, chain: list[0].chain });
+      // No question: pay with the best one (the coin's own network first, so no bridge); others stay one tap away.
       setFund({ ...f, choices: list });
+      setPicking(false);
+      payWith({ symbol: list[0].symbol, chain: list[0].chain }, { ...f, choices: list });
     }).catch((e) => setErr(e.message || "Couldn't check your wallet."));
   }, [signer.ready, evm, sol, text]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -122,7 +126,7 @@ function Flow({ text, at, buy, signer }: { text: string; at?: number; buy: BuyAs
     </div>
   );
   if (err) return <div className="tb-err"><b>Can&apos;t do that yet</b><p>{err}</p></div>;
-  if (fund) return (
+  if (fund && picking) return (
     <div className="stack" style={{ gap: 8 }}>
       <p className="tb-q">Buy ${amt(buy!.amount)} of <b>{fund.token.symbol}</b> ({fund.chainName}). What should I pay with?</p>
       <div className="sb-opts">
@@ -248,6 +252,45 @@ function Flow({ text, at, buy, signer }: { text: string; at?: number; buy: BuyAs
       setStep(""); setDone({ text: m, failed: m });
     }
   }
+
+  // A buy: one line and one button. The route details fold away.
+  if (buy) return (
+    <div className="stack sb-flow" style={{ gap: 10 }}>
+      <div className="sb-buy">
+        {o.toToken.logo && <img src={o.toToken.logo} alt="" width={36} height={36} />}
+        <div>
+          <b>Buy {amt(out)} {o.toToken.symbol}</b>
+          <small>for {amt(Number(o.amount))} {o.fromToken.symbol}{o.fromUsd ? ` (${usd(o.fromUsd)})` : ""} · {from.name}{cross ? ` → ${to.name}` : ""}</small>
+        </div>
+      </div>
+      {autoNote && <div className="sb-auto">{autoNote}</div>}
+      {blocked && <div className="aw-risk danger">{blocked}</div>}
+      {needAck && !blocked && !done && <label className="row aw-ack"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> I understand I lose {impact!.toFixed(1)}% of the value and want to continue.</label>}
+      {done ? (
+        <div className={"sx-track" + (done.failed ? " bad" : done.pending ? "" : " ok")} role="status">
+          <div>{done.pending && <span className="aw-spin" />}{done.text} {done.link && <a href={done.link} target="_blank" rel="noopener noreferrer">View ↗</a>}</div>
+          {done.failed && !done.link && body.current && <button type="button" className="btn" onClick={() => { setDone(null); loadPlan(body.current!); }}>Try again</button>}
+        </div>
+      ) : step ? <div className="aw-step"><span className="aw-spin" />{step}</div> : (
+        <button type="button" className="tx-cta convert" disabled={!!blocked || (needAck && !ack)} onClick={() => go(false)}>Approve &amp; buy</button>
+      )}
+      {!step && !done && (
+        <div className="sb-more">
+          {fund && fund.choices.length > 1 && <button type="button" className="sx-link" onClick={() => setPicking(true)}>Pay with something else</button>}
+          <details><summary>Details</summary>
+            <div className="aw-details">
+              <div><span>Paying with</span><b>{payingWith || `${o.fromToken.symbol} on ${from.name}`}</b></div>
+              <div><span>Network fee</span><b>≈ {o.gasUsd != null ? usd(o.gasUsd) : "–"}</b></div>
+              {o.feeUsd != null && <div><span>Bridge fee</span><b>≈ {usd(o.feeUsd)}</b></div>}
+              {o.feeBps > 0 && <div><span>AUTISTIK fee</span><b>{o.feeBps / 100}%</b></div>}
+              <div><span>Route</span><b>{o.tool}{cross ? ` · ${mins(o.seconds)}` : ""}</b></div>
+              <div><span>Slippage allowed</span><b>{(o.slipBps / 100).toFixed(1)}%</b></div>
+            </div>
+          </details>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="stack sb-flow" style={{ gap: 10 }}>

@@ -5625,3 +5625,9 @@ main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app { height: calc(100dvh - 24p
 .sb-route em { font-style: normal; font-size: 11px; font-weight: 800; padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, #22c55e 18%, transparent); color: #16a34a; }
 .sb .sx-track .aw-spin { margin-right: 6px; vertical-align: -2px; }
 .sb-auto { font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, #22c55e 14%, transparent); color: var(--ink); }
+.sb-buy { display: flex; align-items: center; gap: 12px; }
+.sb-buy img { border-radius: 50%; flex: none; }
+.sb-buy b { display: block; font-size: 16px; }
+.sb-buy small { color: var(--muted); }
+.sb-more { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.sb-more summary { cursor: pointer; color: var(--muted); }
