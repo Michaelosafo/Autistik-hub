@@ -5328,11 +5328,16 @@ button.back-btn{cursor:pointer;font:inherit;font-weight:800;font-size:.88em}
   .sbg-hero.tall, .sbg-hero.round { width: 80vw; right: -40px; bottom: 70px; }
   .sbg-hero.wide { bottom: 90px; }
 }
-:root[data-theme="dark"] .sbg-tile { opacity: .16; }
-:root[data-theme="dark"] .sbg-hero { opacity: .10; }
 :root[data-theme="dark"] .sbg-dots { background-image: radial-gradient(rgba(244,238,255,.10) 1px, transparent 1.2px); }
 html[data-calm="on"] .sbg { display: none; }
 @media (prefers-reduced-motion: reduce) { .sbg-scene, .sbg-scene.on, .sbg-tile, .sbg-hero { animation: none; transition: none; } }
 @media print { .sbg { display: none; } }
 /* The app screens painted their own solid colour; let the background show through. */
-.ax { background: transparent; }
+.ax, :root[data-theme="dark"] .ax, :root[data-theme="light"] .ax { background: transparent; }
+/* Dark mode: a little stronger, so the art shows on dark screens. */
+:root[data-theme="dark"] .sbg-tile { opacity: .2; }
+:root[data-theme="dark"] .sbg-hero { opacity: .16; }
+:root[data-theme="dark"] .sbg-hero.round { opacity: .18; }
+:root[data-theme="dark"] .sbg-scene::before { opacity: .8; }
+/* The home landing page keeps its glows but lets the background art show through. */
+.lp { background: radial-gradient(90% 60% at 80% 0%, rgba(240,185,11,.12), transparent 60%), radial-gradient(70% 50% at 0% 10%, rgba(118,69,217,.18), transparent 60%); }
