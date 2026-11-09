@@ -100,12 +100,13 @@ const same = (a: unknown, b: string, c: XChain) => c.kind === "solana" ? String(
  * Every answer is checked: right networks, right coins, right amount, paying out to `toAddress`, and (EVM) only
  * through the LI.FI contract.
  */
-export async function xQuote(p: { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number }): Promise<XQuote> {
+export async function xQuote(p: { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST" }): Promise<XQuote> {
   const q = new URLSearchParams({
     fromChain: String(p.from.id), toChain: String(p.to.id), fromToken: p.fromToken, toToken: p.toToken, fromAmount: p.amount.toString(),
     fromAddress: p.fromAddress, toAddress: p.toAddress, slippage: String(p.slippageBps / 10_000), integrator: INTEGRATOR || "autistik-hub",
   });
   if (xFeeBps) q.set("fee", String(xFeeBps / 10_000));
+  if (p.order) q.set("order", p.order);
   const j = await lifi(`/quote?${q}`, 20_000);
   const a = j?.action, e = j?.estimate, tx = j?.transactionRequest;
   if (!a || !e || !tx?.data) throw new Error("No route found for this swap. Try another coin or a bigger amount.");

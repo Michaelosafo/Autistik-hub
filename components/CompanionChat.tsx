@@ -16,6 +16,8 @@ import { useVoice } from "@/lib/voice";
 import { Handwritten, WritingNote } from "@/components/Handwriting";
 import { useStickToBottom } from "@/lib/use-stick-bottom";
 import TradeBot, { findTradeRequest, type TradeIntent } from "@/components/companion/TradeBot";
+import SwapBot from "@/components/companion/SwapBot";
+import { looksLikeSwap } from "@/lib/swap-read";
 import type { Member } from "@/components/wallet/types";
 
 type Msg =
@@ -24,6 +26,7 @@ type Msg =
   | { kind: "img"; svg: string; title: string; request: string }
   | { kind: "drawing" }
   | { kind: "trade"; ca: string; intent?: TradeIntent }
+  | { kind: "swap"; text: string }
   | { kind: "sys"; text: string };
 type Turn = { role: "user" | "assistant"; content: string };
 type Conv = { id: string; who: CompanionId; title: string; at: number; msgs: Msg[]; turns: Turn[] };
@@ -156,6 +159,12 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
         turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: `(Opened the trading bot for ${trade.ca})` }] }));
       return;
     }
+    // "convert 1 SOL to USDT": the swap bot finds the cheapest route and the member's wallet signs.
+    if (looksLikeSwap(text)) {
+      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : titleOf(text), msgs: [...x.msgs, { kind: "me", text }, { kind: "swap", text }], at: Date.now(),
+        turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: "(Opened the swap bot for this request)" }] }));
+      return;
+    }
     const turns: Turn[] = [...conv.turns, { role: "user", content: text }];
     edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : titleOf(text), turns, msgs: [...x.msgs, { kind: "me", text }, { kind: "ai", text: `${COMPANIONS[companion].name} is thinking…`, pending: true }], at: Date.now() }));
     setBusy(true);
@@ -249,7 +258,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
   const composer = (
     <form className="ai-composer" onSubmit={(e) => { e.preventDefault(); send(input); }}>
       <textarea ref={field} rows={1} value={input} onChange={(e) => setInput(e.target.value)}
-        placeholder={!signedIn ? "Sign in to chat" : draw ? `Describe a picture for ${c.name} to draw…` : voice.listening ? "Listening… speak now" : `Message ${c.name}, or paste a coin address to trade…`}
+        placeholder={!signedIn ? "Sign in to chat" : draw ? `Describe a picture for ${c.name} to draw…` : voice.listening ? "Listening… speak now" : `Message ${c.name}, paste a coin address, or say “convert 1 SOL to USDT”…`}
         aria-label={`Message ${c.name}`}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }} />
       <div className="ai-tools">
@@ -342,6 +351,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
               if (shown && !shown.has(i)) return null;
               if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
               if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
+              if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} auto={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "drawing") return (
                 <div key={i} className="msgrow"><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
