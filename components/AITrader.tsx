@@ -100,6 +100,8 @@ export default function AITrader() {
         <div><small>Profit (closed)</small><b className={d.stats.pnl >= 0 ? "up" : "down"}>{sign(d.stats.pnl)} BNB</b>{!live && <em>from {s.paper_start} BNB start</em>}</div>
       </section>
 
+      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} />
+
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <b>Mode</b>
@@ -201,5 +203,53 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
         <a className="btn small" href={`/analytics/${p.chain}/${p.token}`} target="_blank" rel="noopener noreferrer">Scan ↗</a>
       </div>
     </div>
+  );
+}
+
+/** Every coin the AI bought: what it paid, what it's worth now, and the % up or down. */
+function Bought({ open, closed }: { open: P[]; closed: P[] }) {
+  const [tab, setTab] = useState<"open" | "closed">("open");
+  const rows = tab === "open"
+    ? open.map((p) => { const now = Number(p.last_usd) || Number(p.entry_usd); const pct = (now / Number(p.entry_usd) - 1) * 100; return { p, pct, worth: Number(p.spent) * (1 + pct / 100), price: now as number | null }; })
+    : closed.map((p) => ({ p, pct: Number(p.pnl_pct) || 0, worth: Number(p.received) || 0, price: (Number(p.last_usd) || null) as number | null }));
+  const spent = rows.reduce((a, r) => a + Number(r.p.spent), 0), worth = rows.reduce((a, r) => a + r.worth, 0);
+  const total = spent ? (worth / spent - 1) * 100 : 0;
+  const best = Math.max(10, ...rows.map((r) => Math.abs(r.pct)));
+  return (
+    <section className="card stack ait-bought">
+      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <b>Coins the AI bought</b>
+        <div className="ait-seg" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "open"} className={tab === "open" ? "on" : ""} onClick={() => setTab("open")}>Holding ({open.length})</button>
+          <button type="button" role="tab" aria-selected={tab === "closed"} className={tab === "closed" ? "on" : ""} onClick={() => setTab("closed")}>Sold ({closed.length})</button>
+        </div>
+      </div>
+      {!rows.length ? <small className="muted">{tab === "open" ? "Not holding anything right now." : "Nothing sold yet."}</small> : (
+        <>
+          <div className="ait-sum">
+            <span>Paid <b>{fmtAmount(spent)} BNB</b></span>
+            <span>{tab === "open" ? "Worth now" : "Got back"} <b>{fmtAmount(worth)} BNB</b></span>
+            <span className={total >= 0 ? "up" : "down"}><b>{sign(total)}%</b> overall</span>
+          </div>
+          <div className="ait-bl">
+            {rows.map(({ p, pct, worth: w, price }) => (
+              <div key={p.id} className="ait-b">
+                {p.logo ? <img src={p.logo} alt="" width={36} height={36} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
+                <div className="ait-b-name">
+                  <b>{p.symbol}</b>
+                  <small className="muted">{chainName(p.chain)} · {tab === "open" ? `bought ${ago(p.opened_at)}` : `sold ${p.closed_at ? ago(p.closed_at) : ""}`}</small>
+                  <small className="muted">{fmtAmount(Number(p.spent))} → {fmtAmount(w)} BNB · {fmtUsd(Number(p.entry_usd))} → {price ? fmtUsd(price) : "–"}</small>
+                </div>
+                <div className={"ait-b-pct " + (pct >= 0 ? "up" : "down")}>
+                  <b>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%</b>
+                  <i style={{ width: `${Math.max(4, (Math.abs(pct) / best) * 100)}%` }} aria-hidden="true" />
+                </div>
+              </div>
+            ))}
+          </div>
+          {tab === "open" && <small className="muted">Prices update every 5 minutes.</small>}
+        </>
+      )}
+    </section>
   );
 }
