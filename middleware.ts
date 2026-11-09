@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 import { buildCsp, makeNonce } from "@/lib/csp";
 import { MFA_FREE, mfaStep } from "@/lib/mfa";
-import { APP_COOKIE, fromAndroidApp } from "@/lib/android-app";
+import { APP_BLOCKED_API, APP_COOKIE, APP_MONEY, appBlocked, fromAndroidApp } from "@/lib/android-app";
 
 // 1) Gives every page a one-time script nonce and its security policy (Next.js adds the nonce to its own scripts).
 // 2) Keeps the Supabase login session fresh on every page load.
@@ -19,12 +19,26 @@ export async function middleware(request: NextRequest) {
   const next = () => NextResponse.next({ request: { headers } });
   // Opened by the Google Play app: remember it (the app's later pages don't carry the referrer).
   const inApp = fromAndroidApp(request.headers.get("referer"));
+  const appNow = inApp || request.cookies.get(APP_COOKIE)?.value === "android";
+  // The app's very first page already counts as in the app.
+  if (inApp && request.cookies.get(APP_COOKIE)?.value !== "android") { request.cookies.set(APP_COOKIE, "android"); headers.set("cookie", request.cookies.toString()); }
   const finish = (r: NextResponse) => {
     if (inApp && request.cookies.get(APP_COOKIE)?.value !== "android") r.cookies.set(APP_COOKIE, "android", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", secure: true });
     r.headers.set("Content-Security-Policy", enforced);
     r.headers.set("Content-Security-Policy-Report-Only", reportOnly);
     return r;
   };
+
+  // The Google Play app has no money features: those pages show a short note instead, and their API calls are refused.
+  if (appNow && !APP_MONEY) {
+    const path = request.nextUrl.pathname;
+    if (APP_BLOCKED_API.test(path)) return finish(NextResponse.json({ error: "This isn't available in the app." }, { status: 403 }));
+    if (request.method === "GET" && appBlocked(path)) {
+      const to = request.nextUrl.clone();
+      to.pathname = "/in-app"; to.search = "";
+      return finish(NextResponse.redirect(to));
+    }
+  }
 
   // Changes sent to the site's API must come from the site itself, so another website can't send them in a member's name.
   if (request.nextUrl.pathname.startsWith("/api/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {

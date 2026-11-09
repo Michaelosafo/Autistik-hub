@@ -65,7 +65,7 @@ function findTradeAction(text: string, ca: string): { ca: string; intent?: Trade
   return { ca };
 }
 
-export default function TradeBot({ ca, at, intent, appId, member, signedIn }: { ca: string; at?: number; intent?: TradeIntent; appId: string | null; member: Member | null; signedIn: boolean }) {
+export default function TradeBot({ ca, at, intent, appId, member, signedIn, scanOnly = false }: { ca: string; at?: number; intent?: TradeIntent; scanOnly?: boolean; appId: string | null; member: Member | null; signedIn: boolean }) {
   const [found, setFound] = useState<Found | null>(null);
   const [err, setErr] = useState("");
   const [slim, setSlim] = useState(false); // a step is open: on phones the coin details fold away to make room
@@ -81,7 +81,7 @@ export default function TradeBot({ ca, at, intent, appId, member, signedIn }: { 
   return (
     <div className={"tb" + (slim ? " slim" : "")}>
       <CoinCard c={c} t={found.token} m={found.market} />
-      {!signedIn ? <p className="tb-q">Sign in to trade this coin with your wallet.</p> : (
+      {scanOnly ? <div className="tb-flow"><ScanStep c={c} t={found.token} canOrder={false} onAction={() => {}} noTrade /></div> : !signedIn ? <p className="tb-q">Sign in to trade this coin with your wallet.</p> : (
         <SignerScope appId={appId} member={member}>
           {(signer) => <div className="tb-flow"><Flow c={c} t={found.token} m={found.market} signer={signer} intent={intent} at={at} onStep={setSlim} /></div>}
         </SignerScope>
@@ -376,7 +376,7 @@ type Review = {
 };
 
 /** Scan & review: the built-in scanner's read on this coin, then the next step (buy, set a stop-loss…). */
-function ScanStep({ c, t, canOrder, onAction }: { c: WChain; t: TokenInfo; canOrder: boolean; onAction: (a: Action) => void }) {
+function ScanStep({ c, t, canOrder, onAction, noTrade = false }: { c: WChain; t: TokenInfo; canOrder: boolean; onAction: (a: Action) => void; noTrade?: boolean }) {
   const [r, setR] = useState<Review | null>(null);
   const [err, setErr] = useState("");
   const [k, setK] = useState(0);
@@ -427,7 +427,7 @@ function ScanStep({ c, t, canOrder, onAction }: { c: WChain; t: TokenInfo; canOr
       )}
       <p className="tb-q">What next?</p>
       <div className="tb-btns">
-        {v.kind !== "avoid" && <button type="button" className="tb-chip" onClick={() => onAction("buy")}>Buy</button>}
+        {v.kind !== "avoid" && !noTrade && <button type="button" className="tb-chip" onClick={() => onAction("buy")}>Buy</button>}
         {canOrder && <button type="button" className="tb-chip" onClick={() => onAction("sl")}>Set a stop-loss</button>}
         {canOrder && <button type="button" className="tb-chip" onClick={() => onAction("tp")}>Set take profit</button>}
         <a className="tb-chip" href={r.path} target="_blank" rel="noopener noreferrer">Full scan report ↗</a>

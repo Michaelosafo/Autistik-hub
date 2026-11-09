@@ -56,7 +56,7 @@ export default function ProfileSheet({ id, alias, onClose, act }: { id: string; 
           {c?.me ? <Link className="btn small" href="/me">✏️ Edit profile</Link>
             : <button type="button" className={"btn small" + (c?.iFollow ? "" : " primary")} disabled={!c || busy} onClick={follow}>{c?.iFollow ? "Following ✓" : "+ Follow"}</button>}
           {c?.handle && <Link className="btn small" href={`/u/${c.handle}`} target="_blank">Full profile</Link>}
-          {c && !c.me && <button type="button" className="btn small primary" onClick={act.send}>🎁 Send tokens</button>}
+          {c && !c.me && <button type="button" className="btn small primary ps-send" onClick={act.send}>🎁 Send tokens</button>}
         </div>
         {act.canRun && !c?.me && (
           <div className="lv-sheet-run">
