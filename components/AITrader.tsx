@@ -11,15 +11,22 @@ import { fmtAmount, fmtUsd } from "@/lib/num-format";
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
   max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number; max_hold_hours: number; daily_loss_limit: number;
-  use_ai: boolean; last_run: string; last_note: string | null;
+  use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean;
 };
 type P = {
-  id: string; mode: string; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
+  id: string; mode: string; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number; why: string | null;
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
 type Data = { settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
+const CHAINS = [
+  { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
+  { k: "ethereum", name: "Ethereum", note: "ETH coins" },
+  { k: "robinhood", name: "Robinhood Chain", note: "Robinhood Chain coins" },
+  { k: "solana", name: "Solana", note: "Optional" },
+];
+const chainName = (k: string) => CHAINS.find((c) => c.k === k)?.name || k;
 const ago = (iso: string) => { const s = (Date.now() - Date.parse(iso)) / 1000; return s < 60 ? "now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`; };
 const sign = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(2);
 async function post(action: string, body: unknown) {
@@ -72,7 +79,7 @@ export default function AITrader() {
         <Link href="/admin" className="muted">← Admin</Link>
         <div className="label">Admin · testing</div>
         <h1>🤖 AI trader</h1>
-        <p className="muted">It looks at coins trending and new on BNB Chain, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
+        <p className="muted">It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
       </div>
 
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
@@ -108,6 +115,23 @@ export default function AITrader() {
       </section>
 
       <section className="card stack">
+        <b>Where it looks</b>
+        <div className="ait-chains">
+          {CHAINS.map((c) => {
+            const on = s.chains.includes(c.k);
+            return (
+              <button key={c.k} type="button" className={"ait-chain" + (on ? " on" : "")} aria-pressed={on} disabled={!!busy || c.k === "bsc"}
+                onClick={() => act("chains", "settings", { chains: on ? s.chains.filter((x) => x !== c.k) : [...s.chains, c.k] }, `${c.name} ${on ? "off" : "on"}.`)}>
+                <b>{on ? "✓ " : ""}{c.name}</b><small>{c.note}</small>
+              </button>
+            );
+          })}
+        </div>
+        <label className="ait-check"><input type="checkbox" checked={s.need_socials} disabled={!!busy} onChange={(e) => act("soc", "settings", { need_socials: e.target.checked })} /> <span>Only coins with an X or Telegram community (coins being pushed on X / Telegram right now score higher)</span></label>
+        {live && <small className="muted">Live mode buys on BNB Chain only, because the wallet holds BNB. The other chains are traded in practice mode.</small>}
+      </section>
+
+      <section className="card stack">
         <b>Rules</b>
         <div className="ait-form">
           {FIELDS.map((f) => (
@@ -135,7 +159,7 @@ export default function AITrader() {
           <div className="ait-table">
             {d.closed.map((p) => (
               <div key={p.id} className="ait-tr">
-                <span><b>{p.symbol}</b> <small className="muted">{p.mode === "paper" ? "practice" : "live"} · {p.closed_at ? ago(p.closed_at) : ""}</small><br /><small className="muted">{p.close_reason}</small></span>
+                <span><b>{p.symbol}</b> <small className="muted">{chainName(p.chain)} · {p.mode === "paper" ? "practice" : "live"} · {p.closed_at ? ago(p.closed_at) : ""}</small><br /><small className="muted">{p.close_reason}</small></span>
                 <span className="n">{fmtAmount(Number(p.spent))} → {fmtAmount(Number(p.received) || 0)} BNB</span>
                 <span className={"n " + ((Number(p.pnl) || 0) >= 0 ? "up" : "down")}><b>{sign(Number(p.pnl_pct) || 0)}%</b></span>
               </div>
@@ -164,7 +188,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
     <div className="ait-pos">
       <div className="ait-pos-h">
         {p.logo ? <img src={p.logo} alt="" width={34} height={34} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
-        <div className="grow"><b>{p.symbol}</b> <small className="muted">{p.mode === "paper" ? "practice" : "live"} · bought {ago(p.opened_at)}</small><br /><small className="muted">{fmtAmount(Number(p.spent))} BNB · entry {fmtUsd(Number(p.entry_usd))} · now {fmtUsd(now)} · high {fmtUsd(Number(p.high_usd))}</small></div>
+        <div className="grow"><b>{p.symbol}</b> <small className="muted">{chainName(p.chain)} · {p.mode === "paper" ? "practice" : "live"} · bought {ago(p.opened_at)}</small><br /><small className="muted">{fmtAmount(Number(p.spent))} BNB · entry {fmtUsd(Number(p.entry_usd))} · now {fmtUsd(now)} · high {fmtUsd(Number(p.high_usd))}</small></div>
         <b className={ch >= 0 ? "up" : "down"}>{sign(ch)}%</b>
       </div>
       {p.why && <small className="ait-why">{p.why}</small>}
@@ -174,7 +198,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
         <label>Trailing <span className="ait-in"><input inputMode="decimal" value={tr} onChange={(e) => setTr(e.target.value)} /><em>%</em></span></label>
         <button type="button" className="btn small" disabled={busy} onClick={() => onAct("edit", "edit", { id: p.id, stop_loss: Number(sl), take_profit: Number(tp), trail: Number(tr) }, `${p.symbol}: saved.`)}>Save</button>
         <button type="button" className="btn small" disabled={busy} onClick={() => { if (confirm(`Sell all ${p.symbol} now?`)) onAct("close", "close", { id: p.id }, `${p.symbol} sold.`); }}>Sell now</button>
-        <a className="btn small" href={`/analytics/bsc/${p.token}`} target="_blank" rel="noopener noreferrer">Scan ↗</a>
+        <a className="btn small" href={`/analytics/${p.chain}/${p.token}`} target="_blank" rel="noopener noreferrer">Scan ↗</a>
       </div>
     </div>
   );

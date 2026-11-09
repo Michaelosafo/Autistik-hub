@@ -2,10 +2,13 @@
  * The AI trader (admin only, for testing). Every run (every 5 minutes):
  *  1. Checks each open position and sells on stop-loss, take-profit, trailing stop, max hold time, or if the
  *     liquidity is pulled (rug protection).
- *  2. If there's room and money, looks at coins trending and new on BNB Chain, keeps only ones that pass the safety
- *     gates (safety badge, honeypot and tax check, liquidity, age), and buys the best one. With "use AI" on, Claude
- *     picks among the safe candidates and says why; otherwise the highest momentum score wins.
- * Paper mode trades pretend BNB at real prices (nothing is sent). Live mode trades a dedicated wallet whose key is
+ *  2. If there's room and money, looks at coins trending and new on the chosen chains (BNB Chain always; Ethereum and
+ *     Robinhood Chain by default; Solana optional), adds the coins being pushed on X and Telegram right now (DexScreener
+ *     boosts, plus each coin's own X / Telegram links), keeps only ones that pass the safety gates (safety badge,
+ *     honeypot and tax check, liquidity, age) and buys the best one. With "use AI" on, Claude picks among the safe
+ *     candidates and says why; otherwise the highest score wins. Money is always counted in BNB.
+ * Paper mode trades pretend BNB at real prices on every chain (nothing is sent). Live mode buys on BNB Chain only (the
+ * wallet holds BNB; other chains would need bridging), and trades a dedicated wallet whose key is
  * only in Vercel (AI_TRADER_KEY); it never touches anyone else's funds. It pauses itself after the daily loss limit.
  * Server only.
  */
@@ -17,8 +20,12 @@ import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
 
+export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
+export type TradeChain = (typeof TRADE_CHAINS)[number];
+const CHAIN_NAME: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", solana: "Solana" };
+
 export type Settings = {
-  enabled: boolean; mode: "paper" | "live"; chain: "bsc"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number;
+  enabled: boolean; mode: "paper" | "live"; chains: TradeChain[]; need_socials: boolean; paper_cash: number; paper_start: number; per_trade: number; max_positions: number;
   min_liquidity: number; max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number;
   max_hold_hours: number; daily_loss_limit: number; use_ai: boolean; last_run: string; last_note: string | null;
 };
@@ -50,6 +57,9 @@ export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
   const s = data as any;
   for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit"]) s[k] = n(s[k]);
+  s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
+  if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
+  s.need_socials = s.need_socials !== false;
   return s as Settings;
 }
 
@@ -58,6 +68,48 @@ async function bnbUsd() {
   if (!m.priceUsd) throw new Error("No BNB price right now.");
   return m.priceUsd;
 }
+
+// ---------------------------------------------------------------- Any chain: price, socials, safety
+
+type Info = { price: number | null; liquidity: number | null; x: boolean; tg: boolean; logo: string | null };
+/** Price, pool depth and whether the coin has an X / Telegram, from DexScreener (up to 30 coins per call). */
+async function dexInfo(chain: string, tokens: string[]): Promise<Map<string, Info>> {
+  const out = new Map<string, Info>();
+  for (let i = 0; i < tokens.length; i += 30) {
+    const part = tokens.slice(i, i + 30);
+    const r = await fetch(`https://api.dexscreener.com/tokens/v1/${chain}/${part.join(",")}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).catch(() => null);
+    const pairs: any[] = (await r?.json().catch(() => null)) || [];
+    for (const t of part) {
+      const mine = pairs.filter((p) => String(p?.baseToken?.address || "").toLowerCase() === t.toLowerCase()).sort((a, b) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd));
+      const p = mine[0];
+      if (!p) continue;
+      const soc = mine.flatMap((x) => x?.info?.socials || []);
+      out.set(t.toLowerCase(), {
+        price: n(p.priceUsd) || null, liquidity: n(p.liquidity?.usd) || null, logo: p.info?.imageUrl || null,
+        x: soc.some((s: any) => /twitter|^x$/i.test(String(s?.type)) || /x\.com|twitter\.com/i.test(String(s?.url))),
+        tg: soc.some((s: any) => /telegram/i.test(String(s?.type)) || /t\.me\//i.test(String(s?.url))),
+      });
+    }
+  }
+  return out;
+}
+async function priceOf(chain: string, token: string) {
+  if (chain === "bsc") { const m = await market(C, token); return { price: m.priceUsd, liquidity: m.liquidity }; }
+  const i = (await dexInfo(chain, [token])).get(token.toLowerCase());
+  return { price: i?.price ?? null, liquidity: i?.liquidity ?? null };
+}
+/** Coins people are paying to push on X / Telegram right now (DexScreener boosts), as "chain:address". */
+async function boosted(): Promise<Set<string>> {
+  const urls = ["https://api.dexscreener.com/token-boosts/top/v1", "https://api.dexscreener.com/token-boosts/latest/v1"];
+  const lists = await Promise.all(urls.map((u) => fetch(u, { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => [])));
+  return new Set(lists.flat().filter((b: any) => b?.chainId && b?.tokenAddress).map((b: any) => `${b.chainId}:${String(b.tokenAddress).toLowerCase()}`));
+}
+/** Honeypot / tax check on any of the chains (Robinhood Chain uses GoPlus chain 4663). */
+function riskChain(chain: string) {
+  if (chain === "robinhood") return { ...WCHAINS.arbitrum, key: "arbitrum", chainId: 4663, tokens: [] } as any;
+  return WCHAINS[chain as "bsc" | "ethereum" | "solana"];
+}
+const riskFor = (chain: string, token: string) => riskOf(riskChain(chain), token);
 
 /** Live wallet: BNB balance (in BNB). */
 export async function liveBalance(): Promise<{ address: string; bnb: number } | null> {
@@ -120,11 +172,11 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
   const { data: claimed } = await sb.from("ai_trader_positions").update({ status: "closing", updated_at: new Date().toISOString() }).eq("id", p.id).in("status", ["open", "closing"]).select("id");
   if (!claimed?.length) return;
   try {
-    const risk = await riskOf(C, p.token).catch(() => null);
+    const risk = await riskFor(p.chain, p.token).catch(() => null);
     const tax = risk?.sellTax ?? 0;
     let received: number, sellTx: string | null = null, price = priceUsd ?? null;
-    if (price == null) price = (await market(C, p.token)).priceUsd;
-    if (p.mode === "paper") {
+    if (price == null) price = (await priceOf(p.chain, p.token)).price;
+    if (p.mode === "paper" || p.chain !== "bsc") {
       if (!price) throw new Error("No price to sell at.");
       received = (n(p.qty) * price * (1 - tax / 100 - PAPER_SLIP)) / (await bnbUsd());
       const s = await getSettings();
@@ -139,7 +191,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       status: "closed", received, pnl, pnl_pct: n(p.spent) ? (pnl / n(p.spent)) * 100 : null, close_reason: reason, sell_tx: sellTx,
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
-    await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
+    await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
     await sb.from("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
     await log("error", `Couldn't sell ${p.symbol}: ${(e as Error).message}`);
@@ -148,10 +200,10 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
 
 async function manage(s: Settings) {
   const sb = supabaseService();
-  const { data } = await sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]).eq("chain", "bsc");
+  const { data } = await sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]);
   for (const p of (data || []) as Position[]) {
-    const m = await market(C, p.token).catch(() => null);
-    const price = m?.priceUsd ?? null;
+    const m = await priceOf(p.chain, p.token).catch(() => null);
+    const price = m?.price ?? null;
     if (p.status === "closing") { await closePosition(p, p.close_reason || "Closed by admin", price); continue; }
     if (!price) continue;
     const high = Math.max(n(p.high_usd), price);
@@ -170,7 +222,7 @@ async function manage(s: Settings) {
 
 // ---------------------------------------------------------------- Buying
 
-type Cand = { token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number; liquidity: number; mcap: number | null; ageHours: number | null; badge: string; reasons: string[]; score: number; buyTax?: number; sellTax?: number };
+type Cand = { chain: TradeChain; x: boolean; tg: boolean; boosted: boolean; token: string; symbol: string; name: string; image: string | null; price: number; change1h: number; change24h: number; liquidity: number; mcap: number | null; ageHours: number | null; badge: string; reasons: string[]; score: number; buyTax?: number; sellTax?: number };
 
 function momentum(c: Omit<Cand, "score">) {
   // Rising, but not already a vertical candle; deeper pools score higher; very new or very old coins score lower.
@@ -178,32 +230,48 @@ function momentum(c: Omit<Cand, "score">) {
   const liq = Math.log10(Math.max(1, c.liquidity)) * 8;
   const hot = c.change1h > 60 || c.change24h > 300 ? -25 : 0;
   const age = c.ageHours == null ? 0 : c.ageHours < 3 ? -8 : c.ageHours > 24 * 30 ? -5 : 4;
-  return Math.round(h1 * 1.2 + d1 * 0.25 + liq + hot + age + (c.badge === "safer" ? 8 : 0));
+  // Buzz on X and Telegram: has an X, has a Telegram, and is being pushed right now.
+  const buzz = (c.x ? 6 : 0) + (c.tg ? 6 : 0) + (c.x && c.tg ? 4 : 0) + (c.boosted ? 10 : 0);
+  return Math.round(h1 * 1.2 + d1 * 0.25 + liq + hot + age + buzz + (c.badge === "safer" ? 8 : 0));
 }
 
 async function candidates(s: Settings, held: Set<string>): Promise<Cand[]> {
   const sb = supabaseService();
   const { data: recent } = await sb.from("ai_trader_positions").select("token").eq("status", "closed").gte("closed_at", new Date(Date.now() - 12 * 36e5).toISOString());
   const skip = new Set([...held, ...(recent || []).map((r: any) => String(r.token).toLowerCase())]);
-  const d = await discover("bsc");
-  const all = [...d.trending, ...d.fresh, ...d.listed];
-  const seen = new Set<string>();
-  const list: Cand[] = [];
-  for (const c of all) {
-    const k = c.token.toLowerCase();
-    if (seen.has(k) || skip.has(k) || !isAddress(c.token)) continue;
-    seen.add(k);
-    if (c.badge !== "safer" && c.badge !== "caution") continue;
-    if (c.liquidity < s.min_liquidity) continue;
-    if (c.ageHours != null && c.ageHours < s.min_age_hours) continue;
-    if (c.change1h < -5) continue;
-    list.push({ ...c, score: momentum(c) });
-  }
-  list.sort((a, b) => b.score - a.score);
+  // Live mode can only buy with the BNB in its wallet, so it shops on BNB Chain only.
+  const chains = s.mode === "live" ? (["bsc"] as TradeChain[]) : s.chains;
+  const boosts = await boosted();
+  const perChain = await Promise.all(chains.map(async (chain) => {
+    const d = await discover(chain).catch(() => null);
+    if (!d) return [] as Cand[];
+    const seen = new Set<string>();
+    const raw = [...d.trending, ...d.fresh, ...d.listed].filter((c) => {
+      const k = c.token.toLowerCase();
+      if (seen.has(k) || skip.has(k)) return false;
+      seen.add(k);
+      return chain === "solana" ? c.token.length >= 32 : isAddress(c.token);
+    });
+    const info = await dexInfo(chain, raw.map((c) => c.token)).catch(() => new Map<string, Info>());
+    const list: Cand[] = [];
+    for (const c of raw) {
+      const i = info.get(c.token.toLowerCase());
+      const extra = { chain, x: !!i?.x, tg: !!i?.tg, boosted: boosts.has(`${chain}:${c.token.toLowerCase()}`) };
+      if (c.badge !== "safer" && c.badge !== "caution") continue;
+      if (c.liquidity < s.min_liquidity) continue;
+      if (c.ageHours != null && c.ageHours < s.min_age_hours) continue;
+      if (c.change1h < -5) continue;
+      if (s.need_socials && !extra.x && !extra.tg) continue;
+      const cand = { ...c, ...extra, image: c.image || i?.logo || null } as Omit<Cand, "score">;
+      list.push({ ...cand, score: momentum(cand) });
+    }
+    return list;
+  }));
+  const list = perChain.flat().sort((a, b) => b.score - a.score);
   // The honeypot and tax check on the best few.
-  const top = list.slice(0, 8);
+  const top = list.slice(0, 10);
   const checked = await Promise.all(top.map(async (c) => {
-    const r = await riskOf(C, c.token).catch(() => null);
+    const r = await riskFor(c.chain, c.token).catch(() => null);
     if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) return null;
     return { ...c, buyTax: r.buyTax, sellTax: r.sellTax };
   }));
@@ -213,13 +281,13 @@ async function candidates(s: Settings, held: Set<string>): Promise<Cand[]> {
 /** Claude picks one candidate (or none) and says why. Falls back to the top momentum score. */
 async function pick(s: Settings, list: Cand[]): Promise<{ c: Cand; why: string } | null> {
   if (!list.length) return null;
-  const fallback = { c: list[0], why: `Top momentum score ${list[0].score}: ${list[0].change1h.toFixed(1)}% in 1h, ${list[0].change24h.toFixed(1)}% in 24h, $${Math.round(list[0].liquidity).toLocaleString("en-US")} liquidity.` };
+  const fallback = { c: list[0], why: `${CHAIN_NAME[list[0].chain]}${list[0].x ? " · on X" : ""}${list[0].tg ? " · on Telegram" : ""}${list[0].boosted ? " · trending push" : ""}. Top score ${list[0].score}: ${list[0].change1h.toFixed(1)}% in 1h, ${list[0].change24h.toFixed(1)}% in 24h, $${Math.round(list[0].liquidity).toLocaleString("en-US")} liquidity.` };
   if (!s.use_ai || !process.env.ANTHROPIC_API_KEY) return fallback;
   try {
-    const rows = list.map((c, i) => ({ i, symbol: c.symbol, change1h: +c.change1h.toFixed(1), change24h: +c.change24h.toFixed(1), liquidityUsd: Math.round(c.liquidity), mcapUsd: c.mcap ? Math.round(c.mcap) : null, ageHours: c.ageHours != null ? Math.round(c.ageHours) : null, safety: c.badge, buyTax: c.buyTax, sellTax: c.sellTax, notes: c.reasons.slice(0, 3), score: c.score }));
+    const rows = list.map((c, i) => ({ i, chain: CHAIN_NAME[c.chain], symbol: c.symbol, onX: c.x, onTelegram: c.tg, pushedNow: c.boosted, change1h: +c.change1h.toFixed(1), change24h: +c.change24h.toFixed(1), liquidityUsd: Math.round(c.liquidity), mcapUsd: c.mcap ? Math.round(c.mcap) : null, ageHours: c.ageHours != null ? Math.round(c.ageHours) : null, safety: c.badge, buyTax: c.buyTax, sellTax: c.sellTax, notes: c.reasons.slice(0, 3), score: c.score }));
     const msg = await anthropic().messages.create({
       model: FAST_MODEL, max_tokens: 300,
-      system: "You are a cautious short-term crypto trading assistant choosing at most one BNB Chain coin to buy for a test portfolio. All candidates already passed honeypot, tax and liquidity checks. Prefer steady momentum with deep liquidity and reasonable market cap; avoid coins that already pumped vertically, very thin pools, or warning notes. If none look good, pick none. Reply with JSON only: {\"pick\": <index or null>, \"why\": \"<one short sentence>\"}.",
+      system: "You are a cautious short-term crypto trading assistant choosing at most one coin to buy for a test portfolio (BNB Chain, Ethereum, Robinhood Chain or Solana). All candidates already passed honeypot, tax and liquidity checks. Prefer steady momentum with deep liquidity and reasonable market cap, and real community buzz (an active X and Telegram; being pushed right now helps but hype alone is not enough); avoid coins that already pumped vertically, very thin pools, or warning notes. If none look good, pick none. Reply with JSON only: {\"pick\": <index or null>, \"why\": \"<one short sentence>\"}.",
       messages: [{ role: "user", content: JSON.stringify(rows) }],
     } as any);
     const text = (msg as any).content?.map((b: any) => b.text || "").join("") || "";
@@ -240,7 +308,7 @@ async function buyOne(s: Settings, cash: number, held: Set<string>) {
   const spend = Math.min(s.per_trade, cash);
   let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
   const bnb = await bnbUsd();
-  if (s.mode === "paper") {
+  if (s.mode === "paper" || c.chain !== "bsc") {
     qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - PAPER_SLIP)) / c.price;
     await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash - spend }).eq("id", 1);
   } else {
@@ -250,12 +318,12 @@ async function buyOne(s: Settings, cash: number, held: Set<string>) {
     qty = Number(r.raw) / 10 ** decimals;
   }
   const { error } = await sb.from("ai_trader_positions").insert({
-    mode: s.mode, chain: "bsc", token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
+    mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: s.stop_loss, take_profit: s.take_profit, trail: s.trail, why: p.why, buy_tx: tx,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); return "Save failed."; }
-  await log("buy", `Bought ${c.symbol} for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""} at $${c.price}. ${p.why}`);
-  return `Bought ${c.symbol}.`;
+  await log("buy", `Bought ${c.symbol} on ${CHAIN_NAME[c.chain]} for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""} at $${c.price}. ${p.why}`);
+  return `Bought ${c.symbol} on ${CHAIN_NAME[c.chain]}.`;
 }
 
 // ---------------------------------------------------------------- One run

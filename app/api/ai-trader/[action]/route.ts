@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { closePosition, getSettings, liveBalance, log, runTrader, traderAccount, type Position } from "@/lib/ai-trader";
+import { TRADE_CHAINS, closePosition, getSettings, liveBalance, log, runTrader, traderAccount, type Position } from "@/lib/ai-trader";
 import { supabaseService } from "@/lib/supabase/server";
 import { cronDenied } from "@/lib/cron-auth";
 
@@ -56,6 +56,9 @@ export async function POST(req: Request, { params }: { params: { action: string 
       for (const [k, [lo, hi]] of Object.entries(NUM)) if (b[k] != null && isFinite(Number(b[k]))) up[k] = Math.min(hi, Math.max(lo, Number(b[k])));
       if (typeof b.enabled === "boolean") up.enabled = b.enabled;
       if (typeof b.use_ai === "boolean") up.use_ai = b.use_ai;
+      if (typeof b.need_socials === "boolean") up.need_socials = b.need_socials;
+      // BNB Chain is always on; Ethereum, Robinhood Chain and Solana are optional.
+      if (Array.isArray(b.chains)) up.chains = ["bsc", ...TRADE_CHAINS.filter((c) => c !== "bsc" && b.chains.includes(c))];
       if (b.mode === "paper" || b.mode === "live") {
         if (b.mode === "live" && !traderAccount()) return json({ error: "Add AI_TRADER_KEY in Vercel first (a new wallet used only for the AI trader), then redeploy." }, 400);
         up.mode = b.mode;
