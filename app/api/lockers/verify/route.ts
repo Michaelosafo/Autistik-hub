@@ -15,7 +15,7 @@ const API = "https://api.etherscan.io/v2/api";
  * the code. Needs ETHERSCAN_API_KEY in Vercel (one free key from etherscan.io works for all these explorers).
  */
 export async function POST(req: Request) {
-  if (!(await adminState()).admin) return json({ error: "Admins only." }, 403);
+  if (!(await adminState()).staff) return json({ error: "Admins only." }, 403);
   const { chain } = await req.json().catch(() => ({}));
   if (!isLockerChain(chain)) return json({ error: "Unknown chain." }, 400);
   const site = await lockerOn(chain);

@@ -96,7 +96,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
       setMe(user.id);
-      if (full) sb.from("profiles").select("is_admin").eq("id", user.id).maybeSingle().then(({ data }) => setAdmin(!!data?.is_admin), () => {});
+      if (full) sb.rpc("is_staff").then(({ data }) => setAdmin(data === true), () => {});
       const [{ data: f }, { count }] = await Promise.all([
         sb.from("follows").select("followee_id").eq("follower_id", user.id).limit(500),
         sb.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),

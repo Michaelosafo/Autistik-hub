@@ -20,7 +20,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Launch a token · AUTISTIK Hub" };
 
 export default async function NewLaunchPage() {
-  const [user, board, { pads, versions, instants, instantVersions }, { owner, admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
+  const [user, board, { pads, versions, instants, instantVersions }, { owner, helper, staff: admin }, access] = await Promise.all([currentUser(), getBoard(60), padInfo(), adminState(), launchAccess()]);
   return (
     <div className="stack">
       <AdBar ads={toAds(ads(board))} />
@@ -56,7 +56,7 @@ export default async function NewLaunchPage() {
           </LaunchChoice>
         </>
       )}
-      {owner && !admin && <div className="notice">Your admin tools (deploy the Launch Pad on a new chain, list tokens) show here after your 2-step code. <Link href="/admin">Enter it on the Admin page</Link>, then come back to this page.</div>}
+      {(owner || helper) && !admin && <div className="notice">Your admin tools (deploy the Launch Pad on a new chain, list tokens) show here after your 2-step code. <Link href="/admin">Enter it on the Admin page</Link>, then come back to this page.</div>}
       {admin && <AdminListTokens />}
       {admin && <PadDeploy />}
       {admin && <PadTestnetTrial />}

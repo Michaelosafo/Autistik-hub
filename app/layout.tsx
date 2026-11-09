@@ -35,7 +35,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const { data: w0 } = await sb.from("wallets").select("user_id").eq("user_id", user.id).maybeSingle();
     needWallet = !w0;
     // The Admin menu item only shows for the owner (see supabase/admin-lock.sql).
-    const [{ data }, { data: owner }] = await Promise.all([sb.from("profiles").select("alias, color, avatar_url").eq("id", user.id).single().then((r) => (r.error ? sb.from("profiles").select("alias, color").eq("id", user.id).single() : r)), sb.rpc("is_owner")]);
+    const [{ data }, { data: owner }] = await Promise.all([sb.from("profiles").select("alias, color, avatar_url").eq("id", user.id).single().then((r) => (r.error ? sb.from("profiles").select("alias, color").eq("id", user.id).single() : r)), sb.rpc("is_owner"), sb.rpc("is_helper")]).then(([a, b, h]) => [a, { data: b.data === true || h.data === true }] as const);
     me = { id: user.id, avatar_url: (data as any)?.avatar_url ?? null, alias: data?.alias ?? "Member", color: /^#[0-9a-f]{6}$/i.test(data?.color || "") ? data!.color : "#6141D4", is_admin: owner === true, mfa: !!user.factors?.some((f) => f.status === "verified") };
   }
   return (

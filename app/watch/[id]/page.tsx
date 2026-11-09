@@ -21,6 +21,6 @@ export default async function WatchPage({ params }: { params: { id: string } }) 
   const v = await load(params.id);
   if (!v) notFound();
   const user = await currentUser();
-  const admin = user ? (await adminState()).admin : false;
+  const admin = user ? (await adminState()).staff : false;
   return <WatchView video={v} me={user?.id ?? null} admin={admin} />;
 }

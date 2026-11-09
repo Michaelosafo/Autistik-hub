@@ -30,7 +30,7 @@ const PAD_EXTRA = parseAbi(["function deployer() view returns (address)", "funct
 
 /** Admin only: what the deploy buttons need for a chain (prices, wallets, the locker, what's already deployed). */
 export async function GET(req: Request) {
-  if (!(await adminState()).admin) return json({ error: "Admins only." }, 403);
+  if (!(await adminState()).staff) return json({ error: "Admins only." }, 403);
   const chain = new URL(req.url).searchParams.get("chain") as ChainKey;
   const c = CHAINS[chain];
   if (!c || !deployable(c)) return json({ error: "That chain can't have the launchpad yet." }, 400);
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
 
 /** Admin only: saves a launchpad or burner the admin just deployed, after checking it on-chain. */
 export async function POST(req: Request) {
-  if (!(await adminState()).admin) return json({ error: "Admins only." }, 403);
+  if (!(await adminState()).staff) return json({ error: "Admins only." }, 403);
   const { chain, kind, address, txHash } = await req.json().catch(() => ({}));
   const c = CHAINS[chain as ChainKey];
   if (!c || !deployable(c)) return json({ error: "Unknown chain." }, 400);

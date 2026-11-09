@@ -11,14 +11,14 @@ import { fmtAmount, fmtUsd } from "@/lib/num-format";
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
   max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number; max_hold_hours: number; daily_loss_limit: number;
-  use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean;
+  use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean; manual_active: boolean; away_take_profit: number;
 };
 type P = {
   id: string; mode: string; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number; why: string | null;
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
-type Data = { settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
+type Data = { settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
 const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
@@ -100,19 +100,54 @@ export default function AITrader() {
         <div><small>Profit (closed)</small><b className={d.stats.pnl >= 0 ? "up" : "down"}>{sign(d.stats.pnl)} BNB</b>{!live && <em>from {s.paper_start} BNB start</em>}</div>
       </section>
 
-      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} />
+      <section className={"card ait-ctrl" + (s.manual_active && d.active ? " you" : " ai")}>
+        <div className="ait-ctrl-h">
+          <span className="ait-ctrl-ic" aria-hidden="true">{s.manual_active && d.active ? "🧑‍✈️" : "🤖"}</span>
+          <div className="grow">
+            <b>{s.manual_active && d.active ? "You're in control" : "The AI is in control"}</b>
+            <small className="muted">{s.manual_active
+              ? d.active ? `While you're here, nothing is sold for you: tap Sell on any coin when you want. If you leave for ${d.activeMinutes} minutes, the AI takes over and sells at +${s.away_take_profit}% (or the stop-loss).`
+                : `Nobody is here, so the AI sells at +${s.away_take_profit}% or the stop-loss. Open this page and you're back in control.`
+              : `The AI follows the rules below all the time.`}</small>
+          </div>
+        </div>
+        <label className="ait-check"><input type="checkbox" checked={s.manual_active} disabled={!!busy} onChange={(e) => act("manual", "settings", { manual_active: e.target.checked }, e.target.checked ? "You close trades yourself while you're here." : "The AI follows the rules all the time.")} /> <span>I close trades myself while I&apos;m here</span></label>
+        {s.manual_active && (
+          <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span>When I&apos;m away, the AI sells at</span>
+            <span className="ait-in" style={{ width: 110 }}><input inputMode="decimal" defaultValue={String(s.away_take_profit)} onBlur={(e) => { const v = Number(e.target.value); if (v && v !== s.away_take_profit) act("away", "settings", { away_take_profit: v }, `Away take profit: +${v}%.`); }} /><em>%</em></span>
+            <small className="muted">profit</small>
+          </div>
+        )}
+      </section>
+
+      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onSell={(p) => { if (confirm(`Sell all ${p.symbol} now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }} />
 
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <b>Mode</b>
           <div className="ait-seg" role="radiogroup" aria-label="Mode">
             <button type="button" role="radio" aria-checked={!live} className={!live ? "on" : ""} disabled={!!busy} onClick={() => act("mode", "settings", { mode: "paper" }, "Practice mode: pretend BNB, real prices.")}>Practice</button>
-            <button type="button" role="radio" aria-checked={live} className={live ? "on live" : ""} disabled={!!busy || !d.liveReady} onClick={() => { if (confirm("Switch to LIVE? It will trade real BNB from the AI trader wallet.")) act("mode", "settings", { mode: "live" }, "Live mode on."); }}>Live</button>
+            <button type="button" role="radio" aria-checked={live} className={live ? "on live" : ""} disabled={!!busy || !d.liveReady || !d.owner} onClick={() => { if (confirm("Switch to LIVE? It will trade real BNB from the AI trader wallet.")) act("mode", "settings", { mode: "live" }, "Live mode on."); }}>Live</button>
           </div>
         </div>
-        {d.liveReady
-          ? <small className="muted">AI trader wallet: <code>{d.wallet.address}</code> · {d.wallet.bnb != null ? `${fmtAmount(d.wallet.bnb)} BNB` : "–"}. Send BNB (BNB Chain) to this address to fund it. Only this wallet is ever traded.</small>
-          : <small className="muted">Live is off until a wallet is set up: create a brand-new wallet used only for this, add its private key in Vercel as <code>AI_TRADER_KEY</code> (Settings › Environment Variables), redeploy, then fund it with a small amount of BNB. Never use your main wallet.</small>}
+        {d.liveReady ? (
+          <div className="ait-wallet">
+            <small className="muted">Live trading wallet (BNB Chain)</small>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <code className="ait-addr">{d.wallet.address}</code>
+              <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(d.wallet.address || ""); setMsg("Address copied."); }}>Copy</button>
+            </div>
+            <b>{d.wallet.bnb != null ? `${fmtAmount(d.wallet.bnb)} BNB` : "–"}</b>
+            <small className="muted">To fund it, send BNB on <b>BNB Chain</b> to this address from your own wallet or an exchange. Only this wallet is ever traded.</small>
+            {d.owner && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const to = prompt("Send all the BNB back to which BNB Chain address? (your own wallet)"); if (to && confirm(`Send all BNB from the AI trader wallet to ${to}?`)) act("withdraw", "withdraw", { to }); }}>Withdraw BNB to my wallet</button>}
+          </div>
+        ) : d.owner ? (
+          <div className="ait-wallet">
+            <small className="muted">Live trading needs its own wallet. Create one here: it's made on the server, its key is locked in the database vault (nobody sees it, not even here), and you can withdraw the BNB to your own wallet any time.</small>
+            <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { if (confirm("Create the AI trader's live wallet?")) act("wallet", "wallet", {}); }}>Create live wallet</button>
+          </div>
+        ) : <small className="muted">Live trading is set up by the owner.</small>}
         {!live && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how much pretend BNB?", "1"); if (v) act("reset", "reset", { start: Number(v) }, "Practice account reset."); }}>Reset practice account</button>}
       </section>
 
@@ -207,7 +242,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
 }
 
 /** Every coin the AI bought: what it paid, what it's worth now, and the % up or down. */
-function Bought({ open, closed }: { open: P[]; closed: P[] }) {
+function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: boolean; onSell: (p: P) => void }) {
   const [tab, setTab] = useState<"open" | "closed">("open");
   const rows = tab === "open"
     ? open.map((p) => { const now = Number(p.last_usd) || Number(p.entry_usd); const pct = (now / Number(p.entry_usd) - 1) * 100; return { p, pct, worth: Number(p.spent) * (1 + pct / 100), price: now as number | null }; })
@@ -243,6 +278,7 @@ function Bought({ open, closed }: { open: P[]; closed: P[] }) {
                 <div className={"ait-b-pct " + (pct >= 0 ? "up" : "down")}>
                   <b>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%</b>
                   <i style={{ width: `${Math.max(4, (Math.abs(pct) / best) * 100)}%` }} aria-hidden="true" />
+                  {tab === "open" && <button type="button" className="ait-sell" disabled={busy || p.status === "closing"} onClick={() => onSell(p)}>{p.status === "closing" ? "Selling…" : "Sell"}</button>}
                 </div>
               </div>
             ))}
