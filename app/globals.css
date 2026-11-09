@@ -5947,37 +5947,6 @@ html[data-app="android"] .appbar{display:none}
 .ait-chain:disabled{cursor:default}
 .ait-chain:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
 
-/* AI trader: chain picker */
-.ait-chains{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
-.ait-chain{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1.5px solid transparent}
-.ait-chain small{color:var(--muted);font-size:.78em}
-.ait-chain.on{border-color:#F0B90B;background:rgba(240,185,11,.1)}
-.ait-chain:disabled{cursor:default}
-.ait-chain:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
-
-/* ---------- TIK: every post in its own box ---------- */
-.mood-feed,.mad-feed,.ptik .mad-feed,.mp-mood .mood-feed{gap:14px}
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik:not(.compact),
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik-tickled{
-  position:relative;overflow:visible;background:var(--surface);border:1px solid var(--line);border-radius:22px;
-  box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 10px 28px -20px rgba(0,0,0,.55)}
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik:not(.compact)::after,
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik-tickled::after{
-  content:"";position:absolute;left:18px;right:18px;top:-1px;height:3px;border-radius:0 0 4px 4px;
-  background:linear-gradient(90deg,var(--ac,#B57CFF),color-mix(in srgb,var(--ac,#B57CFF) 30%,#F0B90B));opacity:.9;pointer-events:none}
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik:not(.compact):hover{border-color:color-mix(in srgb,var(--ac,#B57CFF) 55%,var(--line));box-shadow:0 14px 34px -20px color-mix(in srgb,var(--ac,#B57CFF) 70%,transparent)}
-/* A Tickle: the box goes round the whole thing, with the original inside */
-.tik-tickled{padding:4px 0 0}
-.tik-tickled::after{background:linear-gradient(90deg,#2BD67B,#F0B90B)!important}
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik-tickled > .tik{background:transparent;border:0;box-shadow:none}
-:is(.ptik,.mad,.mp-mood,.mood-feed,.mad.full) .tik-tickled > .tik::after{display:none}
-/* Comments stay inside their post's box, without boxes of their own */
-:is(.ptik,.mad,.mp-mood,.mood-feed) .tik-replies .tik{background:transparent;border:0;box-shadow:none}
-.tik-replies{margin-top:6px;padding-top:8px;border-top:1px dashed var(--line)}
-.tik-replies .tik-replies{margin-top:0;padding-top:0;border-top:0}
-/* The composer gets a box too */
-:is(.ptik,.mad,.mp-mood) .tik-new:not(.reply){background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:0 10px 28px -20px rgba(0,0,0,.55)}
-
 /* AI trader: coins it bought */
 .ait-sum{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:.9em}
 .ait-sum .up b,.ait-b-pct.up b{color:#22c55e}
