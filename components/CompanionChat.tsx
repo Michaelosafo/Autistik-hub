@@ -19,6 +19,8 @@ import TradeBot, { findTradeRequest, type TradeIntent } from "@/components/compa
 import SwapBot from "@/components/companion/SwapBot";
 import { looksLikeSwap, readBuy, type BuyAsk } from "@/lib/swap-read";
 import { appNoMoney } from "@/lib/android-app";
+import MomoBuy from "@/components/wallet/MomoBuy";
+import SignerScope from "@/components/wallet/SignerScope";
 import type { Member } from "@/components/wallet/types";
 
 type Msg =
@@ -28,6 +30,7 @@ type Msg =
   | { kind: "drawing" }
   | { kind: "trade"; ca: string; intent?: TradeIntent; at?: number }
   | { kind: "swap"; text: string; at?: number; buy?: BuyAsk | null }
+  | { kind: "momo"; coin?: string; ghs?: number }
   | { kind: "sys"; text: string };
 type Turn = { role: "user" | "assistant"; content: string };
 type Conv = { id: string; who: CompanionId; title: string; at: number; msgs: Msg[]; turns: Turn[] };
@@ -156,9 +159,19 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     // "buy $1 of 0x…" (a dollar amount, or a coin to pay with): the swap bot asks what to pay with, then buys.
     // In the Google Play app there's no buying, selling or swapping (coin scans still work).
     const noMoney = appNoMoney();
+    // "buy usdt with momo", "100 cedis of bnb with mobile money": the MoMo checkout, paying into their own wallet.
+    const momo = /\b(momo|mobile\s*money|telecel\s*cash|airteltigo|cedis?|ghs|gh₵)\b/i.test(text) && /\b(buy|get|purchase|pay|fund|top\s*up)\b/i.test(text);
     const buy = readBuy(text);
-    if ((buy || looksLikeSwap(text)) && noMoney) {
+    if ((buy || momo || looksLikeSwap(text)) && noMoney) {
       edit(id, (x) => ({ ...x, msgs: [...x.msgs, { kind: "me", text }, { kind: "sys", text: "Buying, selling and swapping aren't part of the app. I can still scan any coin for you: paste its address." }], at: Date.now() }));
+      return;
+    }
+    if (momo && !buy) {
+      const amt = text.match(/(?:gh₵|ghs|₵)\s*([\d,.]+)|([\d,.]+)\s*(?:cedis?|ghs|gh₵)/i);
+      const ghs = amt ? Number((amt[1] || amt[2]).replace(/,/g, "")) : undefined;
+      const coin = /\bsol(ana)?\b/i.test(text) ? (/usdt|usdc|dollar/i.test(text) ? "usdt_sol" : "sol") : /\bbnb\b/i.test(text) && !/usdt/i.test(text) ? "bnb_bsc" : "usdt_bsc";
+      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : "Buy with MoMo", msgs: [...x.msgs, { kind: "me", text }, { kind: "momo", coin, ghs: ghs && ghs >= 10 ? ghs : undefined }], at: Date.now(),
+        turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: "(Opened Buy with MoMo)" }] }));
       return;
     }
     if (buy) {
@@ -365,6 +378,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
               if (shown && !shown.has(i)) return null;
               if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
               if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
+              if (m.kind === "momo") return <div key={i} className="msgrow"><div className="tb">{signedIn ? <SignerScope appId={appId} member={member}>{(s) => <MomoBuy evm={s.evm?.address ?? null} sol={s.sol?.address ?? null} start={{ coin: m.coin, ghs: m.ghs }} />}</SignerScope> : <p className="tb-q">Sign in to buy with MoMo.</p>}</div></div>;
               if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} at={m.at} buy={m.buy} latest={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} at={m.at} scanOnly={appNoMoney()} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "drawing") return (

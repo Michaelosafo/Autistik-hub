@@ -10,6 +10,7 @@ import SimpleMode from "./SimpleMode";
 import Portfolio from "./Portfolio";
 import { Assets, History, Receive, Security, Send, Welcome } from "./panels";
 import { api, pct, short, store, TokenPicker, usd, worth, type Holding, type Market, type TokenInfo } from "./util";
+import MomoBuy from "@/components/wallet/MomoBuy";
 
 /** The token each network opens on. */
 const FEATURED: Record<WChainKey, string> = {
@@ -17,7 +18,7 @@ const FEATURED: Record<WChainKey, string> = {
   arbitrum: "0x912CE59144191C1204E64559FE8253a0e49E6548", solana: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
 };
 type OType = "market" | "limit" | "stop";
-type BTab = "assets" | "orders" | "history" | "convert" | "send" | "receive" | "security";
+type BTab = "assets" | "orders" | "history" | "convert" | "send" | "receive" | "momo" | "security";
 
 /** AUTISTIK Trade: an exchange-style screen on top of the member's own wallet. */
 export default function WalletApp({ signer, start, member }: { signer: Signer; start: { chain?: string; buy?: string; quick?: boolean; usd?: number }; member?: Member | null }) {
@@ -178,7 +179,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
 
       <div className="tx-panel tx-bottom">
         <div className="tx-tabs" role="tablist" aria-label="Account">
-          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Receive"], ["security", "Security"]] as const).map(([k, name]) => (
+          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Receive"], ["momo", "Buy with MoMo"], ["security", "Security"]] as const).map(([k, name]) => (
             <button key={k} type="button" role="tab" aria-selected={btab === k} className={btab === k ? "on" : ""} onClick={() => setBtab(k)}>{name}</button>
           ))}
         </div>
@@ -192,6 +193,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
             tokens={tokens} balanceOf={balanceOf} onAdd={addCustom} onFrom={setConvFrom} onTo={setConvTo} onDone={load} /></div>}
           {btab === "send" && owner && <Send key={chainKey} c={c} signer={signer} owner={owner} holdings={holdings || []} onDone={load} />}
           {btab === "receive" && owner && <Receive c={c} address={owner} />}
+          {btab === "momo" && <div style={{ maxWidth: 520 }}><MomoBuy evm={signer.evm?.address ?? null} sol={signer.sol?.address ?? null} /></div>}
           {btab === "security" && <Security signer={signer} />}
         </div>
       </div>

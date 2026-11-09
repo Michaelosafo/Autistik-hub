@@ -5672,3 +5672,12 @@ main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app { height: calc(100dvh - 24p
 .yp-settings{padding:4px 6px}
 .yp-settings .me-row{padding:10px 8px}
 .yp-settings .me-sec-h{padding:8px 8px 2px;color:var(--muted);font-size:.78em;text-transform:uppercase;letter-spacing:.06em}
+/* Buy with MoMo */
+.momo{display:flex;flex-direction:column;gap:10px}
+.momo-h{display:flex;flex-direction:column;gap:2px}
+.momo-h small{color:var(--muted)}
+.momo-f{display:flex;flex-direction:column;gap:4px;font-size:.88em;font-weight:700}
+.momo-f select,.momo-f input{font:inherit;font-weight:600;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--ink)}
+.momo-chips{display:flex;flex-wrap:wrap;gap:6px}
+.momo-chips button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;font-size:.85em;font-weight:700;background:var(--surface-2)}
+.momo-chips button.on{background:#F0B90B;color:#111}

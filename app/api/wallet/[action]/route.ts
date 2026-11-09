@@ -10,6 +10,8 @@ import { XCHAINS, isXAddress, isXChain } from "@/lib/bridge-chains";
 import { xChainLogos, xDetect, xQuote, xStatus, xTokens } from "@/lib/bridge-server";
 import { fundingChoices, planSwap, type SwapAsk } from "@/lib/swap-plan";
 import { relayStatus } from "@/lib/relay";
+import { MOMO_COINS, momoLink, momoReady, type MomoCoin } from "@/lib/onramp";
+import { createHash } from "crypto";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +19,7 @@ export const maxDuration = 60;
 
 const LIMITS: Record<string, [number, number]> = {
   token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60], "sol-ultra": [15, 60], "gas-check": [40, 60], "gas-send": [20, 60],
-  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60], "x-plan": [15, 60], "x-fund": [15, 60], "x-relay-status": [90, 60],
+  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60], "x-plan": [15, 60], "momo-link": [20, 60], "momo-status": [60, 60], "x-fund": [15, 60], "x-relay-status": [90, 60],
 };
 
 /**
@@ -31,6 +33,19 @@ export async function POST(req: Request, { params }: { params: { action: string 
   if (limited) return limited;
   const b = await req.json().catch(() => ({}));
   if (action.startsWith("x-")) return cross(action, b);
+  // Buy with MoMo: a signed Onramper checkout link that pays out only to the member's own wallet.
+  if (action === "momo-status") return json({ ready: momoReady(), coins: MOMO_COINS });
+  if (action === "momo-link") {
+    const evm = typeof b.evm === "string" && /^0x[0-9a-fA-F]{40}$/.test(b.evm) ? b.evm : null;
+    const sol = typeof b.sol === "string" && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(b.sol) ? b.sol : null;
+    const ghs = Number(b.ghs);
+    if (!(b.coin in MOMO_COINS)) return json({ error: "Pick a coin." }, 400);
+    if (!(ghs >= 10 && ghs <= 50_000)) return json({ error: "Enter between GH₵10 and GH₵50,000." }, 400);
+    try {
+      const ref = createHash("sha256").update(`${evm || ""}:${sol || ""}`).digest("hex").slice(0, 24);
+      return json({ url: momoLink({ coin: b.coin as MomoCoin, ghs, evm, sol, ref }) });
+    } catch (e: any) { return json({ error: String(e?.message || "Couldn't start the purchase.").slice(0, 160) }, 400); }
+  }
   // A pasted contract address: which network it's on, what it is, its price and safety check (the trading bot).
   if (action === "detect") {
     const raw = String(b?.address || "").trim().slice(0, 64);
