@@ -30,10 +30,14 @@ export type Chart = {
   drawdown: number; fromLow: number; higherLow: boolean; volTrend: number; greens3: number; closes: number[];
 };
 
-async function gt(path: string) {
-  const r = await fetch(`${GT}${path}`, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
-  if (!r.ok) throw new Error(`GeckoTerminal ${r.status}`);
-  return r.json();
+/** GeckoTerminal allows about 30 calls a minute: wait and try again when it says "slow down". */
+async function gt(path: string, tries = 3): Promise<any> {
+  for (let i = 0; ; i++) {
+    const r = await fetch(`${GT}${path}`, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) });
+    if (r.ok) return r.json();
+    if (r.status !== 429 || i >= tries - 1) throw new Error(`GeckoTerminal ${r.status}`);
+    await new Promise((res) => setTimeout(res, 2000 * (i + 1)));
+  }
 }
 
 function parse(chain: string, j: any): Omit<SCand, "setup" | "score" | "reasons">[] {
@@ -65,7 +69,7 @@ async function pools(chain: string, deep: boolean) {
   if (!net) return [];
   // Trending (5m, 1h, 6h) plus the newest pools going back a few hours (BNB Chain makes ~100 an hour), so coins that
   // survived their first 20 minutes and are now moving get seen too.
-  const pages = deep ? 8 : 3;
+  const pages = deep ? 6 : 2;
   const paths = [`/networks/${net}/trending_pools?include=base_token&duration=5m&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=5m&page=2`, `/networks/${net}/trending_pools?include=base_token&duration=5m&page=3`, `/networks/${net}/trending_pools?include=base_token&duration=1h&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=6h&page=1`,
     ...Array.from({ length: pages }, (_, i) => `/networks/${net}/new_pools?include=base_token&page=${i + 1}`)];
   const lists = await Promise.all(paths.map((p) => gt(p).then((j) => parse(chain, j)).catch(() => [])));
