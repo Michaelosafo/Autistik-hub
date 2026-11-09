@@ -5999,3 +5999,5 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik-replies .tik{b
 /* Writing box: same card */
 body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:16px 18px;box-shadow:0 1px 2px rgba(16,12,40,.04),0 8px 24px -16px rgba(16,12,40,.18)}
 @media (max-width:560px){body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik{padding:14px}}
+.tik-act .tik-vn{display:inline!important;font-weight:600}
+.tik-act .tik-vn b{font-weight:800;color:var(--ink)}

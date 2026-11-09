@@ -37,6 +37,9 @@ export default function TikCard(props: CardProps) {
   return <TikBody {...props} />;
 }
 
+/** 950 → "950", 1234 → "1.2K", 2500000 → "2.5M". */
+const views = (v: number | null | undefined) => { const n = v ?? 0; return n < 1000 ? String(n) : n < 1e6 ? `${(n / 1e3).toFixed(n < 1e4 ? 1 : 0).replace(/\.0$/, "")}K` : `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`; };
+
 function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   const box = useRef<HTMLElement>(null);
   const [viewers, setViewers] = useState(false);
@@ -150,11 +153,11 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
           {!t.reply_to && (me === t.author_id
             ? <button type="button" className="tik-act views" onClick={() => setViewers(true)} aria-label={`${t.views ?? 0} views: see who`} title="See who viewed">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
-                <span>{t.views ?? 0}</span>
+                <span className="tik-vn"><b>{views(t.views)}</b> {(t.views ?? 0) === 1 ? "view" : "views"}</span>
               </button>
             : <span className="tik-act views static" aria-label={`${t.views ?? 0} views`} title="Views">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
-                <span>{(t.views ?? 0) > 0 ? t.views : ""}</span>
+                <span className="tik-vn"><b>{views(t.views)}</b> {(t.views ?? 0) === 1 ? "view" : "views"}</span>
               </span>)}
           <button type="button" className={"tik-act share" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik" title="Copy link">
             <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg>
