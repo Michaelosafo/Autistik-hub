@@ -24,7 +24,7 @@ export default async function AdminPage() {
     <div className="stack">
       <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only the Hub owner can open this page.</p></div>
       <AdminWalletBackfill />
-      {admin ? <><div className="notice">Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><AdminFees /><AdminSolCollect /><AdminActivity /><AdminAirdrop /><AdminBadges /><AdminTeam /><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
+      {admin ? <><Link href="/admin/ai-trader" className="notice" style={{ display: "block", fontWeight: 800 }}>🤖 AI trader (testing): give it funds, it finds coins and trades with stop-loss and take profit →</Link><div className="notice">Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><AdminFees /><AdminSolCollect /><AdminActivity /><AdminAirdrop /><AdminBadges /><AdminTeam /><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
     </div>
   );
 }
