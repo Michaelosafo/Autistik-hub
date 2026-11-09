@@ -7,6 +7,7 @@ import { notify, type Note } from "@/lib/push";
 import { currentUser, supabaseService } from "@/lib/supabase/server";
 import { CHAINS } from "@/lib/launchpad";
 import { SUSU_ABI, SUSU_ADDRESS, susuToken } from "@/lib/susu";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -82,7 +83,9 @@ export async function POST(req: Request) {
   return json({ ok: true, tracked: rows.length });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = cronDenied(req);
+  if (denied) return denied;
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ skipped: "not set up" });
   const sb = supabaseService();
   const { data: go } = await sb.rpc("susu_lease", { p_seconds: 3000 });
