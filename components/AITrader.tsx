@@ -140,12 +140,14 @@ export default function AITrader() {
             </div>
             <b>{d.wallet.bnb != null ? `${fmtAmount(d.wallet.bnb)} BNB` : "–"}</b>
             <small className="muted">To fund it, send BNB on <b>BNB Chain</b> to this address from your own wallet or an exchange. Only this wallet is ever traded.</small>
+            {d.owner && <KeyTools busy={!!busy} onAct={act} />}
             {d.owner && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const to = prompt("Send all the BNB back to which BNB Chain address? (your own wallet)"); if (to && confirm(`Send all BNB from the AI trader wallet to ${to}?`)) act("withdraw", "withdraw", { to }); }}>Withdraw BNB to my wallet</button>}
           </div>
         ) : d.owner ? (
           <div className="ait-wallet">
             <small className="muted">Live trading needs its own wallet. Create one here: it's made on the server, its key is locked in the database vault (nobody sees it, not even here), and you can withdraw the BNB to your own wallet any time.</small>
             <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { if (confirm("Create the AI trader's live wallet?")) act("wallet", "wallet", {}); }}>Create live wallet</button>
+            <KeyTools busy={!!busy} onAct={act} importOnly />
           </div>
         ) : <small className="muted">Live trading is set up by the owner.</small>}
         {!live && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how much pretend BNB?", "1"); if (v) act("reset", "reset", { start: Number(v) }, "Practice account reset."); }}>Reset practice account</button>}
@@ -287,5 +289,44 @@ function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: 
         </>
       )}
     </section>
+  );
+}
+
+/** Owner: see the trading wallet's private key (to import it into your own wallet app), or use your own wallet. */
+function KeyTools({ busy, onAct, importOnly }: { busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void>; importOnly?: boolean }) {
+  const [key, setKey] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+  const [imp, setImp] = useState(false);
+  const [paste, setPaste] = useState("");
+  async function reveal() {
+    if (!confirm("Show the private key?\n\nAnyone who sees it can take every coin in this wallet. Make sure nobody is looking at your screen, never send it to anyone (AUTISTIK will never ask for it), and keep it somewhere safe.")) return;
+    setErr("");
+    try { const r = await post("key-reveal", {}); setKey(r.key); } catch (e) { setErr((e as Error).message); }
+  }
+  return (
+    <div className="ait-keys">
+      {!importOnly && (key ? (
+        <div className="ait-key">
+          <small><b>Private key</b>: import it in MetaMask, Trust Wallet or any EVM wallet (Import account › Private key). Works on BNB Chain, Ethereum and Robinhood Chain.</small>
+          <code>{key}</code>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(key); }}>Copy</button>
+            <button type="button" className="btn small" onClick={() => setKey(null)}>Hide</button>
+          </div>
+          <small className="muted">If you trade from the same wallet yourself, the AI and you share the BNB: keep enough in it for the AI&apos;s trades.</small>
+        </div>
+      ) : <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={reveal}>🔑 Show private key</button>)}
+      {!imp ? <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => setImp(true)}>Use my own wallet instead</button> : (
+        <div className="ait-key">
+          <small>Paste the private key of a wallet you own (export it from your wallet app). Use a separate wallet just for the AI, never your main one. {importOnly ? "" : "The current trading wallet must be empty first (Withdraw)."}</small>
+          <input className="input" type="password" autoComplete="off" spellCheck={false} placeholder="0x…" value={paste} onChange={(e) => setPaste(e.target.value)} aria-label="Private key" />
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn small primary" disabled={busy || paste.trim().length < 64} onClick={() => onAct("import", "key-import", { key: paste.trim() }).then(() => { setPaste(""); setImp(false); })}>Use this wallet</button>
+            <button type="button" className="btn small" onClick={() => { setPaste(""); setImp(false); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {err && <small role="status">{err}</small>}
+    </div>
   );
 }

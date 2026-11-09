@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
+import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseService } from "@/lib/supabase/server";
 import { cronDenied } from "@/lib/cron-auth";
 
@@ -83,6 +83,15 @@ export async function POST(req: Request, { params }: { params: { action: string 
     case "wallet": {
       if (!who.admin) return ownerOnly();
       try { const address = await createTraderWallet(); return json({ ok: true, address, note: "Wallet created. Send BNB (BNB Chain) to it, then switch to Live." }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "key-reveal": {
+      if (!who.admin) return ownerOnly();
+      try { return json({ ok: true, key: await revealTraderKey() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "key-import": {
+      if (!who.admin) return ownerOnly();
+      try { const address = await importTraderKey(String(b.key || "")); return json({ ok: true, address, note: `Now trading from your wallet ${address.slice(0, 6)}…${address.slice(-4)}.` }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "withdraw": {

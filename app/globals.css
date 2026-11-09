@@ -6038,3 +6038,6 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .ait-sell{all:unset;cursor:pointer;margin-top:2px;padding:4px 12px;border-radius:99px;font-weight:800;font-size:.75em;background:#E5484D;color:#fff}
 .ait-sell:disabled{opacity:.5;cursor:default}
 .ait-sell:focus-visible{outline:2px solid #E5484D;outline-offset:2px}
+.ait-keys{display:flex;flex-direction:column;gap:8px}
+.ait-key{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;border:1.5px dashed #E5484D;background:rgba(229,72,77,.06)}
+.ait-key code{font-size:.78em;overflow-wrap:anywhere;user-select:all;padding:8px;border-radius:8px;background:var(--surface)}
