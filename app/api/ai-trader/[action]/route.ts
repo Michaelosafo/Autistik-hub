@@ -3,6 +3,9 @@ import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseService } from "@/lib/supabase/server";
 import { cronDenied } from "@/lib/cron-auth";
+import { runFast } from "@/lib/ai-trader";
+import { xReady } from "@/lib/ai-signals";
+import { tgSecret } from "@/lib/tg-secret";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,23 +24,30 @@ export async function GET(_req: Request, { params }: { params: { action: string 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
     return json(await runTrader().catch((e) => ({ error: (e as Error).message })));
   }
+  if (params.action === "fast") {
+    const denied = cronDenied(_req);
+    if (denied) return denied;
+    return json(await runFast().catch((e) => ({ error: (e as Error).message })));
+  }
   if (params.action !== "status") return json({ error: "Not found." }, 404);
   const who = await adminState();
   if (!who.staff) return json({ error: "Admins only." }, 403);
   const sb = supabaseService();
   // Having this page open counts as being around (hands-on mode).
   await sb.from("ai_trader_settings").update({ admin_seen_at: new Date().toISOString() }).eq("id", 1);
-  const [s, { data: open }, { data: closed }, { data: logs }, wallet] = await Promise.all([
+  const [s, { data: open }, { data: closed }, { data: logs }, { data: sigs }, wallet] = await Promise.all([
     getSettings(),
     sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]).order("opened_at", { ascending: false }),
     sb.from("ai_trader_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(50),
     sb.from("ai_trader_log").select("*").order("at", { ascending: false }).limit(60),
+    sb.from("ai_trader_signals").select("id,at,source,who,body,url,chain,token,symbol,mcap,result").not("result", "is", null).order("at", { ascending: false }).limit(40),
     liveBalance().catch(() => null),
   ]);
   const done = ((closed || []) as Position[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + (Number(p.pnl) || 0), 0);
   const wins = done.filter((p) => (Number(p.pnl) || 0) > 0).length;
   return json({
+    signals: sigs || [], sources: { x: xReady(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     settings: s, open: open || [], closed: closed || [], log: logs || [],
     wallet: wallet ?? { address: null, bnb: null }, liveReady: !!(await traderAccount()), owner: who.admin,
     active: adminActive({ ...s, admin_seen_at: new Date().toISOString() }), activeMinutes: ACTIVE_MS / 60_000,
@@ -69,6 +79,9 @@ export async function POST(req: Request, { params }: { params: { action: string 
       if (typeof b.need_socials === "boolean") up.need_socials = b.need_socials;
       if (typeof b.manual_active === "boolean") up.manual_active = b.manual_active;
       if (typeof b.hype_on === "boolean") up.hype_on = b.hype_on;
+      if (typeof b.signals_on === "boolean") up.signals_on = b.signals_on;
+      if (Array.isArray(b.callers)) up.callers = [...new Set(b.callers.map((h: unknown) => String(h).replace(/^@/, "").trim()).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
+      if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
       if (b.away_take_profit != null && isFinite(Number(b.away_take_profit))) up.away_take_profit = Math.min(2000, Math.max(1, Number(b.away_take_profit)));
       // BNB Chain is always on; Ethereum, Robinhood Chain and Solana are optional.
@@ -87,6 +100,15 @@ export async function POST(req: Request, { params }: { params: { action: string 
       if (!who.admin) return ownerOnly();
       try { const address = await createTraderWallet(); return json({ ok: true, address, note: "Wallet created. Send BNB (BNB Chain) to it, then switch to Live." }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tg-hook": {
+      if (!who.admin) return ownerOnly();
+      const t = process.env.TELEGRAM_BOT_TOKEN;
+      if (!t) return json({ error: "Add TELEGRAM_BOT_TOKEN in Vercel first (from @BotFather), then redeploy." }, 400);
+      const r = await fetch(`https://api.telegram.org/bot${t}/setWebhook`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: "https://autistik.io/api/ai-trader/telegram", secret_token: tgSecret(), allowed_updates: ["message", "channel_post", "edited_channel_post"], drop_pending_updates: true }) }).then((x) => x.json()).catch(() => null);
+      const me = await fetch(`https://api.telegram.org/bot${t}/getMe`).then((x) => x.json()).catch(() => null);
+      if (!r?.ok) return json({ error: `Telegram said: ${r?.description || "no answer"}` }, 400);
+      return json({ ok: true, note: `Connected @${me?.result?.username || "your bot"}. Add it to the channels / groups you want it to read.` });
     }
     case "key-reveal": {
       if (!who.admin) return ownerOnly();

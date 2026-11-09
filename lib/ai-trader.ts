@@ -17,6 +17,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
 import { aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
+import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
@@ -31,6 +32,7 @@ export type Settings = {
   max_hold_hours: number; daily_loss_limit: number; use_ai: boolean; last_run: string; last_note: string | null;
   manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
+  signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -129,7 +131,8 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max"]) s[k] = n(s[k]);
+  s.callers = Array.isArray(s.callers) ? s.callers : [];
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
   s.need_socials = s.need_socials !== false;
@@ -275,14 +278,36 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
 export const ACTIVE_MS = 10 * 60_000;
 export const adminActive = (s: Settings) => !!s.admin_seen_at && Date.now() - Date.parse(s.admin_seen_at) < ACTIVE_MS;
 
+/** Price, pool and the last 5 minutes of buys / sells for every open coin, one DexScreener call per chain. */
+async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
+  const out = new Map<string, Flow>();
+  const byChain = new Map<string, string[]>();
+  for (const p of ps) byChain.set(p.chain, [...(byChain.get(p.chain) || []), p.token]);
+  await Promise.all([...byChain].map(async ([chain, toks]) => {
+    for (let i = 0; i < toks.length; i += 30) {
+      const r = await fetch(`https://api.dexscreener.com/tokens/v1/${chain}/${toks.slice(i, i + 30).join(",")}`, { cache: "no-store", signal: AbortSignal.timeout(8000) }).catch(() => null);
+      const pairs: any[] = (await r?.json().catch(() => null)) || [];
+      for (const t of toks.slice(i, i + 30)) {
+        const best = pairs.filter((x) => String(x?.baseToken?.address || "").toLowerCase() === t.toLowerCase()).sort((a, b) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd))[0];
+        if (best) out.set(`${chain}:${t.toLowerCase()}`, toFlow(best));
+      }
+    }
+  }));
+  return out;
+}
+
 async function manage(s: Settings) {
   const sb = supabaseService();
   // Hands-on: while an admin is around, they close trades themselves (only a pulled pool still sells automatically).
-  // When nobody is around, the AI takes over and sells at the "away" take profit (50% by default) or the stop rules.
+  // When nobody is around, the AI takes over: target, stop-loss, trailing stop, sellers taking over near the top.
   const handsOn = s.manual_active && adminActive(s);
   const { data } = await sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]);
-  for (const p of (data || []) as Position[]) {
-    const m = await priceOf(p.chain, p.token).catch(() => null);
+  const ps = (data || []) as Position[];
+  if (!ps.length) return;
+  const flows = await flowsFor(ps).catch(() => new Map<string, Flow>());
+  for (const p of ps) {
+    const f = flows.get(`${p.chain}:${p.token.toLowerCase()}`);
+    const m = f ? { price: f.price, liquidity: f.liquidity } : await priceOf(p.chain, p.token).catch(() => null);
     const price = m?.price ?? null;
     if (p.status === "closing") { await closePosition(p, p.close_reason || "Closed by admin", price); continue; }
     if (!price) continue;
@@ -290,16 +315,20 @@ async function manage(s: Settings) {
     await sb.from("ai_trader_positions").update({ last_usd: price, high_usd: high, updated_at: new Date().toISOString() }).eq("id", p.id);
     const ch = (price / n(p.entry_usd) - 1) * 100;
     const ageH = (Date.now() - Date.parse(p.opened_at)) / 36e5;
+    // Small-coin trades judge a pulled pool against their own size, not the big-coin minimum.
+    const rugLine = p.strategy ? Math.max(500, s.micro_min_liq / 2) : s.min_liquidity / 3;
+    const rug = m?.liquidity != null && m.liquidity < rugLine;
+    if (handsOn) { if (rug) await closePosition({ ...p, high_usd: high }, "Liquidity dropped sharply (possible rug)", price); continue; }
     let why: string | null = null;
-    // Setup trades keep the AI's own target; older trades use the "away" take profit while hands-on mode is on.
+    // Setup and signal trades keep their own target; older trades use the "away" take profit in hands-on mode.
     const tp = p.strategy ? n(p.take_profit) : s.manual_active ? n(s.away_take_profit) || n(p.take_profit) : n(p.take_profit);
-    const trailFrom = p.strategy ? 1.5 : 1.1; // setup trades only start trailing once they're up 50%
-    if (handsOn) { if (m?.liquidity != null && m.liquidity < s.min_liquidity / 3) await closePosition({ ...p, high_usd: high }, "Liquidity dropped sharply (possible rug)", price); continue; }
-    if (ch <= -n(p.stop_loss)) why = `Stop-loss (${ch.toFixed(1)}%)`;
+    const trailFrom = p.strategy ? 1.5 : 1.1; // small-coin trades only start trailing once they're up 50%
+    if (rug) why = "Liquidity dropped sharply (possible rug)";
+    else if (ch <= -n(p.stop_loss)) why = `Stop-loss (${ch.toFixed(1)}%)`;
     else if (ch >= tp) why = `Take profit (+${ch.toFixed(1)}%)`;
+    else if (p.strategy && f && ch >= 40 && f.sells5 >= 8 && f.sells5 > f.buys5 * 1.8) why = `Sellers taking over near the top (+${ch.toFixed(1)}%: ${f.sells5} sells vs ${f.buys5} buys in 5m)`;
     else if (n(p.trail) > 0 && high >= n(p.entry_usd) * trailFrom && price <= high * (1 - n(p.trail) / 100)) why = `Trailing stop (${((price / high - 1) * 100).toFixed(1)}% from the high)`;
     else if (ageH >= s.max_hold_hours) why = `Held ${Math.round(ageH)}h, the most allowed (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%)`;
-    else if (m?.liquidity != null && m.liquidity < s.min_liquidity / 3) why = "Liquidity dropped sharply (possible rug)";
     if (why) await closePosition({ ...p, high_usd: high }, why, price);
   }
 }
@@ -413,13 +442,21 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
   const p = await aiPick(checked.sort((a, b) => b.score - a.score), s.target_profit, s.strat_stop);
   if (!p) return `Read ${checked.length} clean setups; the AI skipped them all this round (no clean entry).`;
   const c = p.c;
+  return executeBuy(s, cash, c, { sl: p.sl, tp: p.tp, why: p.why, strategy: c.setup });
+}
+
+/** Buys one coin (practice or live) and records it with its own stop and target. */
+async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
+  o: { sl: number; tp: number; why: string; strategy: string }) {
+  const sb = supabaseService();
   const spend = Math.min(s.per_trade, cash);
   const bnb = await bnbUsd();
   let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
   if (s.mode === "paper" || c.chain !== "bsc") {
     const slip = Math.min(0.15, 0.01 + ((spend * bnb) / Math.max(1, c.liquidity)) * 2); // small pools move a lot
     qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - slip)) / c.price;
-    await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash - spend }).eq("id", 1);
+    const fresh = await getSettings();
+    await sb.from("ai_trader_settings").update({ paper_cash: fresh.paper_cash - spend }).eq("id", 1);
   } else {
     const r = await liveBuy(getAddress(c.token), spend, c.buyTax ?? 0);
     const dec = await (walletChainClient(C) as any).readContract({ address: c.token, abi: erc20Abi, functionName: "decimals" }).catch(() => 18);
@@ -428,12 +465,13 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
   }
   const { error } = await sb.from("ai_trader_positions").insert({
     mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
-    entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: p.sl, take_profit: p.tp, trail: 25, why: `${p.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
-    strategy: c.setup, pool: c.pool,
+    entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
+    strategy: o.strategy, pool: c.pool || null,
   });
-  if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); return "Save failed."; }
-  await log("buy", `${c.setup === "hype" ? "🔥" : "📉"} Bought ${c.symbol} on ${CHAIN_NAME[c.chain]} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""}. Target +${p.tp}%, stop -${p.sl}%. ${p.why}`);
-  return `Bought ${c.symbol} (${c.setup}) on ${CHAIN_NAME[c.chain]}.`;
+  if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
+  const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : "⚡";
+  await log("buy", `${icon} Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""}. Target +${o.tp}%, stop -${o.sl}%. ${o.why}`);
+  return `Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain}.`;
 }
 
 async function buyOne(s: Settings, cash: number, held: Set<string>) {
@@ -478,7 +516,7 @@ export async function runTrader({ force = false } = {}) {
   const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", 1); return { note: t }; };
   if (s.mode === "live" && !(await traderAccount())) return note("Live mode needs a trading wallet (create one on the AI trader page). Nothing was traded.");
 
-  await manage(s);
+  // Exits are checked every minute by the fast loop (runFast), so this run only looks for new buys.
 
   // Daily loss limit: pause itself.
   const { data: day } = await sb.from("ai_trader_positions").select("pnl").eq("status", "closed").eq("mode", s.mode).gte("closed_at", new Date(Date.now() - 864e5).toISOString());
@@ -497,4 +535,92 @@ export async function runTrader({ force = false } = {}) {
   if (cash < s.per_trade * 0.5) return note(`Not enough BNB to buy (${cash.toFixed(4)} available).`);
   try { return note(await buyOne(fresh, cash, held)); }
   catch (e) { await log("error", `Buy failed: ${(e as Error).message}`); return note(`Buy failed: ${(e as Error).message}`); }
+}
+
+// ---------------------------------------------------------------- Fast loop (every minute): exits and fresh signals
+
+/** Room and money for one more buy, or why not. */
+async function buyRoom(s: Settings): Promise<{ cash: number; held: Set<string> } | string> {
+  const sb = supabaseService();
+  const { data: open } = await sb.from("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
+  const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
+  if (held.size >= s.max_positions) return `Holding ${held.size} of ${s.max_positions} coins.`;
+  const cash = s.mode === "paper" ? (await getSettings()).paper_cash : Math.max(0, ((await liveBalance())?.bnb ?? 0) - GAS_KEEP);
+  if (cash < s.per_trade * 0.5) return `Not enough BNB (${cash.toFixed(4)}).`;
+  return { cash, held };
+}
+
+/**
+ * Decides on one signal. DexScreener signals must be small and not already pumped (in the market-cap window, under
+ * +100% in 1h and +300% in 24h, buyers ahead of sellers). Posts from the caller list (Elon and the callers you add) or
+ * your Telegram groups may be bigger and already moving (up to the caller market-cap limit), but must be fresh.
+ */
+export async function actOnSignal(s: Settings, sig: Signal, flow: Flow | null): Promise<string> {
+  const sb = supabaseService();
+  const save = (result: string, f?: Flow | null) => sb.from("ai_trader_signals").update({ result, symbol: f?.symbol ?? null, mcap: f?.mcap ?? null })
+    .eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
+  const done = async (r: string, f?: Flow | null) => { await save(r, f); return r; };
+  if (!s.enabled) return done("skipped: trader stopped");
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  if (!chains.includes(sig.chain)) return done("skipped: chain not on");
+  const f = flow || (await resolve({ chain: sig.chain, token: sig.token }, chains).catch(() => null));
+  if (!f || !f.price) return done("skipped: no pool yet", f);
+  const caller = sig.source === "x" || sig.source === "telegram";
+  if (caller) {
+    if (Date.now() - sig.at > 5 * 60_000) return done("skipped: post too old", f);
+    if (f.mcap > s.caller_mcap_max) return done(`skipped: market cap $${Math.round(f.mcap).toLocaleString("en-US")} above the caller limit`, f);
+    if (f.liquidity < Math.max(5000, s.micro_min_liq)) return done("skipped: pool too thin", f);
+  } else {
+    if (f.mcap < s.mcap_min || f.mcap > s.mcap_max) return done(`skipped: market cap $${Math.round(f.mcap).toLocaleString("en-US")} outside the window`, f);
+    if (f.ch.h1 > 100 || f.ch.h24 > 300) return done(`skipped: already pumped (${f.ch.h1.toFixed(0)}% 1h, ${f.ch.h24.toFixed(0)}% 24h)`, f);
+    if (f.liquidity < s.micro_min_liq) return done("skipped: pool too thin", f);
+    if (f.ageHours < 0.2) return done("skipped: pool under 12 minutes old", f);
+    if (f.buys5 < 3 || f.buys5 < f.sells5) return done(`skipped: no buying pressure (${f.buys5} buys / ${f.sells5} sells in 5m)`, f);
+    if (s.need_socials && !f.x && !f.tg) return done("skipped: no X or Telegram", f);
+  }
+  const room = await buyRoom(s);
+  if (typeof room === "string") return done(`skipped: ${room}`, f);
+  if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding", f);
+  const r = await riskFor(f.chain, f.token).catch(() => null);
+  if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) return done("skipped: failed the safety check", f);
+  const label = sig.source === "x" ? `@${sig.who} posted it on X` : sig.source === "telegram" ? `posted in ${sig.who} on Telegram` : sig.source === "dex-profile" ? "fresh DexScreener profile (team just went public)" : sig.source === "dex-boost" ? "fresh DexScreener boost" : "fresh community takeover";
+  const why = `${caller ? "📣" : "⚡"} Signal: ${label}. ${f.buys5} buys vs ${f.sells5} sells in 5m, ${f.ch.h1 >= 0 ? "+" : ""}${f.ch.h1.toFixed(0)}% in 1h.`;
+  try {
+    const out = await executeBuy(s, room.cash, { ...f, buyTax: r.buyTax }, { sl: s.strat_stop, tp: s.target_profit, why, strategy: caller ? "caller" : "signal" });
+    return done(`bought: ${out}`, f);
+  } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`, f); }
+}
+
+/** Records signals once; returns only the ones not seen before. */
+async function unseen(sigs: Signal[]): Promise<Signal[]> {
+  if (!sigs.length) return [];
+  const rows = sigs.map((g) => ({ source: g.source, who: g.who, body: g.body, url: g.url, chain: g.chain, token: g.token, at: new Date(g.at).toISOString() }));
+  const { data } = await supabaseService().from("ai_trader_signals").upsert(rows, { onConflict: "source,chain,token,url", ignoreDuplicates: true }).select("source,chain,token,url");
+  const isNew = new Set((data || []).map((r: any) => `${r.source}|${r.chain}|${r.token}|${r.url}`));
+  return sigs.filter((g) => isNew.has(`${g.source}|${g.chain}|${g.token}|${g.url}`));
+}
+
+/** Every minute: watch open coins for fast exits, then act on fresh signals (if the trader is started). */
+export async function runFast() {
+  const sb = supabaseService();
+  const { data: go } = await sb.rpc("ai_trader_fast_lease", { p_seconds: 50 });
+  if (go !== true) return { skipped: "running" };
+  const s = await getSettings();
+  if (s.mode === "live" && !(await traderAccount())) return { skipped: "no wallet" };
+  await manage(s).catch((e) => log("error", `Exit check failed: ${(e as Error).message}`));
+  if (!s.enabled || !s.signals_on) return { ok: true, buys: "stopped" };
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  const out: string[] = [];
+  // X callers first (they move fastest), then DexScreener.
+  if (xReady() && s.callers.length) {
+    const posts = await xPosts(s.callers).catch(() => []);
+    for (const post of posts.slice(0, 5)) {
+      const found = await postSignals(post, "x", chains).catch(() => []);
+      const newOnes = await unseen(found.map((x) => x.sig));
+      for (const x of found.filter((x) => newOnes.includes(x.sig))) out.push(await actOnSignal(s, x.sig, x.flow));
+    }
+  }
+  const dex = await unseen(await dexSignals(chains).catch(() => []));
+  for (const g of dex.slice(0, 8)) out.push(await actOnSignal(s, g, null));
+  return { ok: true, signals: out.length, bought: out.filter((x) => x.startsWith("bought")).length };
 }
