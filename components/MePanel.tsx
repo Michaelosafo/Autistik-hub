@@ -10,15 +10,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
-import FollowButton from "@/components/members/FollowButton";
-import FindPeople from "@/components/FindPeople";
 import ShareProfile from "@/components/members/ShareProfile";
 import VerifiedBadge, { BADGES } from "@/components/VerifiedBadge";
 import BadgePicker from "@/components/BadgePicker";
 import BadgeApply from "@/components/BadgeApply";
-import { MadnessLink } from "@/components/mood/MadnessPanel";
-import ChatsLink from "@/components/chat/ChatsLink";
-import LiveNow from "@/components/rooms/LiveNow";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
@@ -29,39 +24,32 @@ type Summary = {
   launches?: { chain: string; token: string; symbol: string; lp_lock: string; lp_unlock_at: string | null }[];
   team?: { id: string; alias: string; handle: string | null; color: string; avatar_url: string | null; team_title: string | null; is_verified: boolean; following: boolean }[];
 };
-type Update = { kind: string; id: string; at: string; body?: string; author?: { id: string; alias: string; color: string; avatar_url?: string | null } | null };
 
-/** Shortcuts at the top of your panel. */
-const ACTIONS = [
-  { href: "/board", name: "Board", note: "Every coin launched here, live", icon: "i-fire", color: "#FFD84D" },
-  { href: "/launchpad/new", name: "Launch", note: "Make a new token", icon: "i-rocket", color: "#FF6B9A" },
-  { href: "/lockers", name: "Lock", note: "Lockers, stake, Susu and rewards", icon: "i-lock", color: "#B57CFF" },
-  { href: "/liquidity", name: "Liquidity", note: "Add liquidity, then lock it", icon: "i-swap", color: "#4FD1FF" },
-  { href: "/analytics", name: "Scanner", note: "Check any token or wallet", icon: "i-search", color: "#5BE38F" },
-];
-/** The quick-action grid under TIK: one tap to the things members use most. */
-const QUICK = [
-  { href: "/chats", name: "Chats", color: "#4FD1FF", d: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z"/>' },
-  { href: "/spaces", name: "Live", color: "#FF6B9A", d: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>' },
-  { href: "/wallet", name: "Wallet", color: "#F0B90B", d: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/>' },
-  { href: "/swap", name: "Swap", color: "#5BE38F", d: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>' },
-  { href: "/board", name: "Board", color: "#FFD84D", d: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>' },
-  { href: "/launchpad/new", name: "Launch", color: "#B57CFF", d: '<path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z"/><circle cx="15" cy="9" r="1.5"/>' },
-  { href: "/analytics", name: "Scan", color: "#3FCABB", d: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>' },
-  { href: "/hyperfocus", name: "Race", color: "#FF9F5A", d: '<path d="M5 17h14l-1.5-5.5A2 2 0 0 0 15.6 10H8.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>' },
-];
-type Coin = { chain: string; token: string; name: string; symbol: string; logo: string | null; market: { marketCap: number | null; change24h: number | null } | null };
-const short$ = (n: number | null | undefined) => n == null ? "–" : n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
-/** A line icon from the site's icon set. */
-function Ic({ id }: { id: string }) {
-  return <svg className="mp-svg" aria-hidden="true"><use href={"#" + id} /></svg>;
-}
-const BAR = ["#F0B90B", "#B57CFF", "#4FD1FF", "#5BE38F"];
-const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
-const ago = (iso: string) => {
-  const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 60000));
-  return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d`;
+/** Line icons for the panel's rows (24×24, stroke). */
+const IC: Record<string, string> = {
+  wallet: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18M16 15h2"/>',
+  chats: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z"/>',
+  live: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+  swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
+  launch: '<path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z"/><circle cx="15" cy="9" r="1.5"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  scan: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  board: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a5.5 5.5 0 0 1 3.5 6"/>',
+  star: '<path d="M12 3l2.6 5.5 6 .8-4.4 4.1 1.1 5.9L12 16.5 6.7 19.3l1.1-5.9L3.4 9.3l6-.8z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  race: '<path d="M5 17h14l-1.5-5.5A2 2 0 0 0 15.6 10H8.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>',
+  camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
 };
+function Svg({ d, size = 18 }: { d: string; size?: number }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />;
+}
+/** One row: coloured icon tile, label, optional value on the right, chevron. */
+function Row({ href, onClick, icon, color, label, value }: { href?: string; onClick?: () => void; icon: string; color: string; label: string; value?: ReactNode }) {
+  const body = <><span className="pf-ic" style={{ ["--c" as any]: color }}><Svg d={IC[icon]} /></span><span className="pf-l">{label}</span>{value != null && <span className="pf-v">{value}</span>}<i className="pf-chev" aria-hidden="true">›</i></>;
+  return href ? <Link href={href} className="pf-row">{body}</Link> : <button type="button" className="pf-row" onClick={onClick}>{body}</button>;
+}
+const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
 
 export default function MePanel({ me, settings }: {
   me: { id: string; alias: string; color: string; avatar_url: string | null; is_admin: boolean };
@@ -70,15 +58,9 @@ export default function MePanel({ me, settings }: {
 }) {
   const router = useRouter();
   const [sum, setSum] = useState<Summary | null>(null);
-  const [updates, setUpdates] = useState<Update[] | null>(null);
   const [photo, setPhoto] = useState(me.avatar_url);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [scan, setScan] = useState("");
-  const [coins, setCoins] = useState<Coin[] | null>(null);
-  const [seenBoard, setSeenBoard] = useState(true);
-  useEffect(() => { try { setSeenBoard(localStorage.getItem("seen-board") === "1"); } catch {} }, []);
-  const markBoard = () => { try { localStorage.setItem("seen-board", "1"); } catch {} setSeenBoard(true); };
   const file = useRef<HTMLInputElement>(null);
   const [crop, setCrop] = useState<File | null>(null);
   const [view, setView] = useState(false);
@@ -88,8 +70,6 @@ export default function MePanel({ me, settings }: {
 
   useEffect(() => {
     fetch("/api/me/summary").then((r) => r.json()).then(setSum).catch(() => setSum({ signedIn: true }));
-    fetch("/api/board").then((r) => r.json()).then((d) => setCoins(Array.isArray(d?.tokens) ? d.tokens : [])).catch(() => setCoins([]));
-    fetch("/api/feed?tab=following").then((r) => r.json()).then((d) => setUpdates((d.items || []).slice(0, 4))).catch(() => setUpdates([]));
   }, []);
 
   /** A picture was picked: first let them choose how it fits in the circle. */
@@ -131,42 +111,25 @@ export default function MePanel({ me, settings }: {
     setPhoto(null); setBusy(false); setMsg("Photo removed."); router.refresh();
   }
   const verified = !!(sum?.profile?.is_verified || sum?.profile?.is_team);
-  const q = scan.trim().toLowerCase();
-  const isAddr = /^0x[0-9a-fA-F]{40}$/.test(scan.trim()) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(scan.trim());
-  const found = q && !isAddr ? (coins || []).filter((c) => c.name.toLowerCase().includes(q) || c.symbol.toLowerCase().includes(q)).slice(0, 5) : [];
-  function goScan(e: React.FormEvent) {
-    e.preventDefault();
-    const v = scan.trim();
-    const mine = (coins || []).find((c) => c.token.toLowerCase() === v.toLowerCase());
-    if (mine) router.push(`/launchpad/${mine.chain}/${mine.token}`);
-    else if (/^0x[0-9a-fA-F]{40}$/.test(v)) router.push(`/analytics/bsc/${v}`);
-    else if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)) router.push(`/analytics/solana/${v}`);
-    else if (found[0]) router.push(`/launchpad/${found[0].chain}/${found[0].token}`);
-    else setMsg("No coin with that name. Paste a token address to scan it.");
-  }
-
+  const name = sum?.profile?.alias || me.alias;
+  const badgeN = vb ?? sum?.profile?.verified_badge;
   return (
-    <div className="mp">
-      <div className="mp-hero">
-        <div className="mp-hero-bg" aria-hidden="true" />
-        <div className="mp-id">
-          <button type="button" className="mp-photo" onClick={(e) => { e.stopPropagation(); setSheet(true); }} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
-            <Avatar className="me-av mp-av" alias={me.alias} color={me.color} url={photo} logo />
-          </button>
-          <b className="mp-id-n">{sum?.profile?.alias || me.alias}{verified && <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={15} className="vbadge-name" />}{me.is_admin && <span className="mp-badge">Admin</span>}</b>
-          {sum?.profile?.handle && <small className="mp-id-h">@{sum.profile.handle}</small>}
-          <div className="mp-id-s">
-            <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b> Following</Link>
-            <i aria-hidden="true" />
-            <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b> Followers</Link>
-            <i aria-hidden="true" />
-            <Link href="/mood"><b>{sum?.tiks ?? "–"}</b> Tiks</Link>
-          </div>
-          <div className="mp-id-a">
-            <Link className="mp-chip" href="/me">Profile</Link>
-            <button type="button" className="mp-chip mp-badge-chip" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBadge(true); }}>{verified ? <VerifiedBadge n={vb ?? sum?.profile?.verified_badge} size={13} /> : "🏅"} Badge</button>
-            <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={sum?.profile?.alias || me.alias} className="mp-chip" />
-          </div>
+    <div className="mp pf">
+      <div className="pf-head">
+        <button type="button" className="pf-photo" onClick={(e) => { e.stopPropagation(); setSheet(true); }} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
+          <Avatar className="me-av pf-av" alias={me.alias} color={me.color} url={photo} logo />
+          <span className="pf-cam" aria-hidden="true"><Svg d={IC.camera} size={13} /></span>
+        </button>
+        <h2 className="pf-name">{name}{verified && <VerifiedBadge n={badgeN} size={17} className="vbadge-name" />}</h2>
+        <small className="pf-sub">{sum?.profile?.handle ? `@${sum.profile.handle}` : "Add a username on your profile"}{me.is_admin && <em className="pf-admin">Admin</em>}</small>
+        <div className="pf-stats">
+          <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b><small>Following</small></Link>
+          <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b><small>Followers</small></Link>
+          <Link href="/mood"><b>{sum?.tiks ?? "–"}</b><small>Tiks</small></Link>
+        </div>
+        <div className="pf-acts">
+          <Link className="pf-act" href="/me">Edit profile</Link>
+          <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={name} className="pf-act" />
         </div>
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
         {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
@@ -215,143 +178,37 @@ export default function MePanel({ me, settings }: {
         </>, document.body)}
       </div>
       {msg && <small className="mp-msg">{msg}</small>}
-      <MadnessLink />
-      <nav className="mp-quick" aria-label="Quick actions">
-        {QUICK.map((q) => (
-          <Link key={q.href} href={q.href} className="mp-q" style={{ ["--qc" as any]: q.color }}>
-            <span className="mp-q-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: q.d }} /></span>
-            <small>{q.name}</small>
-          </Link>
-        ))}
-      </nav>
-      <ChatsLink />
-      <FindPeople />
 
-      <section className="mp-sec mp-livenow" aria-label="Live rooms">
-        <div className="mp-sec-h"><b><i className="mp-pulse" aria-hidden="true" />Live rooms</b><Link href="/spaces">All</Link></div>
-        <LiveNow max={3} />
-      </section>
-
-      <form className="mp-search" onSubmit={goScan} role="search">
-        <Ic id="i-search" />
-        <input value={scan} onChange={(e) => setScan(e.target.value)} placeholder="Search coins or paste an address" spellCheck={false} aria-label="Search coins or paste a token address" />
-        {scan && <button type="submit" className="mp-search-go">{isAddr ? "Scan" : "Go"}</button>}
-      </form>
-      {(found.length > 0 || (isAddr && scan)) && (
-        <div className="mp-results">
-          {found.map((c) => (
-            <Link key={c.chain + c.token} href={`/launchpad/${c.chain}/${c.token}`} className="mp-coin">
-              {c.logo ? <img src={c.logo} alt="" /> : <span className="mp-coin-l">{c.symbol.slice(0, 2)}</span>}
-              <span className="mp-coin-t"><b>{c.name}</b><small>${c.symbol} · {c.chain}</small></span>
-              <small>{short$(c.market?.marketCap)}</small>
-            </Link>
-          ))}
-          {isAddr && <button type="button" className="mp-coin" onClick={goScan as any}><span className="mp-coin-l"><Ic id="i-search" /></span><span className="mp-coin-t"><b>Scan this token</b><small className="mono">{scan.trim().slice(0, 6)}…{scan.trim().slice(-4)}</small></span></button>}
-        </div>
+      {!verified && (
+        <button type="button" className="pf-cta" onClick={(e) => { e.stopPropagation(); setBadge(true); }}>
+          <span className="pf-cta-ic" aria-hidden="true"><VerifiedBadge n={1} size={22} /></span>
+          <span className="pf-cta-t"><b>Get a badge</b><small>Apply for Verified or Team. It shows next to your name everywhere.</small></span>
+          <i className="pf-chev" aria-hidden="true">›</i>
+        </button>
       )}
 
-      {sum && (() => {
-        const steps: { done: boolean; label: string; note: string; href?: string; onClick?: () => void }[] = [
-          { done: !!photo, label: "Add a profile photo", note: "So people recognise you", onClick: () => file.current?.click() },
-          { done: !!sum.wallet, label: "Set up your wallet", note: "Free, takes a minute", href: "/wallet" },
-          { done: !sum.team?.length || sum.team.every((t) => t.following), label: "Follow the AUTISTIK team", note: "News, airdrops and live sessions", href: "#mp-team" },
-          { done: seenBoard, label: "Look at the Board", note: "Every coin launched here, live", href: "/board" },
-        ];
-        const done = steps.filter((x) => x.done).length;
-        if (done === steps.length) return null;
-        return (
-          <section className="mp-sec mp-start" aria-label="Get started">
-            <div className="mp-sec-h"><b>Get started</b><small>{done} of {steps.length} done</small></div>
-            <div className="mp-progress" aria-hidden="true"><i style={{ width: `${(done / steps.length) * 100}%` }} /></div>
-            {steps.map((x) => {
-              const body = <><span className={"mp-step-ic" + (x.done ? " ok" : "")} aria-hidden="true">{x.done ? "✓" : ""}</span><span className="mp-link-t"><b>{x.label}</b><small>{x.note}</small></span>{!x.done && <i aria-hidden="true">›</i>}</>;
-              return x.done ? <div key={x.label} className="mp-step done">{body}</div>
-                : x.onClick ? <button key={x.label} type="button" className="mp-step" onClick={x.onClick}>{body}</button>
-                : <Link key={x.label} href={x.href!} className="mp-step" onClick={() => x.href === "/board" && markBoard()}>{body}</Link>;
-            })}
-          </section>
-        );
-      })()}
+      <div className="pf-group">
+        <Row href="/wallet" icon="wallet" color="#F0B90B" label="Wallet" value={sum?.wallet ? usd(sum.wallet.totalUsd) : sum ? "Set up" : "…"} />
+        <Row href="/chats" icon="chats" color="#3B9EFF" label="Chats" />
+        <Row href="/spaces" icon="live" color="#FF5C8A" label="Live rooms" />
+        <Row onClick={() => setBadge(true)} icon="star" color="#8B6CFF" label="Badge" value={verified ? <VerifiedBadge n={badgeN} size={15} /> : "Apply"} />
+      </div>
 
-      <section className="mp-sec mp-wallet">
-        <div className="mp-sec-h"><b>Wallet</b><Link href="/wallet">Open</Link></div>
-        {!sum ? <small className="mp-dim">Loading…</small> : sum.wallet ? (
-          <>
-            <div className="mp-total"><b>{usd(sum.wallet.totalUsd)}</b><small className="mono">{sum.wallet.short}</small></div>
-            {(() => {
-              const funds = sum.wallet!.funds.filter((f) => (f.valueUsd ?? 0) > 0).slice(0, 4);
-              const total = funds.reduce((t, f) => t + (f.valueUsd ?? 0), 0);
-              return total > 0 ? <div className="mp-bar" aria-hidden="true">{funds.map((f, i) => <i key={f.symbol} style={{ width: `${((f.valueUsd ?? 0) / total) * 100}%`, background: BAR[i % BAR.length] }} />)}</div> : null;
-            })()}
-            {sum.wallet.funds.slice(0, 4).map((f, i) => <div key={f.symbol} className="mp-line"><span><i className="mp-dot" style={{ background: BAR[i % BAR.length] }} />{f.symbol}</span><span>{usd(f.valueUsd)}</span></div>)}
-            <div className="mp-row"><Link className="mp-chip" href="/wallet">Send</Link><Link className="mp-chip" href="/wallet">Receive</Link><Link className="mp-chip" href="/swap">Swap</Link></div>
-          </>
-        ) : <small className="mp-dim">No wallet yet. <Link href="/wallet">Set one up</Link>.</small>}
-      </section>
+      <div className="pf-group">
+        <Row href="/swap" icon="swap" color="#22C38E" label="Swap" />
+        <Row href="/analytics" icon="scan" color="#14B8A6" label="Check a coin" />
+        <Row href="/board" icon="board" color="#F59E0B" label="Board" />
+        <Row href="/launchpad/new" icon="launch" color="#EC4899" label="Launch a coin" />
+        <Row href="/lockers" icon="lock" color="#A855F7" label="Lock & stake" />
+        <Row href="/hyperfocus" icon="race" color="#FB923C" label="Race" />
+      </div>
 
-      <nav className="mp-links" aria-label="Create and earn">
-        <small className="mp-cap">Create &amp; earn</small>
-        {ACTIONS.map((a) => (
-          <Link key={a.href} href={a.href} className="mp-link" style={{ ["--ic" as any]: a.color }} onClick={() => a.href === "/board" && markBoard()}><span className="mp-ic" aria-hidden="true"><Ic id={a.icon} /></span><span className="mp-link-t"><b>{a.name}</b><small>{a.note}</small></span><i aria-hidden="true">›</i></Link>
-        ))}
-      </nav>
+      <div className="pf-group">
+        <Row href="/members?tab=find" icon="people" color="#0EA5E9" label="Find people" />
+        <Row href="/members" icon="user" color="#64748B" label="AUTISTIK team" value={sum?.team?.length ? `${sum.team.length}` : undefined} />
+      </div>
 
-      {!!sum?.team?.length && (
-        <section className="mp-sec mp-team" id="mp-team" aria-label="Recommended: the AUTISTIK team">
-          <div className="mp-sec-h"><b>Follow the AUTISTIK team</b><Link href="/members">Members</Link></div>
-          <small className="mp-dim">Recommended for everyone: news, airdrops and live sessions first.</small>
-          {sum.team.map((t) => (
-            <div key={t.id} className="mp-person">
-              <Link href={`/members/${t.id}`} className="mp-person-l">
-                <Avatar className="me-av" alias={t.alias} color={t.color} url={t.avatar_url} />
-                <span className="mp-link-t"><b>{t.alias}{t.is_verified && <span className="mp-tick" title="Verified">✓</span>}</b><small>{t.team_title ? `AUTISTIK team · ${t.team_title}` : "AUTISTIK team"}</small></span>
-              </Link>
-              <FollowButton id={t.id} initial={t.following} small />
-            </div>
-          ))}
-        </section>
-      )}
-
-      {coins && coins.length > 0 && (
-        <section className="mp-sec mp-live">
-          <div className="mp-sec-h"><b><i className="mp-pulse" aria-hidden="true" />Live on the Board</b><Link href="/board">All</Link></div>
-          {[...coins].sort((a, b) => (b.market?.marketCap ?? 0) - (a.market?.marketCap ?? 0)).slice(0, 3).map((c, i) => (
-            <Link key={c.chain + c.token} href={`/launchpad/${c.chain}/${c.token}`} className="mp-coin">
-              <span className="mp-rank">#{i + 1}</span>
-              {c.logo ? <img src={c.logo} alt="" /> : <span className="mp-coin-l">{c.symbol.slice(0, 2)}</span>}
-              <span className="mp-coin-t"><b>{c.name}</b><small>${c.symbol} · MC {short$(c.market?.marketCap)}</small></span>
-              {c.market?.change24h != null && <small className={c.market.change24h >= 0 ? "mp-up-c" : "mp-down-c"}>{c.market.change24h >= 0 ? "▲" : "▼"}{Math.abs(c.market.change24h).toFixed(0)}%</small>}
-            </Link>
-          ))}
-        </section>
-      )}
-
-      <section className="mp-sec">
-        <div className="mp-sec-h"><b>Updates from people you follow</b><Link href="/members">All</Link></div>
-        {updates === null ? <small className="mp-dim">Loading…</small> : updates.length === 0 ? (
-          <small className="mp-dim">Nothing new. <Link href="/members?tab=find">Find people to follow</Link>.</small>
-        ) : updates.map((u) => (
-          <Link key={u.id} className="mp-up" href={u.author ? `/members/${u.author.id}` : "/community"}>
-            {u.author && <Avatar className="me-av" alias={u.author.alias} color={u.author.color} url={u.author.avatar_url} />}
-            <span><b>{u.author?.alias || "Member"}</b> <small>{ago(u.at)}</small><br /><span className="mp-clamp">{u.body}</span></span>
-          </Link>
-        ))}
-      </section>
-
-
-      <section className="mp-sec">
-        <div className="mp-sec-h"><b>My launches &amp; locks</b><Link href="/lockers">Lockers</Link></div>
-        {!sum ? <small className="mp-dim">Loading…</small> : !sum.launches?.length ? (
-          <small className="mp-dim">No launches yet. <Link href="/launchpad/new">Launch a token</Link>.</small>
-        ) : sum.launches.slice(0, 4).map((l) => (
-          <Link key={l.chain + l.token} className="mp-line" href={`/launchpad/${l.chain}/${l.token}`}>
-            <span>${l.symbol}</span>
-            <small>{l.lp_lock === "burn" ? "Burned" : l.lp_unlock_at ? `Locked to ${new Date(l.lp_unlock_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}` : "Locked"}</small>
-          </Link>
-        ))}
-      </section>
-
-      <section className="mp-sec mp-settings">{settings}</section>
+      <div className="pf-group pf-settings">{settings}</div>
     </div>
   );
 }
