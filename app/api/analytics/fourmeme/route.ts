@@ -2,6 +2,7 @@ import { createPublicClient, decodeEventLog, http, parseAbi } from "viem";
 import { bsc } from "viem/chains";
 import { json } from "@/lib/ai";
 import { supabaseService } from "@/lib/supabase/server";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,9 @@ const ABI = parseAbi([
 const TOPICS = ["0x396d5e902b675b032348d3d2e9517ee8f0c4a926603fbc075d3d282ff00cad20", "0xc18aa71171b358b706fe3dd345299685ba21a5316c66ffa9e319268b033c44b0"] as const;
 const STEP = 2000n;
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = cronDenied(req);
+  if (denied) return denied;
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ skipped: "not set up" });
   const sb = supabaseService();
   const { data: go } = await sb.rpc("fm_lease", { p_seconds: 200 });

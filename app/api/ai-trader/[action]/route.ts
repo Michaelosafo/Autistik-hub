@@ -2,6 +2,7 @@ import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { closePosition, getSettings, liveBalance, log, runTrader, traderAccount, type Position } from "@/lib/ai-trader";
 import { supabaseService } from "@/lib/supabase/server";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,8 @@ export const maxDuration = 60;
  */
 export async function GET(_req: Request, { params }: { params: { action: string } }) {
   if (params.action === "cron") {
+    const denied = cronDenied(_req);
+    if (denied) return denied;
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
     return json(await runTrader().catch((e) => ({ error: (e as Error).message })));
   }

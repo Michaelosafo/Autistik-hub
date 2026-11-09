@@ -1,6 +1,7 @@
 import { json } from "@/lib/ai";
 import { VANITY_SUFFIX, grind } from "@/lib/solana-vanity";
 import { supabaseService } from "@/lib/supabase/server";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,9 @@ const POOL = 20;
 
 // Called every 5 minutes by the database's scheduler (supabase/sol-vanity.sql). Anyone can call it, but it runs at
 // most once every 4 minutes however often it's called, and stops once the pool is full.
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = cronDenied(req);
+  if (denied) return denied;
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
   const sb = supabaseService();
   const { count } = await sb.from("sol_vanity_mints").select("pubkey", { count: "exact", head: true });

@@ -3,6 +3,7 @@ import { deployerOf, grindSalt } from "@/lib/evm-vanity";
 import { CHAINS, EVM_VANITY_SUFFIX, type ChainKey } from "@/lib/launchpad";
 import { padInfo } from "@/lib/launchpad-server";
 import { supabaseService } from "@/lib/supabase/server";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,9 @@ const POOL = 10;
 
 // Called every 5 minutes by the database's scheduler (supabase/evm-vanity.sql). Anyone can call it, but it runs at
 // most once every 4 minutes however often it's called, and stops once every pool is full.
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = cronDenied(req);
+  if (denied) return denied;
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
   const sb = supabaseService();
   const { pads, versions } = await padInfo(true);

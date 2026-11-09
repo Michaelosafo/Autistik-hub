@@ -3,6 +3,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { supabaseService } from "@/lib/supabase/server";
 import { SOL_ADDR } from "@/lib/solana-launch";
 import { buildRewardAccount, claim, payoutCoin, rewardsInfo, rewardsReady, rewardsWallet, runCoin } from "@/lib/solana-rewards";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,8 @@ export const maxDuration = 60;
 export async function GET(req: Request) {
   const u = new URL(req.url);
   if (u.searchParams.get("status")) return json({ ready: rewardsReady(), wallet: rewardsWallet()?.publicKey.toBase58() ?? null });
+  const denied = cronDenied(req);
+  if (denied) return denied;
   const mint = u.searchParams.get("mint");
   if (mint) {
     if (!SOL_ADDR.test(mint)) return json({ error: "Bad address." }, 400);

@@ -7,6 +7,7 @@ import { cancelOrder, createOrder, keeperAccount, listOrders, orderContracts, ru
 import { KYBER_ROUTER, WCHAINS, isWChain } from "@/lib/wallet-chains";
 import { walletChainClient } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
+import { cronDenied } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,8 @@ const TREASURY = process.env.NEXT_PUBLIC_TREASURY_WALLET || "0x531A5ccB712B2bB99
  */
 export async function GET(req: Request, { params }: { params: { action: string } }) {
   if (params.action === "cron") {
+    const denied = cronDenied(req);
+    if (denied) return denied;
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
     const { data: go } = await supabaseService().rpc("trade_orders_lease", { p_seconds: 50 });
     if (go !== true) return json({ skipped: true });
