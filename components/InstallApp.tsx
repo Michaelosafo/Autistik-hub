@@ -16,11 +16,15 @@ export default function InstallApp() {
     setInstalled(standalone);
     if (standalone) return;
     setIos(/iphone|ipad|ipod/i.test(navigator.userAgent) && !/crios|fxios/i.test(navigator.userAgent));
+    // The prompt may have arrived before this mounted (the page catches it early: window.__bip).
+    if ((window as any).__bip) setPrompt((window as any).__bip);
     const onPrompt = (e: Event) => { e.preventDefault(); setPrompt(e); };
+    const onEarly = () => setPrompt((window as any).__bip);
+    window.addEventListener("bip", onEarly);
     const onInstalled = () => { setInstalled(true); setPrompt(null); };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
-    return () => { window.removeEventListener("beforeinstallprompt", onPrompt); window.removeEventListener("appinstalled", onInstalled); };
+    return () => { window.removeEventListener("beforeinstallprompt", onPrompt); window.removeEventListener("bip", onEarly); window.removeEventListener("appinstalled", onInstalled); };
   }, []);
 
   if (installed || (!prompt && !ios)) return null;

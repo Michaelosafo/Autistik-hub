@@ -40,6 +40,22 @@ export function useTiks(opts: { replyTo?: string | null; limit?: number; refresh
       mine = new Set((l || []).map((x: any) => x.tik_id));
     }
     let shaped = shapeTiks(page, mine);
+    // Tickles: the original Tiks they point at, and Tickle counts (and the member's own) for everything shown.
+    const origIds = [...new Set(shaped.map((x) => x.tickle_of).filter(Boolean) as string[])];
+    if (origIds.length) {
+      const { data: o } = await sb.from("tiks").select(TIK_COLS).in("id", origIds).eq("hidden", false);
+      const { data: ol } = user ? await sb.from("tik_likes").select("tik_id").eq("user_id", user.id).in("tik_id", origIds) : { data: [] };
+      const origs = new Map(shapeTiks((o || []) as any[], new Set((ol || []).map((x: any) => x.tik_id))).map((x) => [x.id, x]));
+      shaped = shaped.map((x) => (x.tickle_of ? { ...x, orig: origs.get(x.tickle_of) ?? null } : x));
+    }
+    const countFor = [...new Set(shaped.map((x) => x.orig?.id ?? x.id))];
+    if (countFor.length) {
+      const { data: tk } = await sb.from("tiks").select("tickle_of,author_id").in("tickle_of", countFor).eq("hidden", false).limit(2000);
+      const n = new Map<string, number>(); const own = new Set<string>();
+      for (const r of (tk || []) as any[]) { n.set(r.tickle_of, (n.get(r.tickle_of) || 0) + 1); if (user && r.author_id === user.id) own.add(r.tickle_of); }
+      const add = (x: Tik): Tik => ({ ...x, tickles: n.get(x.id) || 0, tickled: own.has(x.id) });
+      shaped = shaped.map((x) => (x.orig ? { ...x, orig: add(x.orig) } : add(x)));
+    }
     if (ids) { const at = new Map(ids.map((x, i) => [x, i])); shaped = shaped.sort((a, b) => (at.get(a.id) ?? 99) - (at.get(b.id) ?? 99)); }
     setTiks((t) => (before && t ? [...t, ...shaped] : shaped));
   }, [replyTo, limit, authorsKey, only, idsKey]); // eslint-disable-line react-hooks/exhaustive-deps

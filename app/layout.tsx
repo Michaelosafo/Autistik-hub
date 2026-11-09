@@ -8,6 +8,7 @@ import LiveDock from "@/components/rooms/LiveDock";
 import SiteBackdrop from "@/components/SiteBackdrop";
 import Welcome from "@/components/Welcome";
 import WalletGate from "@/components/WalletGate";
+import AppBanner from "@/components/AppBanner";
 import { cookies, headers } from "next/headers";
 import { APP_COOKIE, APP_CSS, APP_MONEY } from "@/lib/android-app";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
@@ -41,7 +42,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" suppressHydrationWarning {...(appNoMoney ? { "data-app": "android" } : {})}>
       <head>
         {/* Applies saved comfort settings before the page paints, so there's no flash of bright colours or motion. */}
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";d.dataset.theme=l.getItem("theme3")==="dark"?"dark":"light"}catch(e){}` }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";d.dataset.theme=l.getItem("theme3")==="dark"?"dark":"light"}catch(e){}addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__bip=e;dispatchEvent(new Event("bip"))})` }} />
         {appNoMoney && <style dangerouslySetInnerHTML={{ __html: APP_CSS }} />}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
@@ -55,6 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <noscript><style>{`.welcome{display:none}`}</style></noscript>
         {/* The faint, funny artwork behind every page (changes over time and between pages). */}
         <SiteBackdrop />
+        <AppBanner />
         <Welcome />
         {user && needWallet && !appNoMoney && <WalletGate uid={user.id} />}
         {/* Keeps a live playing while members move around the site. */}
