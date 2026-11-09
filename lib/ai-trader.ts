@@ -435,7 +435,8 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
   const checked = (await Promise.all(top.map(async (c) => {
     const i = infos.get(`${c.chain}:${c.token.toLowerCase()}`);
     c.x = !!i?.x; c.tg = !!i?.tg; c.boosted = boosts.has(`${c.chain}:${c.token.toLowerCase()}`);
-    if (s.need_socials && !c.x && !c.tg) { rejected.push(`${c.symbol}: no X or Telegram`); return null; }
+    // Brand-new small coins rarely have their X / Telegram on DexScreener yet: for chart setups socials are a bonus
+    // (the AI sees them), not a must. DexScreener signals still need them.
     c.chart = (await readChart(c.chain, c.pool).catch(() => null)) || undefined;
     const bad = chartOk(c);
     if (bad) { rejected.push(`${c.symbol}: ${bad}`); return null; }
@@ -626,7 +627,8 @@ export async function runFast() {
       for (const x of found.filter((x) => newOnes.includes(x.sig))) out.push(await actOnSignal(s, x.sig, x.flow));
     }
   }
-  const dex = await unseen(await dexSignals(chains).catch(() => []));
-  for (const g of dex.slice(0, 8)) out.push(await actOnSignal(s, g, null));
+  // Only the newest few are recorded each minute, so none are marked seen without being checked.
+  const dex = await unseen((await dexSignals(chains).catch(() => [])).slice(0, 12));
+  for (const g of dex) out.push(await actOnSignal(s, g, null));
   return { ok: true, signals: out.length, bought: out.filter((x) => x.startsWith("bought")).length };
 }

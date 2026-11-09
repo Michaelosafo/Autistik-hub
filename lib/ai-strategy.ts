@@ -60,10 +60,14 @@ function parse(chain: string, j: any): Omit<SCand, "setup" | "score" | "reasons"
 }
 
 /** Coins in the market-cap window on one chain, from trending (5m and 1h) and brand-new pools. */
-async function pools(chain: string) {
+async function pools(chain: string, deep: boolean) {
   const net = MOMENTUM_CHAINS.find((c) => c.key === chain)?.gt;
   if (!net) return [];
-  const paths = [`/networks/${net}/trending_pools?include=base_token&duration=5m&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=1h&page=1`, `/networks/${net}/new_pools?include=base_token&page=1`, `/networks/${net}/new_pools?include=base_token&page=2`];
+  // Trending (5m, 1h, 6h) plus the newest pools going back a few hours (BNB Chain makes ~100 an hour), so coins that
+  // survived their first 20 minutes and are now moving get seen too.
+  const pages = deep ? 8 : 3;
+  const paths = [`/networks/${net}/trending_pools?include=base_token&duration=5m&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=1h&page=1`, `/networks/${net}/trending_pools?include=base_token&duration=6h&page=1`,
+    ...Array.from({ length: pages }, (_, i) => `/networks/${net}/new_pools?include=base_token&page=${i + 1}`)];
   const lists = await Promise.all(paths.map((p) => gt(p).then((j) => parse(chain, j)).catch(() => [])));
   const seen = new Set<string>();
   return lists.flat().filter((c) => { const k = c.token.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -176,7 +180,7 @@ export async function aiPick(list: SCand[], target: number, stop: number): Promi
 
 /** Scan the chains for HYPE and DIP setups in the market-cap window, best first (before the chart and safety checks). */
 export async function scanSetups(chains: string[], s: { hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number }, skip: Set<string>) {
-  const all = (await Promise.all(chains.map((c) => pools(c).catch(() => [])))).flat();
+  const all = (await Promise.all(chains.map((c) => pools(c, chains.length <= 2).catch(() => [])))).flat();
   const out: SCand[] = [];
   for (const c of all) {
     if (skip.has(c.token.toLowerCase()) || c.price <= 0) continue;
