@@ -10,8 +10,29 @@ import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
 
 /** One Tik: who, what they wrote, a picture, likes and replies. */
-export default function TikCard({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null }) {
+export default function TikCard(props: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null }) {
+  const { t, me, onRemoved } = props;
+  // A Tickle: "🔁 name tickled" over the original Tik. (Its original was deleted or hidden: nothing to show.)
+  if (t.tickle_of) {
+    if (!t.orig) return null;
+    return (
+      <div className="tik-tickled">
+        <small className="tik-tickled-by">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" /></svg>
+          {me === t.author_id ? "You" : t.author?.alias || "Someone"} tickled
+        </small>
+        <TikBody {...props} t={t.orig} onRemoved={() => onRemoved?.(t.id)} />
+      </div>
+    );
+  }
+  return <TikBody {...props} />;
+}
+
+function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null }) {
   const [liked, setLiked] = useState(t.liked);
+  const [tickled, setTickled] = useState(!!t.tickled);
+  const [tickles, setTickles] = useState(t.tickles ?? 0);
+  const [copied, setCopied] = useState(false);
   const [likes, setLikes] = useState(t.likes);
   const [replies, setReplies] = useState(t.replies);
   const [open, setOpen] = useState(false);
@@ -26,6 +47,22 @@ export default function TikCard({ t, me, onRemoved, compact, hot }: { t: Tik; me
     const { error } = next ? await sb.from("tik_likes").insert({ tik_id: t.id }) : await sb.from("tik_likes").delete().eq("tik_id", t.id).eq("user_id", me);
     if (error && error.code !== "23505") { setLiked(!next); setLikes((n) => n + (next ? -1 : 1)); }
     else refreshTrending();
+  }
+  /** Tickle (repost) this Tik to everyone's feed, or undo it. */
+  async function tickle() {
+    if (!me) { window.location.href = `/login?next=${encodeURIComponent(location.pathname)}`; return; }
+    const sb = supabaseBrowser();
+    const next = !tickled;
+    setTickled(next); setTickles((n) => n + (next ? 1 : -1));
+    const { error } = next ? await sb.from("tiks").insert({ author_id: me, body: "", tickle_of: t.id }) : await sb.from("tiks").delete().eq("author_id", me).eq("tickle_of", t.id);
+    if (error && error.code !== "23505") { setTickled(!next); setTickles((n) => n + (next ? -1 : 1)); }
+    else refreshTrending();
+  }
+  /** A link that opens this Tik directly (share it anywhere). */
+  async function copyLink() {
+    const url = `${location.origin}/tik?tik=${t.id}`;
+    try { await navigator.clipboard.writeText(url); } catch { window.prompt("Copy this link:", url); }
+    setCopied(true); setTimeout(() => setCopied(false), 1800);
   }
   async function remove() {
     if (!confirm("Delete this Tik?")) return;
@@ -63,6 +100,16 @@ export default function TikCard({ t, me, onRemoved, compact, hot }: { t: Tik; me
               <span>{replies > 0 ? replies : "Reply"}</span>
             </button>
           )}
+          {!t.reply_to && (
+            <button type="button" className={"tik-act tickle" + (tickled ? " on" : "")} onClick={tickle} aria-pressed={tickled} aria-label={tickled ? "Undo Tickle" : "Tickle: repost to everyone"} title={tickled ? "Undo Tickle" : "Tickle (repost)"}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" /></svg>
+              <span>{tickles > 0 ? tickles : "Tickle"}</span>
+            </button>
+          )}
+          <button type="button" className={"tik-act" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></svg>
+            <span>{copied ? "Copied!" : "Copy link"}</span>
+          </button>
           {me && me === t.author_id && <button type="button" className="tik-act del" onClick={remove}>Delete</button>}
         </div>
         {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
