@@ -6,6 +6,7 @@ import Link from "next/link";
 import WalletLoader from "@/components/wallet/WalletLoader";
 import SendTokens from "@/components/live/SendTokens";
 import { getState, pickWallet, subscribe } from "@/lib/connect";
+import { isAndroidApp } from "@/lib/android-app";
 
 const OrdersAdmin = dynamic(() => import("@/components/wallet/OrdersAdmin"), { ssr: false });
 
@@ -27,6 +28,9 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
   appId: string | null; member: Member; start: any; admin: boolean; rewards: Rewards; feeNote: string;
 }) {
   const [tab, setTab] = useState<string>("wallet");
+  // Inside the Google Play app: no paid races (decided after load, so the server and browser draw the same page).
+  const [inApp, setInApp] = useState(false);
+  useEffect(() => setInApp(isAndroidApp()), []);
   const conn = useSyncExternalStore(subscribe, getState, getState);
   const [evm, setEvm] = useState("");
   const [list, setList] = useState<Holding[] | null>(null);
@@ -76,7 +80,7 @@ export default function WalletDash({ appId, member, start, admin, rewards, feeNo
   const tiles: { label: string; note: string; href?: string; tab?: string; play?: boolean }[] = [
     { label: "Scanner", note: "Any wallet or token: holders, 100x club, sellers", tab: "scanner" },
     { label: "Race", note: "Race every holder of a coin in 3D", tab: "race" },
-    { label: "Win $AUTISTIK", note: "$0.50 entry, top 5 split the pot", play: true },
+    ...(inApp ? [] : [{ label: "Win $AUTISTIK", note: "$0.50 entry, top 5 split the pot", play: true }]),
     { label: "Offline swap", note: "Swap face to face, no internet", tab: "swap" },
     { label: "Swap", note: "Best price on any network", href: "/swap" },
     { label: "Watchlist", note: "Coins you follow", href: "/analytics/pins" },

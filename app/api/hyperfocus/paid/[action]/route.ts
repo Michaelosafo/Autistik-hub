@@ -1,4 +1,9 @@
 import { json } from "@/lib/ai";
+import { cookies } from "next/headers";
+import { APP_COOKIE } from "@/lib/android-app";
+
+/** Paid races aren't offered in the Google Play app (Play's real-money gaming rules); the website keeps them. */
+const inApp = () => cookies().get(APP_COOKIE)?.value === "android";
 import { rateLimit } from "@/lib/ratelimit";
 import { PRO_TOKEN } from "@/lib/pro";
 import { ENTRY_USD, ROOM_SIZE, SPLIT, enabled, gameAccount, inputs, join, leave, openRoom, quote, roomView, sweep, tokenDecimals } from "@/lib/hyperfocus-paid";
@@ -18,7 +23,7 @@ export async function GET(req: Request, { params }: { params: { action: string }
   const limited = await rateLimit(req, `hf-paid-${a}`, ...LIMITS[a]);
   if (limited) return limited;
   if (a === "status") {
-    const on = enabled();
+    const on = enabled() && !inApp();
     if (on) await sweep().catch(() => null);
     return json({ enabled: on, entryUsd: ENTRY_USD, roomSize: ROOM_SIZE, split: SPLIT.map(Number), marketingPct: 30, token: PRO_TOKEN, decimals: await tokenDecimals(),
       gameWallet: on ? gameAccount()!.address : null, open: on ? await openRoom().catch(() => ({ players: 0 })) : null });
@@ -32,6 +37,7 @@ export async function GET(req: Request, { params }: { params: { action: string }
 export async function POST(req: Request, { params }: { params: { action: string } }) {
   const a = params.action === "finish" ? "inputs" : params.action;
   if (!["quote", "join", "inputs", "leave"].includes(a)) return json({ error: "Not found." }, 404);
+  if (inApp() && (a === "quote" || a === "join")) return json({ error: "Paid races aren't available in the app. Play them on autistik.io." }, 403);
   const limited = await rateLimit(req, `hf-paid-${a}`, ...LIMITS[a]);
   if (limited) return limited;
   const b = await req.json().catch(() => ({}));
