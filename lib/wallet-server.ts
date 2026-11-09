@@ -407,7 +407,8 @@ export async function build(c: WChain, q: Quote, from: string, slippageBps: numb
     return { kind: "evm", to: c.v2Router, data, value: buy ? q.amountIn : "0", spender: buy ? null : c.v2Router };
   }
   // KyberSwap: the fee must still be ours (a quote from the browser can't redirect it).
-  const fee = q.route?.extraFee;
+  // An "extraFee" of 0 (or with no receiver) is no fee at all.
+  const fee = q.route?.extraFee && Number(q.route.extraFee.feeAmount) > 0 && q.route.extraFee.feeReceiver ? q.route.extraFee : null;
   // The Wallet's own fee can't be dropped; any fee (Wallet or chat) can only ever go to the treasury.
   if (TREASURY && FEE_BPS > 0 && !(trusted && q.feeBps === 0 && !fee) && (!fee || ![FEE_BPS, CHAT_FEE_BPS].includes(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
   if (fee && (!TREASURY || String(fee.feeReceiver).toLowerCase() !== TREASURY.toLowerCase() || !okFee(Number(fee.feeAmount)))) throw new Error("Prices changed. Please get a new quote.");
