@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_CONFIGURED } from "@/lib/supabase/env";
 import { buildCsp, makeNonce } from "@/lib/csp";
 import { MFA_FREE, mfaStep } from "@/lib/mfa";
+import { APP_COOKIE, fromAndroidApp } from "@/lib/android-app";
 
 // 1) Gives every page a one-time script nonce and its security policy (Next.js adds the nonce to its own scripts).
 // 2) Keeps the Supabase login session fresh on every page load.
@@ -16,7 +17,10 @@ export async function middleware(request: NextRequest) {
   headers.set("x-nonce", nonce);
   headers.set("content-security-policy", enforced);
   const next = () => NextResponse.next({ request: { headers } });
+  // Opened by the Google Play app: remember it (the app's later pages don't carry the referrer).
+  const inApp = fromAndroidApp(request.headers.get("referer"));
   const finish = (r: NextResponse) => {
+    if (inApp && request.cookies.get(APP_COOKIE)?.value !== "android") r.cookies.set(APP_COOKIE, "android", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax", secure: true });
     r.headers.set("Content-Security-Policy", enforced);
     r.headers.set("Content-Security-Policy-Report-Only", reportOnly);
     return r;
