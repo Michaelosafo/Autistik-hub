@@ -5938,3 +5938,11 @@ html[data-app="android"] .appbar{display:none}
 .tik-tickled-by svg{width:14px;height:14px}
 @media (max-width:560px){.tik{padding:12px;gap:10px}.tik-av .me-av{width:38px;height:38px}.tik-handle{display:none}.tik-actions{max-width:none}}
 @media (prefers-reduced-motion:reduce){.tik,.tik-img img,.tik-act svg,.tik-menu{transition:none;animation:none}}
+
+/* AI trader: chain picker */
+.ait-chains{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.ait-chain{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:14px;background:var(--surface-2);border:1.5px solid transparent}
+.ait-chain small{color:var(--muted);font-size:.78em}
+.ait-chain.on{border-color:#F0B90B;background:rgba(240,185,11,.1)}
+.ait-chain:disabled{cursor:default}
+.ait-chain:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
