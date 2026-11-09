@@ -72,6 +72,36 @@ export async function createTraderWallet(): Promise<string> {
   return cached.address;
 }
 
+/** Owner: the wallet's private key, to import it into their own wallet app (MetaMask, Trust Wallet…). */
+export async function revealTraderKey(): Promise<string> {
+  const env = process.env.AI_TRADER_KEY?.trim();
+  if (env && /^0x[0-9a-fA-F]{64}$/.test(env)) return env;
+  const { data } = await supabaseService().rpc("ai_trader_key_get");
+  if (typeof data !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(data)) throw new Error("There's no trading wallet yet.");
+  await log("settings", "The owner viewed the trading wallet's private key.");
+  return data;
+}
+
+/** Owner: use their own wallet for live trading instead (only while the current one is empty and nothing live is open). */
+export async function importTraderKey(raw: string): Promise<string> {
+  const key = (raw.trim().startsWith("0x") ? raw.trim() : `0x${raw.trim()}`) as `0x${string}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("That isn't a private key (64 letters and numbers, from your wallet's Export private key).");
+  if (process.env.AI_TRADER_KEY?.trim()) throw new Error("AI_TRADER_KEY is set in Vercel and wins over this. Remove it there first.");
+  const sb = supabaseService();
+  const { data: openLive } = await sb.from("ai_trader_positions").select("id").eq("mode", "live").in("status", ["open", "closing"]).limit(1);
+  if (openLive?.length) throw new Error("Sell the open live coins first.");
+  const cur = await traderAccount();
+  if (cur) {
+    const bnb = Number(await (walletChainClient(C) as any).getBalance({ address: cur.address })) / 1e18;
+    if (bnb > 0.0005) throw new Error(`The current trading wallet still holds ${bnb.toFixed(4)} BNB. Withdraw it first so nothing is left behind.`);
+  }
+  const { error } = await sb.rpc("ai_trader_key_set", { p_key: key, p_replace: true });
+  if (error) throw new Error(error.message);
+  cached = privateKeyToAccount(key);
+  await log("settings", `Live trading now uses the owner's own wallet: ${cached.address}`);
+  return cached.address;
+}
+
 /** Owner: sends the wallet's BNB (all but the gas for this transfer) to an address the owner typed. */
 export async function withdrawBnb(to: string): Promise<{ hash: string; bnb: number }> {
   const account = await traderAccount();
