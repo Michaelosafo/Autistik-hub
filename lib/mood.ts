@@ -22,9 +22,13 @@ export type Tik = {
   tickle_of?: string | null; orig?: Tik | null;
   /** How many times this Tik was tickled, and whether the member tickled it. */
   tickles?: number; tickled?: boolean;
+  /** How many members have seen it (not counting the author). */
+  views?: number;
+  /** A reply aimed at someone in the thread: who. */
+  reply_user?: string | null; to?: { id: string; alias: string; handle?: string | null } | null;
 };
 
-export const TIK_COLS = "id,body,mood,image_url,created_at,author_id,reply_to,tickle_of,author:profiles!tiks_author_id_fkey(id,alias,color,avatar_url,is_team,is_verified,handle,verified_badge),tik_likes(count),replies:tiks!reply_to(count)";
+export const TIK_COLS = "id,body,mood,image_url,created_at,author_id,reply_to,tickle_of,views,reply_user,to:profiles!tiks_reply_user_fkey(id,alias,handle),author:profiles!tiks_author_id_fkey(id,alias,color,avatar_url,is_team,is_verified,handle,verified_badge),tik_likes(count),replies:tiks!reply_to(count)";
 
 export function ago(iso: string) {
   const s = Math.max(1, (Date.now() - Date.parse(iso)) / 1000);
@@ -34,7 +38,8 @@ export function ago(iso: string) {
 /** Turns rows from Supabase into Tiks, with this member's likes marked. */
 export function shapeTiks(rows: any[], mine: Set<string>): Tik[] {
   return rows.map((r) => ({
-    id: r.id, body: r.body, mood: r.mood, image_url: r.image_url, created_at: r.created_at, author_id: r.author_id, reply_to: r.reply_to, tickle_of: r.tickle_of ?? null,
+    id: r.id, body: r.body, mood: r.mood, image_url: r.image_url, created_at: r.created_at, author_id: r.author_id, reply_to: r.reply_to, tickle_of: r.tickle_of ?? null, views: r.views ?? 0, reply_user: r.reply_user ?? null,
+    to: Array.isArray(r.to) ? r.to[0] ?? null : r.to ?? null,
     author: Array.isArray(r.author) ? r.author[0] ?? null : r.author ?? null,
     likes: r.tik_likes?.[0]?.count ?? 0, replies: r.replies?.[0]?.count ?? 0, liked: mine.has(r.id),
   }));

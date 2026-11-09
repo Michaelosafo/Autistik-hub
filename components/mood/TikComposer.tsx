@@ -13,7 +13,7 @@ async function shrink(file: File): Promise<Blob> {
 }
 
 /** Write a Tik: just type and post, with an optional picture. Also used for replies. Ctrl/Cmd+Enter posts. */
-export default function TikComposer({ replyTo, onPosted, compact, placeholder }: { replyTo?: string; onPosted?: () => void; compact?: boolean; placeholder?: string }) {
+export default function TikComposer({ replyTo, replyUser, onPosted, compact, placeholder }: { replyTo?: string; replyUser?: string | null; onPosted?: () => void; compact?: boolean; placeholder?: string }) {
   const [body, setBody] = useState("");
   const [pic, setPic] = useState<{ blob: Blob; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,7 +41,7 @@ export default function TikComposer({ replyTo, onPosted, compact, placeholder }:
       if (error) { setBusy(false); setMsg("Couldn't upload the picture. Try again."); return; }
       image_url = sb.storage.from("tik-images").getPublicUrl(path).data.publicUrl;
     }
-    const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), image_url, reply_to: replyTo ?? null });
+    const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), image_url, reply_to: replyTo ?? null, ...(replyTo && replyUser ? { reply_user: replyUser } : {}) });
     setBusy(false);
     if (error) { setMsg(/slow down/i.test(error.message) ? error.message : "Couldn't post. Try again."); return; }
     setBody(""); if (pic) URL.revokeObjectURL(pic.url); setPic(null);

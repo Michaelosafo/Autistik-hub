@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { markSeen } from "./seen";
 import Avatar from "@/components/Avatar";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -10,7 +12,12 @@ import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
 
 /** One Tik: who, what they wrote, a picture, likes and replies. */
-export default function TikCard(props: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null }) {
+type CardProps = {
+  t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null;
+  /** In a thread: who the Tik being replied to is by, and "Reply" to this person. */
+  parentAlias?: string; onReplyTo?: (who: { id: string; alias: string }) => void;
+};
+export default function TikCard(props: CardProps) {
   const { t, me, onRemoved } = props;
   // A Tickle: "🔁 name tickled" over the original Tik. (Its original was deleted or hidden: nothing to show.)
   if (t.tickle_of) {
@@ -28,7 +35,20 @@ export default function TikCard(props: { t: Tik; me: string | null; onRemoved?: 
   return <TikBody {...props} />;
 }
 
-function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null }) {
+function TikBody({ t, me, onRemoved, compact, hot, parentAlias, onReplyTo }: CardProps) {
+  const box = useRef<HTMLElement>(null);
+  const [viewers, setViewers] = useState(false);
+  // Counts as seen once it's at least half on screen for a second (the author's own looks don't count).
+  useEffect(() => {
+    if (!me || me === t.author_id || !box.current) return;
+    let tm: ReturnType<typeof setTimeout> | null = null;
+    const io = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) tm = setTimeout(() => { markSeen(t.id, me); io.disconnect(); }, 1000);
+      else if (tm) { clearTimeout(tm); tm = null; }
+    }, { threshold: 0.5 });
+    io.observe(box.current);
+    return () => { io.disconnect(); if (tm) clearTimeout(tm); };
+  }, [t.id, me, t.author_id]);
   const [liked, setLiked] = useState(t.liked);
   const [tickled, setTickled] = useState(!!t.tickled);
   const [tickles, setTickles] = useState(t.tickles ?? 0);
@@ -54,7 +74,7 @@ function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null
     const sb = supabaseBrowser();
     const next = !tickled;
     setTickled(next); setTickles((n) => n + (next ? 1 : -1));
-    const { error } = next ? await sb.from("tiks").insert({ author_id: me, body: "", tickle_of: t.id }) : await sb.from("tiks").delete().eq("author_id", me).eq("tickle_of", t.id);
+    const { error } = next ? await sb.from("tiks").insert({ body: "", tickle_of: t.id }) : await sb.from("tiks").delete().eq("author_id", me).eq("tickle_of", t.id);
     if (error && error.code !== "23505") { setTickled(!next); setTickles((n) => n + (next ? -1 : 1)); }
     else refreshTrending();
   }
@@ -71,7 +91,7 @@ function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null
   }
 
   return (
-    <article className={"tik" + (compact ? " compact" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
+    <article ref={box} className={"tik" + (compact ? " compact" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
       {hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
@@ -83,6 +103,7 @@ function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null
           {a?.is_team && <span className="tik-team">Team</span>}
           <small className="tik-time">{ago(t.created_at)}</small>
         </div>
+        {t.reply_to && (t.to?.alias || parentAlias) && <small className="tik-replying">Replying to <b>@{t.to?.handle || t.to?.alias || parentAlias}</b></small>}
         <p className="tik-body">{t.body}</p>
         {t.image_url && (
           <button type="button" className="tik-img" onClick={() => setZoom(true)} aria-label="View the picture">
@@ -106,6 +127,21 @@ function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null
               <span>{tickles > 0 ? tickles : "Tickle"}</span>
             </button>
           )}
+          {t.reply_to && onReplyTo && a && (
+            <button type="button" className="tik-act" onClick={() => onReplyTo({ id: a.id, alias: a.alias })}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
+              <span>Reply</span>
+            </button>
+          )}
+          {!t.reply_to && (me === t.author_id
+            ? <button type="button" className="tik-act" onClick={() => setViewers(true)} aria-label={`${t.views ?? 0} views: see who`} title="See who viewed">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                <span>{t.views ?? 0}</span>
+              </button>
+            : (t.views ?? 0) > 0 && <span className="tik-act static" aria-label={`${t.views} views`}>
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>
+                <span>{t.views}</span>
+              </span>)}
           <button type="button" className={"tik-act" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></svg>
             <span>{copied ? "Copied!" : "Copy link"}</span>
@@ -113,6 +149,7 @@ function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null
           {me && me === t.author_id && <button type="button" className="tik-act del" onClick={remove}>Delete</button>}
         </div>
         {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
+        {viewers && typeof document !== "undefined" && createPortal(<Viewers tikId={t.id} count={t.views ?? 0} onClose={() => setViewers(false)} />, document.body)}
       </div>
       {zoom && t.image_url && (
         <div className="tik-zoom" role="dialog" aria-modal="true" aria-label="Picture" onClick={() => setZoom(false)}>
@@ -125,14 +162,49 @@ function TikBody({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null
 
 function Replies({ tik, me, onCount }: { tik: Tik; me: string | null; onCount: (d: number) => void }) {
   const [k, setK] = useState(0);
+  // Who the reply is to: the Tik's author, or a person in the thread (tap Reply on their reply).
+  const [to, setTo] = useState<{ id: string; alias: string } | null>(null);
+  const owner = tik.author?.alias || "them";
   const { tiks, setTiks, more, loadMore } = useTiks({ replyTo: tik.id, limit: 20, refreshKey: k });
   return (
     <div className="tik-replies">
       {tiks === null ? <small className="muted">Loading replies…</small> : tiks.map((r) => (
-        <TikCard key={r.id} t={r} me={me} compact onRemoved={(id) => { setTiks((x) => x?.filter((y) => y.id !== id) ?? null); onCount(-1); }} />
+        <TikCard key={r.id} t={r} me={me} compact parentAlias={tik.author?.handle || tik.author?.alias} onReplyTo={(w) => setTo(w.id === me ? null : w)}
+          onRemoved={(id) => { setTiks((x) => x?.filter((y) => y.id !== id) ?? null); onCount(-1); }} />
       ))}
       {more && <button type="button" className="tik-more" onClick={loadMore}>More replies</button>}
-      {me ? <TikComposer replyTo={tik.id} compact onPosted={() => { setK((n) => n + 1); onCount(1); }} /> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
+      {me ? <>
+        {to && <div className="tik-to">Replying to <b>{to.alias}</b><button type="button" onClick={() => setTo(null)} aria-label="Reply to the Tik instead">✕</button></div>}
+        <TikComposer replyTo={tik.id} replyUser={to?.id ?? null} compact placeholder={`Reply to ${to?.alias || owner}…`} onPosted={() => { setK((n) => n + 1); onCount(1); setTo(null); }} />
+      </> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
+    </div>
+  );
+}
+
+/** Who has seen your Tik (only you, the author, can see this list). */
+function Viewers({ tikId, count, onClose }: { tikId: string; count: number; onClose: () => void }) {
+  const [list, setList] = useState<{ id: string; alias: string; color: string | null; avatar_url: string | null; at: string }[] | null>(null);
+  useEffect(() => {
+    const sb = supabaseBrowser();
+    (async () => {
+      const { data } = await sb.from("tik_views").select("user_id,seen_at").eq("tik_id", tikId).order("seen_at", { ascending: false }).limit(200);
+      const rows = (data || []) as { user_id: string; seen_at: string }[];
+      const { data: ps } = rows.length ? await sb.from("profiles").select("id,alias,color,avatar_url").in("id", rows.map((r) => r.user_id)) : { data: [] };
+      const by = new Map(((ps || []) as any[]).map((p) => [p.id, p]));
+      setList(rows.map((r) => ({ id: r.user_id, alias: by.get(r.user_id)?.alias || "Member", color: by.get(r.user_id)?.color ?? null, avatar_url: by.get(r.user_id)?.avatar_url ?? null, at: r.seen_at })));
+    })();
+  }, [tikId]);
+  return (
+    <div className="tik-viewers-bg" role="dialog" aria-modal="true" aria-label="Seen by" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="tik-viewers">
+        <div className="tik-viewers-h"><b>Seen by {count}</b><button type="button" onClick={onClose} aria-label="Close">✕</button></div>
+        {list === null ? <small className="muted">Loading…</small> : list.length === 0 ? <small className="muted">No views yet.</small> : (
+          <ul>{list.map((v) => (
+            <li key={v.id}><Link href={`/members/${v.id}`} onClick={onClose}><Avatar className="me-av" alias={v.alias} color={v.color} url={v.avatar_url} /><b>{v.alias}</b><small>{ago(v.at)}</small></Link></li>
+          ))}</ul>
+        )}
+        <small className="muted">Only you can see who viewed your Tik.</small>
+      </div>
     </div>
   );
 }
