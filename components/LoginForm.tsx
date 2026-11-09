@@ -216,7 +216,7 @@ export default function LoginForm({ next, initialError, initialMode, providers =
               </div>
             </label>
             <NameSuggest onPick={(p) => setNick(p.alias)} />
-            <span className="muted" style={{ fontSize: ".82em" }}>This is how members see and find you, with an @handle like on X. Your email is never shown to anyone. You can change it later.</span>
+            <span className="muted" style={{ fontSize: ".82em" }}>This is how members see and find you, with an @handle. Your email is never shown to anyone. You can change it later.</span>
           </div>
         )}
         <label className="field"><span>Email</span>
