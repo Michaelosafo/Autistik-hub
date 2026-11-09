@@ -6023,3 +6023,5 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .th-a.k-drop .th-a-h em,.th-a.k-recording .th-a-h em,.th-a.k-live-ended .th-a-h em{background:rgba(59,158,255,.14);color:#3B9EFF}
 .th-a-x{line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .th-act .th-chips{border-bottom:0;padding-bottom:2px}
+.th-act .th-a-t > .th-a-h{display:flex;align-items:center;gap:5px;width:100%;-webkit-line-clamp:unset;overflow:visible}
+.th-act .th-a-t > .th-a-x{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
