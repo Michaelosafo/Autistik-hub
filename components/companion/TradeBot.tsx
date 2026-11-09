@@ -57,6 +57,7 @@ export function findTradeRequest(text: string): { ca: string; intent?: TradeInte
 export default function TradeBot({ ca, intent, appId, member, signedIn }: { ca: string; intent?: TradeIntent; appId: string | null; member: Member | null; signedIn: boolean }) {
   const [found, setFound] = useState<Found | null>(null);
   const [err, setErr] = useState("");
+  const [slim, setSlim] = useState(false); // a step is open: on phones the coin details fold away to make room
   useEffect(() => {
     let live = true;
     api<Found>("detect", { address: ca }).then((d) => live && setFound(d)).catch((e) => live && setErr(e.message || "Couldn't find that coin."));
@@ -67,11 +68,11 @@ export default function TradeBot({ ca, intent, appId, member, signedIn }: { ca: 
   if (!found) return <div className="tb"><div className="tb-load"><span className="aw-spin" />Looking up {short(ca)} on every network…</div></div>;
   const c = WCHAINS[found.chain];
   return (
-    <div className="tb">
+    <div className={"tb" + (slim ? " slim" : "")}>
       <CoinCard c={c} t={found.token} m={found.market} />
       {!signedIn ? <p className="tb-q">Sign in to trade this coin with your wallet.</p> : (
         <SignerScope appId={appId} member={member}>
-          {(signer) => <Flow c={c} t={found.token} m={found.market} signer={signer} intent={intent} />}
+          {(signer) => <div className="tb-flow"><Flow c={c} t={found.token} m={found.market} signer={signer} intent={intent} onStep={setSlim} /></div>}
         </SignerScope>
       )}
     </div>
@@ -105,11 +106,12 @@ function CoinCard({ c, t, m }: { c: WChain; t: TokenInfo; m: Market | null }) {
   );
 }
 
-function Flow({ c, t, m, signer, intent }: { c: WChain; t: TokenInfo; m: Market | null; signer: Signer; intent?: TradeIntent }) {
+function Flow({ c, t, m, signer, intent, onStep }: { c: WChain; t: TokenInfo; m: Market | null; signer: Signer; intent?: TradeIntent; onStep?: (open: boolean) => void }) {
   const owner = c.kind === "solana" ? signer.sol?.address : signer.evm?.address;
   const [action, setAction] = useState<Action | null>(intent?.action ?? null);
   const [hold, setHold] = useState<{ native: Holding | null; token: Holding | null } | null>(null);
   const [contract, setContract] = useState<string | null | undefined>(undefined);
+  useEffect(() => { onStep?.(!!action); }, [action]); // eslint-disable-line react-hooks/exhaustive-deps
   const load = () => {
     if (!owner) return;
     api<{ holdings: Holding[] }>("balances", { chain: c.key, owner, extra: [t.address] }).then((d) => setHold({

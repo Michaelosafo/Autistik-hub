@@ -5456,3 +5456,35 @@ html[data-calm="on"] .sbg { display: none; }
 .tk-chip small { opacity: .75; font-size: .75em; }
 .tk-empty { display: flex; flex-direction: column; gap: 4px; padding: 18px; border-radius: 18px; background: var(--surface-2); }
 @media (prefers-reduced-motion: reduce) { .tik.hot.top, .tk-strip-h i { animation: none; } }
+
+/* ---- AI chat: a bigger box, one question and answer at a time (Previous / Next), less scrolling ---- */
+.chat.lux.gpt.ai-app { grid-template-columns: 220px minmax(0, 1fr); height: calc(100dvh - 76px); }
+.chat.lux.gpt .msgs > * { max-width: 980px; }
+.gpt .msg.me { margin-right: max(0px, calc((100% - 980px) / 2)) !important; }
+.ai-composer { max-width: 980px; }
+.chat.lux.gpt .msgs { padding: 14px 18px 8px; gap: 14px; font-size: 1.04em; }
+.chat.lux.gpt .msgs.focus { justify-content: flex-start; }
+.ai-pager { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; max-width: 980px; margin: 0 auto; padding: 6px 18px; box-sizing: border-box; font-size: .84em; }
+.ai-pager button { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 99px; font-weight: 800; background: rgba(var(--wc), .06); border: 1px solid rgba(var(--wc), .12); }
+.ai-pager button:hover:not([disabled]) { border-color: rgba(233,182,90,.6); }
+.ai-pager button:focus-visible { outline: 2px solid #E9B65A; outline-offset: 2px; }
+.ai-pager button[disabled] { opacity: .35; cursor: default; }
+.ai-pager span { opacity: .75; font-weight: 700; }
+.ai-pager-grow { flex: 1; }
+.ai-pager-new { color: #1B1206; background: linear-gradient(135deg, #F3C969, #D99A2B) !important; border-color: transparent !important; }
+:root[data-theme="light"] .ai-pager button { background: #fff; border-color: var(--line); }
+@media (max-width: 860px) {
+  .chat.lux.gpt.ai-app { height: calc(100dvh - 128px - env(safe-area-inset-bottom)); }
+  .ai-pager { padding: 6px 10px; }
+  .ai-pager-mode { display: none; }
+  .chat.lux.gpt .msgs { padding: 10px 10px 6px; }
+}
+
+/* The trade card fills the chat width; on big screens the coin details sit beside the questions. */
+.chat.lux.gpt .tb { width: 100%; max-width: 980px; }
+@media (min-width: 900px) {
+  .tb:has(> .tb-flow) { display: grid; grid-template-columns: minmax(260px, 380px) minmax(0, 1fr); align-items: start; gap: 16px; }
+  .tb:has(> .tb-flow) > .tb-flow { display: flex; flex-direction: column; gap: 10px; }
+}
+.tb-flow { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+@media (max-width: 899px) { .tb.slim .tb-stats, .tb.slim .tb-notes, .tb.slim .tb-chart { display: none; } }
