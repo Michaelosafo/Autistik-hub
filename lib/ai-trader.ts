@@ -16,7 +16,7 @@ import { createWalletClient, erc20Abi, getAddress, http, isAddress } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
-import { aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
+import { IMPOSTOR, aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
 import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
@@ -186,6 +186,29 @@ function riskChain(chain: string) {
   return WCHAINS[chain as "bsc" | "ethereum" | "solana"];
 }
 const riskFor = (chain: string, token: string) => riskOf(riskChain(chain), token);
+
+/**
+ * Rug check (EVM): most of the pool's liquidity must be locked or burned, and the owner must not be able to take
+ * coins back, hide ownership or change balances. A small coin whose creator can pull the pool gets skipped.
+ */
+async function rugCheck(chain: string, token: string): Promise<string | null> {
+  if (chain === "solana") return null;
+  const id = chain === "bsc" ? 56 : chain === "ethereum" ? 1 : chain === "robinhood" ? 4663 : 0;
+  if (!id) return null;
+  const j = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${id}?contract_addresses=${token}`, { cache: "no-store", signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => null);
+  const r = j?.result?.[token.toLowerCase()];
+  if (!r) return "no safety data yet";
+  if (r.hidden_owner === "1" || r.can_take_back_ownership === "1" || r.owner_change_balance === "1" || r.selfdestruct === "1") return "the owner keeps dangerous powers";
+  if (r.is_honeypot === "1" || r.cannot_sell_all === "1" || r.transfer_pausable === "1") return "selling can be blocked";
+  const lp: any[] = Array.isArray(r.lp_holders) ? r.lp_holders : [];
+  const dead = (a: string) => /^0x0{40}$|^0x0{36}dead$/i.test(a) || /^0x000000000000000000000000000000000000dead$/i.test(a);
+  const safe = lp.reduce((a, h) => a + (h?.is_locked === 1 || h?.is_locked === "1" || dead(String(h?.address || "")) ? Number(h?.percent) || 0 : 0), 0);
+  if (!lp.length) return "can't see who owns the pool";
+  if (safe < 0.8) return `only ${Math.round(safe * 100)}% of the pool is locked or burned`;
+  const creator = Number(r.creator_percent) || 0, owner = Number(r.owner_percent) || 0;
+  if (creator > 0.15 || owner > 0.15) return `the creator still holds ${Math.round(Math.max(creator, owner) * 100)}% of the coins`;
+  return null;
+}
 
 /** BNB to spend per trade: the dollar amount if one is set (so it stays e.g. $5 when BNB moves), else the BNB amount. */
 export async function tradeSize(s: Settings): Promise<number> {
@@ -443,6 +466,8 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
     if (bad) { rejected.push(`${c.symbol}: ${bad}`); return null; }
     const r = await riskFor(c.chain, c.token).catch(() => null);
     if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) { rejected.push(`${c.symbol}: failed the safety check`); return null; }
+    const rug = await rugCheck(c.chain, c.token).catch(() => "rug check failed");
+    if (rug) { rejected.push(`${c.symbol}: ${rug}`); return null; }
     c.buyTax = r.buyTax; c.sellTax = r.sellTax;
     return c;
   }))).filter(Boolean) as SCand[];
@@ -591,6 +616,9 @@ export async function actOnSignal(s: Settings, sig: Signal, flow: Flow | null): 
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding", f);
   const r = await riskFor(f.chain, f.token).catch(() => null);
   if (!r || r.honeypot || r.level === "danger" || Math.max(r.buyTax, r.sellTax) > s.max_tax) return done("skipped: failed the safety check", f);
+  const rug = await rugCheck(f.chain, f.token).catch(() => "rug check failed");
+  if (rug) return done(`skipped: ${rug}`, f);
+  if (!caller && (IMPOSTOR.test(f.symbol.trim()) || f.sells5 < 1)) return done("skipped: copycat name or nobody selling yet", f);
   const label = sig.source === "x" ? `@${sig.who} posted it on X` : sig.source === "telegram" ? `posted in ${sig.who} on Telegram` : sig.source === "dex-profile" ? "fresh DexScreener profile (team just went public)" : sig.source === "dex-boost" ? "fresh DexScreener boost" : "fresh community takeover";
   const why = `${caller ? "📣" : "⚡"} Signal: ${label}. ${f.buys5} buys vs ${f.sells5} sells in 5m, ${f.ch.h1 >= 0 ? "+" : ""}${f.ch.h1.toFixed(0)}% in 1h.`;
   try {
