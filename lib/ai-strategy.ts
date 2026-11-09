@@ -78,8 +78,14 @@ async function pools(chain: string, deep: boolean) {
 }
 
 /** Sorts a coin into HYPE or DIP (or neither) and scores it. */
+/** Copycats of big coins ("SHIB" at $17K) are almost always traps. */
+export const IMPOSTOR = /^(W?BNB|W?ETH|W?BTC|BTCB|SHIB|SHIBA|PEPE|DOGE|FLOKI|BONK|WIF|TRUMP|MELANIA|SOL|USDT|USDC|XRP|ADA|TON|SUI|CAKE|TRX|LINK|AVAX|DOT|LTC|BCH|NEAR|APT|ARB|OP|MATIC|POL|FDUSD|DAI|BUSD|ELON|TESLA|X|GROK|CZ|BINANCE|ASTER)$/i;
+
 export function classify(c: Omit<SCand, "setup" | "score" | "reasons">, s: { hype_on: boolean; dip_on: boolean }): SCand | null {
   const [b15, s15, by15, sl15] = c.tx.m15, [b5, s5, by5, sl5] = c.tx.m5;
+  if (IMPOSTOR.test(c.symbol.trim())) return null;
+  // Only buys and no sells means people probably can't sell (honeypot) or it's all the creator's own wallets.
+  if (s15 < 3 || sl15 < 2) return null;
   const pressure15 = (b15 + 1) / (s15 + 1), buyers15 = (by15 + 1) / (sl15 + 1), pressure5 = (b5 + 1) / (s5 + 1);
   const accel = c.vol.h1 > 0 ? (c.vol.m15 * 4) / c.vol.h1 : 0; // >1: the last 15 min trade faster than the hour's average
   const reasons: string[] = [];
