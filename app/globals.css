@@ -6001,3 +6001,25 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 @media (max-width:560px){body :is(.tik-pro,.mad,.ptik,.mp-mood,.mood-feed,.tik-focus) .tik{padding:14px}}
 .tik-act .tik-vn{display:inline!important;font-weight:600}
 .tik-act .tik-vn b{font-weight:800;color:var(--ink)}
+
+/* "Happening now": each item is its own card, like a Tik post */
+.th-act{gap:10px}
+.th-act .th-a,.th-act .th-a + .th-a{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:20px;background:var(--surface);
+  box-shadow:0 1px 2px rgba(16,12,40,.04),0 8px 24px -16px rgba(16,12,40,.18);transition:border-color .15s,box-shadow .2s,transform .15s}
+.th-act .th-a:hover{background:var(--surface);border-color:color-mix(in srgb,var(--ac,#B57CFF) 45%,var(--line));border-radius:20px;transform:translateY(-1px);
+  box-shadow:0 1px 2px rgba(16,12,40,.04),0 12px 28px -16px color-mix(in srgb,var(--ac,#B57CFF) 45%,transparent)}
+.th-act .th-a:hover + .th-a{border-top-color:var(--line)}
+.th-act .th-av{width:42px!important;height:42px!important;box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--ac,#B57CFF);border-radius:50%}
+.th-act .th-a-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;font-size:.95rem}
+.th-a-h{display:flex;align-items:center;gap:5px;min-width:0}
+.th-a-h b{display:inline-flex;align-items:center;gap:3px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th-a-sep{color:var(--muted)}
+.th-a-h small{color:var(--muted);font-size:.78rem;opacity:1;white-space:nowrap}
+.th-a-h em{margin-left:auto;flex:none;font-style:normal;font-size:.7rem;font-weight:800;padding:3px 9px;border-radius:99px;background:var(--surface-2);color:var(--ink)}
+.th-a.k-launch .th-a-h em{background:rgba(240,185,11,.16);color:#C98A00}
+.th-a.k-live .th-a-h em{background:rgba(229,72,77,.14);color:#E5484D}
+.th-a.k-tik .th-a-h em{background:rgba(181,124,255,.16);color:#9B5CFF}
+.th-a.k-joined .th-a-h em{background:rgba(34,197,94,.14);color:#16a34a}
+.th-a.k-drop .th-a-h em,.th-a.k-recording .th-a-h em,.th-a.k-live-ended .th-a-h em{background:rgba(59,158,255,.14);color:#3B9EFF}
+.th-a-x{line-height:1.45;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.th-act .th-chips{border-bottom:0;padding-bottom:2px}
