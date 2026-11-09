@@ -73,6 +73,7 @@ const MORE: { name: string; items: Item[] }[] = [
     { href: "/me", name: "My profile", note: "Your meme name, followers and activity", icon: "i-user" },
     { href: "/members", name: "Members", note: "Follow people and see what they're up to", icon: "i-com" },
     { href: "/security", name: "Account security", note: "Your authenticator app", icon: "i-key" },
+    { href: "/account/delete", name: "Delete account", note: "Remove your account and data", icon: "i-user" },
   ] },
 ];
 // Phone bar: Swap sits in the middle as the big button; everything else is behind the ☰ Menu button.
