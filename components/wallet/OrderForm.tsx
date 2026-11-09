@@ -21,6 +21,59 @@ const fix = (n: number, d: number) => (isFinite(n) && n > 0 ? n.toFixed(Math.min
 /** A price as plain digits (never "7.3e-7"), with about 5 significant figures. */
 const plain = (n: number) => (!isFinite(n) || n <= 0 ? "" : n >= 1 ? String(Number(n.toPrecision(6))) : n.toFixed(Math.min(18, -Math.floor(Math.log10(n)) + 4)).replace(/0+$/, ""));
 
+/** The Orders contract on each network (empty when orders aren't open there). */
+export const orderContracts = contracts;
+
+/**
+ * Places a limit or stop-loss order: wraps BNB/ETH if needed, approves exactly the open orders' total, signs the order
+ * (free) and saves it. The keeper fills it when the price is reached; tokens stay in the wallet until then.
+ * `outQty` is what the member wants back (in getToken units) at their price.
+ */
+export async function placeOrder({ c, signer, contract, kind, side, payToken, getToken, amount, outQty, slip, days, step }: {
+  c: WChain; signer: Signer; contract: string; kind: "limit" | "stop"; side: "buy" | "sell"; payToken: WToken; getToken: WToken;
+  amount: string; outQty: number; slip: number; days: number; step: (s: string) => void;
+}) {
+  const ev = signer.evm!;
+  const pc: any = createPublicClient({ chain: c.viem, transport: http(c.rpc) });
+  const tokenIn = orderTokenIn(c, payToken.address);
+  const tokenOut = isNative(c, getToken.address) ? NATIVE : getToken.address;
+  const decIn = payToken.decimals, decOut = getToken.decimals;
+  const amountIn = toUnits(amount, decIn)!;
+  const target = toUnits(fix(outQty, decOut), decOut)!;
+  if (!amountIn || amountIn <= 0n || !target || target <= 0n) throw new Error("Enter an amount and a price.");
+  const minOut = kind === "limit" ? target : (target * BigInt(100 - slip)) / 100n;
+  // Buying with BNB/ETH: orders spend WBNB/WETH, so wrap whatever is missing first.
+  if (isNative(c, payToken.address)) {
+    const have: bigint = await pc.readContract({ address: c.wrapped!, abi: erc20Abi, functionName: "balanceOf", args: [ev.address] });
+    if (have < amountIn) {
+      step(`Wrapping ${amt(raw2num((amountIn - have).toString(), 18))} ${c.native.symbol} to use in the order…`);
+      const h = await ev.send(c.chainId!, { to: c.wrapped!, value: (amountIn - have).toString(), data: encodeFunctionData({ abi: WRAP_ABI, functionName: "deposit" }) });
+      await waitEvm(c, h);
+    }
+  }
+  // Approve exactly this order plus your other open orders on the same token. Nothing more.
+  const { orders } = await post<{ orders: Row[] }>("list", { chain: c.key, maker: ev.address });
+  const open = orders.filter((o) => (o.status === "open" || o.status === "filling") && o.token_in.toLowerCase() === tokenIn.toLowerCase() && o.contract.toLowerCase() === contract.toLowerCase());
+  const need = open.reduce((s, o) => s + BigInt(o.amount_in), amountIn);
+  const allowance: bigint = await pc.readContract({ address: tokenIn as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [ev.address, contract as `0x${string}`] });
+  if (allowance < need) {
+    step("Allow the order contract to use this amount (one transaction)…");
+    const h = await ev.send(c.chainId!, { to: tokenIn as `0x${string}`, value: "0", data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract as `0x${string}`, need] }) });
+    await waitEvm(c, h);
+  }
+  step("Sign your order (free, no transaction)…");
+  const message = { maker: ev.address, tokenIn: tokenIn as `0x${string}`, tokenOut: tokenOut as `0x${string}`, amountIn, minOut,
+    expiry: BigInt(Math.floor(Date.now() / 1000) + days * 86400), nonce: BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)) };
+  const signature = await ev.signTyped(c.chainId!, { domain: orderDomain(c.chainId!, contract), types: ORDER_TYPES, primaryType: "Order", message });
+  step("Placing your order…");
+  const price = side === "sell" ? outQty / Number(amount) : Number(amount) / outQty;
+  await post("create", {
+    chain: c.key, kind, side, price: plain(price) || "0", triggerOut: target.toString(), signature,
+    symbolIn: payToken.symbol === c.native.symbol ? `W${c.native.symbol}` : payToken.symbol, symbolOut: getToken.symbol, decimalsIn: decIn, decimalsOut: decOut,
+    order: { ...message, amountIn: amountIn.toString(), minOut: minOut.toString(), expiry: message.expiry.toString(), nonce: message.nonce.toString() },
+  });
+}
+
 /**
  * Limit and stop-loss orders. Signing an order is free; the only transactions are approving the exact amount (and, for
  * buys with BNB/ETH, wrapping it). The order fills automatically when the price is reached.
@@ -48,8 +101,6 @@ export default function OrderForm({ c, signer, owner, side, kind, base, quote, m
   const P = Number(price), A = Number(amount);
   const payToken = side === "sell" ? base : quote;
   const getToken = side === "sell" ? quote : base;
-  const tokenIn = orderTokenIn(c, payToken.address);
-  const tokenOut = isNative(c, getToken.address) ? NATIVE : getToken.address;
   const outQty = P > 0 && A > 0 ? (side === "sell" ? A * P : A / P) : 0;
   const bal = balanceOf(payToken.address);
   const wrappedBal = isNative(c, payToken.address) ? balanceOf(c.wrapped!) : undefined;
@@ -65,42 +116,8 @@ export default function OrderForm({ c, signer, owner, side, kind, base, quote, m
 
   async function place() {
     setErr(""); setOk("");
-    const ev = signer.evm!;
-    const pc: any = createPublicClient({ chain: c.viem, transport: http(c.rpc) });
     try {
-      const decIn = payToken.decimals, decOut = getToken.decimals;
-      const amountIn = toUnits(amount, decIn)!;
-      const target = toUnits(fix(outQty, decOut), decOut)!;
-      const minOut = kind === "limit" ? target : (target * BigInt(100 - slip)) / 100n;
-      // Buying with BNB/ETH: orders spend WBNB/WETH, so wrap whatever is missing first.
-      if (isNative(c, payToken.address)) {
-        const have: bigint = await pc.readContract({ address: c.wrapped!, abi: erc20Abi, functionName: "balanceOf", args: [ev.address] });
-        if (have < amountIn) {
-          setStep(`Wrapping ${amt(raw2num((amountIn - have).toString(), 18))} ${c.native.symbol} to use in the order…`);
-          const h = await ev.send(c.chainId!, { to: c.wrapped!, value: (amountIn - have).toString(), data: encodeFunctionData({ abi: WRAP_ABI, functionName: "deposit" }) });
-          await waitEvm(c, h);
-        }
-      }
-      // Approve exactly this order plus your other open orders on the same token. Nothing more.
-      const { orders } = await post<{ orders: Row[] }>("list", { chain: c.key, maker: ev.address });
-      const open = orders.filter((o) => (o.status === "open" || o.status === "filling") && o.token_in.toLowerCase() === tokenIn.toLowerCase() && o.contract.toLowerCase() === contract!.toLowerCase());
-      const need = open.reduce((s, o) => s + BigInt(o.amount_in), amountIn);
-      const allowance: bigint = await pc.readContract({ address: tokenIn as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [ev.address, contract as `0x${string}`] });
-      if (allowance < need) {
-        setStep("Allow the order contract to use this amount (one transaction)…");
-        const h = await ev.send(c.chainId!, { to: tokenIn as `0x${string}`, value: "0", data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [contract as `0x${string}`, need] }) });
-        await waitEvm(c, h);
-      }
-      setStep("Sign your order (free, no transaction)…");
-      const message = { maker: ev.address, tokenIn: tokenIn as `0x${string}`, tokenOut: tokenOut as `0x${string}`, amountIn, minOut,
-        expiry: BigInt(Math.floor(Date.now() / 1000) + days * 86400), nonce: BigInt(Date.now()) * 1000n + BigInt(Math.floor(Math.random() * 1000)) };
-      const signature = await ev.signTyped(c.chainId!, { domain: orderDomain(c.chainId!, contract!), types: ORDER_TYPES, primaryType: "Order", message });
-      setStep("Placing your order…");
-      await post("create", {
-        chain: c.key, kind, side, price: String(P), triggerOut: target.toString(), signature,
-        symbolIn: payToken.symbol === c.native.symbol ? `W${c.native.symbol}` : payToken.symbol, symbolOut: getToken.symbol, decimalsIn: decIn, decimalsOut: decOut,
-        order: { ...message, amountIn: amountIn.toString(), minOut: minOut.toString(), expiry: message.expiry.toString(), nonce: message.nonce.toString() },
-      });
+      await placeOrder({ c, signer, contract: contract!, kind, side, payToken, getToken, amount, outQty, slip, days, step: setStep });
       setOk(`${kind === "limit" ? "Limit" : "Stop-loss"} order placed. It fills automatically when the price is reached.`);
       setAmount(""); onDone();
     } catch (e: any) { setErr(friendlyError(e, c.native.symbol)); }

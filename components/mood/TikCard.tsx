@@ -7,9 +7,10 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
 import { useTiks } from "./useMood";
+import { refreshTrending, type Hot } from "./useTrending";
 
 /** One Tik: who, what they wrote, a picture, likes and replies. */
-export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean }) {
+export default function TikCard({ t, me, onRemoved, compact, hot }: { t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null }) {
   const [liked, setLiked] = useState(t.liked);
   const [likes, setLikes] = useState(t.likes);
   const [replies, setReplies] = useState(t.replies);
@@ -24,6 +25,7 @@ export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: str
     setLiked(next); setLikes((n) => n + (next ? 1 : -1));
     const { error } = next ? await sb.from("tik_likes").insert({ tik_id: t.id }) : await sb.from("tik_likes").delete().eq("tik_id", t.id).eq("user_id", me);
     if (error && error.code !== "23505") { setLiked(!next); setLikes((n) => n + (next ? -1 : 1)); }
+    else refreshTrending();
   }
   async function remove() {
     if (!confirm("Delete this Tik?")) return;
@@ -32,7 +34,8 @@ export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: str
   }
 
   return (
-    <article className={"tik" + (compact ? " compact" : "")}>
+    <article className={"tik" + (compact ? " compact" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
+      {hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
       </Link>
@@ -62,7 +65,7 @@ export default function TikCard({ t, me, onRemoved, compact }: { t: Tik; me: str
           )}
           {me && me === t.author_id && <button type="button" className="tik-act del" onClick={remove}>Delete</button>}
         </div>
-        {open && <Replies tik={t} me={me} onCount={(d) => setReplies((n) => n + d)} />}
+        {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
       </div>
       {zoom && t.image_url && (
         <div className="tik-zoom" role="dialog" aria-modal="true" aria-label="Picture" onClick={() => setZoom(false)}>

@@ -1,4 +1,5 @@
 import { json } from "@/lib/ai";
+import { detectChain } from "@/lib/analytics-detect";
 import { rateLimit } from "@/lib/ratelimit";
 import { isMomentumChain } from "@/lib/momentum";
 import { discover } from "@/lib/momentum-server";
@@ -14,7 +15,7 @@ export const maxDuration = 30;
 
 const LIMITS: Record<string, [number, number]> = {
   token: [60, 60], market: [90, 60], discover: [60, 60], balances: [40, 60], quote: [60, 60], build: [20, 60], "sol-transfer": [10, 60], "sol-send": [15, 60], "sol-status": [90, 60], "sol-ultra": [15, 60], "gas-check": [40, 60], "gas-send": [20, 60],
-  "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60],
+  detect: [40, 60], "x-chains": [30, 60], "x-tokens": [60, 60], "x-quote": [40, 60], "x-status": [90, 60], "x-detect": [40, 60],
 };
 
 /**
@@ -28,6 +29,18 @@ export async function POST(req: Request, { params }: { params: { action: string 
   if (limited) return limited;
   const b = await req.json().catch(() => ({}));
   if (action.startsWith("x-")) return cross(action, b);
+  // A pasted contract address: which network it's on, what it is, its price and safety check (the trading bot).
+  if (action === "detect") {
+    const raw = String(b?.address || "").trim().slice(0, 64);
+    try {
+      const k = await detectChain(raw);
+      if (!k || !isWChain(k)) return json({ error: "Couldn't find that coin on BNB Chain, Base, Ethereum, Arbitrum or Solana. Check the address." }, 404);
+      const c = WCHAINS[k as keyof typeof WCHAINS];
+      const [t, m] = await Promise.all([tokenInfo(c, raw), market(c, raw).catch(() => null)]);
+      if (!t) return json({ error: `No token found at that address on ${c.name}.` }, 404);
+      return json({ chain: c.key, token: t, market: m });
+    } catch (e) { return json({ error: (e as Error).message || "Couldn't look that coin up. Try again." }, 502); }
+  }
   const chain = isWChain(b?.chain) ? WCHAINS[b.chain as keyof typeof WCHAINS] : null;
   if (!chain && !["sol-send", "sol-status", "sol-ultra", "gas-send"].includes(action)) return json({ error: "Pick a network." }, 400);
 
