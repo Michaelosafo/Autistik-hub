@@ -25,6 +25,12 @@ export type Signer = {
   switchTo?: (kind: "embedded" | "external") => void;
   canSwitch?: boolean;
   logout: () => void;
+  /**
+   * The built-in AUTISTIK wallet signing without its confirm window, for trades the member already approved in
+   * their own message ("approved sell $1 of AUTISTIK"). Only the built-in wallet can do this; wallets like MetaMask
+   * or Phantom always ask in their own window.
+   */
+  quiet?: { evm: Signer["evm"]; sol: Signer["sol"] } | null;
   /** Opens the provider's secure screen to copy the private key (built-in wallet only). */
   exportKey?: (kind: "evm" | "solana") => void;
 };

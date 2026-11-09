@@ -7,7 +7,7 @@
  * Limit, take-profit and stop-loss orders are signed once (free) and then run on their own, 24/7, even when the site is
  * closed: the keeper fills them when the price is reached. Nobody else ever holds the member's keys.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SignerScope from "@/components/wallet/SignerScope";
 import { OpenOrders, orderContracts, placeOrder } from "@/components/wallet/OrderForm";
 import { GAS_RESERVE } from "@/components/wallet/MarketForm";
@@ -16,8 +16,11 @@ import { addTrade, amt, api, friendlyError, Logo, pct, raw2num, runTrade, short,
 import { IMPACT_BLOCK, IMPACT_CONFIRM, MAX_SLIPPAGE_BPS, WCHAINS, isNative, toUnits, type WChain, type WChainKey } from "@/lib/wallet-chains";
 import { STOP_SLIPPAGE_DEFAULT } from "@/lib/orders";
 import { plainNum } from "@/lib/num-format";
+import { claimAuto } from "@/lib/auto-trade";
+import { isApproved } from "@/lib/swap-read";
 
-export type TradeIntent = { action: Action; amount?: number; pct?: number; mult?: number };
+/** `auto`: the message said "approved" (or "confirm", "go ahead"): a buy or sell runs by itself. */
+export type TradeIntent = { action: Action; amount?: number; pct?: number; mult?: number; auto?: boolean };
 type Action = "buy" | "sell" | "limit" | "tp" | "sl" | "orders" | "scan" | "info";
 type Found = { chain: WChainKey; token: TokenInfo; market: Market | null };
 
@@ -43,6 +46,10 @@ export function findTradeRequest(text: string): { ca: string; intent?: TradeInte
   const sol = evm ? null : text.match(/(?:^|\s)([1-9A-HJ-NP-Za-km-z]{32,44})(?=\s|$)/);
   const ca = evm?.[0] || sol?.[1];
   if (!ca) return null;
+  const r = findTradeAction(text, ca);
+  return r && isApproved(text) && r.intent && (r.intent.action === "buy" || r.intent.action === "sell") ? { ca, intent: { ...r.intent, auto: true } } : r;
+}
+function findTradeAction(text: string, ca: string): { ca: string; intent?: TradeIntent } | null {
   const t = text.replace(ca, " ").toLowerCase();
   const n = (s?: string) => (s ? Number(s) : undefined);
   let m: RegExpMatchArray | null;
@@ -56,7 +63,7 @@ export function findTradeRequest(text: string): { ca: string; intent?: TradeInte
   return { ca };
 }
 
-export default function TradeBot({ ca, intent, appId, member, signedIn }: { ca: string; intent?: TradeIntent; appId: string | null; member: Member | null; signedIn: boolean }) {
+export default function TradeBot({ ca, at, intent, appId, member, signedIn }: { ca: string; at?: number; intent?: TradeIntent; appId: string | null; member: Member | null; signedIn: boolean }) {
   const [found, setFound] = useState<Found | null>(null);
   const [err, setErr] = useState("");
   const [slim, setSlim] = useState(false); // a step is open: on phones the coin details fold away to make room
@@ -74,7 +81,7 @@ export default function TradeBot({ ca, intent, appId, member, signedIn }: { ca: 
       <CoinCard c={c} t={found.token} m={found.market} />
       {!signedIn ? <p className="tb-q">Sign in to trade this coin with your wallet.</p> : (
         <SignerScope appId={appId} member={member}>
-          {(signer) => <div className="tb-flow"><Flow c={c} t={found.token} m={found.market} signer={signer} intent={intent} onStep={setSlim} /></div>}
+          {(signer) => <div className="tb-flow"><Flow c={c} t={found.token} m={found.market} signer={signer} intent={intent} at={at} onStep={setSlim} /></div>}
         </SignerScope>
       )}
     </div>
@@ -108,7 +115,7 @@ function CoinCard({ c, t, m }: { c: WChain; t: TokenInfo; m: Market | null }) {
   );
 }
 
-function Flow({ c, t, m, signer, intent, onStep }: { c: WChain; t: TokenInfo; m: Market | null; signer: Signer; intent?: TradeIntent; onStep?: (open: boolean) => void }) {
+function Flow({ c, t, m, signer, intent, at, onStep }: { c: WChain; t: TokenInfo; m: Market | null; signer: Signer; intent?: TradeIntent; at?: number; onStep?: (open: boolean) => void }) {
   const owner = c.kind === "solana" ? signer.sol?.address : signer.evm?.address;
   const [action, setAction] = useState<Action | null>(intent?.action ?? null);
   const [hold, setHold] = useState<{ native: Holding | null; token: Holding | null } | null>(null);
@@ -155,8 +162,8 @@ function Flow({ c, t, m, signer, intent, onStep }: { c: WChain; t: TokenInfo; m:
       ) : (
         <div className="tb-step">
           <button type="button" className="tb-back" onClick={() => setAction(null)}>← Back</button>
-          {action === "buy" && <MarketStep c={c} t={t} m={m} signer={signer} owner={owner} side="buy" hold={hold} preset={intent?.action === "buy" ? intent.amount : undefined} onDone={load} />}
-          {action === "sell" && <MarketStep c={c} t={t} m={m} signer={signer} owner={owner} side="sell" hold={hold} preset={intent?.action === "sell" ? intent.pct : undefined} onDone={load} />}
+          {action === "buy" && <MarketStep c={c} t={t} m={m} signer={signer} owner={owner} side="buy" hold={hold} preset={intent?.action === "buy" ? intent.amount : undefined} auto={intent?.action === "buy" && intent.auto ? at : undefined} onDone={load} />}
+          {action === "sell" && <MarketStep c={c} t={t} m={m} signer={signer} owner={owner} side="sell" hold={hold} preset={intent?.action === "sell" ? intent.pct : undefined} auto={intent?.action === "sell" && intent.auto ? at : undefined} onDone={load} />}
           {(action === "limit" || action === "tp" || action === "sl") && contract && (
             <OrderStep c={c} t={t} m={m} signer={signer} contract={contract} kind={action} hold={hold}
               presetMove={intent?.action === action ? (action === "tp" ? intent.mult : intent.pct) : undefined} onDone={() => { load(); setAction("orders"); }} />
@@ -170,8 +177,10 @@ function Flow({ c, t, m, signer, intent, onStep }: { c: WChain; t: TokenInfo; m:
 }
 
 /** Buy or sell now. Buy asks "how much BNB?", sell asks "how much of it?", then shows the quote to confirm. */
-function MarketStep({ c, t, m, signer, owner, side, hold, preset, onDone }: {
-  c: WChain; t: TokenInfo; m: Market | null; signer: Signer; owner: string; side: "buy" | "sell"; hold: { native: Holding | null; token: Holding | null } | null; preset?: number; onDone: () => void;
+function MarketStep({ c, t, m, signer, owner, side, hold, preset, auto, onDone }: {
+  c: WChain; t: TokenInfo; m: Market | null; signer: Signer; owner: string; side: "buy" | "sell"; hold: { native: Holding | null; token: Holding | null } | null; preset?: number;
+  /** When the request was typed, if it said "approved": the trade runs by itself once the price is in. */
+  auto?: number; onDone: () => void;
 }) {
   const from = side === "buy" ? c.native : t, to = side === "buy" ? t : c.native;
   const bal = side === "buy" ? hold?.native : hold?.token;
@@ -210,11 +219,13 @@ function MarketStep({ c, t, m, signer, owner, side, hold, preset, onDone }: {
     : tooMuch ? `Not enough ${from.symbol}.` : "";
   const needAck = t.risk.level === "danger" || (q?.impact != null && q.impact >= IMPACT_CONFIRM);
 
-  async function go() {
+  async function go(quiet = false) {
     if (!q) return;
     setErr(""); setDone("");
+    // Approved in the message: the built-in wallet signs without its confirm window.
+    const s: Signer = quiet && signer.quiet ? { ...signer, evm: signer.quiet.evm ?? signer.evm, sol: signer.quiet.sol ?? signer.sol } : signer;
     try {
-      const hash = await runTrade(c, signer, owner, q, from, slipBps, setStep);
+      const hash = await runTrade(c, s, owner, q, from, slipBps, setStep);
       addTrade({ at: Date.now(), chain: c.key, side, pay: `${amount} ${from.symbol}`, get: `${amt(out)} ${to.symbol}`, hash });
       setHash(hash);
       setDone(`Done. ${side === "buy" ? "Bought" : "Sold"} about ${amt(out)} ${to.symbol} for ${amount} ${from.symbol}.`);
@@ -223,9 +234,23 @@ function MarketStep({ c, t, m, signer, owner, side, hold, preset, onDone }: {
     setStep("");
   }
 
+  // "0x… approved sell 50%": once the price is in, sell (or buy) by itself, unless a safety check needs a look.
+  const fired = useRef(false);
+  const [autoNote, setAutoNote] = useState("");
+  useEffect(() => {
+    if (!auto || !q || fired.current || step || done) return;
+    fired.current = true;
+    if (blocked || needAck) { setAutoNote("I didn't run this by itself: check the warning below first."); return; }
+    if (!claimAuto(auto)) return;
+    setAutoNote(c.kind === "solana" ? (signer.quiet?.sol ? "Approved in your message: doing it now." : "Approved in your message. Your wallet will still ask in its own window.")
+      : signer.quiet?.evm ? "Approved in your message: doing it now." : "Approved in your message. Your wallet will still ask in its own window.");
+    go(true);
+  }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (done) return <div className="tb-done">✅ {done} {hash && <a href={`${c.explorer}/tx/${hash}`} target="_blank" rel="noopener noreferrer">View ↗</a>}</div>;
   return (
     <>
+      {autoNote && <div className="sb-auto">{autoNote}</div>}
       <p className="tb-q">{side === "buy" ? `How much ${c.native.symbol} do you want to spend?` : `How much of your ${t.symbol} do you want to sell?`}</p>
       <div className="tb-btns">
         {side === "buy"
@@ -249,7 +274,7 @@ function MarketStep({ c, t, m, signer, owner, side, hold, preset, onDone }: {
       )}
       {needAck && q && !blocked && <label className="tb-ack"><input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} /> I understand this is risky and want to go ahead.</label>}
       {step ? <div className="aw-step"><span className="aw-spin" />{step}</div>
-        : <button type="button" className={`tb-go ${side}`} disabled={!q || !!blocked || (needAck && !ack)} onClick={go}>{blocked || (q ? `Confirm: ${side} ${side === "buy" ? `${amount} ${c.native.symbol} of ${t.symbol}` : `${amt(Number(amount))} ${t.symbol}`}` : raw ? "Getting the best price…" : "Pick an amount")}</button>}
+        : <button type="button" className={`tb-go ${side}`} disabled={!q || !!blocked || (needAck && !ack)} onClick={() => go()}>{blocked || (q ? `Confirm: ${side} ${side === "buy" ? `${amount} ${c.native.symbol} of ${t.symbol}` : `${amt(Number(amount))} ${t.symbol}`}` : raw ? "Getting the best price…" : "Pick an amount")}</button>}
       {err && <div className="aw-risk danger">{err}</div>}
     </>
   );

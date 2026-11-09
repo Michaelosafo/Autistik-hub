@@ -14,7 +14,11 @@ const CHAIN_WORDS: Record<string, string> = {
   eth: "ethereum", ethereum: "ethereum", mainnet: "ethereum", erc20: "ethereum", base: "base", arb: "arbitrum", arbitrum: "arbitrum",
   op: "optimism", optimism: "optimism", polygon: "polygon", matic: "polygon", avax: "avalanche", avalanche: "avalanche",
 };
-export const clean = (s: unknown) => String(s ?? "").trim().replace(/^\$/, "").toUpperCase().replace(/[^A-Z0-9.]/g, "").slice(0, 12);
+export const clean = (s: unknown) => {
+  const v = String(s ?? "").trim().replace(/^\$/, "").toUpperCase().replace(/[^A-Z0-9.]/g, "").slice(0, 12);
+  // The site's own coin, however it's typed (utistik, autistic, autism…).
+  return /^A?U+T+I*S+T*I*[CK]+K?$|^AUTIS[MT]?$/.test(v) ? "AUTISTIK" : v;
+};
 export function chainKey(s: unknown): string | null {
   const v = String(s ?? "").trim().toLowerCase();
   if (!v || v === "null") return null;
@@ -22,19 +26,34 @@ export function chainKey(s: unknown): string | null {
   return CHAIN_WORDS[v] || (KEYS.has(v) ? v : null);
 }
 
+/** "approved", "confirm", "go ahead": the member wants it done straight away, no extra tap. */
+export const APPROVED_RE = /\b(approved?|confirm(?:ed)?|go ahead|execute|do it( now)?|auto(?:matically)?|no need to (?:ask|confirm))\b/i;
+export const isApproved = (text: string) => APPROVED_RE.test(text);
+
 /** Quick reading for the common ways of asking; Claude reads anything else. */
 export function readSwap(text: string): SwapAsk | null {
   const t = text.toLowerCase().replace(/,/g, "").replace(/\s+/g, " ").trim()
+    .replace(new RegExp(APPROVED_RE.source, "gi"), " ")
+    .replace(/\b(please|pls|plz|now|for me|from my wallet|in my wallet|my wallet)\b/g, " ")
+    // "1 usd", "1 dollar", "1$" → "$1"; "worth" is just a filler word.
+    .replace(/(\d[\d.]*)\s*(?:usd|dollars?|bucks|\$)(?![a-z])/g, "$$$1").replace(/\bworth\b/g, " ")
+    .replace(/\s+/g, " ").trim()
     // "to sol usdt" / "to base usdc": the coin on that network.
     .replace(/\b(to|for|into)\s+(sol|solana|bsc|bnb|base|eth|ethereum|arb|arbitrum|polygon|optimism|avax)\s+([a-z][a-z0-9.]{1,11})\s*$/, (_, w, c, coin) => `${w} ${coin} on ${c}`)
-    .replace(/[.!?]+$/, "");
+    .replace(/[.!?]+$/, "").trim();
   const on = "(?:\\s+(?:on|in|via|over|at)\\s+(?:the\\s+)?([a-z ]+?)(?:\\s+(?:chain|network))?)?";
-  const re = new RegExp(`(?:convert|swap|exchange|change|turn|trade|bridge|move|sell)\\s+(?:my\\s+)?(all|max|half|everything|\\$?[\\d.]+\\s*%?|\\$[\\d.]+)?\\s*(?:of\\s+)?(?:my\\s+)?\\$?([a-z][a-z0-9.]{0,11})${on}\\s+(?:to|for|into|2)\\s+\\$?([a-z][a-z0-9.]{0,11})${on}\\s*$`);
-  const m = t.match(re);
-  if (!m) return null;
-  const [, q, from, fc, to, tc] = m;
+  const qty = "(all|max|half|everything|\\$?[\\d.]+\\s*%?|\\$[\\d.]+)?\\s*(?:(?:of|from)\\s+)?(?:my\\s+)?(?:the\\s+)?\\$?([a-z][a-z0-9.]{0,11})";
+  const re = new RegExp(`(?:convert|swap|exchange|change|turn|trade|bridge|move|sell)\\s+(?:my\\s+)?${qty}${on}\\s+(?:to|for|into|2)\\s+\\$?([a-z][a-z0-9.]{0,11})${on}\\s*$`);
+  // "sell $1 of autistik": no coin to receive named, so the network's own coin (BNB, SOL, ETH).
+  const sell = new RegExp(`\\bsell\\s+(?:my\\s+)?${qty}${on}\\s*$`);
+  let m = t.match(re);
+  let q: string | undefined, from: string, fc: string | undefined, to = "", tc: string | undefined;
+  if (m) [, q, from, fc, to, tc] = m;
+  else if ((m = t.match(sell))) [, q, from, fc] = m;
+  else return null;
+  if (!q) return null; // no amount: Claude asks
   let amount: number | null = null, unit: SwapAsk["unit"] = "coin";
-  if (!q || /all|max|everything/.test(q)) { unit = "all"; if (!q) return null; }
+  if (/all|max|everything/.test(q)) unit = "all";
   else if (q === "half") { unit = "pct"; amount = 50; }
   else if (q.startsWith("$")) { unit = "usd"; amount = parseFloat(q.slice(1)); }
   else if (q.endsWith("%")) { unit = "pct"; amount = parseFloat(q); }
@@ -42,14 +61,16 @@ export function readSwap(text: string): SwapAsk | null {
   const fromChain = chainKey(fc), toChain = chainKey(tc);
   if ((fc && !fromChain) || (tc && !toChain)) return null;
   // "move 1 SOL to base": a network named as the destination coin means "the same coin's equivalent on that network".
-  const toIsChain = !tc && chainKey(to) && !["SOL", "BNB", "ETH", "AVAX", "MATIC"].includes(clean(to));
-  return { amount, unit, from: clean(from), fromChain, to: toIsChain ? "" : clean(to), toChain: toIsChain ? chainKey(to) : toChain };
+  const toIsChain = !!to && !tc && chainKey(to) && !["SOL", "BNB", "ETH", "AVAX", "MATIC"].includes(clean(to));
+  return { amount, unit, from: clean(from), fromChain, to: toIsChain || !to ? "" : clean(to), toChain: toIsChain ? chainKey(to) : toChain };
 }
-
 
 /** Does this message look like a request to swap or convert coins (and not a question about swapping)? */
 export function looksLikeSwap(text: string): boolean {
   const t = text.toLowerCase();
   if (t.length > 200 || /\?\s*$/.test(t) && !/^(can you|could you|pls|please)/.test(t)) return false;
-  return /\b(convert|swap|exchange|bridge|change|turn|move)\b/.test(t) && /\b(to|for|into)\b/.test(t) && !/\b(how|what|why|explain|difference)\b/.test(t);
+  if (/\b(how|what|why|explain|difference|should i|when)\b/.test(t)) return false;
+  if (/\b(convert|swap|exchange|bridge|change|turn|move)\b/.test(t) && /\b(to|for|into)\b/.test(t)) return true;
+  // "sell $1 of autistik", "approved sell half my sol to usdt"
+  return /\bsell\b/.test(t) && /(\d|\b(all|half|everything|max)\b)/.test(t);
 }

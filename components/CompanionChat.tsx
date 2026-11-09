@@ -25,8 +25,8 @@ type Msg =
   | { kind: "ai"; text: string; pending?: boolean; writing?: boolean; born?: number }
   | { kind: "img"; svg: string; title: string; request: string }
   | { kind: "drawing" }
-  | { kind: "trade"; ca: string; intent?: TradeIntent }
-  | { kind: "swap"; text: string }
+  | { kind: "trade"; ca: string; intent?: TradeIntent; at?: number }
+  | { kind: "swap"; text: string; at?: number }
   | { kind: "sys"; text: string };
 type Turn = { role: "user" | "assistant"; content: string };
 type Conv = { id: string; who: CompanionId; title: string; at: number; msgs: Msg[]; turns: Turn[] };
@@ -155,13 +155,13 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     // A pasted coin address: the trading bot takes over (no AI message used).
     const trade = findTradeRequest(text);
     if (trade) {
-      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : `Trade ${trade.ca.slice(0, 6)}…`, msgs: [...x.msgs, { kind: "me", text }, { kind: "trade", ca: trade.ca, intent: trade.intent }], at: Date.now(),
+      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : `Trade ${trade.ca.slice(0, 6)}…`, msgs: [...x.msgs, { kind: "me", text }, { kind: "trade", ca: trade.ca, intent: trade.intent, at: Date.now() }], at: Date.now(),
         turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: `(Opened the trading bot for ${trade.ca})` }] }));
       return;
     }
     // "convert 1 SOL to USDT": the swap bot finds the cheapest route and the member's wallet signs.
     if (looksLikeSwap(text)) {
-      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : titleOf(text), msgs: [...x.msgs, { kind: "me", text }, { kind: "swap", text }], at: Date.now(),
+      edit(id, (x) => ({ ...x, title: x.msgs.length ? x.title : titleOf(text), msgs: [...x.msgs, { kind: "me", text }, { kind: "swap", text, at: Date.now() }], at: Date.now(),
         turns: [...x.turns, { role: "user", content: text }, { role: "assistant", content: "(Opened the swap bot for this request)" }] }));
       return;
     }
@@ -351,8 +351,8 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
               if (shown && !shown.has(i)) return null;
               if (m.kind === "me") return <div key={i} className="msg me">{m.text}</div>;
               if (m.kind === "sys") return <div key={i} className="msg sys">{m.text}</div>;
-              if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} auto={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
-              if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
+              if (m.kind === "swap") return <div key={i} className="msgrow"><SwapBot text={m.text} at={m.at} latest={i === list.length - 1} appId={appId} member={member} signedIn={signedIn} /></div>;
+              if (m.kind === "trade") return <div key={i} className="msgrow"><TradeBot ca={m.ca} at={m.at} intent={i === list.length - 1 ? m.intent : undefined} appId={appId} member={member} signedIn={signedIn} /></div>;
               if (m.kind === "drawing") return (
                 <div key={i} className="msgrow"><div className="msg ai paper"><div className="drawing"><span>{c.name} is drawing…</span><i><b style={{ width: "60%" }} /></i></div></div></div>
               );
