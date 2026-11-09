@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { appNoMoney } from "@/lib/android-app";
 
 /** How long the page takes to open after "Go to site". */
 const OPEN_MS = 800;
@@ -37,7 +38,8 @@ export default function Welcome() {
   useEffect(() => {
     if (skip) return;
     go.current?.focus();
-    const t = setTimeout(() => setLine(1), ARENA_MS);
+    // The Google Play app has no arena (it's a money feature there): just the hello.
+    const t = setTimeout(() => { if (!appNoMoney()) setLine(1); }, ARENA_MS);
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") open(); };
     document.addEventListener("keydown", key);
     return () => { clearTimeout(t); clearTimeout(timer.current); document.removeEventListener("keydown", key); };
