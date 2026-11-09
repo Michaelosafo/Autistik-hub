@@ -46,8 +46,8 @@ function Svg({ d, size = 18 }: { d: string; size?: number }) {
 }
 /** One row: coloured icon tile, label, optional value on the right, chevron. */
 function Row({ href, onClick, icon, color, label, value }: { href?: string; onClick?: () => void; icon: string; color: string; label: string; value?: ReactNode }) {
-  const body = <><span className="pf-ic" style={{ ["--c" as any]: color }}><Svg d={IC[icon]} /></span><span className="pf-l">{label}</span>{value != null && <span className="pf-v">{value}</span>}<i className="pf-chev" aria-hidden="true">›</i></>;
-  return href ? <Link href={href} className="pf-row">{body}</Link> : <button type="button" className="pf-row" onClick={onClick}>{body}</button>;
+  const body = <><span className="yp-ic" style={{ ["--c" as any]: color }}><Svg d={IC[icon]} /></span><span className="yp-l">{label}</span>{value != null && <span className="yp-v">{value}</span>}<i className="yp-chev" aria-hidden="true">›</i></>;
+  return href ? <Link href={href} className="yp-row">{body}</Link> : <button type="button" className="yp-row" onClick={onClick}>{body}</button>;
 }
 const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
 
@@ -114,22 +114,22 @@ export default function MePanel({ me, settings }: {
   const name = sum?.profile?.alias || me.alias;
   const badgeN = vb ?? sum?.profile?.verified_badge;
   return (
-    <div className="mp pf">
-      <div className="pf-head">
-        <button type="button" className="pf-photo" onClick={(e) => { e.stopPropagation(); setSheet(true); }} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
-          <Avatar className="me-av pf-av" alias={me.alias} color={me.color} url={photo} logo />
-          <span className="pf-cam" aria-hidden="true"><Svg d={IC.camera} size={13} /></span>
+    <div className="mp yp">
+      <div className="yp-head">
+        <button type="button" className="yp-photo" onClick={(e) => { e.stopPropagation(); setSheet(true); }} disabled={busy} aria-label="Profile photo options" aria-haspopup="dialog">
+          <Avatar className="me-av yp-av" alias={me.alias} color={me.color} url={photo} logo />
+          <span className="yp-cam" aria-hidden="true"><Svg d={IC.camera} size={13} /></span>
         </button>
-        <h2 className="pf-name">{name}{verified && <VerifiedBadge n={badgeN} size={17} className="vbadge-name" />}</h2>
-        <small className="pf-sub">{sum?.profile?.handle ? `@${sum.profile.handle}` : "Add a username on your profile"}{me.is_admin && <em className="pf-admin">Admin</em>}</small>
-        <div className="pf-stats">
+        <h2 className="yp-name">{name}{verified && <VerifiedBadge n={badgeN} size={17} className="vbadge-name" />}</h2>
+        <small className="yp-sub">{sum?.profile?.handle ? `@${sum.profile.handle}` : "Add a username on your profile"}{me.is_admin && <em className="yp-admin">Admin</em>}</small>
+        <div className="yp-stats">
           <Link href="/members?tab=following"><b>{sum?.following ?? "–"}</b><small>Following</small></Link>
           <Link href="/members?tab=followers"><b>{sum?.followers ?? "–"}</b><small>Followers</small></Link>
           <Link href="/mood"><b>{sum?.tiks ?? "–"}</b><small>Tiks</small></Link>
         </div>
-        <div className="pf-acts">
-          <Link className="pf-act" href="/me">Edit profile</Link>
-          <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={name} className="pf-act" />
+        <div className="yp-acts">
+          <Link className="yp-act" href="/me">Edit profile</Link>
+          <ShareProfile handle={sum?.profile?.handle ?? null} id={me.id} name={name} className="yp-act" />
         </div>
         <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) pick(f); e.target.value = ""; }} />
         {crop && <PhotoCrop file={crop} onCancel={() => setCrop(null)} onDone={upload} />}
@@ -180,21 +180,21 @@ export default function MePanel({ me, settings }: {
       {msg && <small className="mp-msg">{msg}</small>}
 
       {!verified && (
-        <button type="button" className="pf-cta" onClick={(e) => { e.stopPropagation(); setBadge(true); }}>
-          <span className="pf-cta-ic" aria-hidden="true"><VerifiedBadge n={1} size={22} /></span>
-          <span className="pf-cta-t"><b>Get a badge</b><small>Apply for Verified or Team. It shows next to your name everywhere.</small></span>
-          <i className="pf-chev" aria-hidden="true">›</i>
+        <button type="button" className="yp-cta" onClick={(e) => { e.stopPropagation(); setBadge(true); }}>
+          <span className="yp-cta-ic" aria-hidden="true"><VerifiedBadge n={1} size={22} /></span>
+          <span className="yp-cta-t"><b>Get a badge</b><small>Apply for Verified or Team. It shows next to your name everywhere.</small></span>
+          <i className="yp-chev" aria-hidden="true">›</i>
         </button>
       )}
 
-      <div className="pf-group">
+      <div className="yp-group">
         <Row href="/wallet" icon="wallet" color="#F0B90B" label="Wallet" value={sum?.wallet ? usd(sum.wallet.totalUsd) : sum ? "Set up" : "…"} />
         <Row href="/chats" icon="chats" color="#3B9EFF" label="Chats" />
         <Row href="/spaces" icon="live" color="#FF5C8A" label="Live rooms" />
         <Row onClick={() => setBadge(true)} icon="star" color="#8B6CFF" label="Badge" value={verified ? <VerifiedBadge n={badgeN} size={15} /> : "Apply"} />
       </div>
 
-      <div className="pf-group">
+      <div className="yp-group">
         <Row href="/swap" icon="swap" color="#22C38E" label="Swap" />
         <Row href="/analytics" icon="scan" color="#14B8A6" label="Check a coin" />
         <Row href="/board" icon="board" color="#F59E0B" label="Board" />
@@ -203,12 +203,12 @@ export default function MePanel({ me, settings }: {
         <Row href="/hyperfocus" icon="race" color="#FB923C" label="Race" />
       </div>
 
-      <div className="pf-group">
+      <div className="yp-group">
         <Row href="/members?tab=find" icon="people" color="#0EA5E9" label="Find people" />
         <Row href="/members" icon="user" color="#64748B" label="AUTISTIK team" value={sum?.team?.length ? `${sum.team.length}` : undefined} />
       </div>
 
-      <div className="pf-group pf-settings">{settings}</div>
+      <div className="yp-group yp-settings">{settings}</div>
     </div>
   );
 }
