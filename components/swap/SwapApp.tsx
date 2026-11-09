@@ -9,6 +9,7 @@ import { XCHAINS, XCHAIN_BY_KEY, XCHAIN_LIST, isXNative, xNative, type XChain, t
 import BridgeForm from "./BridgeForm";
 import { pickWallet, setNetwork } from "@/lib/connect";
 import { SwapPanels, type CardIO, type Side } from "./SwapCard";
+import MomoBuy from "@/components/wallet/MomoBuy";
 
 /** What each network's swap opens with: the chain's coin -> AUTISTIK (BNB Chain) or USDC. */
 const DEFAULT_TO: Record<WChainKey, string> = {
@@ -107,17 +108,27 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   // Before a wallet is connected the card still works: pick coins and type an amount.
   const [preAmount, setPreAmount] = useState("");
   const cross = fromNet.id !== toNet.id;
+  // Swap one coin for another, or buy USDT / BNB / SOL with MoMo (cedis) straight into the wallet. ?momo opens MoMo.
+  const [mode, setMode] = useState<"swap" | "momo">("swap");
+  useEffect(() => { if (/[?&]momo\b/.test(window.location.search)) setMode("momo"); }, []);
 
   return (
     <div className="sw">
       <div className="sw-card sc-card">
-        <div className="sc-head">
-          <h1>Swap</h1>
+        <div className="sc-head" role="tablist" aria-label="Swap or buy with MoMo">
+          {mode === "swap" ? <h1>Swap</h1> : <button type="button" role="tab" aria-selected={false} className="sc-tab sc-btn" onClick={() => setMode("swap")}>Swap</button>}
+          {mode === "momo" ? <h1>MoMo</h1> : <button type="button" role="tab" aria-selected={false} className="sc-tab sc-btn" onClick={() => setMode("momo")}>MoMo</button>}
           <Link href="/wallet" className="sc-tab">Limit</Link>
-          <span className={"sc-mode" + (cross ? " x" : "")}>{cross ? <><i className="sx-arc" aria-hidden="true">∞</i>{fromNet.name} → {toNet.name}</> : `${XCHAIN_LIST.length} networks`}</span>
+          {mode === "swap" && <span className={"sc-mode" + (cross ? " x" : "")}>{cross ? <><i className="sx-arc" aria-hidden="true">∞</i>{fromNet.name} → {toNet.name}</> : `${XCHAIN_LIST.length} networks`}</span>}
         </div>
 
-        {!local ? (
+        {mode === "momo" ? (
+          <div className="sw-momo">
+            <MomoBuy evm={signer.evm?.address ?? null} sol={signer.sol?.address ?? null} />
+            {!signer.evm && !signer.sol && <button type="button" className="sw-connect" onClick={signer.loginEmbedded ?? signer.loginExternal ?? signer.login}>Set up your wallet first</button>}
+            <button type="button" className="sw-alt" onClick={() => setMode("swap")}>Got USDT or BNB? Swap it to any coin, like AUTISTIK →</button>
+          </div>
+        ) : !local ? (
           <BridgeForm key={`${fromNet.id}-${toNet.id}`} signer={signer} from={fromNet} to={toNet} fromToken={xFrom} toToken={xTo}
             onFromToken={setXFrom} onToToken={setXTo} logos={logos} card={card} />
         ) : owner && from && to ? (
@@ -135,11 +146,13 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         )}
       </div>
 
+      {mode === "swap" && <>
       <div className="sw-links">
         {local && to && <Link href={`/analytics/${chainKey}/${to.address}`}>Scan {to.symbol} →</Link>}
         <Link href="/stake">Stake AUTISTIK, earn BNB →</Link>
       </div>
       <p className="sw-note">{local ? (FEE_BPS ? `Best price across every DEX (KyberSwap, Jupiter). A ${FEE_BPS / 100}% fee per swap goes to AUTISTIK marketing.` : "Best price across every DEX (KyberSwap, Jupiter). No AUTISTIK fee. Gas-free where we can: on Solana the network fee is covered for you, and on BNB Chain with the built-in AUTISTIK wallet.") : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
+      </>}
     </div>
   );
 }

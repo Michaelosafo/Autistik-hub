@@ -5681,3 +5681,7 @@ main:not(.ax-main):has(.ai-app) .chat.lux.gpt.ai-app { height: calc(100dvh - 24p
 .momo-chips{display:flex;flex-wrap:wrap;gap:6px}
 .momo-chips button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;font-size:.85em;font-weight:700;background:var(--surface-2)}
 .momo-chips button.on{background:#F0B90B;color:#111}
+.sc-btn{all:unset;cursor:pointer;font-family:var(--f-display);font-size:1.5em;font-weight:700;color:#5f5677}
+.sc-btn:hover{color:var(--muted)}
+.sw-momo{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+@media (max-width:420px){ .sc-btn{font-size:1.3em} }
