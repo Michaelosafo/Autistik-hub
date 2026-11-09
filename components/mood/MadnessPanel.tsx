@@ -8,9 +8,10 @@ import TikComposer from "./TikComposer";
 import TikCard from "./TikCard";
 import TikHome from "./TikHome";
 import { useTiks } from "./useMood";
+import { useTrending } from "./useTrending";
 import { ago } from "@/lib/mood";
 
-type Tab = "home" | "following" | "everyone" | "alerts" | "people";
+type Tab = "home" | "trending" | "following" | "everyone" | "alerts" | "people";
 type Note = { id: number; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null };
 type Act = { user_id: string; at: string; kind: string; label: string | null; link: string | null };
 const ACT: Record<string, string> = { post: "posted in a group", live: "joined a live", launch: "launched a coin", lock: "locked liquidity", pin: "pinned a coin", scan: "scanned a coin", follow: "followed someone", listed: "listed a coin" };
@@ -86,6 +87,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
   const [me, setMe] = useState<string | null>(null);
   const [follows, setFollows] = useState<string[] | null>(null);
   const [unread, setUnread] = useState(0);
+  const hotCount = useTrending().list.length;
 
   useEffect(() => {
     if (!full) { try { if (localStorage.getItem("madness-open") === "1") setOpen(true); } catch {} }
@@ -108,6 +110,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
   if (full) {
     const NAV: [Tab, string, string, string][] = [
       ["home", "Home", "News, activity, tokens people are watching, clean scans and people to follow", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'],
+      ["trending", "Trending", "Posts people are replying to and liking right now", '<path d="M12 3c1 3.5 4.5 5 4.5 9.2A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.8C7.5 10 9 9 9 7c1.6 1 2.3 2.2 2.5 3.4C12.6 8.4 12.7 5.8 12 3z"/><path d="M6 20h12"/>'],
       ["following", "Following", "Posts from people you follow", '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 11l2 2 4-4"/>'],
       ["everyone", "Everyone", "The whole TIK feed", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>'],
       ["alerts", "Alerts", "Replies, follows and likes", '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'],
@@ -127,6 +130,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
                 <span className="tik-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} /></span>
                 <span className="tik-nl">{l}</span>
                 {t === "alerts" && unread > 0 && <em className="tik-badge">{unread > 9 ? "9+" : unread}</em>}
+                {t === "trending" && hotCount > 0 && <em className="tik-badge hot">{hotCount}</em>}
               </button>
             ))}
           </nav>
@@ -144,8 +148,10 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
             <span className="tik-status"><span className="tik-dot" aria-hidden="true" />Live feed</span>
           </header>
           {focus}
+          {(tab === "home" || tab === "everyone" || tab === "following") && <TrendingStrip me={me} onAll={() => setTab("trending")} />}
           {(tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
           {tab === "home" && <TikHome admin={admin} />}
+          {tab === "trending" && <TrendingFeed me={me} />}
           {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
           {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
           {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
@@ -186,11 +192,12 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
 
 function Feed({ me, authors, refreshKey, limit = 5 }: { me: string | null; authors: string[] | null; refreshKey: number; limit?: number }) {
   const { tiks, setTiks, more, loadMore } = useTiks({ limit, refreshKey, authors });
+  const { map: hot } = useTrending();
   if (tiks === null) return <small className="mp-dim">Loading…</small>;
   if (!tiks.length) return <small className="mp-dim">{authors ? "No Tiks from people you follow yet." : "No Tiks yet. Be the first."}</small>;
   return (
     <div className="mad-feed">
-      {tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={limit <= 5} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
+      {tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={limit <= 5} hot={hot.get(t.id)} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
       {limit > 5 && more && <button type="button" className="tik-more" onClick={loadMore}>Load more</button>}
     </div>
   );
@@ -256,5 +263,45 @@ function Alerts({ me, onRead }: { me: string | null; onRead: () => void }) {
         </Link>
       ))}
     </div>
+  );
+}
+
+/** 🔥 Trending: the posts people are replying to and liking most right now, highlighted and kept up to date. */
+function TrendingFeed({ me }: { me: string | null }) {
+  const { list, map } = useTrending();
+  const ids = list.map((h) => h.id);
+  const { tiks, setTiks } = useTiks({ ids, limit: 50 });
+  if (tiks === null) return <small className="mp-dim">Loading what&apos;s trending…</small>;
+  if (!ids.length || !tiks.length) return <div className="tk-empty"><b>🔥 Nothing is trending yet</b><small className="mp-dim">When people start replying to and liking a post, it shows up here and lights up in the feed.</small></div>;
+  return (
+    <div className="mad-feed">
+      {tiks.map((t) => <TikCard key={t.id} t={t} me={me} hot={map.get(t.id)} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
+    </div>
+  );
+}
+
+/** A live strip of the top trending posts at the top of TIK. */
+function TrendingStrip({ me, onAll }: { me: string | null; onAll: () => void }) {
+  const { list } = useTrending();
+  const top = list.slice(0, 5).map((h) => h.id);
+  const { tiks } = useTiks({ ids: top, limit: 5 });
+  if (!me || !top.length || !tiks?.length) return null;
+  const hot = new Map(list.map((h) => [h.id, h]));
+  return (
+    <section className="tk-strip" aria-label="Trending now">
+      <div className="tk-strip-h"><b><i aria-hidden="true">🔥</i> Trending now</b><button type="button" onClick={onAll}>See all</button></div>
+      <div className="tk-strip-row">
+        {tiks.map((t) => {
+          const h = hot.get(t.id);
+          return (
+            <Link key={t.id} href={`/mood?tik=${t.id}`} className={"tk-chip" + (h && h.rank === 1 ? " first" : "")}>
+              <span className="tk-chip-top"><em>#{h?.rank ?? "–"}</em><b>{t.author?.alias || "Member"}</b></span>
+              <span className="tk-chip-body">{t.body.slice(0, 90)}{t.body.length > 90 ? "…" : ""}</span>
+              <small>💬 {t.replies} · ❤️ {t.likes}{h?.recent ? ` · ${h.recent} new` : ""}</small>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
   );
 }

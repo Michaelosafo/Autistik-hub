@@ -4,8 +4,9 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { TIK_COLS, shapeTiks, type Tik } from "@/lib/mood";
 
 /** Loads Tiks (the feed, or the replies to one Tik) for the signed-in member, newest first. */
-export function useTiks(opts: { replyTo?: string | null; limit?: number; refreshKey?: number; authors?: string[] | null; only?: string | null }) {
-  const { replyTo = null, limit = 20, refreshKey = 0, authors = null, only = null } = opts;
+export function useTiks(opts: { replyTo?: string | null; limit?: number; refreshKey?: number; authors?: string[] | null; only?: string | null; ids?: string[] | null }) {
+  const { replyTo = null, limit = 20, refreshKey = 0, authors = null, only = null, ids = null } = opts;
+  const idsKey = ids ? ids.join(",") : "";
   const authorsKey = authors ? authors.join(",") : "";
   const [tiks, setTiks] = useState<Tik[] | null>(null);
   const [me, setMe] = useState<string | null>(null);
@@ -19,6 +20,11 @@ export function useTiks(opts: { replyTo?: string | null; limit?: number; refresh
     q = replyTo ? q.eq("reply_to", replyTo) : q.is("reply_to", null);
     if (before) q = replyTo ? q.gt("created_at", before) : q.lt("created_at", before);
     if (only) q = sb.from("tiks").select(TIK_COLS).eq("id", only).limit(1);
+    else if (ids) {
+      // A set list (trending): fetch those, keep the given order.
+      if (!ids.length) { setTiks([]); setMore(false); return; }
+      q = sb.from("tiks").select(TIK_COLS).in("id", ids.slice(0, 50)).eq("hidden", false);
+    }
     else if (authors) {
       if (!authors.length) { setTiks([]); setMore(false); return; }
       q = q.in("author_id", authors.slice(0, 300));
@@ -33,9 +39,10 @@ export function useTiks(opts: { replyTo?: string | null; limit?: number; refresh
       const { data: l } = await sb.from("tik_likes").select("tik_id").eq("user_id", user.id).in("tik_id", page.map((r) => r.id));
       mine = new Set((l || []).map((x: any) => x.tik_id));
     }
-    const shaped = shapeTiks(page, mine);
+    let shaped = shapeTiks(page, mine);
+    if (ids) { const at = new Map(ids.map((x, i) => [x, i])); shaped = shaped.sort((a, b) => (at.get(a.id) ?? 99) - (at.get(b.id) ?? 99)); }
     setTiks((t) => (before && t ? [...t, ...shaped] : shaped));
-  }, [replyTo, limit, authorsKey, only]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [replyTo, limit, authorsKey, only, idsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load, refreshKey]);
   const loadMore = () => { if (tiks?.length) load(tiks[tiks.length - 1].created_at); };
   return { tiks, setTiks, me, more, loadMore, err, reload: () => load() };
