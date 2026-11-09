@@ -6,17 +6,30 @@
  */
 import { createPublicClient, erc20Abi, getAddress, http } from "viem";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
-import { WCHAINS, WSOL } from "@/lib/wallet-chains";
-import { balances } from "@/lib/wallet-server";
+import { MAX_SLIPPAGE_BPS, WCHAINS, WSOL, type WChain, type WChainKey } from "@/lib/wallet-chains";
+import { balances, market, quote as engineQuote, riskOf, type Quote } from "@/lib/wallet-server";
 import { XCHAIN_BY_KEY, isXAddress, isXNative, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
 import { xQuote, xTokens } from "@/lib/bridge-server";
 import { chainKey, clean, readSwap, type SwapAsk } from "@/lib/swap-read";
 export type { SwapAsk };
 
+/**
+ * One way to do the swap. "lifi": LI.FI (any network, or across networks). "engine": the Wallet's own swap engine
+ * (KyberSwap / the DEX / Jupiter) on one network, which also handles coins with a tax such as AUTISTIK.
+ */
 export type SwapOption = {
-  quote: XQuote; fromToken: XToken; toToken: XToken; amount: string; // amount in coins, as typed into a swap form
+  via: "lifi" | "engine";
+  fromChain: number; toChain: number; fromToken: XToken; toToken: XToken;
+  amount: string;                  // amount in coins, as typed into a swap form
+  amountIn: string;                // raw
+  toAmount: string; toAmountMin: string | null;
+  fromUsd: number | null; toUsd: number | null; gasUsd: number | null; feeUsd: number | null;
+  tool: string; seconds: number | null; slipBps: number;
   costUsd: number | null;          // network fee + bridge fee
   netUsd: number | null;           // what arrives, minus the network fee
+  quote: XQuote | null;            // via lifi
+  engine: { chain: WChainKey; q: Quote } | null; // via engine
+  at: number;
 };
 export type SwapPlan = { ask: SwapAsk; options: SwapOption[]; skipped: string[]; note: string | null };
 
@@ -33,7 +46,7 @@ async function askClaude(text: string): Promise<SwapAsk | null> {
     system: `You turn a crypto swap request into JSON. Reply with JSON only: {"amount":number|null,"unit":"coin"|"usd"|"pct"|"all","from":"SYMBOL","fromChain":string|null,"to":"SYMBOL","toChain":string|null}.
 unit "usd" when they give a dollar value of the coin they pay with, "pct" for a share of their balance (half = 50), "all" for everything.
 Chains: ${SCAN.join(", ")}, or another network's lowercase name. "cheapest" when they want whichever network is cheapest. null when not said.
-"usdt on sol" means to "USDT", toChain "solana". If the request is not a swap or conversion, reply {"none":true}.`,
+"usdt on sol" means to "USDT", toChain "solana". "sell X" with nothing to receive named: "to":"" and toChain null. Ignore words like "approved". If the request is not a swap or conversion, reply {"none":true}.`,
     messages: [{ role: "user", content: text.slice(0, 400) }],
   });
   const raw = r.content.map((c: any) => (c.type === "text" ? c.text : "")).join("");
@@ -68,6 +81,11 @@ async function balanceOf(c: XChain, owner: string, t: XToken): Promise<bigint> {
   if (isXNative(c, t.address)) return pc.getBalance({ address: who });
   return pc.readContract({ address: t.address as `0x${string}`, abi: erc20Abi, functionName: "balanceOf", args: [who] });
 }
+
+/** The Wallet's own network for this one, if it is one (BNB Chain, Base, Ethereum, Arbitrum, Solana). */
+const wchainOf = (c: XChain): WChain | null => (c.wchain ? WCHAINS[c.wchain as WChainKey] ?? null : null);
+/** A coin's address as the Wallet engine writes it (its own coin is 0xEeee… / wSOL). */
+const toEngine = (c: XChain, wc: WChain, a: string) => (isXNative(c, a) ? wc.native.address : a);
 
 const units = (n: number, d: number) => {
   const s = n.toFixed(Math.min(d, 12));
@@ -104,15 +122,22 @@ export async function planSwap(text: string, who: { evm: string | null; sol: str
   }))).filter(Boolean) as { c: XChain; t: XToken; owner: string; bal: bigint }[];
   if (!sources.length) throw new Error(skipped[0] || `I couldn't find ${ask.from} ${ask.fromChain ? `on ${XCHAIN_BY_KEY[ask.fromChain]?.name || ask.fromChain}` : "in your wallet"}.`);
 
+  // A price for "$1 worth": LI.FI's, or the coin's market (DexScreener) on the Wallet's own networks.
+  const withPrice = await Promise.all(sources.map(async (s) => {
+    let price = s.t.priceUsd ?? null;
+    const wc = wchainOf(s.c);
+    if (!price && ask.unit === "usd" && wc) price = (await market(wc, toEngine(s.c, wc, s.t.address)).catch(() => null))?.priceUsd ?? null;
+    return { ...s, price };
+  }));
   // How much, in coins, on each source network.
-  const priced = sources.map((s) => {
+  const priced = withPrice.map((s) => {
     const native = isXNative(s.c, s.t.address);
     const keep = native ? units(GAS_KEEP[s.c.key] ?? 0.0003, s.t.decimals) : 0n;
     const spendable = s.bal > keep ? s.bal - keep : 0n;
     let raw: bigint | null = null;
     if (ask.unit === "all") raw = spendable;
     else if (ask.unit === "pct") raw = ask.amount! >= 100 ? spendable : (s.bal * BigInt(Math.round(ask.amount! * 100))) / 10_000n;
-    else if (ask.unit === "usd") raw = s.t.priceUsd ? units(ask.amount! / s.t.priceUsd, s.t.decimals) : null;
+    else if (ask.unit === "usd") raw = s.price ? units(ask.amount! / s.price, s.t.decimals) : null;
     else raw = units(ask.amount!, s.t.decimals);
     return { ...s, raw };
   });
@@ -136,10 +161,13 @@ export async function planSwap(text: string, who: { evm: string | null; sol: str
       if (!owner || !isXAddress(to, owner)) { skipped.push(`Connect a ${to.name} wallet to receive on ${to.name}.`); continue; }
       // "move 1 SOL to base" (no coin named): the same coin there, or the chain's own coin.
       // "move 1 SOL to base" (no coin named): a chain's own coin becomes the other chain's own coin; others stay the same coin.
-      const tt = ask.to ? await findToken(to, ask.to)
+      // "sell $1 of AUTISTIK" (nothing named, same network): the network's own coin.
+      const tt = !ask.to && !ask.toChain ? await findToken(to, to.native.symbol)
+        : ask.to ? await findToken(to, ask.to)
         : isXNative(s.c, s.t.address) ? await findToken(to, to.native.symbol)
         : (await findToken(to, s.t.symbol)) ?? (await findToken(to, to.native.symbol));
       if (!tt) { if (toKeys.length === 1 && ask.toChain) skipped.push(`${ask.to} isn't on ${to.name}.`); continue; }
+      if (!ask.to && !ask.toChain && isXNative(s.c, s.t.address)) throw new Error(`What should I swap your ${s.t.symbol} to? Try: sell 1 ${s.t.symbol} to USDT`);
       if (to.id === s.c.id && tt.address.toLowerCase() === s.t.address.toLowerCase()) continue;
       pairs.push({ s, to, tt });
     }
@@ -156,20 +184,37 @@ export async function planSwap(text: string, who: { evm: string | null; sol: str
   if (!pairs.length) throw new Error(skipped[0] || `I couldn't find ${ask.to || "that coin"} on ${ask.toChain ? XCHAIN_BY_KEY[ask.toChain]?.name || ask.toChain : "a network you can receive on"}.`);
 
   const stable = (a: string, b: string) => /USD/.test(a) && /USD/.test(b);
-  const results = await Promise.allSettled(pairs.slice(0, 8).map(async ({ s, to, tt }) => {
-    const quote = await xQuote({ from: s.c, to, fromToken: s.t.address, toToken: tt.address, amount: s.raw!, fromAddress: s.owner, toAddress: addr(to)!,
-      slippageBps: stable(s.t.symbol, tt.symbol) ? 50 : 100, order: "CHEAPEST" });
-    const costUsd = (quote.gasUsd ?? 0) + (quote.feeUsd ?? 0) || null;
-    const netUsd = quote.toUsd != null ? quote.toUsd - (quote.gasUsd ?? 0) : null;
-    return { quote, fromToken: s.t, toToken: tt, amount: human(s.raw!, s.t.decimals), costUsd, netUsd } as SwapOption;
+  const results = await Promise.allSettled(pairs.slice(0, 8).flatMap(({ s, to, tt }) => {
+    const base = { fromChain: s.c.id, toChain: to.id, fromToken: s.t, toToken: tt, amount: human(s.raw!, s.t.decimals), amountIn: s.raw!.toString(), at: Date.now() };
+    const viaLifi = async (): Promise<SwapOption> => {
+      const slipBps = stable(s.t.symbol, tt.symbol) ? 50 : 100;
+      const q = await xQuote({ from: s.c, to, fromToken: s.t.address, toToken: tt.address, amount: s.raw!, fromAddress: s.owner, toAddress: addr(to)!, slippageBps: slipBps, order: "CHEAPEST" });
+      return { ...base, via: "lifi", toAmount: q.toAmount, toAmountMin: q.toAmountMin, fromUsd: q.fromUsd, toUsd: q.toUsd, gasUsd: q.gasUsd, feeUsd: q.feeUsd,
+        tool: q.toolName, seconds: q.seconds, slipBps, costUsd: (q.gasUsd ?? 0) + (q.feeUsd ?? 0) || null, netUsd: q.toUsd != null ? q.toUsd - (q.gasUsd ?? 0) : null, quote: q, engine: null };
+    };
+    // Same network on one of the Wallet's own networks: its own engine too (handles taxed coins like AUTISTIK).
+    const wc = s.c.id === to.id ? wchainOf(s.c) : null;
+    const viaEngine = async (): Promise<SwapOption> => {
+      const tin = toEngine(s.c, wc!, s.t.address), tout = toEngine(s.c, wc!, tt.address);
+      const [q, rin, rout] = await Promise.all([engineQuote(wc!, tin, tout, s.raw!), riskOf(wc!, tin).catch(() => null), riskOf(wc!, tout).catch(() => null)]);
+      if (rout?.honeypot) throw new Error(`${tt.symbol} looks like a honeypot (you couldn't sell it again). Stopped for your safety.`);
+      const tax = (rin?.sellTax ?? 0) + (rout?.buyTax ?? 0);
+      const slipBps = Math.min(MAX_SLIPPAGE_BPS, tax > 0 ? Math.ceil((tax + 3) * 100) : stable(s.t.symbol, tt.symbol) ? 50 : 300);
+      return { ...base, via: "engine", toAmount: q.amountOut, toAmountMin: null, fromUsd: q.inUsd, toUsd: q.outUsd, gasUsd: q.gasUsd, feeUsd: null,
+        tool: q.kind === "jupiter" ? "Jupiter" : q.kind === "v2" ? "DEX" : "KyberSwap", seconds: null, slipBps,
+        costUsd: q.gasUsd, netUsd: q.outUsd != null ? q.outUsd - (q.gasUsd ?? 0) : null, quote: null, engine: { chain: wc!.key, q } };
+    };
+    return wc ? [viaEngine(), viaLifi()] : [viaLifi()];
   }));
-  const options = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  let options = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
   if (!options.length) {
     const why = results.find((r) => r.status === "rejected") as PromiseRejectedResult | undefined;
     throw new Error(String(why?.reason?.message || "No route found for this swap. Try a bigger amount."));
   }
-  // Most value in hand after every fee first; then the lowest fees.
+  // Most value in hand after every fee first; then the lowest fees. One route per pair of networks (the better one).
   options.sort((a, b) => (b.netUsd ?? -1) - (a.netUsd ?? -1) || (a.costUsd ?? 1e9) - (b.costUsd ?? 1e9));
+  const seen = new Set<string>();
+  options = options.filter((o) => { const k = `${o.fromChain}-${o.toChain}-${o.toToken.address}`; if (seen.has(k)) return false; seen.add(k); return true; });
   const note = options.length > 1 ? `Compared ${options.length} routes; the first one leaves you the most after fees.` : null;
   return { ask, options, skipped: [...new Set(skipped)].slice(0, 3), note };
 }

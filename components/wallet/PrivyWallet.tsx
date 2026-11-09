@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { PrivyProvider, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
+import { PrivyProvider, useExportWallet, usePrivy, useSendTransaction, useWallets } from "@privy-io/react-auth";
 import { useExportWallet as useSolExport, useSignTransaction, useWallets as useSolWallets } from "@privy-io/react-auth/solana";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { bsc } from "viem/chains";
@@ -104,6 +104,7 @@ function useHubSigner(member: Member | null): { signer: Signer; gate: ReactNode 
   const { wallets } = useWallets();
   const { wallets: solWallets } = useSolWallets();
   const { signTransaction } = useSignTransaction();
+  const { sendTransaction } = useSendTransaction();
   const { exportWallet } = useExportWallet();
   const { exportWallet: exportSol } = useSolExport();
   const [prefer, setPrefer] = useState<"embedded" | "external" | null>(null);
@@ -146,6 +147,24 @@ function useHubSigner(member: Member | null): { signer: Signer; gate: ReactNode 
         const { signedTransaction } = await signTransaction({ transaction: fromB64(txBase64), wallet: sw, chain: "solana:mainnet" });
         return toB64(signedTransaction);
       },
+    } : null,
+    // Already approved by the member in their own message: the built-in wallet signs without its confirm window.
+    quiet: (evm && evm === evmBuilt) || (sw && sw === solEmbedded && !useSiteSol) ? {
+      evm: evm && evm === evmBuilt ? {
+        ...evm,
+        async send(chainId, tx) {
+          const r = await sendTransaction({ to: tx.to, data: tx.data, value: "0x" + BigInt(tx.value).toString(16), chainId } as any,
+            { address: evmEmbedded.address, uiOptions: { showWalletUIs: false } } as any);
+          return r.hash as `0x${string}`;
+        },
+      } : null,
+      sol: sw && sw === solEmbedded && !useSiteSol ? {
+        address: sw.address,
+        async sign(txBase64: string) {
+          const { signedTransaction } = await signTransaction({ transaction: fromB64(txBase64), wallet: sw, chain: "solana:mainnet", options: { uiOptions: { showWalletUIs: false } } } as any);
+          return toB64(signedTransaction);
+        },
+      } : null,
     } : null,
     login,
     // The built-in wallet needs a Hub account: sign in (or join) first, then unlock it with a code sent to that email.
