@@ -92,7 +92,7 @@ export function readBuy(text: string): BuyAsk | null {
     .replace(new RegExp(APPROVED_RE.source, "gi"), " ")
     .replace(/(\d[\d.]*)\s*(?:usd|dollars?|bucks|\$)(?![a-z])/g, "$$$1").replace(/\s+/g, " ").trim();
   if (!/\bbuy\b/.test(t)) return null;
-  const w = t.match(/\b(?:with|using|from|pay(?:ing)?(?: with)?)\s+(?:my\s+)?([a-z][a-z0-9]{1,9})(?:\s+(?:on|in)\s+(?:the\s+)?([a-z]+))?/);
+  const w = t.match(/\b(?:with|using|from|use|pay(?:ing)?(?: with)?)\s+(?:my\s+)?([a-z][a-z0-9]{1,9})(?:\s+(?:on|in)\s+(?:the\s+)?([a-z]+))?/);
   let pay = w ? clean(w[1]) : null;
   let payChain = w?.[2] ? chainKey(w[2]) : null;
   if (pay && chainKey(pay) && !["BNB", "ETH", "SOL", "AVAX", "MATIC", "POL"].includes(pay)) { payChain = chainKey(pay); pay = null; } // "with base"
