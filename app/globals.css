@@ -6068,3 +6068,5 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .ait-sig.won .ait-sig-r{color:#16a34a;font-weight:800}
 .ait-tag.signal{background:rgba(240,185,11,.16);color:#C98A00}
 .ait-tag.caller{background:rgba(181,124,255,.16);color:#9B5CFF}
+.ait-size{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
+.ait-size .btn{margin-left:auto}

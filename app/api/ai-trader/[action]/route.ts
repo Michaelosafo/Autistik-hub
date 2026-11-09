@@ -3,7 +3,7 @@ import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseService } from "@/lib/supabase/server";
 import { cronDenied } from "@/lib/cron-auth";
-import { runFast } from "@/lib/ai-trader";
+import { runFast, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
 import { tgSecret } from "@/lib/tg-secret";
 
@@ -48,6 +48,7 @@ export async function GET(_req: Request, { params }: { params: { action: string 
   const wins = done.filter((p) => (Number(p.pnl) || 0) > 0).length;
   return json({
     signals: sigs || [], sources: { x: xReady(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
+    perTradeBnb: await tradeSize(s).catch(() => s.per_trade),
     settings: s, open: open || [], closed: closed || [], log: logs || [],
     wallet: wallet ?? { address: null, bnb: null }, liveReady: !!(await traderAccount()), owner: who.admin,
     active: adminActive({ ...s, admin_seen_at: new Date().toISOString() }), activeMinutes: ACTIVE_MS / 60_000,
@@ -56,6 +57,7 @@ export async function GET(_req: Request, { params }: { params: { action: string 
 }
 
 const NUM: Record<string, [number, number]> = {
+  per_trade_usd: [0, 100_000],
   per_trade: [0.001, 10], max_positions: [1, 20], min_liquidity: [1000, 10_000_000], max_tax: [0, 25], min_age_hours: [0, 720],
   mcap_min: [500, 10_000_000], mcap_max: [1000, 100_000_000], micro_min_liq: [500, 10_000_000], target_profit: [10, 1000], strat_stop: [5, 90],
   stop_loss: [1, 90], take_profit: [1, 2000], trail: [0, 90], max_hold_hours: [1, 720], daily_loss_limit: [0.001, 100],

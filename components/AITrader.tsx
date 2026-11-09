@@ -12,7 +12,7 @@ type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
   max_tax: number; min_age_hours: number; stop_loss: number; take_profit: number; trail: number; max_hold_hours: number; daily_loss_limit: number;
   use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean; manual_active: boolean; away_take_profit: number;
-  signals_on: boolean; callers: string[]; caller_mcap_max: number;
+  signals_on: boolean; callers: string[]; caller_mcap_max: number; per_trade_usd: number;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
 };
 type P = {
@@ -21,7 +21,7 @@ type P = {
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
 type Sig = { id: number; at: string; source: string; who: string | null; body: string | null; url: string; chain: string; token: string; symbol: string | null; mcap: number | null; result: string | null };
-type Data = { signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
+type Data = { perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
 const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
@@ -40,7 +40,8 @@ async function post(action: string, body: unknown) {
 }
 
 const FIELDS: { k: keyof S; label: string; unit: string; step: string; hint: string }[] = [
-  { k: "per_trade", label: "Per trade", unit: "BNB", step: "0.01", hint: "How much it spends on each coin" },
+  { k: "per_trade_usd", label: "Per trade in $", unit: "$", step: "1", hint: "Spends this many dollars of BNB on each coin (0 = use the BNB amount below)" },
+  { k: "per_trade", label: "Per trade in BNB", unit: "BNB", step: "0.001", hint: "Used only when the $ amount is 0" },
   { k: "max_positions", label: "Coins at once", unit: "", step: "1", hint: "Most coins it holds at the same time" },
   { k: "stop_loss", label: "Stop-loss", unit: "%", step: "1", hint: "Sells if a coin falls this much below the buy price" },
   { k: "take_profit", label: "Take profit", unit: "%", step: "5", hint: "Sells when a coin is up this much" },
@@ -94,6 +95,8 @@ export default function AITrader() {
           onClick={() => act("toggle", "settings", { enabled: !s.enabled }, s.enabled ? "Stopped. It won't buy anything until you press Start. Open coins still have their stop-loss and target." : "Started. It checks fresh signals every minute and scans for setups every 5 minutes.")}>
           {s.enabled ? "■ STOP" : "▶ START"}
         </button>
+        <div className="ait-size">Each trade: <b>{s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`}</b> <small className="muted">({fmtAmount(d.perTradeBnb)} BNB{cash != null && d.perTradeBnb > 0 ? ` · room for about ${Math.floor(cash / d.perTradeBnb)} trades` : ""})</small>
+          <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt("How many dollars of BNB should each trade use?", String(s.per_trade_usd || 5)); if (v && Number(v) > 0) act("size", "settings", { per_trade_usd: Number(v) }, `Each trade now uses $${Number(v)} of BNB.`); }}>Change</button></div>
         <small className="muted">{s.enabled ? "Stop halts all buying until you press Start again." : "Start makes it look for trades and buy."} Open coins are always protected by their stop-loss and target.</small>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>

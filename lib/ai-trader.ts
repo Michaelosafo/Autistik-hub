@@ -32,7 +32,7 @@ export type Settings = {
   max_hold_hours: number; daily_loss_limit: number; use_ai: boolean; last_run: string; last_note: string | null;
   manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
-  signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null;
+  signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -131,7 +131,7 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd"]) s[k] = n(s[k]);
   s.callers = Array.isArray(s.callers) ? s.callers : [];
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
@@ -186,6 +186,12 @@ function riskChain(chain: string) {
   return WCHAINS[chain as "bsc" | "ethereum" | "solana"];
 }
 const riskFor = (chain: string, token: string) => riskOf(riskChain(chain), token);
+
+/** BNB to spend per trade: the dollar amount if one is set (so it stays e.g. $5 when BNB moves), else the BNB amount. */
+export async function tradeSize(s: Settings): Promise<number> {
+  if (s.per_trade_usd > 0) return +(s.per_trade_usd / (await bnbUsd())).toFixed(6);
+  return s.per_trade;
+}
 
 /** Live wallet: BNB balance (in BNB). */
 export async function liveBalance(): Promise<{ address: string; bnb: number } | null> {
@@ -449,7 +455,7 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
   o: { sl: number; tp: number; why: string; strategy: string }) {
   const sb = supabaseService();
-  const spend = Math.min(s.per_trade, cash);
+  const spend = Math.min(await tradeSize(s), cash);
   const bnb = await bnbUsd();
   let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
   if (s.mode === "paper" || c.chain !== "bsc") {
@@ -482,7 +488,7 @@ async function buyOne(s: Settings, cash: number, held: Set<string>) {
   const p = await pick(s, list);
   if (!p) return `Looked at ${list.length} safe coins; none looked good enough to buy.`;
   const c = p.c;
-  const spend = Math.min(s.per_trade, cash);
+  const spend = Math.min(await tradeSize(s), cash);
   let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
   const bnb = await bnbUsd();
   if (s.mode === "paper" || c.chain !== "bsc") {
@@ -532,7 +538,7 @@ export async function runTrader({ force = false } = {}) {
   if (held.size >= s.max_positions) return note(`Holding ${held.size} of ${s.max_positions} coins; waiting for exits.`);
   const fresh = await getSettings();
   const cash = s.mode === "paper" ? fresh.paper_cash : Math.max(0, ((await liveBalance())?.bnb ?? 0) - GAS_KEEP);
-  if (cash < s.per_trade * 0.5) return note(`Not enough BNB to buy (${cash.toFixed(4)} available).`);
+  if (cash < (await tradeSize(s)) * 0.5) return note(`Not enough BNB to buy (${cash.toFixed(4)} available).`);
   try { return note(await buyOne(fresh, cash, held)); }
   catch (e) { await log("error", `Buy failed: ${(e as Error).message}`); return note(`Buy failed: ${(e as Error).message}`); }
 }
@@ -546,7 +552,7 @@ async function buyRoom(s: Settings): Promise<{ cash: number; held: Set<string> }
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
   if (held.size >= s.max_positions) return `Holding ${held.size} of ${s.max_positions} coins.`;
   const cash = s.mode === "paper" ? (await getSettings()).paper_cash : Math.max(0, ((await liveBalance())?.bnb ?? 0) - GAS_KEEP);
-  if (cash < s.per_trade * 0.5) return `Not enough BNB (${cash.toFixed(4)}).`;
+  if (cash < (await tradeSize(s)) * 0.5) return `Not enough BNB (${cash.toFixed(4)}).`;
   return { cash, held };
 }
 
