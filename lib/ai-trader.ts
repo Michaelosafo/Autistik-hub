@@ -516,7 +516,7 @@ export async function runTrader({ force = false } = {}) {
   const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", 1); return { note: t }; };
   if (s.mode === "live" && !(await traderAccount())) return note("Live mode needs a trading wallet (create one on the AI trader page). Nothing was traded.");
 
-  await manage(s);
+  // Exits are checked every minute by the fast loop (runFast), so this run only looks for new buys.
 
   // Daily loss limit: pause itself.
   const { data: day } = await sb.from("ai_trader_positions").select("pnl").eq("status", "closed").eq("mode", s.mode).gte("closed_at", new Date(Date.now() - 864e5).toISOString());
