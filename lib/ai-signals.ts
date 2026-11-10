@@ -10,7 +10,7 @@
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const DS = "https://api.dexscreener.com";
 
-export type Signal = { source: "dex-profile" | "dex-boost" | "dex-cto" | "x" | "telegram"; who: string; body: string; url: string; chain: string; token: string; at: number };
+export type Signal = { source: "dex-profile" | "dex-boost" | "dex-cto" | "x" | "telegram" | "reddit" | "dex-top"; who: string; body: string; url: string; chain: string; token: string; at: number };
 export type Flow = {
   chain: string; token: string; pool: string; symbol: string; name: string; image: string | null;
   price: number; liquidity: number; mcap: number; ageHours: number;
@@ -63,10 +63,10 @@ export function extract(text: string): { evm: string[]; sol: string[]; tickers: 
 
 /** New DexScreener profiles, boosts and community takeovers on the chosen chains. */
 export async function dexSignals(chains: string[]): Promise<Signal[]> {
-  const src: [Signal["source"], string][] = [["dex-profile", `${DS}/token-profiles/latest/v1`], ["dex-boost", `${DS}/token-boosts/latest/v1`], ["dex-cto", `${DS}/community-takeovers/latest/v1`]];
+  const src: [Signal["source"], string][] = [["dex-profile", `${DS}/token-profiles/latest/v1`], ["dex-boost", `${DS}/token-boosts/latest/v1`], ["dex-cto", `${DS}/community-takeovers/latest/v1`], ["dex-top", `${DS}/token-boosts/top/v1`]];
   const lists = await Promise.all(src.map(async ([source, url]) => {
     const j = await get(url).catch(() => []);
-    return (Array.isArray(j) ? j : []).filter((x: any) => chains.includes(String(x?.chainId)) && x?.tokenAddress).slice(0, 30).map((x: any): Signal => ({
+    return (Array.isArray(j) ? j : []).filter((x: any) => chains.includes(String(x?.chainId)) && x?.tokenAddress).slice(0, 10).map((x: any): Signal => ({
       source, who: "DexScreener", body: String(x.description || "").slice(0, 280), url: String(x.url || ""),
       chain: String(x.chainId), token: x.chainId === "solana" ? String(x.tokenAddress) : String(x.tokenAddress).toLowerCase(), at: Date.now(),
     }));
@@ -95,7 +95,54 @@ export async function xPosts(handles: string[]): Promise<{ id: string; text: str
 }
 
 /** Turns a post (X or Telegram) into signals: each contract address or $TICKER it mentions, on the chosen chains. */
-export async function postSignals(post: { text: string; user: string; url: string; at: number }, source: "x" | "telegram", chains: string[]): Promise<{ sig: Signal; flow: Flow }[]> {
+// Reddit: crypto subreddits where people post new coins. With REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET set (a free
+// "script" app at reddit.com/prefs/apps) it uses Reddit's API; without them it tries the public feed, which Reddit
+// may block from servers.
+const REDDIT_SUBS = ["CryptoMoonShots", "SatoshiStreetBets", "memecoins", "CryptoMoonShot", "BSCMoonShots", "bnbchain", "solana_memecoins", "MemeCoinMoonShots"];
+const REDDIT_UA = "web:autistik.io:v1.0 (AI trader)";
+let redditToken: { v: string; exp: number } | null = null;
+
+async function redditAuth(): Promise<string | null> {
+  const id = process.env.REDDIT_CLIENT_ID, secret = process.env.REDDIT_CLIENT_SECRET;
+  if (!id || !secret) return null;
+  if (redditToken && redditToken.exp > Date.now() + 60_000) return redditToken.v;
+  const r = await fetch("https://www.reddit.com/api/v1/access_token", {
+    method: "POST",
+    headers: { authorization: `Basic ${btoa(`${id}:${secret}`)}`, "content-type": "application/x-www-form-urlencoded", "user-agent": REDDIT_UA },
+    body: "grant_type=client_credentials", cache: "no-store", signal: AbortSignal.timeout(8000),
+  }).catch(() => null);
+  const j: any = r && r.ok ? await r.json().catch(() => null) : null;
+  if (!j?.access_token) return null;
+  redditToken = { v: String(j.access_token), exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
+  return redditToken.v;
+}
+
+/** New Reddit posts (last 15 minutes) in crypto subreddits that name a contract address (tickers alone are too vague). */
+export async function redditPosts(): Promise<{ id: string; text: string; user: string; url: string; at: number }[]> {
+  const token = await redditAuth();
+  const lists = await Promise.all(REDDIT_SUBS.map(async (sub) => {
+    const url = token ? `https://oauth.reddit.com/r/${sub}/new?limit=25&raw_json=1` : `https://www.reddit.com/r/${sub}/new.json?limit=25&raw_json=1`;
+    const r = await fetch(url, { headers: { "user-agent": REDDIT_UA, ...(token ? { authorization: `Bearer ${token}` } : {}) }, cache: "no-store", signal: AbortSignal.timeout(8000) }).catch(() => null);
+    const j: any = r && r.ok ? await r.json().catch(() => null) : null;
+    const kids: any[] = Array.isArray(j?.data?.children) ? j.data.children : [];
+    return kids.map((c) => c?.data).filter(Boolean).map((d) => ({ sub, d }));
+  }));
+  const cutoff = Date.now() - 15 * 60_000;
+  const out: { id: string; text: string; user: string; url: string; at: number }[] = [];
+  const seen = new Set<string>();
+  for (const { sub, d } of lists.flat()) {
+    const at = Number(d.created_utc) * 1000;
+    if (!(at > cutoff) || d.removed_by_category || d.over_18 || seen.has(String(d.id))) continue;
+    const text = `${d.title || ""}\n${d.selftext || ""}\n${d.url_overridden_by_dest || ""}`;
+    const { evm, sol } = extract(text);
+    if (!evm.length && !sol.length) continue;
+    seen.add(String(d.id));
+    out.push({ id: String(d.id), text: text.slice(0, 2000), user: `r/${sub} · u/${d.author || "?"}`, url: `https://www.reddit.com${d.permalink || ""}`, at });
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
+export async function postSignals(post: { text: string; user: string; url: string; at: number }, source: "x" | "telegram" | "reddit", chains: string[]): Promise<{ sig: Signal; flow: Flow }[]> {
   const { evm, sol, tickers } = extract(post.text);
   const refs = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : []), ...(evm.length || sol.length ? [] : tickers.slice(0, 2).map((ticker) => ({ ticker })))].slice(0, 3);
   const found = await Promise.all(refs.map((r) => resolve(r, chains).catch(() => null)));
