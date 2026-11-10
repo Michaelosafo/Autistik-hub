@@ -374,7 +374,7 @@ function Strategy({ s, busy, onAct }: { s: S; busy: boolean; onAct: (n: string, 
   );
 }
 
-const SRC: Record<string, string> = { x: "𝕏", telegram: "✈️ TG", "dex-profile": "DexScreener profile", "dex-boost": "DexScreener boost", "dex-cto": "Community takeover" };
+const SRC: Record<string, string> = { x: "𝕏", telegram: "✈️ TG", "dex-profile": "DexScreener profile", "dex-boost": "DexScreener boost", "dex-cto": "Community takeover", "dex-top": "DexScreener top boost", reddit: "👽 Reddit", "honeypot-watch": "👀 Honeypot watch" };
 
 /** Fresh signals: X callers, Telegram groups and DexScreener, acted on within a minute. */
 function Signals({ d, busy, onAct }: { d: Data; busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
