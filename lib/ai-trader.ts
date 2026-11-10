@@ -17,7 +17,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
 import { IMPOSTOR, aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
-import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
+import { dexSignals, postSignals, redditPosts, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
@@ -334,7 +334,15 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
     await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
     await sb.from("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
-    await log("error", `Couldn't sell ${p.symbol}: ${(e as Error).message}`);
+    const msg = (e as Error).message;
+    const entry = n((p as any).entry_usd), last = n((p as any).last_usd);
+    // A coin that rugged or turned into a honeypot can never be sold: write it off once instead of retrying every minute.
+    if ((entry > 0 && last > 0 && last < entry * 0.05) || (/TRANSFER_FROM_FAILED|TRANSFER_FAILED/i.test(msg) && entry > 0 && last < entry * 0.5)) {
+      await sb.from("ai_trader_positions").update({ status: "closed", received: 0, pnl: -n(p.spent), pnl_pct: -100, close_reason: `written off: can't be sold (${reason})`, closed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", p.id);
+      await log("loss", `Wrote off ${p.symbol}: it can't be sold any more (rugged or honeypot), so the bot stops trying and frees the slot. ${n(p.spent).toFixed(4)} BNB lost.`);
+      return;
+    }
+    await log("error", `Couldn't sell ${p.symbol}: ${msg}`);
   }
 }
 
@@ -638,11 +646,11 @@ export async function actOnSignal(s: Settings, sig: Signal, flow: Flow | null): 
     if (f.liquidity < Math.max(5000, s.micro_min_liq)) return done("skipped: pool too thin", f);
   } else {
     if (f.mcap < s.mcap_min || f.mcap > s.mcap_max) return done(`skipped: market cap $${Math.round(f.mcap).toLocaleString("en-US")} outside the window`, f);
-    if (f.ch.h1 > 100 || f.ch.h24 > 300) return done(`skipped: already pumped (${f.ch.h1.toFixed(0)}% 1h, ${f.ch.h24.toFixed(0)}% 24h)`, f);
+    if (f.ch.h1 > 250 || f.ch.h24 > 1000) return done(`skipped: already pumped (${f.ch.h1.toFixed(0)}% 1h, ${f.ch.h24.toFixed(0)}% 24h)`, f);
     if (f.liquidity < s.micro_min_liq) return done("skipped: pool too thin", f);
-    if (f.ageHours < 0.2) return done("skipped: pool under 12 minutes old", f);
-    if (f.buys5 < 3 || f.buys5 < f.sells5) return done(`skipped: no buying pressure (${f.buys5} buys / ${f.sells5} sells in 5m)`, f);
-    if (s.need_socials && !f.x && !f.tg) return done("skipped: no X or Telegram", f);
+    if (f.ageHours < 0.1) return done("skipped: pool under 6 minutes old", f);
+    if (f.buys5 < 2 || f.buys5 < f.sells5 * 0.8) return done(`skipped: no buying pressure (${f.buys5} buys / ${f.sells5} sells in 5m)`, f);
+    // Socials are checked by the rug guard (DexScreener first, then GeckoTerminal), so new launches aren't missed here.
   }
   const room = await buyRoom(s);
   if (typeof room === "string") return done(`skipped: ${room}`, f);
@@ -689,7 +697,14 @@ export async function runFast() {
     }
   }
   // Only the newest few are recorded each minute, so none are marked seen without being checked.
-  const dex = await unseen((await dexSignals(chains).catch(() => [])).slice(0, 12));
+  // Reddit: new posts in crypto subreddits that name a contract address.
+  const reddit = await redditPosts().catch(() => []);
+  for (const post of reddit.slice(0, 8)) {
+    const found = await postSignals(post, "reddit", chains).catch(() => []);
+    const newOnes = await unseen(found.map((x) => x.sig));
+    for (const x of found.filter((x) => newOnes.includes(x.sig))) out.push(await actOnSignal(s, x.sig, x.flow));
+  }
+  const dex = await unseen((await dexSignals(chains).catch(() => [])).slice(0, 40));
   for (const g of dex) out.push(await actOnSignal(s, g, null));
   return { ok: true, signals: out.length, bought: out.filter((x) => x.startsWith("bought")).length };
 }
