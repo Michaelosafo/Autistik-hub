@@ -9,25 +9,26 @@ type Act = (name: string, action: string, body: unknown, done?: string) => Promi
 export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number };
 export type Rebuy = { id: number; chain: string; token: string; symbol: string | null; sold_usd: number; low_usd: number | null; status: string; note: string | null; sold_at: string };
 
-const MODES = [
-  { k: "telegram", name: "Telegram only", note: "Buys only coins called in your ticked Telegram chats. No scanning." },
-  { k: "both", name: "Telegram + X", note: "Buys coins called in your Telegram chats and posted by your followed X sources. No scanning." },
-  { k: "x", name: "X only", note: "Buys only coins posted by your followed X accounts, Lists and Communities. No scanning." },
-  { k: "general", name: "General", note: "Copy trades plus the AI's own scanning and DexScreener signals." },
-] as const;
-
-export function ModePicker({ mode, busy, onAct }: { mode: string; busy: boolean; onAct: Act }) {
-  const cur = MODES.find((m) => m.k === mode) || MODES[0];
+/** What the trader buys from: tick any mix. Telegram and X calls are bought as called; General has the safety checks. */
+export function SourcePicker({ tg, x, general, busy, onAct }: { tg: boolean; x: boolean; general: boolean; busy: boolean; onAct: Act }) {
+  const set = (k: "use_tg" | "use_x" | "use_general", v: boolean, label: string) => {
+    if (!v && [tg, x, general].filter(Boolean).length === 1) return; // keep one on
+    onAct(k, "settings", { [k]: v }, `${label} ${v ? "on" : "off"}.`);
+  };
+  const Box = ({ k, on, title, note }: { k: "use_tg" | "use_x" | "use_general"; on: boolean; title: string; note: string }) => (
+    <label className={"aic-row" + (on ? " on" : "")}>
+      <input type="checkbox" checked={on} disabled={busy} onChange={(e) => set(k, e.target.checked, title)} />
+      <span className="grow"><b>{title}</b><small className="muted">{note}</small></span>
+    </label>
+  );
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <small className="muted">What it trades</small>
-      <div className="ait-seg aic-tabs" role="radiogroup" aria-label="What the trader trades">
-        {MODES.map((m) => (
-          <button key={m.k} type="button" role="radio" aria-checked={cur.k === m.k} className={cur.k === m.k ? "on" : ""} disabled={busy}
-            onClick={() => cur.k !== m.k && onAct("mode", "settings", { trade_mode: m.k }, `${m.name}: ${m.note}`)}>{m.name}</button>
-        ))}
+      <small className="muted">What it buys from (tick any)</small>
+      <div className="aic-list">
+        <Box k="use_tg" on={tg} title="✈️ Telegram" note="Coins called in your ticked Telegram chats." />
+        <Box k="use_x" on={x} title="𝕏 X" note="Coins posted by your followed X accounts, Lists and Communities." />
+        <Box k="use_general" on={general} title="🛡 General (with security checks)" note="The AI also finds coins itself (scanning and DexScreener signals). Every one is honeypot, tax, liquidity and rug-checked before buying." />
       </div>
-      <small className="muted">{cur.note}</small>
     </div>
   );
 }
@@ -116,10 +117,27 @@ export function LiveChains({ list, live, busy, onAct }: { list: LiveWallet[]; li
           {w.chain === "solana" && !w.address && <button type="button" className="btn small" disabled={busy} onClick={() => onAct("solw", "sol-wallet", {})}>Create Solana wallet</button>}
         </div>
       ))}</div>
+      <SolImport has={list.some((w) => w.chain === "solana" && w.address)} busy={busy} onAct={onAct} />
       {list.some((w) => w.chain === "solana" && w.address) && (
         <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy}
           onClick={async () => { if (!confirm("Show the Solana wallet's private key? Anyone who sees it can take the SOL and coins in it.")) return; const r = await fetch("/api/ai-trader/sol-key-reveal", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((x) => x.json()).catch(() => null); if (r?.key) prompt("Solana private key (import into Phantom or Solflare as a private key). Keep it secret:", r.key); else alert(r?.error || "Couldn't load it."); }}>Show Solana private key</button>
       )}
+    </div>
+  );
+}
+
+/** Use your own Solana wallet: paste the private key Phantom / Solflare shows. */
+function SolImport({ has, busy, onAct }: { has: boolean; busy: boolean; onAct: Act }) {
+  const [open, setOpen] = useState(false), [key, setKey] = useState("");
+  if (!open) return <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => setOpen(true)}>{has ? "Use my own Solana wallet instead" : "Import my Solana wallet"}</button>;
+  return (
+    <div className="ait-key">
+      <small>Paste the private key of a Solana wallet you own. In Phantom: Settings → Manage accounts → your account → Show private key. In Solflare: Settings → Export private key. Use a separate wallet just for the AI, never your main one.{has ? " The current Solana trading wallet must be empty first." : ""}</small>
+      <input className="input" type="password" autoComplete="off" spellCheck={false} placeholder="Solana private key" value={key} onChange={(e) => setKey(e.target.value)} aria-label="Solana private key" />
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn small primary" disabled={busy || key.trim().length < 40} onClick={() => onAct("solimp", "sol-key-import", { key: key.trim() }).then(() => { setKey(""); setOpen(false); })}>Use this wallet</button>
+        <button type="button" className="btn small" onClick={() => { setKey(""); setOpen(false); }}>Cancel</button>
+      </div>
     </div>
   );
 }

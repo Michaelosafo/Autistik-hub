@@ -16,6 +16,7 @@ type S = {
   signals_on: boolean; callers: string[]; caller_mcap_max: number; per_trade_usd: number;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
+  use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean;
 };
 type P = {
   id: string; mode: string; chain: string; strategy?: string | null; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;

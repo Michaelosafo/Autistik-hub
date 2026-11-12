@@ -43,7 +43,7 @@ export type Settings = {
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
-  live_chains: LiveChain[]; copy_check: boolean;
+  live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -101,6 +101,41 @@ export async function createSolWallet(): Promise<string> {
   await log("settings", `Solana trading wallet created: ${kp.publicKey.toBase58()}`);
   return kp.publicKey.toBase58();
 }
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58(t: string) {
+  let v = 0n;
+  for (const ch of t) { const i = B58.indexOf(ch); if (i < 0) throw new Error("bad"); v = v * 58n + BigInt(i); }
+  const out: number[] = [];
+  while (v > 0n) { out.unshift(Number(v % 256n)); v /= 256n; }
+  for (const ch of t) { if (ch !== "1") break; out.unshift(0); }
+  return Uint8Array.from(out);
+}
+
+/**
+ * Use your own Solana wallet: paste its private key as Phantom / Solflare export it (a long base58 string) or as the
+ * 64-number list. Only while the current Solana trading wallet is empty and no live Solana coin is open.
+ */
+export async function importSolKey(raw: string): Promise<string> {
+  const t = raw.trim();
+  let bytes: Uint8Array;
+  try { bytes = t.startsWith("[") ? Uint8Array.from(JSON.parse(t)) : b58(t); } catch { throw new Error("That isn't a Solana private key. Copy it from Phantom or Solflare: Settings → Show private key."); }
+  if (bytes.length !== 64) throw new Error("That isn't a full Solana private key (it should be the long key Phantom or Solflare shows).");
+  let kp: Keypair;
+  try { kp = Keypair.fromSecretKey(bytes); } catch { throw new Error("That private key isn't valid."); }
+  const { data: openSol } = await tq("ai_trader_positions").select("id").eq("mode", "live").eq("chain", "solana").in("status", ["open", "closing"]).limit(1);
+  if (openSol?.length) throw new Error("Sell the open live Solana coins first.");
+  const cur = await solAccount();
+  if (cur && cur.publicKey.toBase58() !== kp.publicKey.toBase58()) {
+    const sol = await chainBalance("solana", { evm: null, sol: cur }).catch(() => 0);
+    if (sol > 0.002) throw new Error(`The current Solana trading wallet still holds ${sol.toFixed(4)} SOL. Move it out first (show its private key and import it into Phantom), so nothing is left behind.`);
+  }
+  const { error } = await supabaseService().rpc("ai_trader_sol_key_set_for", { p_trader: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: true });
+  if (error) throw new Error(error.message);
+  solWallets.set(T(), kp);
+  await log("settings", `Solana trading now uses your own wallet: ${kp.publicKey.toBase58()}`);
+  return kp.publicKey.toBase58();
+}
+
 /** The Solana wallet's secret key as the 64-number list Phantom / Solflare accept when importing a private key. */
 export async function revealSolKey(): Promise<string> {
   const kp = await solAccount();
@@ -193,6 +228,7 @@ export async function getSettings(): Promise<Settings> {
   if (!["telegram", "both", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
   s.rebuy_on = s.rebuy_on !== false;
   s.copy_check = s.copy_check === true;
+  s.use_tg = s.use_tg !== false; s.use_x = s.use_x === true; s.use_general = s.use_general === true;
   s.live_chains = (Array.isArray(s.live_chains) ? s.live_chains : ["bsc"]).filter((c: string) => isLiveChain(c));
   if (!s.live_chains.length) s.live_chains = ["bsc"];
   s.copy_on = s.copy_on !== false;
@@ -661,7 +697,7 @@ export async function runTrader({ force = false } = {}) {
   }
   if (!s.enabled) return note("Checked open positions (paused, so no new buys).");
   // Telegram only / X only: the trader buys only coins called in what you follow, never from its own scanning.
-  if (s.trade_mode !== "general") return note(s.trade_mode === "telegram" ? "Telegram only: buying coins called in your followed Telegram chats (no scanning)." : "X only: buying coins posted by your followed X sources (no scanning).");
+  if (!s.use_general) return note(`${[s.use_tg && "Telegram", s.use_x && "X"].filter(Boolean).join(" + ") || "Nothing"} ticked: buying only called coins (General is off, so no scanning).`);
 
   const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
@@ -757,7 +793,7 @@ export async function runFast() {
   const s = await getSettings();
   if (s.mode === "live" && !(await traderAccount())) return { skipped: "no wallet" };
   await manage(s).catch((e) => log("error", `Exit check failed: ${(e as Error).message}`));
-  const general = s.trade_mode === "general";
+  const general = s.use_general;
   if (s.enabled && general) await recheckWatch(s).catch((e) => log("error", `Watch list check failed: ${(e as Error).message}`));
   if (s.enabled && s.copy_on && s.rebuy_on) await rebuyCheck(s).catch((e) => log("error", `Re-buy check failed: ${(e as Error).message}`));
   if (!s.enabled) return { ok: true, buys: "stopped" };
@@ -765,12 +801,12 @@ export async function runFast() {
   const out: string[] = [];
   // Copy trades from what you follow, depending on the trading mode.
   if (s.copy_on) {
-    if (s.trade_mode !== "telegram") {
+    if (s.use_x) {
       const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
       if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", T());
       for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at, from: { username: post.user } }, "x", post.label).catch(() => [])));
     }
-    if (s.trade_mode !== "x") {
+    if (s.use_tg) {
       // Groups, channels and chats read through the admin's own Telegram account.
       const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
       if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
@@ -849,7 +885,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
   // Telegram only mode ignores X, X only mode ignores Telegram.
-  if ((source === "x" && s.trade_mode === "telegram") || (source === "telegram" && s.trade_mode === "x")) return [];
+  if ((source === "x" && !s.use_x) || (source === "telegram" && !s.use_tg)) return [];
   const caller = await callerUsd(source === "x" ? "x" : "tg", post.from).catch(() => null);
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
