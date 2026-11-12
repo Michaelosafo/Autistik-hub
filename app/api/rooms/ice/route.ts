@@ -25,6 +25,7 @@ export async function GET() {
         method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ ttl: 86400 }),
       });
       const j: any = await r.json().catch(() => null);
+      if (!r.ok) console.warn(`[rooms/ice] Cloudflare TURN refused (${r.status}): check CLOUDFLARE_TURN_KEY_ID / CLOUDFLARE_TURN_API_TOKEN`);
       const list = Array.isArray(j?.iceServers) ? j.iceServers : j?.iceServers ? [j.iceServers] : [];
       // Keep TURN entries only (STUN is already in the page), and skip port 53, which some browsers block.
       servers = list.map((s: any) => ({ ...s, urls: (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u: string) => /^turns?:/.test(u) && !/:53\b/.test(u)) })).filter((s: any) => s.urls.length);
@@ -32,6 +33,7 @@ export async function GET() {
   } else if (process.env.TURN_URLS && process.env.TURN_USERNAME && process.env.TURN_CREDENTIAL) {
     servers = [{ urls: process.env.TURN_URLS.split(",").map((u) => u.trim()).filter(Boolean), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL }];
   }
-  if (servers.length) cache = { at: Date.now(), servers };
+  if (servers.length) { cache = { at: Date.now(), servers }; console.log(`[rooms/ice] voice relay ready (${servers.reduce((n, x) => n + x.urls.length, 0)} routes)`); }
+  else console.warn("[rooms/ice] no voice relay: calls on mobile data may not connect");
   return json({ iceServers: servers });
 }
