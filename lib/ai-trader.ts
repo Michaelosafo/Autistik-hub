@@ -22,6 +22,9 @@ import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
 import { SAFETY, safetyGate, type Gate } from "@/lib/ai-safety";
+import { simulateHoneypot } from "@/lib/honeypot-sim";
+import { extract } from "@/lib/ai-signals";
+import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
 
 export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
 export type TradeChain = (typeof TRADE_CHAINS)[number];
@@ -34,6 +37,7 @@ export type Settings = {
   manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
+  copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -132,7 +136,8 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl"]) s[k] = n(s[k]);
+  s.copy_on = s.copy_on !== false;
   s.callers = Array.isArray(s.callers) ? s.callers : [];
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
@@ -331,6 +336,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       status: "closed", received, pnl, pnl_pct: n(p.spent) ? (pnl / n(p.spent)) * 100 : null, close_reason: reason, sell_tx: sellTx,
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
+    if (p.strategy === "copy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
     await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
     await sb.from("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
@@ -382,6 +388,13 @@ async function manage(s: Settings) {
     // Small-coin trades judge a pulled pool against their own size, not the big-coin minimum.
     const rugLine = p.strategy ? Math.max(500, s.micro_min_liq / 2) : s.min_liquidity / 3;
     const rug = m?.liquidity != null && m.liquidity < rugLine;
+    // Copy trades (coins posted in the groups you follow) always sell at their own target or stop-loss, even when
+    // you're in control: nothing else (trailing stop, sellers taking over, max hold) closes them.
+    if (p.strategy === "copy") {
+      const cw = rug ? "Liquidity dropped sharply (possible rug)" : ch <= -n(p.stop_loss) ? `Stop-loss (${ch.toFixed(1)}%)` : ch >= n(p.take_profit) ? `Take profit (+${ch.toFixed(1)}%)` : null;
+      if (cw) await closePosition({ ...p, high_usd: high }, cw, price);
+      continue;
+    }
     if (handsOn) { if (rug) await closePosition({ ...p, high_usd: high }, "Liquidity dropped sharply (possible rug)", price); continue; }
     let why: string | null = null;
     // Setup and signal trades keep their own target; older trades use the "away" take profit in hands-on mode.
@@ -513,7 +526,7 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 
 /** Buys one coin (practice or live) and records it with its own stop and target. */
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
-  o: { sl: number; tp: number; why: string; strategy: string }) {
+  o: { sl: number; tp: number; why: string; strategy: string; trail?: number }) {
   const sb = supabaseService();
   const spend = Math.min(await tradeSize(s), cash);
   const bnb = await bnbUsd();
@@ -531,11 +544,11 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   }
   const { error } = await sb.from("ai_trader_positions").insert({
     mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
-    entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
+    entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
     strategy: o.strategy, pool: c.pool || null,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
-  const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : "⚡";
+  const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : o.strategy === "copy" ? "📡" : "⚡";
   await log("buy", `${icon} Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""}. Target +${o.tp}%, stop -${o.sl}%. ${o.why}`);
   return `Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain}.`;
 }
@@ -679,6 +692,12 @@ export async function runFast() {
   if (!s.enabled || !s.signals_on) return { ok: true, buys: "stopped" };
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const out: string[] = [];
+  // Followed X accounts, Lists and Communities: copy trades.
+  if (s.copy_on) {
+    const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
+    if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", 1);
+    for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at }, "x", post.label).catch(() => [])));
+  }
   // X callers first (they move fastest), then DexScreener.
   if (xReady() && s.callers.length) {
     const posts = await xPosts(s.callers).catch(() => []);
@@ -693,3 +712,77 @@ export async function runFast() {
   for (const g of dex) out.push(await actOnSignal(s, g, null));
   return { ok: true, signals: out.length, bought: out.filter((x) => x.startsWith("bought")).length };
 }
+
+// ---------------------------------------------------------------- Copy trading (groups and accounts you follow)
+
+/** Buy or sell tax at or above this counts as "can't really be sold" for copy trades. */
+export const COPY_MAX_TAX = 25;
+
+/**
+ * The only check before a copy trade: it must not be a honeypot. GoPlus and Honeypot.is (a simulated buy and sell
+ * on BNB Chain / Ethereum) both look; if either says it can't be sold, the sell tax is extreme, or (Solana) the
+ * creator can freeze or change balances, it's skipped. If no check answers at all, it's skipped too.
+ */
+export async function copyGate(chain: string, token: string): Promise<{ ok: true; buyTax: number; sellTax: number } | { ok: false; reason: string }> {
+  const [risk, sim] = await Promise.all([
+    riskFor(chain, token).catch(() => null),
+    chain === "solana" ? Promise.resolve(null) : simulateHoneypot(chain, token).catch(() => null),
+  ]);
+  const known = !!risk && risk.level !== "unknown";
+  if (!known && !sim) return { ok: false, reason: "the honeypot check didn't answer" };
+  if (risk?.honeypot || sim?.honeypot === true) return { ok: false, reason: `honeypot${sim?.reason ? ` (${sim.reason})` : ": it can't be sold"}` };
+  if (sim && n(sim.holdersTested) >= 5 && n(sim.holdersFailed) / n(sim.holdersTested) > 0.5) return { ok: false, reason: `honeypot: ${sim.holdersFailed} of ${sim.holdersTested} recent holders couldn't sell` };
+  const buyTax = Math.max(n(risk?.buyTax), n(sim?.buyTax)), sellTax = Math.max(n(risk?.sellTax), n(sim?.sellTax));
+  if (sellTax >= COPY_MAX_TAX || buyTax >= COPY_MAX_TAX) return { ok: false, reason: `extreme tax (buy ${buyTax.toFixed(0)}%, sell ${sellTax.toFixed(0)}%)` };
+  const trap = (risk?.notes || []).find((t) => /freeze|can't be transferred|change your balance|change wallet balances/i.test(t));
+  if (trap) return { ok: false, reason: trap.replace(/\.$/, "") };
+  return { ok: true, buyTax: +buyTax.toFixed(2), sellTax: +sellTax.toFixed(2) };
+}
+
+/**
+ * A post from a followed Telegram group or X account / List / Community: every contract address in it is bought
+ * (no market-cap, liquidity, socials or momentum rules), as long as it isn't a honeypot, with the copy target and
+ * stop-loss. $TICKERS alone are ignored, since many coins share a ticker and copycats use them.
+ */
+export async function copyPost(post: { text: string; user: string; url: string; at: number }, source: "x" | "telegram", label: string): Promise<string[]> {
+  const s = await getSettings();
+  if (!s.enabled || !s.copy_on) return [];
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  const { evm, sol } = extract(post.text);
+  const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
+  const out: string[] = [];
+  const sb = supabaseService();
+  for (const r of refs) {
+    const f = await resolve(r, chains).catch(() => null);
+    const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
+    const { data } = await sb.from("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "source,chain,token,url", ignoreDuplicates: true }).select("id");
+    if (!data?.length) continue; // already handled this post
+    out.push(await actOnCopy(s, sig, f, label));
+  }
+  return out;
+}
+
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string): Promise<string> {
+  const sb = supabaseService();
+  const done = async (r: string) => {
+    await sb.from("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
+    return r;
+  };
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  if (!f || !f.price) return done(s.mode === "live" ? "skipped: no BNB Chain pool for it (live trading buys on BNB Chain only)" : "skipped: no pool on your chains yet");
+  if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
+  if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
+  const room = await buyRoom(s);
+  if (typeof room === "string") return done(`skipped: ${room}`);
+  if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
+  const g = await copyGate(f.chain, f.token);
+  if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
+  const why = `📡 Copy: ${label}. Sells at +${s.copy_tp}% or -${s.copy_sl}%.`;
+  try {
+    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.copy_tp, why, strategy: "copy", trail: 0 });
+    const spend = await tradeSize(s).catch(() => s.per_trade);
+    await tgNotify(`📡 Bought ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(Math.min(spend, room.cash))} BNB${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${s.copy_tp}% or -${s.copy_sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
+    return done(`bought: ${r}`);
+  } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`); }
+}
+const fmt = (x: number) => x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
