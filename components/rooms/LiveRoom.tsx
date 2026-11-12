@@ -355,6 +355,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     if (!joinedRef.current) { if (joining) return; setMsg(""); setJoining(true); }
     unlockAudio();
     const sb = supabaseBrowser();
+    // A leftover connection to this room (left earlier, or a dropped one) would be handed back instead of a new one.
+    for (const c of sb.getChannels()) if ((c as any).topic === `realtime:room:${room.id}`) { try { sb.removeChannel(c); } catch {} }
     const ch = sb.channel(`room:${room.id}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
     chan.current = ch;
     ch.on("presence", { event: "sync" }, () => {
@@ -447,7 +449,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       if (status !== "SUBSCRIBED") {
         live.current = false;
         if (!joinedRef.current) {
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setMsg("Couldn't connect to the room. Check your internet and try again."); setJoining(false); try { ch.unsubscribe(); } catch {} chan.current = null; }
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setMsg("Couldn't connect to the room. Check your internet and try again."); setJoining(false); chan.current = null; try { sb.removeChannel(ch); } catch { try { ch.unsubscribe(); } catch {} } }
           return;
         }
         // Already in the live: a network blip. The voices keep playing (they go phone to phone); the room
@@ -476,7 +478,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   function rejoin() {
     const old = chan.current;
     chan.current = null;
-    try { old?.unsubscribe(); } catch {}
+    if (old) { try { supabaseBrowser().removeChannel(old); } catch { try { old.unsubscribe(); } catch {} } }
     setJoining(false);
     join();
   }
@@ -561,15 +563,18 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     return () => { document.removeEventListener("visibilitychange", wake); window.removeEventListener("pageshow", wake); };
   }, [joined]);
 
+  // Left on purpose (the page offers "Join again"; opening the link again joins straight away).
+  const [left, setLeft] = useState(false);
   function leave(forget = true) {
     clearTimeout(watchdog.current); live.current = false;
     try { wake.current?.release(); } catch {} wake.current = null;
     stopMic();
     for (const k of [...pcs.current.keys()]) closePc(k);
     levels.current.forEach((f) => f()); levels.current.clear();
-    try { chan.current?.unsubscribe(); } catch {}
-    chan.current = null;
-    setJoined(false); setJoining(false); setPeers({}); setHand(false);
+    // Remove the room connection completely (not just switch it off): opening the live again must get a fresh one.
+    const old = chan.current; chan.current = null;
+    if (old) { try { supabaseBrowser().removeChannel(old); } catch { try { old.unsubscribe(); } catch {} } }
+    setJoined(false); setJoining(false); setPeers({}); setHand(false); setLeft(true);
     if (forget) forgetLive(room.id);
   }
   useEffect(() => () => {
@@ -820,7 +825,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
           </div>
           <b>{isHost ? "You're the host" : "You're in"}</b>
           <p>{isHost ? "Your microphone starts muted." : "Listen, comment, react, and raise your hand to speak."} {ready && <small className="muted">🔒 Drops go to your wallet {ready}, only you see this.</small>}</p>
-          <button type="button" className="btn primary" disabled={joining} onClick={join}>{joining ? "Joining…" : isHost ? "Start the live" : "Join the live"}</button>
+          <button type="button" className="btn primary" disabled={joining} onClick={join}>{joining ? "Joining…" : isHost ? "Start the live" : left ? "Join again" : "Join the live"}</button>
         </div>
       ) : !mini ? (
         <>
