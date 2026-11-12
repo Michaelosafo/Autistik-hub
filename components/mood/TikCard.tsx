@@ -63,7 +63,21 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   const [open, setOpen] = useState(false);
   const [zoom, setZoom] = useState(false);
   const [menu, setMenu] = useState(false);
+  // A heart that bursts on the picture when you double-tap it (and the like button pops).
+  const [burst, setBurst] = useState(0);
+  const tap = useRef<ReturnType<typeof setTimeout> | null>(null);
   const a = t.author;
+  const mine = !!me && me === t.author_id;
+  /** One tap opens the picture; a quick second tap likes it (with a heart burst), like on Instagram. */
+  function onPic() {
+    if (tap.current) {
+      clearTimeout(tap.current); tap.current = null;
+      setBurst((n) => n + 1);
+      if (!liked) like();
+      return;
+    }
+    tap.current = setTimeout(() => { tap.current = null; setZoom(true); }, 260);
+  }
 
   async function like() {
     if (!me) { window.location.href = `/login?next=${encodeURIComponent(location.pathname)}`; return; }
@@ -97,7 +111,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   }
 
   return (
-    <article ref={box} style={{ ["--ac" as any]: a?.color || "#B57CFF" }} className={"tik" + (compact ? " compact" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
+    <article ref={box} style={{ ["--ac" as any]: a?.color || "#B57CFF" }} className={"tik" + (compact ? " compact" : "") + (mine ? " mine" : "") + (t.image_url ? " has-img" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
       {hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
@@ -131,8 +145,10 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
           ? <div className={`tik-style s-${t.style}`}><p><RichText text={t.body} /></p></div>
           : <p className="tik-body"><RichText text={t.body} /></p>}
         {t.image_url && (
-          <button type="button" className="tik-img" onClick={() => setZoom(true)} aria-label="View the picture">
+          <button type="button" className="tik-img" onClick={onPic} aria-label="View the picture (double-tap to like)">
+            <span className="tik-img-fill" aria-hidden="true" style={{ backgroundImage: `url("${t.image_url}")` }} />
             <img src={t.image_url} alt="" loading="lazy" />
+            {burst > 0 && <span key={burst} className="tik-burst" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg></span>}
           </button>
         )}
         <div className="tik-actions">
@@ -146,7 +162,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
               <span>{tickles > 0 ? tickles : ""}</span>
             </button>
           )}
-          <button type="button" className={"tik-act like" + (liked ? " on" : "")} onClick={like} aria-pressed={liked} aria-label={liked ? "Unlike" : "Like"} title="Like">
+          <button type="button" key={liked ? "l1" : "l0"} className={"tik-act like" + (liked ? " on pop" : "")} onClick={like} aria-pressed={liked} aria-label={liked ? "Unlike" : "Like"} title="Like">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>
             <span>{likes > 0 ? likes : ""}</span>
           </button>
@@ -170,7 +186,18 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
       </div>
       {zoom && t.image_url && (
         <div className="tik-zoom" role="dialog" aria-modal="true" aria-label="Picture" onClick={() => setZoom(false)}>
-          <img src={t.image_url} alt="" />
+          <span className="tik-zoom-bg" aria-hidden="true" style={{ backgroundImage: `url("${t.image_url}")` }} />
+          <button type="button" className="tik-zoom-x" aria-label="Close" onClick={() => setZoom(false)}>✕</button>
+          <figure onClick={(e) => e.stopPropagation()}>
+            <img src={t.image_url} alt="" />
+            <figcaption>
+              <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
+              <span><b>{a?.alias || "Member"}</b>{t.body && <small>{t.body.slice(0, 140)}{t.body.length > 140 ? "…" : ""}</small>}</span>
+              <button type="button" className={"tik-zoom-like" + (liked ? " on" : "")} onClick={like} aria-pressed={liked} aria-label={liked ? "Unlike" : "Like"}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>{likes > 0 ? likes : ""}
+              </button>
+            </figcaption>
+          </figure>
         </div>
       )}
     </article>
@@ -189,7 +216,26 @@ function Replies({ tik, me, onCount }: { tik: Tik; me: string | null; onCount: (
           onRemoved={(id) => { setTiks((x) => x?.filter((y) => y.id !== id) ?? null); onCount(-1); }} />
       ))}
       {more && <button type="button" className="tik-more" onClick={loadMore}>More replies</button>}
+      {me && <QuickReplies tikId={tik.id} onSent={() => { setK((n) => n + 1); onCount(1); }} />}
       {me ? <TikComposer replyTo={tik.id} compact placeholder={`Reply to ${owner}…`} onPosted={() => { setK((n) => n + 1); onCount(1); }} /> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
+    </div>
+  );
+}
+
+/** One-tap replies, so joining a conversation is as quick as a reaction. */
+const QUICK = ["🔥 LFG", "😂😂", "💯 Facts", "🚀 To the moon", "👀 Watching", "❤️ Love this"];
+function QuickReplies({ tikId, onSent }: { tikId: string; onSent: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function send(text: string) {
+    if (busy) return;
+    setBusy(text);
+    const { error } = await supabaseBrowser().from("tiks").insert({ body: text, reply_to: tikId });
+    setBusy(null);
+    if (!error) onSent();
+  }
+  return (
+    <div className="tik-quick" role="group" aria-label="Quick replies">
+      {QUICK.map((q) => <button key={q} type="button" disabled={!!busy} className={busy === q ? "on" : ""} onClick={() => send(q)}>{q}</button>)}
     </div>
   );
 }

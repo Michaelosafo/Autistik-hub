@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import FindPeople from "@/components/FindPeople";
 import LogoMark from "@/components/LogoMark";
+import Avatar from "@/components/Avatar";
 import TikComposer from "./TikComposer";
 import TikCard from "./TikCard";
 import TikHome from "./TikHome";
@@ -195,8 +196,16 @@ function Feed({ me, authors, refreshKey, limit = 5 }: { me: string | null; autho
   const { map: hot } = useTrending();
   if (tiks === null) return <small className="mp-dim">Loading…</small>;
   if (!tiks.length) return <small className="mp-dim">{authors ? "No Tiks from people you follow yet." : "No Tiks yet. Be the first."}</small>;
+  // Who's in the conversation: the newest voices in this feed, stacked like a group chat header.
+  const voices = limit > 5 ? [...new Map(tiks.filter((t) => t.author).map((t) => [t.author!.id, t.author!])).values()].slice(0, 7) : [];
   return (
     <div className="mad-feed">
+      {voices.length > 1 && (
+        <div className="tk-talk" aria-label="People talking">
+          <span className="tk-talk-av">{voices.map((v) => <Avatar key={v.id} className="me-av" alias={v.alias || "?"} color={v.color} url={v.avatar_url} />)}</span>
+          <span className="tk-talk-t"><b>{voices.length}{voices.length === 7 ? "+" : ""} people talking</b><small><i className="tik-dot" aria-hidden="true" />Jump in: reply, react or post a picture</small></span>
+        </div>
+      )}
       {tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={limit <= 5} hot={hot.get(t.id)} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
       {limit > 5 && more && <button type="button" className="tik-more" onClick={loadMore}>Load more</button>}
     </div>
