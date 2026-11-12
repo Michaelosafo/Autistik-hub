@@ -235,6 +235,9 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       const st = pc.connectionState;
       if (st === "connected") { retries.current.delete(key); return; }
       if (st !== "failed" && st !== "disconnected") return;
+      // A short drop (switching networks, weak signal): heal the same link first, so the voice doesn't cut out.
+      const [f0, t0] = key.split(">");
+      if (st === "disconnected" && f0 === me.id) setTimeout(() => { if (pcs.current.get(key) === pc && pc.connectionState === "disconnected") healPc(key, t0, pc); }, 1500);
       // A dropped or failed voice link: the sender calls again (a few times, a little later each time).
       setTimeout(() => {
         if (pcs.current.get(key) !== pc || pc.connectionState === "connected") return;
@@ -244,6 +247,17 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       }, st === "failed" ? 800 : 4000);
     };
     return pc;
+  }
+
+  /** Re-route an existing voice link (new network paths) without hanging up: no gap in the sound when it works. */
+  async function healPc(key: string, to: string, pc: RTCPeerConnection) {
+    try {
+      await loadIce();
+      pc.setConfiguration?.(ICE);
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      send("offer", { to, key, sdp: pc.localDescription, heal: true });
+    } catch { /* the slower full re-call below still runs */ }
   }
 
   // I'm on stage: send my microphone (and camera, if on) to one person.
@@ -279,8 +293,9 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       const t = setInterval(() => {
         an.getByteFrequencyData(buf);
         const v = buf.reduce((s, x) => s + x, 0) / buf.length;
-        setTalking((m) => (m[id] === v > 18 ? m : { ...m, [id]: v > 18 }));
-      }, 250);
+        // Turns on above 18, off only below 10: the glow doesn't flicker between words.
+        setTalking((m) => { const was = !!m[id]; const now = was ? v > 10 : v > 18; return was === now ? m : { ...m, [id]: now }; });
+      }, 300);
       levels.current.set(id, () => { clearInterval(t); try { src.disconnect(); } catch {} });
     } catch { /* no meter on this browser */ }
   }
@@ -338,7 +353,12 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       const next: Record<string, Peer> = {};
       for (const [id, metas] of Object.entries(st)) { const m = metas[metas.length - 1]; if (m) next[id] = { id, alias: m.alias, color: m.color, avatar_url: m.avatar_url, role: m.role, hand: !!m.hand, muted: !!m.muted, at: m.at || 0, ver: !!m.ver, vb: m.vb ?? null }; }
       setPeers(next);
-      for (const k of [...pcs.current.keys()]) { const [a, b] = k.split(">"); if (!next[a] || !next[b]) closePc(k); }
+      // Presence can blink for a moment (a reconnect, a status update): only hang up on someone still gone 6s later.
+      const gone = [...pcs.current.keys()].filter((k) => { const [a, b] = k.split(">"); return !next[a] || !next[b]; });
+      if (gone.length) setTimeout(() => {
+        const now = (chan.current?.presenceState?.() || {}) as Record<string, unknown>;
+        for (const k of gone) { const [a, b] = k.split(">"); if (!now[a] || !now[b]) closePc(k); }
+      }, 6000);
       // The host's lists of speakers and co-hosts are the ones that count.
       const h = st[room.host_id]?.[st[room.host_id].length - 1];
       if (h && !isHost) {
@@ -355,9 +375,11 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       for (let i = 0; i < 25 && !onStageNow(payload.from); i++) await sleep(300);
       if (!onStageNow(payload.from) || !chan.current) return;
       await loadIce();
+      const old = pcs.current.get(payload.key);
+      const heal = !!payload.heal && old && old.signalingState === "stable";
       const early = pendingIce.current.get(payload.key);
-      const pc = newPc(payload.key, payload.from);
-      if (early) pendingIce.current.set(payload.key, early);
+      const pc = heal ? old! : newPc(payload.key, payload.from);
+      if (early && !heal) pendingIce.current.set(payload.key, early);
       try {
         await pc.setRemoteDescription(payload.sdp);
         await flushIce(payload.key, pc);
@@ -402,6 +424,10 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     });
     ch.on("broadcast", { event: "drop" }, ({ payload }: any) => { if (peersRef.current[payload.from]) setDrop(String(payload.text || "").slice(0, 160)); });
     ch.on("broadcast", { event: "fire" }, () => fireBurst());
+    ch.on("broadcast", { event: "lower" }, ({ payload }: any) => {
+      if (!runners().includes(payload.from) || payload.to !== me.id) return;
+      setHand(false); track(myRoleRef.current, false, true); setMsg("The host can't bring you up right now. You can request again later.");
+    });
     ch.on("broadcast", { event: "rec" }, ({ payload }: any) => { if (payload.from === room.host_id) setRecOn(!!payload.on); });
     ch.on("broadcast", { event: "react" }, ({ payload }: any) => { if (REACTIONS.includes(payload.e)) float(payload.e); });
     ch.on("broadcast", { event: "end" }, ({ payload }: any) => { if (payload.from === room.host_id) { setEnded(true); leave(); } });
@@ -518,7 +544,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     if (!mic.current) { startMic().then((ok) => ok && setMicOn(true)); return; }
     setMicOn(!!mutedRef.current);
   }
-  function raiseHand() { const h = !hand; setHand(h); track(myRole, h, true); if (h) setMsg(openMic ? "Coming up to speak…" : "Hand raised. The host can invite you up to speak."); }
+  function raiseHand() { const h = !hand; setHand(h); track(myRole, h, true); if (h) setMsg(openMic ? "Coming up to speak…" : "Request sent ✋ The host will see it and can bring you up."); }
 
   // ---- running the stage (host and co-hosts)
   async function setSpeakerList(list: string[]) {
@@ -643,16 +669,16 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const fk = useRef(0);
   function float(e: string) {
     const k = ++fk.current;
-    setFloaters((f) => [...f.slice(-24), { k, e, x: 10 + Math.random() * 80 }]);
+    setFloaters((f) => [...f.slice(-14), { k, e, x: 10 + Math.random() * 80 }]);
     setTimeout(() => setFloaters((f) => f.filter((x) => x.k !== k)), 2600);
   }
   const react = (e: string) => { float(e); send("react", { e }); };
   const blazeT = useRef<any>(null);
   function fireBurst() {
     setFires((n) => n + 1);
-    for (let i = 0; i < 9; i++) setTimeout(() => {
+    for (let i = 0; i < 6; i++) setTimeout(() => {
       const k = ++fk.current;
-      setFloaters((f) => [...f.slice(-40), { k, e: "🔥", x: 4 + Math.random() * 92, big: true }]);
+      setFloaters((f) => [...f.slice(-16), { k, e: "🔥", x: 4 + Math.random() * 92, big: true }]);
       setTimeout(() => setFloaters((f) => f.filter((x) => x.k !== k)), 2800);
     }, i * 70);
     setBlaze(true);
@@ -666,6 +692,18 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const audience = list.filter((p) => roleOf(p.id) === "listener");
   const hands = audience.filter((p) => p.hand);
   const badge = { host: "Host", cohost: "Co-host", speaker: "Speaker", listener: "" } as const;
+  // Requests to speak pop up for the host one at a time (Accept / Not now); all of them stay listed under the stage.
+  const [seenReq, setSeenReq] = useState<string[]>([]);
+  const dismissReq = (id: string) => setSeenReq((s) => [...s, id]);
+  const newReq = hands.find((p) => !seenReq.includes(p.id)) || null;
+  useEffect(() => { if (newReq && canRun) { try { navigator.vibrate?.(40); } catch {} } }, [newReq?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Someone lowered their hand: they can ask again later and the pop-up shows again.
+  useEffect(() => { setSeenReq((s) => s.filter((id) => hands.some((h) => h.id === id))); }, [hands.map((h) => h.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  function openChat() {
+    const el = document.getElementById("lv-chat");
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => (el?.querySelector('input[aria-label="Comment"]') as HTMLInputElement | null)?.focus(), 350);
+  }
 
   // Open mic: the host's page brings up anyone who asks, while there's room on stage.
   useEffect(() => {
@@ -777,6 +815,14 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             })}
           </section>
 
+          {canRun && !openMic && newReq && (
+            <div className="lv-req" role="alertdialog" aria-label="Request to speak">
+              <Avatar className="avatar lv-av xs" alias={newReq.alias} color={newReq.color} url={newReq.avatar_url} />
+              <span><b>{newReq.alias}</b><small>wants to speak</small></span>
+              <button type="button" className="lv-req-ok" onClick={() => { invite(newReq.id); dismissReq(newReq.id); }}>Accept</button>
+              <button type="button" className="lv-req-no" onClick={() => { send("lower", { to: newReq.id }); dismissReq(newReq.id); }}>Not now</button>
+            </div>
+          )}
           {canRun && hands.length > 0 && !openMic && (
             <section className="lv-hands" aria-label="Raised hands">
               <small>✋ Want to speak</small>
@@ -801,16 +847,17 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             {!audience.length && <small className="muted">No listeners yet. Share the link so people can join.</small>}
           </section>
 
-          <div className="lv-floats" aria-hidden="true">{floaters.map((f) => <span key={f.k} className={f.big ? "big" : undefined} style={{ left: `${f.x}%` }}><Emo e={f.e} size={f.big ? 64 : 42} /></span>)}</div>
+          <div className="lv-floats" aria-hidden="true">{floaters.map((f) => <span key={f.k} className={f.big ? "big" : undefined} style={{ left: `${f.x}%` }}><Emo e={f.e} size={f.big ? 44 : 32} /></span>)}</div>
 
-          <button type="button" className="lv-fire" onClick={moreFire} aria-label="More fire">
-            <span className="lv-fire-ic" aria-hidden="true"><Emo e="🔥" size={30} /></span>
-            <span className="lv-fire-t"><b>MORE FIRE</b><small>{fires ? `${fmt(fires)} 🔥 in this live` : "Tap to light it up"}</small></span>
-          </button>
+          <div className="lv-hype" role="group" aria-label="Hype">
+            <button type="button" className="lv-fire sm" onClick={moreFire} aria-label="More fire">
+              <span className="lv-fire-ic" aria-hidden="true"><Emo e="🔥" size={20} /></span>
+              <span className="lv-fire-t"><b>FIRE</b>{fires > 0 && <small>{fmt(fires)}</small>}</span>
+            </button>
+            {REACTIONS.filter((e) => e !== "🔥").map((e) => <button key={e} type="button" className="lv-emo" onClick={() => react(e)} aria-label={`React ${e}`}><Emo e={e} size={20} /></button>)}
+          </div>
 
-          <div className="lv-react" role="group" aria-label="React">{REACTIONS.map((e) => <button key={e} type="button" onClick={() => react(e)} aria-label={`React ${e}`}><Emo e={e} size={30} /></button>)}</div>
-
-          <LiveChat roomId={room.id} me={me} canModerate={canRun} />
+          <div id="lv-chat" className="lv-chat-wrap"><LiveChat roomId={room.id} me={me} canModerate={canRun} /></div>
 
           <LiveWallet roomId={room.id} address={myAddr} sol={me.wallet?.member?.sol ?? null} canAll={canRun}
             people={list.filter((p) => p.id !== me.id).map((p) => ({ id: p.id, alias: p.alias, color: p.color, avatar_url: p.avatar_url }))}
@@ -824,7 +871,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
         <div className={"lv-ctl" + (mini ? " mini" : "")} role="toolbar" aria-label="Live controls" style={!joined ? { display: "none" } : undefined}>
           {canSpeak
             ? <MicBtn muted={muted} talking={!!talking[me.id]} onClick={toggleMute} />
-            : <Ctl icon="hand" label={openMic ? "Speak" : hand ? "Lower" : "Ask to speak"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
+            : <Ctl icon="hand" label={openMic ? "Speak" : hand ? "Requested" : "Request"} title={openMic ? "Speak" : hand ? "Cancel your request to speak" : "Request to speak"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
+          {!mini && <Ctl icon="chat" label="Comment" onClick={openChat} />}
           <SpeakerOut audios={allAudios} />
           {!mini && canSpeak && coinLive && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
           {isHost && <Ctl icon={rec ? "stop" : "rec"} label={rec ? "Stop rec" : "Record"} on={rec} tone="red" onClick={() => (rec ? stopRec() : startRec())} pressed={rec} />}
