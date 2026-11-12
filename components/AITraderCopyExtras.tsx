@@ -11,7 +11,8 @@ export type Rebuy = { id: number; chain: string; token: string; symbol: string |
 
 const MODES = [
   { k: "telegram", name: "Telegram only", note: "Buys only coins called in your ticked Telegram chats. No scanning." },
-  { k: "x", name: "X only", note: "Buys only coins posted by your followed X accounts, Lists and Communities." },
+  { k: "both", name: "Telegram + X", note: "Buys coins called in your Telegram chats and posted by your followed X sources. No scanning." },
+  { k: "x", name: "X only", note: "Buys only coins posted by your followed X accounts, Lists and Communities. No scanning." },
   { k: "general", name: "General", note: "Copy trades plus the AI's own scanning and DexScreener signals." },
 ] as const;
 
@@ -87,6 +88,37 @@ export function RebuyBox({ on, dump, tp, sl, list, busy, onAct }: { on: boolean;
             </div>
           );
         })}</div>
+      )}
+    </div>
+  );
+}
+
+export type LiveWallet = { chain: string; native: string; on: boolean; address: string | null; balance: number | null };
+const CHAIN_LABEL: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", solana: "Solana" };
+
+/** Live chains: switch each on or off, see its wallet address and balance, and make the Solana wallet. */
+export function LiveChains({ list, live, busy, onAct }: { list: LiveWallet[]; live: boolean; busy: boolean; onAct: Act }) {
+  const [copied, setCopied] = useState("");
+  const on = list.filter((w) => w.on).map((w) => w.chain);
+  const toggle = (chain: string, v: boolean) => onAct(`lc${chain}`, "settings", { live_chains: v ? [...on, chain] : on.filter((c) => c !== chain) }, v ? `${CHAIN_LABEL[chain]} on for live trading.` : `${CHAIN_LABEL[chain]} off for live trading.`);
+  const copy = (a: string) => { navigator.clipboard?.writeText(a).then(() => { setCopied(a); setTimeout(() => setCopied(""), 1500); }).catch(() => {}); };
+  return (
+    <div className="aic-block">
+      <b>⛓ Live chains</b>
+      <small className="muted">{live ? "Live trading buys on the chains switched on here." : "You're in practice mode: these apply once you switch to Live."} Each chain pays with its own coin, so send that coin to the wallet: BNB on BNB Chain, ETH on Ethereum, ETH on Robinhood Chain, SOL on Solana. The same address works on BNB Chain, Ethereum and Robinhood Chain. Calls on a chain that&apos;s off (or has no money) are skipped.</small>
+      <div className="aic-list">{list.map((w) => (
+        <div key={w.chain} className={"aic-row aic-chain" + (w.on ? " on" : "")}>
+          <input type="checkbox" checked={w.on} disabled={busy || (!w.address && !w.on)} onChange={(e) => toggle(w.chain, e.target.checked)} aria-label={`Trade live on ${CHAIN_LABEL[w.chain]}`} />
+          <span className="grow">
+            <b>{CHAIN_LABEL[w.chain] || w.chain}</b>
+            <small className="muted">{w.address ? <>{w.balance == null ? "balance unavailable" : `${w.balance.toFixed(w.native === "SOL" ? 4 : 5)} ${w.native}`} · <button type="button" className="aic-addr" onClick={() => copy(w.address!)}>{copied === w.address ? "Copied ✓" : `${w.address.slice(0, 6)}…${w.address.slice(-4)} (copy)`}</button></> : w.chain === "solana" ? "No Solana wallet yet" : "No trading wallet yet (create it under Live wallet)"}</small>
+          </span>
+          {w.chain === "solana" && !w.address && <button type="button" className="btn small" disabled={busy} onClick={() => onAct("solw", "sol-wallet", {})}>Create Solana wallet</button>}
+        </div>
+      ))}</div>
+      {list.some((w) => w.chain === "solana" && w.address) && (
+        <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy}
+          onClick={async () => { if (!confirm("Show the Solana wallet's private key? Anyone who sees it can take the SOL and coins in it.")) return; const r = await fetch("/api/ai-trader/sol-key-reveal", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((x) => x.json()).catch(() => null); if (r?.key) prompt("Solana private key (import into Phantom or Solflare as a private key). Keep it secret:", r.key); else alert(r?.error || "Couldn't load it."); }}>Show Solana private key</button>
       )}
     </div>
   );

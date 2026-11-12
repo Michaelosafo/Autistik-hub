@@ -6106,3 +6106,5 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .aic-caller{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .aic-caller select{width:auto;flex:none}
 .aic-caller > .input{flex:1;min-width:140px}
+.aic-addr{all:unset;cursor:pointer;text-decoration:underline dotted}
+.aic-chain .btn{flex:none}
