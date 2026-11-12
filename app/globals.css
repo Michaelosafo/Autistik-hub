@@ -6096,3 +6096,6 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .aic-sent{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:10px;background:rgba(59,158,255,.1)}
 .aic-tabs{flex-wrap:wrap}
 .aic-tabs small{opacity:.65;font-weight:600}
+.aic-qr{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px;border-radius:12px;background:var(--surface)}
+.aic-qr img{border-radius:10px;background:#fff;padding:6px;width:220px;height:220px}
+.aic-qr .stack{flex:1;min-width:200px}

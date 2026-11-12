@@ -11,6 +11,7 @@ import { Api, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { computeCheck } from "telegram/Password";
 import bigInt from "big-integer";
+import QRCode from "qrcode";
 import { supabaseService } from "@/lib/supabase/server";
 import { T, tq } from "@/lib/ai-trader-ctx";
 
@@ -35,6 +36,7 @@ function friendly(e: unknown): string {
   if (/PHONE_CODE_EXPIRED/.test(m)) return "That code has expired. Start again to get a new one.";
   if (/PASSWORD_HASH_INVALID/.test(m)) return "That 2-step verification password is wrong.";
   if (/FLOOD_WAIT_(\d+)/.test(m)) return `Telegram asks to wait ${Math.ceil(Number(m.match(/FLOOD_WAIT_(\d+)/)![1]) / 60)} minutes before trying again.`;
+  if (/AUTH_TOKEN_(EXPIRED|INVALID|ALREADY_ACCEPTED)/.test(m)) return "That QR code has expired. Tap Show QR code again.";
   if (/PHONE_NUMBER_BANNED/.test(m)) return "Telegram says this number is banned.";
   if (/SEND_CODE_UNAVAILABLE/.test(m)) return "Telegram has no other way to send the code right now. Check the \"Telegram\" chat in your app, or wait a few minutes and start again.";
   if (/API_ID_INVALID/.test(m)) return "Telegram says TELEGRAM_API_ID / TELEGRAM_API_HASH don't match. Copy them again from my.telegram.org/apps into Vercel and redeploy.";
@@ -105,6 +107,58 @@ async function pending(): Promise<{ phone: string; code_hash: string; pending_se
   const { data } = await auth().select("phone,code_hash,pending_session,pending_at").eq("id", T()).maybeSingle();
   if (!data?.pending_session || !data.pending_at || Date.now() - Date.parse(data.pending_at) > 10 * 60_000) throw new Error("That login has expired. Start again.");
   return data as any;
+}
+
+// ---------------------------------------------------------------- QR login (no code needed)
+
+const tokenUrl = (token: any) => `tg://login?token=${Buffer.from(token).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+async function qrOf(r: any) {
+  const link = tokenUrl(r.token);
+  return { link, qr: await QRCode.toDataURL(link, { margin: 1, width: 280, errorCorrectionLevel: "M" }), expires: Number(r.expires) * 1000 };
+}
+
+/**
+ * QR login, like Telegram Desktop: shows a QR code (and a tg://login link) that the admin scans or opens in their
+ * Telegram app (Settings → Devices → Link Desktop Device). No login code is sent, so nothing can get lost.
+ */
+export async function tgaQrStart(): Promise<{ link: string; qr: string; expires: number }> {
+  let c: TelegramClient | null = null;
+  try {
+    c = await client();
+    const r: any = await c.invoke(new Api.auth.ExportLoginToken({ apiId: apiId(), apiHash: apiHash(), exceptIds: [] }));
+    await auth().upsert({ id: T(), phone: null, code_hash: null, pending_session: String(c.session.save()), pending_at: new Date().toISOString() });
+    return await qrOf(r);
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { await close(c); }
+}
+
+/** Checks the QR login: done, a 2-step password needed, or still waiting (with a fresh QR when the old one expired). */
+export async function tgaQrCheck(): Promise<{ ok: true; name: string } | { needPassword: true; hint: string | null } | { waiting: true; link: string; qr: string; expires: number }> {
+  const p = await pending();
+  let c: TelegramClient | null = null;
+  try {
+    c = await client(p.pending_session);
+    let r: any;
+    try {
+      r = await c.invoke(new Api.auth.ExportLoginToken({ apiId: apiId(), apiHash: apiHash(), exceptIds: [] }));
+      if (r?.className === "auth.LoginTokenMigrateTo") {
+        // The account lives on another Telegram server: move there and finish the login.
+        await (c as any)._switchDC(r.dcId);
+        r = await c.invoke(new Api.auth.ImportLoginToken({ token: r.token }));
+      }
+    } catch (e) {
+      if (/SESSION_PASSWORD_NEEDED/.test(String((e as any)?.errorMessage || e))) {
+        const pw: any = await c.invoke(new Api.account.GetPassword());
+        await auth().update({ pending_session: String(c.session.save()), pending_at: new Date().toISOString() }).eq("id", T());
+        return { needPassword: true, hint: pw?.hint ? String(pw.hint) : null };
+      }
+      throw e;
+    }
+    if (r?.className === "auth.LoginTokenSuccess") return { ok: true, name: await finish(c) };
+    await auth().update({ pending_session: String(c.session.save()), pending_at: new Date().toISOString() }).eq("id", T());
+    return { waiting: true, ...(await qrOf(r)) };
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { await close(c); }
 }
 
 /** Step 2: the code. Returns needPassword when the account has 2-step verification. */

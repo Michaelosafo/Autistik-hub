@@ -3,7 +3,7 @@
  * Log in with your own Telegram account (phone number → code → 2-step password if set), then tick which of your
  * groups and channels to copy. Part of the AI trader's copy trading panel.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CopySource } from "@/components/AITraderCopy";
 
 type Chat = { ref: string; title: string; kind: "group" | "channel" | "chat" | "bot"; members: number | null; username: string | null };
@@ -18,7 +18,9 @@ async function call(action: string, body: unknown) {
 const ago = (iso: string | null) => { if (!iso) return "no posts yet"; const s = (Date.now() - Date.parse(iso)) / 1000; return s < 60 ? "posted now" : s < 3600 ? `posted ${Math.floor(s / 60)}m ago` : s < 86400 ? `posted ${Math.floor(s / 3600)}h ago` : `posted ${Math.floor(s / 86400)}d ago`; };
 
 export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: { st: TgaState; sources: CopySource[]; busy: boolean; reload: () => Promise<void>; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
-  const [step, setStep] = useState<"phone" | "code" | "password">("phone");
+  const [step, setStep] = useState<"qr" | "phone" | "code" | "password">("qr");
+  const [qr, setQr] = useState<{ qr: string; link: string; expires: number } | null>(null);
+  const polling = useRef(false);
   const [phone, setPhone] = useState(""), [code, setCode] = useState(""), [pw, setPw] = useState("");
   const [hint, setHint] = useState<string | null>(null), [sentTo, setSentTo] = useState(""), [resend, setResend] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "group" | "channel" | "chat">("all");
@@ -27,8 +29,28 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState("");
 
+  // While a QR code is showing, ask every 3 seconds whether it was scanned (a fresh code comes back when it expires).
+  useEffect(() => {
+    if (step !== "qr" || !qr) return;
+    let stop = false;
+    const t = setInterval(async () => {
+      if (stop || polling.current) return;
+      polling.current = true;
+      try {
+        const r = await call("tga-qr-check", {});
+        if (r.name) { stop = true; setQr(null); await done(r.name); }
+        else if (r.needPassword) { stop = true; setQr(null); setHint(r.hint || null); setStep("password"); }
+        else if (r.qr) setQr({ qr: r.qr, link: r.link, expires: r.expires });
+      } catch (e) { stop = true; setQr(null); setMsg((e as Error).message); }
+      polling.current = false;
+    }, 3000);
+    const end = setTimeout(() => { stop = true; setQr(null); setMsg("The QR code timed out. Tap Show QR code to try again."); }, 5 * 60_000);
+    return () => { stop = true; clearInterval(t); clearTimeout(end); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, !!qr]);
+
   async function go(fn: () => Promise<void>) { setWorking(true); setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } setWorking(false); }
-  const done = async (name: string) => { setStep("phone"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Tap "Show my groups, channels and chats" to pick what to copy.`); await reload(); };
+  const done = async (name: string) => { setStep("qr"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Tap "Show my groups, channels and chats" to pick what to copy.`); await reload(); };
   const mine = sources.filter((x) => x.kind === "tg_chat");
 
   if (!st.ready) return (
@@ -38,6 +60,27 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
   if (!st.signedIn) return (
     <div className="stack" style={{ gap: 8 }}>
       <small className="muted">Log in with your own Telegram account: every group, channel and chat you have shows up here to tick. No bot needed. Telegram will tell you about the new login; you can end it any time in Telegram → Settings → Devices.</small>
+      {step === "qr" && (
+        <div className="stack" style={{ gap: 8 }}>
+          {!qr ? (
+            <button type="button" className="btn" style={{ alignSelf: "flex-start" }} disabled={working || busy} onClick={() => go(async () => { const r = await call("tga-qr", {}); setQr({ qr: r.qr, link: r.link, expires: r.expires }); })}>{working ? "Getting a QR code…" : "Show QR code"}</button>
+          ) : (
+            <div className="aic-qr">
+              <img src={qr.qr} alt="Telegram login QR code" width={220} height={220} />
+              <div className="stack" style={{ gap: 6 }}>
+                <b>Scan this in Telegram</b>
+                <small className="muted">On your phone: Telegram → <b>Settings → Devices → Link Desktop Device</b>, then point the camera at this code. On this same phone, tap the button instead.</small>
+                <a className="btn small" href={qr.link}>Open in Telegram on this phone</a>
+                <small className="muted">Waiting for you to approve… it logs in by itself.</small>
+              </div>
+            </div>
+          )}
+          <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => { setQr(null); setStep("phone"); setMsg(""); }}>Log in with a code instead</button>
+        </div>
+      )}
+      {step === "phone" && (
+        <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => { setStep("qr"); setMsg(""); }}>Log in with a QR code instead (no code needed)</button>
+      )}
       {step === "phone" && (
         <form className="aic-add" onSubmit={(e) => { e.preventDefault(); go(async () => { const r = await call("tga-start", { phone }); setSentTo(r.sentTo); setResend(r.resend); setStep("code"); }); }}>
           <input className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="+233 20 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Your Telegram phone number" />
