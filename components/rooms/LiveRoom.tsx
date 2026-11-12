@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Avatar from "@/components/Avatar";
 import LiveWallet from "./LiveWallet";
 import type { Member } from "@/components/wallet/types";
@@ -9,7 +9,7 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import Emo from "@/components/Emo";
 import SpeakerOut from "./SpeakerOut";
 import Ctl, { MicBtn } from "./Ctl";
-import LiveChat from "./LiveChat";
+import LiveChatRaw from "./LiveChat";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
@@ -34,6 +34,8 @@ async function loadIce() {
     if (Array.isArray(j?.iceServers) && j.iceServers.length) { ICE = { iceServers: [...STUN, ...j.iceServers] }; iceAt = Date.now(); }
   } catch { /* STUN only */ }
 }
+// The chat holds hundreds of messages: only redraw it when its own inputs change (not on every voice level tick).
+const LiveChat = memo(LiveChatRaw);
 const MAX_STAGE = 8; // host + co-hosts + speakers
 const MAX_COHOSTS = 3;
 const REACTIONS = ["🚀", "💎", "❤️", "😂", "👏", "🔥"];
@@ -438,6 +440,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       }
       if (joinedRef.current) { await track(myRoleRef.current, false, mutedRef.current); return; } // reconnected
       if (isHost) await startMic();
+      if (isHost) { try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {}); } catch {} }
       await track(isHost ? "host" : "listener", false, true);
       setJoined(true); setJoining(false);
       rememberLive(room.id, room.title);
@@ -696,7 +699,30 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const [seenReq, setSeenReq] = useState<string[]>([]);
   const dismissReq = (id: string) => setSeenReq((s) => [...s, id]);
   const newReq = hands.find((p) => !seenReq.includes(p.id)) || null;
-  useEffect(() => { if (newReq && canRun) { try { navigator.vibrate?.(40); } catch {} } }, [newReq?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The host can't miss a request: a chime, a buzz, a phone notification if they're in another app, and the tab title.
+  useEffect(() => {
+    if (!newReq || !canRun || openMic) return;
+    try { navigator.vibrate?.([60, 40, 60]); } catch {}
+    try {
+      const c = meterCtx(), o = c.createOscillator(), g = c.createGain();
+      o.type = "sine"; o.frequency.setValueAtTime(880, c.currentTime); o.frequency.setValueAtTime(1320, c.currentTime + 0.12);
+      g.gain.setValueAtTime(0.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(0.18, c.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + 0.35);
+      o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.4);
+    } catch {}
+    try {
+      if (document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") {
+        const n = new Notification(`✋ ${newReq.alias} wants to speak`, { body: `In your live "${room.title}". Tap to open and accept.`, tag: `req-${room.id}`, icon: "/icons/icon-192.png" });
+        n.onclick = () => { window.focus(); n.close(); };
+      }
+    } catch {}
+    const t0 = document.title; let on = false;
+    const flash = setInterval(() => { on = !on; document.title = on ? `✋ ${newReq.alias} wants to speak` : t0; }, 1000);
+    const stop = () => { if (document.visibilityState === "visible") { clearInterval(flash); document.title = t0; } };
+    document.addEventListener("visibilitychange", stop);
+    const end = setTimeout(() => { clearInterval(flash); document.title = t0; }, 30_000);
+    if (document.visibilityState === "visible") setTimeout(() => { clearInterval(flash); document.title = t0; }, 4000);
+    return () => { clearInterval(flash); clearTimeout(end); document.title = t0; document.removeEventListener("visibilitychange", stop); };
+  }, [newReq?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Someone lowered their hand: they can ask again later and the pop-up shows again.
   useEffect(() => { setSeenReq((s) => s.filter((id) => hands.some((h) => h.id === id))); }, [hands.map((h) => h.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
   function openChat() {
