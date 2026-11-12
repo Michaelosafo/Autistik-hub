@@ -33,15 +33,19 @@ export function SourcePicker({ tg, x, general, busy, onAct }: { tg: boolean; x: 
   );
 }
 
-export function Callers({ list, normal, busy, onAct }: { list: Caller[]; normal: string; busy: boolean; onAct: Act }) {
+export function Callers({ list, normal, only, busy, onAct }: { list: Caller[]; normal: string; only: boolean; busy: boolean; onAct: Act }) {
   const [platform, setPlatform] = useState<"tg" | "x">("tg");
   const [who, setWho] = useState("");
   const [usd, setUsd] = useState("");
   const label = (c: Caller) => (/^\d+$/.test(c.who) ? `ID ${c.who}` : `@${c.who}`);
   return (
     <div className="aic-block">
-      <b>⭐ Caller sizes</b>
-      <small className="muted">Everyone&apos;s calls buy the normal size ({normal}). Add the good traders here with a bigger dollar amount, so their calls buy big. Paste several @usernames or user ids at once, separated by spaces or commas.</small>
+      <b>⭐ Callers</b>
+      <label className={"aic-row" + (only ? " on" : "")}>
+        <input type="checkbox" checked={only} disabled={busy} onChange={(e) => { if (e.target.checked && !list.length && !confirm("Your caller list is empty, so nothing will be bought until you add callers. Turn it on anyway?")) return; onAct("co", "settings", { callers_only: e.target.checked }, e.target.checked ? "Only your chosen callers' posts are bought now. Everyone else's calls are ignored." : "Everyone's calls in your chats are bought again."); }} />
+        <span className="grow"><b>Only buy calls from these callers</b><small className="muted">{only ? `Strict: a call is bought only when one of the ${list.length} caller${list.length === 1 ? "" : "s"} below posts it. Everyone else in your groups is ignored.` : `Off: everyone's calls buy the normal size (${normal}); callers below buy their own amount.`}</small></span>
+      </label>
+      <small className="muted">Add the traders you want the bot to follow, each with a dollar amount per call. Paste several @usernames or user ids at once, separated by spaces or commas. In a channel, posts come from the channel itself, so add the channel&apos;s @username.</small>
       <form className="aic-caller" onSubmit={(e) => { e.preventDefault(); if (who.trim() && Number(usd) > 0) onAct("caller", "caller", { op: "add", platform, who, usd: Number(usd) }).then(() => { setWho(""); }); }}>
         <select className="input" value={platform} onChange={(e) => setPlatform(e.target.value as "tg" | "x")} aria-label="Where they post">
           <option value="tg">Telegram</option>

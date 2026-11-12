@@ -136,6 +136,7 @@ async function postMine(action: string, b: any) {
       if (typeof b.copy_on === "boolean") up.copy_on = b.copy_on;
       if (typeof b.rebuy_on === "boolean") up.rebuy_on = b.rebuy_on;
       if (typeof b.copy_check === "boolean") up.copy_check = b.copy_check;
+      if (typeof b.callers_only === "boolean") up.callers_only = b.callers_only;
       // What it buys from: tick boxes. At least one stays on.
       if (typeof b.use_tg === "boolean" || typeof b.use_x === "boolean" || typeof b.use_general === "boolean") {
         const nx = { use_tg: typeof b.use_tg === "boolean" ? b.use_tg : cur.use_tg, use_x: typeof b.use_x === "boolean" ? b.use_x : cur.use_x, use_general: typeof b.use_general === "boolean" ? b.use_general : cur.use_general };

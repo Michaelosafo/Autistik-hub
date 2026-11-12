@@ -43,7 +43,7 @@ export type Settings = {
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
-  live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean;
+  live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; callers_only: boolean;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -65,31 +65,33 @@ const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
  * key is kept encrypted in the database Vault (only the server can read it; it's never shown or sent anywhere).
  */
 // Each admin's trader has its own wallet. AI_TRADER_KEY in Vercel, if set, is the owner's (trader 1) only.
-const wallets = new Map<number, ReturnType<typeof privateKeyToAccount>>();
+// Decoded wallets, reused only while the saved key is unchanged. The key itself is read from Vault every time, so an
+// import or a new wallet is picked up at once by every server, never an old wallet kept in memory.
+const wallets = new Map<number, { key: string; a: ReturnType<typeof privateKeyToAccount> }>();
 const envKey = () => (T() === 1 ? process.env.AI_TRADER_KEY?.trim() || "" : "");
 export async function traderAccount() {
-  const have = wallets.get(T());
-  if (have) return have;
   let k = envKey();
   if (!/^0x[0-9a-fA-F]{64}$/.test(k)) {
     const { data } = await supabaseService().rpc("ai_trader_key_get_for", { p_trader: T() });
     k = typeof data === "string" ? data : "";
   }
   if (!/^0x[0-9a-fA-F]{64}$/.test(k)) return null;
+  const have = wallets.get(T());
+  if (have && have.key === k) return have.a;
   const a = privateKeyToAccount(k as `0x${string}`);
-  wallets.set(T(), a);
+  wallets.set(T(), { key: k, a });
   return a;
 }
 
 // Each trader's Solana wallet (optional), kept in Vault like the EVM one.
-const solWallets = new Map<number, Keypair>();
+const solWallets = new Map<number, { key: string; kp: Keypair }>();
 export async function solAccount(): Promise<Keypair | null> {
-  const have = solWallets.get(T());
-  if (have) return have;
   const { data } = await supabaseService().rpc("ai_trader_sol_key_get_for", { p_trader: T() });
   if (typeof data !== "string" || !data.startsWith("[")) return null;
+  const have = solWallets.get(T());
+  if (have && have.key === data) return have.kp;
   const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(data)));
-  solWallets.set(T(), kp);
+  solWallets.set(T(), { key: data, kp });
   return kp;
 }
 export async function createSolWallet(): Promise<string> {
@@ -97,7 +99,7 @@ export async function createSolWallet(): Promise<string> {
   const kp = Keypair.generate();
   const { error } = await supabaseService().rpc("ai_trader_sol_key_set_for", { p_trader: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: false });
   if (error) throw new Error(error.message);
-  solWallets.set(T(), kp);
+  solWallets.delete(T());
   await log("settings", `Solana trading wallet created: ${kp.publicKey.toBase58()}`);
   return kp.publicKey.toBase58();
 }
@@ -131,7 +133,7 @@ export async function importSolKey(raw: string): Promise<string> {
   }
   const { error } = await supabaseService().rpc("ai_trader_sol_key_set_for", { p_trader: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: true });
   if (error) throw new Error(error.message);
-  solWallets.set(T(), kp);
+  solWallets.delete(T());
   await log("settings", `Solana trading now uses your own wallet: ${kp.publicKey.toBase58()}`);
   return kp.publicKey.toBase58();
 }
@@ -163,7 +165,7 @@ export async function createTraderWallet(): Promise<string> {
   const { error } = await supabaseService().rpc("ai_trader_key_set_for", { p_trader: T(), p_key: key, p_replace: false });
   if (error) throw new Error(error.message);
   const a = privateKeyToAccount(key);
-  wallets.set(T(), a);
+  wallets.delete(T());
   await log("settings", `Live trading wallet created: ${a.address}`);
   return a.address;
 }
@@ -194,7 +196,7 @@ export async function importTraderKey(raw: string): Promise<string> {
   const { error } = await sb.rpc("ai_trader_key_set_for", { p_trader: T(), p_key: key, p_replace: true });
   if (error) throw new Error(error.message);
   const a = privateKeyToAccount(key);
-  wallets.set(T(), a);
+  wallets.delete(T());
   await log("settings", `Live trading now uses your own wallet: ${a.address}`);
   return a.address;
 }
@@ -228,6 +230,7 @@ export async function getSettings(): Promise<Settings> {
   if (!["telegram", "both", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
   s.rebuy_on = s.rebuy_on !== false;
   s.copy_check = s.copy_check === true;
+  s.callers_only = s.callers_only === true;
   s.use_tg = s.use_tg !== false; s.use_x = s.use_x === true; s.use_general = s.use_general === true;
   s.live_chains = (Array.isArray(s.live_chains) ? s.live_chains : ["bsc"]).filter((c: string) => isLiveChain(c));
   if (!s.live_chains.length) s.live_chains = ["bsc"];
@@ -887,6 +890,8 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   // Telegram only mode ignores X, X only mode ignores Telegram.
   if ((source === "x" && !s.use_x) || (source === "telegram" && !s.use_tg)) return [];
   const caller = await callerUsd(source === "x" ? "x" : "tg", post.from).catch(() => null);
+  // Strict mode: only posts from the chosen callers are bought; everyone else's calls are ignored.
+  if (s.callers_only && !caller) return [];
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
