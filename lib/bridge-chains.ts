@@ -111,3 +111,46 @@ export type XQuote = {
   sol: string | null;
   at: number;
 };
+
+// ---------------------------------------------------------------- Relay's own contracts (page and server)
+
+let relayTrust: { at: number; byId: Map<number, Set<string>> } | null = null;
+/**
+ * Every contract / solver address Relay publishes for a network (from api.relay.link/chains, cached for an hour).
+ * A Relay route may only send money or approvals to these: checked on the server before a Relay route is chosen, and
+ * again in the page before signing, so neither has to trust the other.
+ */
+export async function relayTrusted(chainId: number): Promise<Set<string> | null> {
+  if (!relayTrust || Date.now() - relayTrust.at > 3_600_000) {
+    const j = await fetch("https://api.relay.link/chains", { headers: { accept: "application/json" }, cache: "no-store" }).then((r) => r.json()).catch(() => null);
+    const byId = new Map<number, Set<string>>();
+    const walk = (v: unknown, set: Set<string>, depth = 0) => {
+      if (depth > 4 || v == null) return;
+      if (typeof v === "string") { if (/^0x[0-9a-fA-F]{40}$/.test(v)) set.add(v.toLowerCase()); return; }
+      if (Array.isArray(v)) { for (const x of v) walk(x, set, depth + 1); return; }
+      if (typeof v === "object") for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+        if (/currenc|token|erc20Currencies|featured/i.test(k)) continue; // coin addresses aren't Relay's contracts
+        walk(x, set, depth + 1);
+      }
+    };
+    for (const c of (j?.chains || []) as any[]) {
+      const set = new Set<string>();
+      walk(c?.contracts, set); walk(c?.solverAddresses, set); walk(c?.depositAddress, set);
+      if (set.size) byId.set(Number(c.id), set);
+    }
+    if (!byId.size) return null;
+    relayTrust = { at: Date.now(), byId };
+  }
+  return relayTrust.byId.get(chainId) || null;
+}
+
+/** The page's check before signing a cross-network swap: LI.FI's contract, or (Relay routes) Relay's own contracts. */
+export async function trustedSwapTx(from: XChain, tool: string, tx: { to: string; spender: string | null }): Promise<boolean> {
+  const to = tx.to.toLowerCase(), sp = tx.spender ? tx.spender.toLowerCase() : null;
+  if (tool.startsWith("relay:")) {
+    const set = await relayTrusted(from.id);
+    return !!set && set.has(to) && (!sp || set.has(sp));
+  }
+  const d = lifiDiamond(from.id).toLowerCase();
+  return to === d && (!sp || sp === to);
+}

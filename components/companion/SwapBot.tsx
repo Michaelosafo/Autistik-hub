@@ -14,7 +14,7 @@ import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } fr
 import SignerScope from "@/components/wallet/SignerScope";
 import type { Member, Signer } from "@/components/wallet/types";
 import { addTrade, amt, api, friendlyError, raw2num, runTrade, sendSol, store, usd, type Quote } from "@/components/wallet/util";
-import { XCHAINS, XCHAIN_BY_KEY, lifiDiamond, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
+import { XCHAINS, XCHAIN_BY_KEY, lifiDiamond, trustedSwapTx, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
 import { IMPACT_BLOCK, IMPACT_CONFIRM, WCHAINS, type WChainKey } from "@/lib/wallet-chains";
 import { claimAuto } from "@/lib/auto-trade";
 import { isApproved, type BuyAsk } from "@/lib/swap-read";
@@ -222,7 +222,7 @@ function Flow({ text, at, buy, signer }: { text: string; at?: number; buy: BuyAs
           } else {
             const tx = x.evm;
             if (!ev || !tx) throw new Error(`Connect a ${from.name} wallet.`);
-            if (getAddress(tx.to) !== getAddress(lifiDiamond(from.id)) || (tx.spender && getAddress(tx.spender) !== getAddress(tx.to))) throw new Error("Unexpected swap contract. Stopped for your safety.");
+            if (!(await trustedSwapTx(from, x.tool, tx))) throw new Error("Unexpected swap contract. Stopped for your safety.");
             if (tx.spender) {
               const have: bigint = await pc(from).readContract({ address: opt.fromToken.address as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [ev.address, tx.spender] });
               if (have < BigInt(x.fromAmount)) {
