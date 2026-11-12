@@ -483,7 +483,8 @@ async function manage(s: Settings) {
     if (p.status === "closing") { await closePosition(p, p.close_reason || "Closed by admin", price); continue; }
     if (!price) continue;
     const high = Math.max(n(p.high_usd), price);
-    await tq("ai_trader_positions").update({ last_usd: price, high_usd: high, updated_at: new Date().toISOString() }).eq("id", p.id);
+    const low = Math.min(n((p as any).low_usd) || n(p.entry_usd) || price, price);
+    await tq("ai_trader_positions").update({ last_usd: price, high_usd: high, low_usd: low, updated_at: new Date().toISOString() }).eq("id", p.id);
     const ch = (price / n(p.entry_usd) - 1) * 100;
     const ageH = (Date.now() - Date.parse(p.opened_at)) / 36e5;
     // Small-coin trades judge a pulled pool against their own size, not the big-coin minimum.
@@ -627,7 +628,7 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 
 /** Buys one coin (practice or live) and records it with its own stop and target. */
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
-  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean }) {
+  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null } }) {
   const sb = supabaseService();
   const bnb = await bnbUsd();
   const live = s.mode === "live" && isLiveChain(c.chain) && s.live_chains.includes(c.chain);
@@ -658,6 +659,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
     mode: live ? "live" : "paper", native, spent_native: spentNative, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
     strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject,
+    low_usd: c.price, source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
   const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : o.strategy === "copy" ? "📡" : "⚡";
@@ -925,7 +927,9 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const out: string[] = [];
   const sb = supabaseService();
   for (const r of refs) {
-    const f = await resolve(r, chains).catch(() => null);
+    // A brand-new coin can take a few seconds to show up on the price feeds: look again a couple of times.
+    let f = await resolve(r, chains).catch(() => null);
+    for (let i = 0; !f && i < 3; i++) { await new Promise((ok) => setTimeout(ok, 3000)); f = await resolve(r, chains).catch(() => null); }
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
     // First call only: a CA that came through any of your groups or accounts before (or was ever traded) isn't bought again.
     const key = sig.chain === "solana" ? sig.token : sig.token.toLowerCase();
@@ -942,19 +946,22 @@ export async function copyPost(post: { text: string; user: string; url: string; 
       out.push("skipped: shared before");
       continue;
     }
-    out.push(await actOnCopy(s, sig, f, label, caller));
+    out.push(await actOnCopy(s, sig, f, label, caller, {
+      group: source === "telegram" ? post.user : `X · ${post.user}`,
+      who: post.from?.username ? `@${post.from.username}` : source === "x" ? null : null,
+    }));
   }
   return out;
 }
 
-async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: { usd: number; who: string } | null = null): Promise<string> {
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: { usd: number; who: string } | null = null, src?: { group: string; who: string | null }): Promise<string> {
   const sb = supabaseService();
   const done = async (r: string) => {
     await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
     return r;
   };
   const chains = tradeChains(s);
-  if (!f || !f.price) return done(s.mode === "live" ? "skipped: no BNB Chain pool for it (live trading buys on BNB Chain only)" : "skipped: no pool on your chains yet");
+  if (!f || !f.price) return done(`skipped: no trading pool found for it yet (too new to trade, or not on your ticked chains: ${tradeChains(s).join(", ")})`);
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
   if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
   // Money check and coin check side by side: every second counts on a fresh call.
@@ -965,7 +972,7 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const newProject = f.ageHours < 24;
   const why = `📡 Copy: ${label}.${caller ? ` Caller size $${caller.usd}.` : ""} Sells at +${s.copy_tp}% or -${s.copy_sl}%.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
   try {
-    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.copy_tp, why, strategy: "copy", trail: 0, usd: caller?.usd ?? null, newProject });
+    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.copy_tp, why, strategy: "copy", trail: 0, usd: caller?.usd ?? null, newProject, src });
     const spend = caller ? caller.usd / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
     await tgNotify(`📡 Bought ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(Math.min(spend, room.cash))} BNB${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${s.copy_tp}% or -${s.copy_sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
     return done(`bought: ${r}`);

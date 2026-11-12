@@ -345,6 +345,13 @@ async function postMine(action: string, b: any) {
       await closePosition(p as Position, "Closed by admin");
       return json({ ok: true });
     }
+    case "forget": {
+      // Stop managing a trade without selling: the coins stay in the wallet, the bot won't touch them.
+      const { data, error } = await tq("ai_trader_positions").update({ status: "closed", closed_at: new Date().toISOString(), close_reason: "Cancelled by you: coins kept in the wallet" }).eq("id", String(b.id || "")).in("status", ["open", "closing"]).select("symbol");
+      if (error || !data?.length) return json({ error: "That position isn't open." }, 400);
+      await log("settings", `Admin cancelled ${data[0].symbol}: kept the coins, the bot stopped managing it.`);
+      return json({ ok: true });
+    }
     case "edit": {
       const up: Record<string, number> = {};
       for (const k of ["stop_loss", "take_profit", "trail"]) if (b[k] != null && isFinite(Number(b[k]))) up[k] = Math.min(NUM[k][1], Math.max(NUM[k][0], Number(b[k])));

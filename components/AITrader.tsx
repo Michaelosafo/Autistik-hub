@@ -22,7 +22,55 @@ type P = {
   id: string; mode: string; chain: string; strategy?: string | null; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number; why: string | null;
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
+  low_usd?: number | null; source_group?: string | null; source_who?: string | null; native?: string | null; spent_native?: number | null; received_native?: number | null;
 };
+
+/** 1234567 → 1.23M (token amounts). */
+function qtyFmt(n: number) {
+  if (!isFinite(n) || n <= 0) return "–";
+  for (const [d, u] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]] as const) if (n >= d) return `${(n / d).toFixed(n / d >= 100 ? 0 : 2)}${u}`;
+  return n >= 1 ? n.toFixed(2) : n.toPrecision(3);
+}
+
+/**
+ * The facts of one trade: how many coins it bought (and for how much), which group / account shared the call (and
+ * who posted it), and the price range since buying: lowest → highest, with where it bought, where it is now, and the
+ * stop-loss and take-profit prices.
+ */
+function TradeFacts({ p, closed = false }: { p: P; closed?: boolean }) {
+  const entry = Number(p.entry_usd) || 0;
+  const now = Number(p.last_usd) || entry;
+  const sl = entry * (1 - Number(p.stop_loss) / 100), tp = entry * (1 + Number(p.take_profit) / 100);
+  const lo = Math.min(Number(p.low_usd) || entry, entry, now), hi = Math.max(Number(p.high_usd) || entry, entry, now);
+  const span = hi - lo || entry * 0.0001 || 1;
+  const at = (v: number) => `${Math.min(100, Math.max(0, ((v - lo) / span) * 100))}%`;
+  const native = p.native || "BNB";
+  const paid = p.spent_native != null ? Number(p.spent_native) : Number(p.spent);
+  return (
+    <div className="ait-facts">
+      <span className="ait-fact"><i aria-hidden="true">🪙</i>Bought <b>{qtyFmt(Number(p.qty))} {p.symbol}</b> for <b>{fmtAmount(paid)} {native}</b>{closed && p.received_native != null ? <> · got back <b>{fmtAmount(Number(p.received_native))} {native}</b></> : null}</span>
+      {p.source_group && (
+        <span className="ait-fact"><i aria-hidden="true">📡</i>Shared in <b>{p.source_group}</b>{p.source_who ? <> by <b>{p.source_who}</b></> : null}</span>
+      )}
+      {entry > 0 && (
+        <div className="ait-range" aria-label={`Price range ${fmtUsd(lo)} to ${fmtUsd(hi)}`}>
+          <div className="ait-range-bar">
+            <span className="ait-range-fill" style={{ left: at(Math.min(entry, now)), width: `calc(${at(Math.max(entry, now))} - ${at(Math.min(entry, now))})` }} data-up={now >= entry ? "1" : "0"} />
+            <i className="ait-mk entry" style={{ left: at(entry) }} title={`Bought at ${fmtUsd(entry)}`} />
+            <i className={"ait-mk now" + (now >= entry ? " up" : " down")} style={{ left: at(now) }} title={`${closed ? "Sold at" : "Now"} ${fmtUsd(now)}`} />
+          </div>
+          <div className="ait-range-l">
+            <span>Low <b>{fmtUsd(lo)}</b></span>
+            <span>Bought <b>{fmtUsd(entry)}</b></span>
+            <span>{closed ? "Sold" : "Now"} <b className={now >= entry ? "up" : "down"}>{fmtUsd(now)}</b></span>
+            <span>High <b>{fmtUsd(hi)}</b></span>
+          </div>
+          {!closed && <small className="ait-range-t">Stop-loss at <b className="down">{fmtUsd(sl)}</b> · take profit at <b className="up">{fmtUsd(tp)}</b></small>}
+        </div>
+      )}
+    </div>
+  );
+}
 type Sig = { id: number; at: string; source: string; who: string | null; body: string | null; url: string; chain: string; token: string; symbol: string | null; mcap: number | null; result: string | null };
 type Data = { isOwner: boolean; traderId: number; copy: CopyData; perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
@@ -136,7 +184,8 @@ export default function AITrader() {
         )}
       </section>
 
-      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onSell={(p) => { if (confirm(`Sell all ${p.symbol} now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }} />
+      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onSell={(p) => { if (confirm(`Cancel ${p.symbol}: sell all of it now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }}
+        onForget={(p) => { if (confirm(`Stop the bot managing ${p.symbol}? Nothing is sold: the coins stay in your wallet and you sell them yourself.`)) act("forget", "forget", { id: p.id }, `${p.symbol}: the bot stopped managing it.`); }} />
 
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -245,9 +294,10 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
     <div className="ait-pos">
       <div className="ait-pos-h">
         {p.logo ? <img src={p.logo} alt="" width={34} height={34} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
-        <div className="grow"><b>{p.symbol}</b> <small className="muted">{chainName(p.chain)} · {p.mode === "paper" ? "practice" : "live"} · bought {ago(p.opened_at)}</small><br /><small className="muted">{fmtAmount(Number(p.spent))} BNB · entry {fmtUsd(Number(p.entry_usd))} · now {fmtUsd(now)} · high {fmtUsd(Number(p.high_usd))}</small></div>
+        <div className="grow"><b>{p.symbol}</b> <small className="muted">{chainName(p.chain)} · {p.mode === "paper" ? "practice" : "live"} · bought {ago(p.opened_at)}</small></div>
         <b className={ch >= 0 ? "up" : "down"}>{sign(ch)}%</b>
       </div>
+      <TradeFacts p={p} />
       {p.why && <small className="ait-why">{p.why}</small>}
       <div className="ait-pos-f">
         <label>Stop-loss <span className="ait-in"><input inputMode="decimal" value={sl} onChange={(e) => setSl(e.target.value)} /><em>%</em></span></label>
@@ -262,7 +312,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
 }
 
 /** Every coin the AI bought: what it paid, what it's worth now, and the % up or down. */
-function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: boolean; onSell: (p: P) => void }) {
+function Bought({ open, closed, busy, onSell, onForget }: { open: P[]; closed: P[]; busy: boolean; onSell: (p: P) => void; onForget: (p: P) => void }) {
   const [tab, setTab] = useState<"open" | "closed">("open");
   const rows = tab === "open"
     ? open.map((p) => { const now = Number(p.last_usd) || Number(p.entry_usd); const pct = (now / Number(p.entry_usd) - 1) * 100; return { p, pct, worth: Number(p.spent) * (1 + pct / 100), price: now as number | null }; })
@@ -294,11 +344,20 @@ function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: 
                   <b>{p.symbol} {p.strategy && <span className={"ait-tag " + p.strategy}>{({ hype: "🔥 Hype", dip: "📉 Dip", signal: "⚡ Signal", caller: "📣 Caller" } as Record<string, string>)[p.strategy] || p.strategy}</span>}</b>
                   <small className="muted">{chainName(p.chain)} · {tab === "open" ? `bought ${ago(p.opened_at)}` : `sold ${p.closed_at ? ago(p.closed_at) : ""}`}</small>
                   <small className="muted">{fmtAmount(Number(p.spent))} → {fmtAmount(w)} BNB · {fmtUsd(Number(p.entry_usd))} → {price ? fmtUsd(price) : "–"}</small>
+                  <TradeFacts p={p} closed={tab === "closed"} />
                 </div>
                 <div className={"ait-b-pct " + (pct >= 0 ? "up" : "down")}>
                   <b>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%</b>
                   <i style={{ width: `${Math.max(4, (Math.abs(pct) / best) * 100)}%` }} aria-hidden="true" />
-                  {tab === "open" && <button type="button" className="ait-sell" disabled={busy || p.status === "closing"} onClick={() => onSell(p)}>{p.status === "closing" ? "Selling…" : "Sell"}</button>}
+                  {tab === "open" && (p.status === "closing" ? <span className="ait-sell">Selling…</span> : (
+                    <details className="ait-cancel">
+                      <summary>✕ Cancel trade</summary>
+                      <div>
+                        <button type="button" className="ait-sell" disabled={busy} onClick={() => onSell(p)}>💸 Sell now</button>
+                        <button type="button" className="ait-keep" disabled={busy} onClick={() => onForget(p)}>✋ Keep coins, stop bot</button>
+                      </div>
+                    </details>
+                  ))}
                 </div>
               </div>
             ))}
