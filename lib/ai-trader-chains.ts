@@ -269,15 +269,37 @@ async function jupSwap(kp: Keypair, inputMint: string, outputMint: string, amoun
   const tx = VersionedTransaction.deserialize(Buffer.from(j.swapTransaction, "base64"));
   tx.sign([kp]);
   const conn = solConn();
-  const sig = await conn.sendRawTransaction(tx.serialize(), { skipPreflight: false, maxRetries: 3 });
-  const conf = await conn.confirmTransaction({ signature: sig, blockhash: tx.message.recentBlockhash, lastValidBlockHeight: Number(j.lastValidBlockHeight) }, "confirmed");
-  if (conf.value.err) throw new Error("The Solana swap failed on-chain.");
-  return sig;
+  const raw = tx.serialize();
+  const sig = await conn.sendRawTransaction(raw, { skipPreflight: false, maxRetries: 0 });
+  // Confirm by asking for the signature's status (the waiting method gave up early on serverless and reported a
+  // "Signature … expired" error even when the swap went through). Re-send every ~1.5s until it lands or expires.
+  const lastValid = Number(j.lastValidBlockHeight) || 0;
+  const t0 = Date.now();
+  while (Date.now() - t0 < 70_000) {
+    const st = (await conn.getSignatureStatuses([sig]).catch(() => null))?.value?.[0];
+    if (st?.err) throw new Error("The Solana swap failed on-chain.");
+    if (st?.confirmationStatus === "confirmed" || st?.confirmationStatus === "finalized") return sig;
+    const h = await conn.getBlockHeight("confirmed").catch(() => 0);
+    if (lastValid && h > lastValid + 5) break;
+    conn.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 0 }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  const fin = (await conn.getSignatureStatuses([sig]).catch(() => null))?.value?.[0];
+  if (fin && !fin.err && fin.confirmationStatus) return sig;
+  throw new Error(`Solana swap not confirmed (${sig.slice(0, 12)}…)`);
 }
 
 async function solBuy(kp: Keypair, mint: string, amountSol: number, tax: number) {
   const before = await solTokenRaw(kp.publicKey, mint);
-  const sig = await jupSwap(kp, WSOL, mint, BigInt(Math.floor(amountSol * 1e9)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)));
+  let sig: string;
+  try { sig = await jupSwap(kp, WSOL, mint, BigInt(Math.floor(amountSol * 1e9)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100))); }
+  catch (e) {
+    // Not confirmed in time: if the coins arrived anyway, it's a buy (so it's tracked and sold at TP/SL, never lost).
+    await new Promise((r) => setTimeout(r, 3000));
+    const got = await solTokenRaw(kp.publicKey, mint).catch(() => before);
+    if (got.raw > before.raw) return { hash: "unconfirmed", raw: got.raw - before.raw, decimals: got.decimals || before.decimals || 6 };
+    throw e;
+  }
   const after = await solTokenRaw(kp.publicKey, mint);
   return { hash: sig, raw: after.raw - before.raw, decimals: after.decimals || before.decimals || 6 };
 }

@@ -927,7 +927,9 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const out: string[] = [];
   const sb = supabaseService();
   for (const r of refs) {
-    const f = await resolve(r, chains).catch(() => null);
+    // A brand-new coin can take a few seconds to show up on the price feeds: look again a couple of times.
+    let f = await resolve(r, chains).catch(() => null);
+    for (let i = 0; !f && i < 3; i++) { await new Promise((ok) => setTimeout(ok, 3000)); f = await resolve(r, chains).catch(() => null); }
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
     // First call only: a CA that came through any of your groups or accounts before (or was ever traded) isn't bought again.
     const key = sig.chain === "solana" ? sig.token : sig.token.toLowerCase();
@@ -959,7 +961,7 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
     return r;
   };
   const chains = tradeChains(s);
-  if (!f || !f.price) return done(s.mode === "live" ? "skipped: no BNB Chain pool for it (live trading buys on BNB Chain only)" : "skipped: no pool on your chains yet");
+  if (!f || !f.price) return done(`skipped: no trading pool found for it yet (too new to trade, or not on your ticked chains: ${tradeChains(s).join(", ")})`);
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
   if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
   // Money check and coin check side by side: every second counts on a fresh call.

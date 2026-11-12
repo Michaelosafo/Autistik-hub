@@ -184,7 +184,8 @@ export default function AITrader() {
         )}
       </section>
 
-      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onSell={(p) => { if (confirm(`Sell all ${p.symbol} now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }} />
+      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onSell={(p) => { if (confirm(`Cancel ${p.symbol}: sell all of it now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }}
+        onForget={(p) => { if (confirm(`Stop the bot managing ${p.symbol}? Nothing is sold: the coins stay in your wallet and you sell them yourself.`)) act("forget", "forget", { id: p.id }, `${p.symbol}: the bot stopped managing it.`); }} />
 
       <section className="card stack">
         <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
@@ -311,7 +312,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
 }
 
 /** Every coin the AI bought: what it paid, what it's worth now, and the % up or down. */
-function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: boolean; onSell: (p: P) => void }) {
+function Bought({ open, closed, busy, onSell, onForget }: { open: P[]; closed: P[]; busy: boolean; onSell: (p: P) => void; onForget: (p: P) => void }) {
   const [tab, setTab] = useState<"open" | "closed">("open");
   const rows = tab === "open"
     ? open.map((p) => { const now = Number(p.last_usd) || Number(p.entry_usd); const pct = (now / Number(p.entry_usd) - 1) * 100; return { p, pct, worth: Number(p.spent) * (1 + pct / 100), price: now as number | null }; })
@@ -348,7 +349,15 @@ function Bought({ open, closed, busy, onSell }: { open: P[]; closed: P[]; busy: 
                 <div className={"ait-b-pct " + (pct >= 0 ? "up" : "down")}>
                   <b>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%</b>
                   <i style={{ width: `${Math.max(4, (Math.abs(pct) / best) * 100)}%` }} aria-hidden="true" />
-                  {tab === "open" && <button type="button" className="ait-sell" disabled={busy || p.status === "closing"} onClick={() => onSell(p)}>{p.status === "closing" ? "Selling…" : "Sell"}</button>}
+                  {tab === "open" && (p.status === "closing" ? <span className="ait-sell">Selling…</span> : (
+                    <details className="ait-cancel">
+                      <summary>✕ Cancel trade</summary>
+                      <div>
+                        <button type="button" className="ait-sell" disabled={busy} onClick={() => onSell(p)}>💸 Sell now</button>
+                        <button type="button" className="ait-keep" disabled={busy} onClick={() => onForget(p)}>✋ Keep coins, stop bot</button>
+                      </div>
+                    </details>
+                  ))}
                 </div>
               </div>
             ))}
