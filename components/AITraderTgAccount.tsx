@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import type { CopySource } from "@/components/AITraderCopy";
 
 type Chat = { ref: string; title: string; kind: "group" | "channel" | "chat" | "bot"; members: number | null; username: string | null };
-export type TgaState = { ready: boolean; signedIn: boolean; name: string | null };
+export type TgaState = { ready: boolean; signedIn: boolean; name: string | null; stage: string | null; hint: string | null; chats: Chat[] | null; chatsAt: string | null };
 
 async function call(action: string, body: unknown) {
   const r = await fetch(`/api/ai-trader/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -18,13 +18,24 @@ async function call(action: string, body: unknown) {
 const ago = (iso: string | null) => { if (!iso) return "no posts yet"; const s = (Date.now() - Date.parse(iso)) / 1000; return s < 60 ? "posted now" : s < 3600 ? `posted ${Math.floor(s / 60)}m ago` : s < 86400 ? `posted ${Math.floor(s / 3600)}h ago` : `posted ${Math.floor(s / 86400)}d ago`; };
 
 export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: { st: TgaState; sources: CopySource[]; busy: boolean; reload: () => Promise<void>; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
-  const [step, setStep] = useState<"qr" | "phone" | "code" | "password">("qr");
+  // A login waiting for the 2-step password (started on any device) opens straight at the password box.
+  const [step, setStep] = useState<"qr" | "phone" | "code" | "password">(st.stage === "password" ? "password" : "qr");
   const [qr, setQr] = useState<{ qr: string; link: string; expires: number } | null>(null);
   const polling = useRef(false);
   const [phone, setPhone] = useState(""), [code, setCode] = useState(""), [pw, setPw] = useState("");
-  const [hint, setHint] = useState<string | null>(null), [sentTo, setSentTo] = useState(""), [resend, setResend] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(st.hint), [sentTo, setSentTo] = useState(""), [resend, setResend] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "group" | "channel" | "chat">("all");
-  const [chats, setChats] = useState<Chat[] | null>(null);
+  // The chat list is saved with your trader, so it shows on every device you open this page on.
+  const [chats, setChats] = useState<Chat[] | null>(st.chats);
+  useEffect(() => { if (st.chats) setChats(st.chats); }, [st.chatsAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (st.stage === "password" && !st.signedIn) { setStep("password"); setHint(st.hint); } }, [st.stage, st.signedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Signed in but no saved list yet (e.g. logged in before this update): load it once.
+  const autoLoaded = useRef(false);
+  useEffect(() => {
+    if (!st.signedIn || st.chats || autoLoaded.current) return;
+    autoLoaded.current = true;
+    call("tga-chats", {}).then((r) => setChats(r.chats)).catch(() => {});
+  }, [st.signedIn, st.chats]);
   const [find, setFind] = useState("");
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState("");
@@ -49,8 +60,10 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, !!qr]);
 
+  const startOver = () => go(async () => { await call("tga-reset", {}); setQr(null); setCode(""); setPw(""); setHint(null); setStep("qr"); await reload(); });
+
   async function go(fn: () => Promise<void>) { setWorking(true); setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } setWorking(false); }
-  const done = async (name: string) => { setStep("qr"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Tap "Show my groups, channels and chats" to pick what to copy.`); await reload(); };
+  const done = async (name: string) => { setStep("qr"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Your groups, channels and chats are below: tick the ones to copy.`); await reload(); };
   const mine = sources.filter((x) => x.kind === "tg_chat");
 
   if (!st.ready) return (
@@ -110,9 +123,16 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
             <input className="input" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} aria-label="Telegram 2-step verification password" />
             <button type="submit" className="btn small" disabled={working || !pw}>{working ? "Checking…" : "Log in"}</button>
           </form>
+          <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={working} onClick={startOver}>Start over</button>
         </>
       )}
       {msg && <small className="aic-note" role="status">{msg}</small>}
+      {/waiting for your 2-step password/.test(msg) && (
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn small" onClick={() => { setMsg(""); setStep("password"); }}>Type the password</button>
+          <button type="button" className="btn small ghost" disabled={working} onClick={startOver}>Start over</button>
+        </div>
+      )}
     </div>
   );
 
@@ -126,7 +146,7 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
         <span className="aic-ok">✓ Logged in as {st.name}</span>
         <button type="button" className="btn small ghost" disabled={busy || working} onClick={() => { if (confirm("Log out of your Telegram account here? Your ticked groups stop being copied.")) onAct("tgao", "tga-logout", {}); }}>Log out</button>
       </div>
-      {chats === null ? <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={working || busy} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Loading your chats…" : "Show my groups, channels and chats"}</button>
+      {chats === null ? <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={working || busy} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Loading your chats…" : "Load my groups, channels and chats"}</button>
         : !chats.length ? <small className="muted">No groups, channels or chats found.</small>
           : (
             <>
@@ -148,7 +168,8 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
                 );
               })}</div>
               <small className="muted">Ticked chats are read every minute (up to 25). Only messages posted after you tick one are copied.</small>
-              <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={working} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>Refresh list</button>
+              <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={working} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Refreshing…" : "Refresh list"}</button>
+              {st.chatsAt && <small className="muted">List saved {new Date(st.chatsAt).toLocaleString()}. It shows on every device you open this page on.</small>}
             </>
           )}
       {chats === null && mine.some((x) => x.enabled) && (
