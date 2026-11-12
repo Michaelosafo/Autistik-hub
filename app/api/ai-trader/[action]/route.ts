@@ -3,7 +3,7 @@ import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
-import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaResend, tgaStart, tgaStatus } from "@/lib/tg-account";
+import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaStart, tgaStatus } from "@/lib/tg-account";
 import { cronDenied } from "@/lib/cron-auth";
 import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
@@ -170,6 +170,13 @@ async function postMine(action: string, b: any) {
     }
     case "tga-start": {
       try { return json({ ok: true, ...(await tgaStart(String(b.phone || ""))) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-qr": {
+      try { return json({ ok: true, ...(await tgaQrStart()) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-qr-check": {
+      try { const r = await tgaQrCheck(); if ("ok" in r) await log("settings", `Logged in with Telegram account ${r.name}.`); return json({ ok: true, ...r }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "tga-resend": {
       try { return json({ ok: true, ...(await tgaResend()) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
