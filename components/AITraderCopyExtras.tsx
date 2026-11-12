@@ -6,7 +6,7 @@
 import { useState } from "react";
 
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
-export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number };
+export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number; chat: string; chat_title: string | null };
 export type Rebuy = { id: number; chain: string; token: string; symbol: string | null; sold_usd: number; low_usd: number | null; status: string; note: string | null; sold_at: string };
 
 /** What the trader buys from: tick any mix. Telegram and X calls are bought as called; General has the safety checks. */
@@ -33,37 +33,57 @@ export function SourcePicker({ tg, x, general, busy, onAct }: { tg: boolean; x: 
   );
 }
 
-export function Callers({ list, normal, only, busy, onAct }: { list: Caller[]; normal: string; only: boolean; busy: boolean; onAct: Act }) {
+/** A Telegram chat's id in one form ("c:123:hash" / "g:123" from the account login, -100123 / -123 from the bot). */
+const chatKey = (ref: string) => (/^[cgu]:/.test(ref) ? ref.split(":")[1] || "" : ref.replace(/^-100/, "").replace(/^-/, ""));
+
+export function Callers({ list, normal, groups, busy, onAct }: { list: Caller[]; normal: string; groups: { ref: string; title: string }[]; busy: boolean; onAct: Act }) {
   const [platform, setPlatform] = useState<"tg" | "x">("tg");
+  const [chat, setChat] = useState("");
   const [who, setWho] = useState("");
   const [usd, setUsd] = useState("");
   const label = (c: Caller) => (/^\d+$/.test(c.who) ? `ID ${c.who}` : `@${c.who}`);
+  const opts = groups.map((g) => ({ key: chatKey(g.ref), title: g.title })).filter((g, i, a) => g.key && a.findIndex((x) => x.key === g.key) === i);
+  const byGroup = new Map<string, Caller[]>();
+  for (const c of list) byGroup.set(c.platform === "x" ? "x" : c.chat || "", [...(byGroup.get(c.platform === "x" ? "x" : c.chat || "") || []), c]);
+  const groupName = (k: string) => (k === "x" ? "X (any account)" : k === "" ? "All Telegram groups" : opts.find((o) => o.key === k)?.title || list.find((c) => c.chat === k)?.chat_title || `Group ${k}`);
+  const strict = opts.filter((o) => byGroup.has(o.key));
   return (
     <div className="aic-block">
       <b>⭐ Callers</b>
-      <label className={"aic-row" + (only ? " on" : "")}>
-        <input type="checkbox" checked={only} disabled={busy} onChange={(e) => { if (e.target.checked && !list.length && !confirm("Your caller list is empty, so nothing will be bought until you add callers. Turn it on anyway?")) return; onAct("co", "settings", { callers_only: e.target.checked }, e.target.checked ? "Only your chosen callers' posts are bought now. Everyone else's calls are ignored." : "Everyone's calls in your chats are bought again."); }} />
-        <span className="grow"><b>Only buy calls from these callers</b><small className="muted">{only ? `Strict: a call is bought only when one of the ${list.length} caller${list.length === 1 ? "" : "s"} below posts it. Everyone else in your groups is ignored.` : `Off: everyone's calls buy the normal size (${normal}); callers below buy their own amount.`}</small></span>
-      </label>
-      <small className="muted">Add the traders you want the bot to follow, each with a dollar amount per call. Paste several @usernames or user ids at once, separated by spaces or commas. In a channel, posts come from the channel itself, so add the channel&apos;s @username.</small>
-      <form className="aic-caller" onSubmit={(e) => { e.preventDefault(); if (who.trim() && Number(usd) > 0) onAct("caller", "caller", { op: "add", platform, who, usd: Number(usd) }).then(() => { setWho(""); }); }}>
+      <small className="muted">Pick a group and add the people whose calls the bot should buy there. <b>A group with callers picked buys only their calls.</b> A group with nobody picked buys every call. Each caller has their own dollar amount per call (normal size is {normal}).</small>
+      <form className="aic-caller" onSubmit={(e) => { e.preventDefault(); if (who.trim() && Number(usd) > 0) { const t = opts.find((o) => o.key === chat)?.title; onAct("caller", "caller", { op: "add", platform, who, usd: Number(usd), chat: platform === "tg" ? chat : "", chatTitle: t }).then(() => setWho("")); } }}>
         <select className="input" value={platform} onChange={(e) => setPlatform(e.target.value as "tg" | "x")} aria-label="Where they post">
           <option value="tg">Telegram</option>
           <option value="x">X</option>
         </select>
-        <input className="input" placeholder={platform === "tg" ? "@username or user id" : "@handle"} value={who} onChange={(e) => setWho(e.target.value)} aria-label="Callers" />
+        {platform === "tg" && (
+          <select className="input" value={chat} onChange={(e) => setChat(e.target.value)} aria-label="Which group">
+            <option value="">All groups (size only)</option>
+            {opts.map((o) => <option key={o.key} value={o.key}>Only in: {o.title}</option>)}
+          </select>
+        )}
+        <input className="input" placeholder={platform === "tg" ? "@username or user id (several ok)" : "@handle"} value={who} onChange={(e) => setWho(e.target.value)} aria-label="Callers" />
         <span className="ait-in" style={{ width: 110 }}><em>$</em><input inputMode="decimal" placeholder="50" value={usd} onChange={(e) => setUsd(e.target.value)} aria-label="Dollars per buy" /></span>
         <button type="submit" className="btn small" disabled={busy || !who.trim() || !(Number(usd) > 0)}>Add</button>
       </form>
+      {platform === "tg" && !chat && <small className="muted">&ldquo;All groups&rdquo; only sets their size wherever they post; it doesn&apos;t limit any group. To make a group buy only certain people, pick that group.</small>}
       {list.length > 0 ? (
-        <div className="aic-list">{list.map((c) => (
-          <div key={c.id} className="aic-row on">
-            <span className="grow"><b>{label(c)}</b><small className="muted">{c.platform === "x" ? "X" : "Telegram"} · buys ${Number(c.usd).toLocaleString("en-US")} per call</small></span>
-            <button type="button" className="aic-x" aria-label={`Remove ${label(c)}`} disabled={busy} onClick={() => onAct(`cl${c.id}`, "caller", { op: "remove", id: c.id })}>✕</button>
+        <div className="stack" style={{ gap: 10 }}>{[...byGroup.entries()].map(([k, cs]) => (
+          <div key={k} className="stack" style={{ gap: 6 }}>
+            <small><b>{groupName(k)}</b>{k !== "" && k !== "x" ? " · only these callers are bought here" : ""}</small>
+            <div className="aic-list">{cs.map((c) => (
+              <div key={c.id} className="aic-row on">
+                <span className="grow"><b>{label(c)}</b><small className="muted">buys ${Number(c.usd).toLocaleString("en-US")} per call</small></span>
+                <button type="button" className="aic-x" aria-label={`Remove ${label(c)}`} disabled={busy} onClick={() => onAct(`cl${c.id}`, "caller", { op: "remove", id: c.id })}>✕</button>
+              </div>
+            ))}</div>
           </div>
         ))}</div>
-      ) : <small className="muted">No caller sizes yet.</small>}
-      <small className="muted">To find a Telegram user id, open their profile in Telegram (some apps show the id), or forward one of their messages to @userinfobot.</small>
+      ) : <small className="muted">No callers yet: every call in your ticked groups is bought.</small>}
+      {opts.length > 0 && (
+        <small className="muted">{strict.length ? `Only picked callers: ${strict.map((o) => o.title).join(", ")}. ` : ""}{opts.filter((o) => !byGroup.has(o.key)).length ? `Every call: ${opts.filter((o) => !byGroup.has(o.key)).map((o) => o.title).join(", ")}.` : ""}</small>
+      )}
+      <small className="muted">To find a Telegram user id, forward one of their messages to @userinfobot. In a channel, posts come from the channel itself, so add the channel&apos;s @username.</small>
     </div>
   );
 }

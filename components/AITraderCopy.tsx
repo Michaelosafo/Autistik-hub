@@ -118,7 +118,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
         </details>
       </div>
 
-      <Callers list={c.callers || []} only={s.callers_only} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
+      <Callers list={c.callers || []} groups={c.sources.filter((x) => (x.kind === "tg_chat" || x.kind === "tg") && x.enabled).map((x) => ({ ref: x.ref, title: x.title || x.ref }))} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
       <RebuyBox on={s.rebuy_on} dump={s.rebuy_dump} tp={s.rebuy_tp} sl={s.copy_sl} list={c.rebuys || []} busy={busy || !owner} onAct={onAct} />
 
       {/* X */}

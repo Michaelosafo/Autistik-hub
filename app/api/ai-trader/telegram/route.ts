@@ -20,6 +20,6 @@ export async function POST(req: Request) {
   if (!want || got.length !== want.length || !timingSafeEqual(Buffer.from(got), Buffer.from(want))) return new Response("no", { status: 401 });
   const u = await req.json().catch(() => null);
   const post = await tgHandle(u).catch(() => null);
-  if (post) await Promise.all(post.traders.map((id) => withTrader(id, () => copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from }, "telegram", `posted in "${post.chat}"${post.from.username ? ` by @${post.from.username}` : ""} on Telegram`)).catch(() => [])));
+  if (post) await Promise.all(post.traders.map((id) => withTrader(id, () => copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatId }, "telegram", `posted in "${post.chat}"${post.from.username ? ` by @${post.from.username}` : ""} on Telegram`)).catch(() => [])));
   return Response.json({ ok: true });
 }

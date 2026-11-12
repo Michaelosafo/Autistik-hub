@@ -813,7 +813,7 @@ export async function runFast() {
       // Groups, channels and chats read through the admin's own Telegram account.
       const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
       if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
-      for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => [])));
+      for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => [])));
     }
   }
   // General mode only: X callers and DexScreener signals.
@@ -877,21 +877,41 @@ async function copyCheckFor(s: Settings, chain: string, token: string): Promise<
 export type From = { id?: string | null; username?: string | null } | null | undefined;
 
 /** The $ amount set for whoever posted (by username or user id), if any. */
-async function callerUsd(platform: "tg" | "x", from: From): Promise<{ usd: number; who: string } | null> {
+/** A Telegram chat's id in one form, whether it came from the account login ("c:123:hash", "g:123") or the bot (-100123, -123). */
+export const chatKey = (ref: string | number | null | undefined): string => {
+  const r = String(ref ?? "");
+  if (/^[cgu]:/.test(r)) return r.split(":")[1] || "";
+  return r.replace(/^-100/, "").replace(/^-/, "");
+};
+
+/**
+ * Who may buy from a post, and how much. A group with callers picked for it buys ONLY their calls (anyone else in that
+ * group is skipped); a group with nobody picked buys every call. Callers picked for "all groups" set their own size
+ * wherever they post. Returns skip: true when the group has its own callers and the poster isn't one of them.
+ */
+async function callerFor(platform: "tg" | "x", from: From, chat: string): Promise<{ skip: true } | { skip: false; caller: { usd: number; who: string } | null }> {
   const keys = [from?.username?.replace(/^@/, "").toLowerCase(), from?.id ? String(from.id) : null].filter(Boolean) as string[];
-  if (!keys.length) return null;
-  const { data } = await tq("ai_trader_callers").select("who,usd").eq("platform", platform).in("who", keys).limit(1);
-  return data?.[0] ? { usd: n(data[0].usd), who: String(data[0].who) } : null;
+  const { data } = await tq("ai_trader_callers").select("who,usd,chat").eq("platform", platform).in("chat", chat ? [chat, ""] : [""]);
+  const rows = (data || []) as { who: string; usd: number; chat: string }[];
+  const mine = chat ? rows.filter((r) => r.chat === chat) : [];
+  const hit = (list: typeof rows) => list.find((r) => keys.includes(String(r.who)));
+  if (mine.length) {
+    const m = hit(mine);
+    return m ? { skip: false, caller: { usd: n(m.usd), who: String(m.who) } } : { skip: true };
+  }
+  const g = hit(rows.filter((r) => r.chat === ""));
+  return { skip: false, caller: g ? { usd: n(g.usd), who: String(g.who) } : null };
 }
 
-export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From }, source: "x" | "telegram", label: string): Promise<string[]> {
+export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string }, source: "x" | "telegram", label: string): Promise<string[]> {
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
   // Telegram only mode ignores X, X only mode ignores Telegram.
   if ((source === "x" && !s.use_x) || (source === "telegram" && !s.use_tg)) return [];
-  const caller = await callerUsd(source === "x" ? "x" : "tg", post.from).catch(() => null);
-  // Strict mode: only posts from the chosen callers are bought; everyone else's calls are ignored.
-  if (s.callers_only && !caller) return [];
+  const who = await callerFor(source === "x" ? "x" : "tg", post.from, source === "telegram" ? chatKey(post.chat) : "").catch(() => ({ skip: false as const, caller: null }));
+  // This group has its own callers and the poster isn't one of them: not bought.
+  if (who.skip) return [];
+  const caller = who.caller;
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
