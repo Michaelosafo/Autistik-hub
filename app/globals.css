@@ -6153,3 +6153,121 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .lv-gate-orb{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;color:#fff;
   background:radial-gradient(circle at 35% 30%,#C084FC,#7C3AED 55%,#4C1D95);box-shadow:0 0 0 6px rgba(168,85,247,.12),0 12px 30px -8px rgba(124,58,237,.8),inset 0 1px 0 rgba(255,255,255,.35)}
 @media (prefers-reduced-motion:reduce){.ctl.red.on .ctl-ic::before,.lv-fire{animation:none}}
+
+/* ================= TIK: fun conversation dashboard ================= */
+/* Posts: lift + accent edge in each member's colour */
+.tik{position:relative;transition:transform .18s ease,box-shadow .2s,border-color .2s}
+.tik:not(.compact)::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(var(--ac,#B57CFF),color-mix(in srgb,var(--ac,#B57CFF) 30%,#FF6B9A));opacity:.85}
+.tik-pro .tik:not(.compact):hover{transform:translateY(-2px)}
+.tik-av .me-av{box-shadow:0 0 0 2px var(--surface),0 0 0 4px color-mix(in srgb,var(--ac,#B57CFF) 55%,transparent)}
+.tik-name{font-weight:900}
+/* Pictures: framed, blurred fill behind tall/wide shots, glossy hover, double-tap heart */
+.tik-img{position:relative;isolation:isolate;border-radius:18px;box-shadow:0 0 0 1px rgba(var(--wc),.08),0 14px 34px -22px rgba(20,8,40,.7);transition:transform .25s ease,box-shadow .25s;-webkit-tap-highlight-color:transparent;user-select:none}
+.tik-img-fill{position:absolute;inset:-20px;z-index:-1;background-size:cover;background-position:center;filter:blur(22px) saturate(1.4);opacity:.75}
+.tik-img img{max-height:520px;object-fit:contain;transition:transform .4s ease}
+.tik-img::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.18) 50%,transparent 60%);transform:translateX(-120%);transition:transform .7s ease}
+.tik-img:hover{box-shadow:0 0 0 1px color-mix(in srgb,var(--ac,#B57CFF) 60%,transparent),0 22px 44px -22px color-mix(in srgb,var(--ac,#B57CFF) 70%,#000)}
+.tik-img:hover img{transform:scale(1.025)}
+.tik-img:hover::after{transform:translateX(120%)}
+.tik.compact .tik-img img{max-height:260px}
+.tik-burst{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.tik-burst svg{width:96px;height:96px;fill:#fff;filter:drop-shadow(0 0 18px rgba(255,64,128,.95)) drop-shadow(0 6px 12px rgba(0,0,0,.35));animation:tikBurst .9s cubic-bezier(.2,1.4,.4,1) forwards}
+@keyframes tikBurst{0%{transform:scale(0);opacity:0}25%{transform:scale(1.25);opacity:1}45%{transform:scale(.95)}70%{transform:scale(1.05);opacity:1}100%{transform:scale(1.1) translateY(-30px);opacity:0}}
+/* Action bar: chunky pills with colour per action, a pop when you like */
+.tik-actions{gap:6px;flex-wrap:wrap}
+.tik-act{padding:6px 11px;background:rgba(var(--wc),.04);transition:background .15s,color .15s,transform .15s}
+.tik-act:hover{transform:translateY(-1px)}
+.tik-act.reply:hover,.tik-act.reply.on{color:#4FA8FF;background:rgba(79,168,255,.12)}
+.tik-act.tickle:hover,.tik-act.tickle.on{color:#2BD67B;background:rgba(43,214,123,.12)}
+.tik-act.tickle.on svg{fill:none;stroke:#2BD67B}
+.tik-act.like:hover,.tik-act.like.on{color:#FF3D7F;background:rgba(255,61,127,.12)}
+.tik-act.like.on svg{fill:#FF3D7F;stroke:#FF3D7F}
+.tik-act.share:hover,.tik-act.share.on{color:#F0B90B;background:rgba(240,185,11,.14)}
+.tik-act.pop svg{animation:tikPop .45s cubic-bezier(.2,1.6,.4,1)}
+@keyframes tikPop{0%{transform:scale(.6)}50%{transform:scale(1.35)}100%{transform:scale(1)}}
+/* Replies read like a chat: bubbles, yours on the right in TIK colours */
+.tik-replies{position:relative;gap:10px;padding:10px 0 2px 12px;margin-top:2px}
+.tik-replies::before{content:"";position:absolute;left:0;top:6px;bottom:6px;width:2px;border-radius:2px;background:linear-gradient(color-mix(in srgb,var(--ac,#B57CFF) 70%,transparent),transparent)}
+.tik-replies>.tik.compact{background:transparent;border:0;padding:0;gap:8px;max-width:92%;animation:tikIn .3s ease both}
+.tik-replies>.tik.compact .tik-main{gap:4px}
+.tik-replies>.tik.compact .tik-body,.tik-replies>.tik.compact .tik-style{padding:9px 13px;border-radius:4px 18px 18px 18px;background:rgba(var(--wc),.07);align-self:flex-start;max-width:100%}
+.tik-replies>.tik.compact.mine{align-self:flex-end;flex-direction:row-reverse}
+.tik-replies>.tik.compact.mine .tik-head{flex-direction:row-reverse}
+.tik-replies>.tik.compact.mine .tik-time{margin-left:0;margin-right:auto}
+.tik-replies>.tik.compact.mine .tik-body{align-self:flex-end;border-radius:18px 4px 18px 18px;color:#fff;background:linear-gradient(135deg,#B57CFF,#FF6B9A)}
+.tik-replies>.tik.compact.mine .tik-actions{justify-content:flex-end}
+.tik-replies>.tik.compact .tik-actions{transform:scale(.92);transform-origin:left}
+@keyframes tikIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.tik-quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
+.tik-quick::-webkit-scrollbar{display:none}
+.tik-quick button{all:unset;cursor:pointer;flex:none;padding:6px 12px;border-radius:99px;font-size:.78em;font-weight:800;color:var(--ink);background:rgba(var(--wc),.06);border:1px solid rgba(var(--wc),.08);transition:transform .15s,background .15s,border-color .15s}
+.tik-quick button:hover{transform:translateY(-1px) scale(1.04);border-color:rgba(181,124,255,.5);background:rgba(181,124,255,.12)}
+.tik-quick button.on{background:linear-gradient(135deg,#B57CFF,#FF6B9A);color:#fff}
+.tik-quick button:disabled{opacity:.6;cursor:default}
+.tik-quick button:focus-visible{outline:2px solid #F0B90B}
+.tik-show{color:color-mix(in srgb,var(--ac,#B57CFF) 80%,var(--ink))}
+/* Lightbox: blurred glow of the picture, caption bar with the poster and a like */
+.tik-zoom{background:rgba(6,4,14,.82);backdrop-filter:blur(6px);animation:tikFade .2s ease}
+.tik-zoom-bg{position:absolute;inset:0;background-size:cover;background-position:center;filter:blur(60px) saturate(1.6);opacity:.45;pointer-events:none}
+.tik-zoom figure{position:relative;margin:0;display:flex;flex-direction:column;max-width:min(980px,100%);max-height:100%;cursor:default;animation:tikZoomIn .28s cubic-bezier(.2,1.2,.4,1)}
+.tik-zoom figure img{max-height:calc(100vh - 120px);object-fit:contain;border-radius:18px 18px 0 0;box-shadow:0 30px 80px -20px rgba(0,0,0,.8)}
+.tik-zoom figcaption{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:0 0 18px 18px;color:#fff;background:rgba(18,12,32,.82);backdrop-filter:blur(10px)}
+.tik-zoom figcaption .me-av{width:34px;height:34px;flex:none}
+.tik-zoom figcaption span{flex:1;min-width:0;display:flex;flex-direction:column}
+.tik-zoom figcaption small{opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tik-zoom-like{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:99px;font-weight:900;background:rgba(255,255,255,.1)}
+.tik-zoom-like svg{width:18px;height:18px;fill:none;stroke:#fff;stroke-width:2}
+.tik-zoom-like.on{background:rgba(255,61,127,.25)}
+.tik-zoom-like.on svg{fill:#FF3D7F;stroke:#FF3D7F;animation:tikPop .45s cubic-bezier(.2,1.6,.4,1)}
+.tik-zoom-x{all:unset;cursor:pointer;position:absolute;top:14px;right:14px;z-index:2;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:900;background:rgba(255,255,255,.12);backdrop-filter:blur(8px)}
+.tik-zoom-x:hover{background:rgba(255,255,255,.22)}
+@keyframes tikFade{from{opacity:0}to{opacity:1}}
+@keyframes tikZoomIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+/* "N people talking" header on the feed */
+.tk-talk{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:18px;border:1px solid rgba(181,124,255,.25);
+  background:linear-gradient(110deg,rgba(181,124,255,.14),rgba(255,107,154,.08) 55%,rgba(79,209,255,.08))}
+.tk-talk-av{display:flex;flex:none}
+.tk-talk-av .me-av{width:30px;height:30px;margin-left:-9px;box-shadow:0 0 0 2px var(--surface);transition:transform .15s}
+.tk-talk-av .me-av:first-child{margin-left:0}
+.tk-talk-av .me-av:hover{transform:translateY(-3px);z-index:1}
+.tk-talk-t{display:flex;flex-direction:column;min-width:0}
+.tk-talk-t b{font-weight:900}
+.tk-talk-t small{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.78em;font-weight:700}
+/* Dashboard header: gradient title */
+.tik-top{background:linear-gradient(110deg,color-mix(in srgb,var(--surface) 86%,transparent),color-mix(in srgb,var(--surface) 70%,transparent)),radial-gradient(80% 140% at 0% 0%,rgba(181,124,255,.22),transparent 60%),radial-gradient(80% 140% at 100% 0%,rgba(255,107,154,.16),transparent 60%)}
+.tik-top h2{background:linear-gradient(90deg,var(--ink),color-mix(in srgb,#B57CFF 70%,var(--ink)));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+/* Composer: glowing box when typing, picture button in colour */
+.tik-new-box:focus-within{box-shadow:0 0 0 2px rgba(181,124,255,.45),0 10px 30px -18px #B57CFF;border-radius:14px}
+.tik-attach{color:#4FA8FF}
+.tik-attach:hover{background:rgba(79,168,255,.12)}
+
+/* ---- The TIK panel (beside your photo): glassy, colourful, alive ---- */
+.ptik{gap:12px;padding:14px !important;border-radius:22px;
+  background:linear-gradient(color-mix(in srgb,var(--surface) 92%,transparent),color-mix(in srgb,var(--surface) 92%,transparent)) padding-box,
+  conic-gradient(from var(--ptik-a,0deg),#FFD84D,#FF6B9A,#B57CFF,#4FD1FF,#FFD84D) border-box;
+  box-shadow:0 18px 44px -28px rgba(181,124,255,.85);animation:ptikSpin 8s linear infinite}
+@property --ptik-a{syntax:"<angle>";initial-value:0deg;inherits:false}
+@keyframes ptikSpin{to{--ptik-a:360deg}}
+.ptik::before{background:radial-gradient(90% 60% at 0% 0%,rgba(255,107,154,.2),transparent 60%),radial-gradient(80% 60% at 100% 0%,rgba(79,209,255,.18),transparent 60%),radial-gradient(70% 50% at 50% 110%,rgba(181,124,255,.18),transparent 60%)}
+.ptik-head{padding-bottom:2px}
+.ptik-t b{font-size:1.3rem}
+.ptik-open{box-shadow:0 8px 18px -8px #F0B90B;transition:transform .15s,filter .15s}
+.ptik-open:hover{transform:translateY(-1px);filter:brightness(1.06)}
+.ptik-tabs{background:rgba(var(--wc),.07);border-radius:14px}
+.ptik-tabs button{border-radius:10px;transition:background .2s,color .2s,box-shadow .2s}
+.ptik-tabs button[aria-selected=true]{color:#fff;background:linear-gradient(135deg,#B57CFF,#FF6B9A);box-shadow:0 6px 16px -8px #FF6B9A}
+.ptik-tabs button.hot:not([aria-selected=true]){color:#FF3D7F}
+.ptik .tik{background:rgba(var(--wc),.05);border:1px solid rgba(var(--wc),.06);border-radius:16px;animation:tikIn .3s ease both}
+.ptik .tik:hover{border-color:rgba(181,124,255,.35)}
+.ptik .tik::before{display:none}
+.ptik .tik-img img{max-height:200px}
+.ptik .tik-act{padding:4px 8px;background:transparent}
+.ptik-foot a{border-radius:12px;background:rgba(var(--wc),.06);transition:background .15s,transform .15s}
+.ptik-foot a:hover{transform:translateY(-1px);background:rgba(181,124,255,.14)}
+.ptik-foot a:nth-child(2){color:#fff;background:linear-gradient(135deg,#FF6B9A,#B57CFF)}
+
+:root[data-calm="on"] .ptik,:root[data-calm="on"] .tik-burst svg{animation:none}
+@media (prefers-reduced-motion:reduce){
+  .ptik,.tik-burst svg,.tik-act.pop svg,.tik-replies>.tik.compact,.ptik .tik,.tik-zoom,.tik-zoom figure{animation:none}
+  .tik-img::after{display:none}.tik-img:hover img,.tik-pro .tik:not(.compact):hover{transform:none}
+}
