@@ -7,7 +7,7 @@ import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaR
 import { cronDenied } from "@/lib/cron-auth";
 import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
-import { COPY_MAX_TAX } from "@/lib/ai-trader";
+import { COPY_MAX_TAX, createSolWallet, liveWallets, revealSolKey } from "@/lib/ai-trader";
 import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xFollowing, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
 
 export const runtime = "nodejs";
@@ -91,6 +91,7 @@ async function getMine(_req: Request, action: string) {
     signals: sigs || [], sources: { x: xReady(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     copy: {
       sources: srcs || [], maxTax: COPY_MAX_TAX, callers: callers || [], rebuys: rebuys || [],
+      wallets: await liveWallets(s).catch(() => []),
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
       tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null, stage: null, hint: null, chats: null, chatsAt: null })),
       x: { loginReady: xLoginReady(), signedIn: !!s.x_username, username: s.x_username, canRead: await xReadReady().catch(() => false), communities: !!process.env.TWITTERAPI_IO_KEY },
@@ -134,7 +135,13 @@ async function postMine(action: string, b: any) {
       if (typeof b.signals_on === "boolean") up.signals_on = b.signals_on;
       if (typeof b.copy_on === "boolean") up.copy_on = b.copy_on;
       if (typeof b.rebuy_on === "boolean") up.rebuy_on = b.rebuy_on;
-      if (["telegram", "x", "general"].includes(b.trade_mode)) up.trade_mode = b.trade_mode;
+      if (["telegram", "both", "x", "general"].includes(b.trade_mode)) up.trade_mode = b.trade_mode;
+      // Chains to trade on with real money (each needs its own coin in the wallet). BNB Chain can be switched off too.
+      if (Array.isArray(b.live_chains)) {
+        const lc = ["bsc", "ethereum", "robinhood", "solana"].filter((c) => b.live_chains.includes(c));
+        if (!lc.length) return json({ error: "Keep at least one chain on for live trading." }, 400);
+        up.live_chains = lc;
+      }
       if (Array.isArray(b.callers)) up.callers = [...new Set(b.callers.map((h: unknown) => String(h).replace(/^@/, "").trim()).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
       if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
@@ -282,6 +289,13 @@ async function postMine(action: string, b: any) {
         return json({ ok: true, note: `Now copying ${title}.` });
       }
       return json({ error: "Unknown action." }, 400);
+    }
+    case "sol-wallet": {
+      try { const address = await createSolWallet(); return json({ ok: true, address, note: "Solana wallet created. Send SOL to it, then switch Solana on for live trading." }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "sol-key-reveal": {
+      try { return json({ ok: true, key: await revealSolKey() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "key-reveal": {
       try { return json({ ok: true, key: await revealTraderKey() }); } catch (e) { return json({ error: (e as Error).message }, 400); }

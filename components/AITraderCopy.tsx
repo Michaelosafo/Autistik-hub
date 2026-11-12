@@ -6,11 +6,11 @@
  */
 import { useEffect, useState } from "react";
 import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
-import { Callers, ModePicker, RebuyBox, type Caller, type Rebuy } from "@/components/AITraderCopyExtras";
+import { Callers, LiveChains, ModePicker, RebuyBox, type Caller, type LiveWallet, type Rebuy } from "@/components/AITraderCopyExtras";
 
 export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
 export type CopyData = {
-  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[];
+  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[]; wallets: LiveWallet[];
   tg: { ready: boolean; linked: boolean; username: string | null };
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
@@ -72,6 +72,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
       <p className="muted" style={{ margin: 0 }}>Any coin (contract address) posted in a group or account you follow is bought within seconds, then sold at the target or the stop-loss. The only check is for honeypots: it skips a coin that can&apos;t be sold or has a buy or sell tax of {c.maxTax}% or more.</p>
 
       <ModePicker mode={s.trade_mode} busy={busy || !owner} onAct={onAct} />
+      <LiveChains list={c.wallets || []} live={s.mode === "live"} busy={busy || !owner} onAct={onAct} />
 
       <div className="aic-rules">
         <label><small className="muted">Sell at profit</small>
@@ -81,7 +82,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
           <span className="ait-in"><em>−</em><input inputMode="decimal" disabled={busy || !owner} value={sl || String(s.copy_sl)} onChange={(e) => setSl(e.target.value)} onBlur={() => { if (sl && Number(sl) !== s.copy_sl) onAct("sl", "settings", { copy_sl: Number(sl) }, `Copy trades now sell at −${Number(sl)}%.`); setSl(""); }} /><em>%</em></span>
           <small className="muted">sells if it falls this much</small></label>
       </div>
-      <small className="muted">Each copy buy uses the trade size above ({s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`}) and counts toward &ldquo;Coins at once&rdquo;. {s.mode === "live" ? "Live trading buys on BNB Chain only, so coins on other chains are skipped." : "Practice mode: pretend BNB, real prices."} {!s.enabled && <b>The trader is stopped, so nothing is copied until you press Start.</b>}</small>
+      <small className="muted">Each copy buy uses the trade size above ({s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`}) and counts toward &ldquo;Coins at once&rdquo;. {s.mode === "live" ? "Live: buys on the chains switched on under Live chains." : "Practice mode: pretend BNB, real prices."} {!s.enabled && <b>The trader is stopped, so nothing is copied until you press Start.</b>}</small>
 
       {/* Telegram */}
       <div className="aic-block">

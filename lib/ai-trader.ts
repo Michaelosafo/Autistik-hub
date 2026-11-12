@@ -27,6 +27,8 @@ import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
 import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
 import { tgaNewPosts } from "@/lib/tg-account";
+import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, walletAddress, type LiveChain, type Wallets } from "@/lib/ai-trader-chains";
+import { Keypair } from "@solana/web3.js";
 
 export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
 export type TradeChain = (typeof TRADE_CHAINS)[number];
@@ -40,7 +42,8 @@ export type Settings = {
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
-  trade_mode: "telegram" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
+  trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
+  live_chains: LiveChain[];
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -76,6 +79,46 @@ export async function traderAccount() {
   const a = privateKeyToAccount(k as `0x${string}`);
   wallets.set(T(), a);
   return a;
+}
+
+// Each trader's Solana wallet (optional), kept in Vault like the EVM one.
+const solWallets = new Map<number, Keypair>();
+export async function solAccount(): Promise<Keypair | null> {
+  const have = solWallets.get(T());
+  if (have) return have;
+  const { data } = await supabaseService().rpc("ai_trader_sol_key_get_for", { p_trader: T() });
+  if (typeof data !== "string" || !data.startsWith("[")) return null;
+  const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(data)));
+  solWallets.set(T(), kp);
+  return kp;
+}
+export async function createSolWallet(): Promise<string> {
+  if (await solAccount()) throw new Error("This trader already has a Solana wallet.");
+  const kp = Keypair.generate();
+  const { error } = await supabaseService().rpc("ai_trader_sol_key_set_for", { p_trader: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: false });
+  if (error) throw new Error(error.message);
+  solWallets.set(T(), kp);
+  await log("settings", `Solana trading wallet created: ${kp.publicKey.toBase58()}`);
+  return kp.publicKey.toBase58();
+}
+/** The Solana wallet's secret key as the 64-number list Phantom / Solflare accept when importing a private key. */
+export async function revealSolKey(): Promise<string> {
+  const kp = await solAccount();
+  if (!kp) throw new Error("There's no Solana wallet yet.");
+  await log("settings", "The Solana wallet's private key was viewed.");
+  return JSON.stringify(Array.from(kp.secretKey));
+}
+const wallets = async (): Promise<Wallets> => ({ evm: await traderAccount(), sol: await solAccount() });
+/** The chains this trader buys on: in live mode the ones switched on for live trading, in practice all its chains. */
+export const tradeChains = (s: Settings): string[] => (s.mode === "live" ? s.live_chains : s.chains);
+
+/** Each live chain: wallet address and balance in its own coin (for the page). */
+export async function liveWallets(s: Settings) {
+  const w = await wallets();
+  return Promise.all(LIVE_CHAINS.map(async (chain) => ({
+    chain, native: NATIVE[chain], on: s.live_chains.includes(chain), address: walletAddress(chain, w),
+    balance: walletAddress(chain, w) ? await chainBalance(chain, w).catch(() => null) : null,
+  })));
 }
 
 /** Owner: makes the live trading wallet (once). Returns its address to send BNB to. */
@@ -147,8 +190,10 @@ export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", T()).single();
   const s = data as any;
   for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl", "rebuy_dump", "rebuy_tp"]) s[k] = n(s[k]);
-  if (!["telegram", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
+  if (!["telegram", "both", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
   s.rebuy_on = s.rebuy_on !== false;
+  s.live_chains = (Array.isArray(s.live_chains) ? s.live_chains : ["bsc"]).filter((c: string) => isLiveChain(c));
+  if (!s.live_chains.length) s.live_chains = ["bsc"];
   s.copy_on = s.copy_on !== false;
   s.callers = Array.isArray(s.callers) ? s.callers : [];
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
@@ -333,19 +378,22 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
     const tax = risk?.sellTax ?? 0;
     let received: number, sellTx: string | null = null, price = priceUsd ?? null;
     if (price == null) price = (await priceOf(p.chain, p.token)).price;
-    if (p.mode === "paper" || p.chain !== "bsc") {
+    let receivedNative: number | null = null;
+    if (p.mode === "paper") {
       if (!price) throw new Error("No price to sell at.");
       received = (n(p.qty) * price * (1 - tax / 100 - (p.strategy ? 0.03 : PAPER_SLIP))) / (await bnbUsd());
       const s = await getSettings();
       await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash + Math.max(0, received) }).eq("id", T());
     } else {
-      if (!(await traderAccount())) throw new Error("There's no trading wallet, so live positions can't be sold here.");
-      const r = await liveSell(getAddress(p.token), BigInt(p.amount_raw || "0"), tax);
-      received = r.received; sellTx = r.hash;
+      // Live on any chain: sold for that chain's coin, counted in BNB terms like the buy.
+      if (!isLiveChain(p.chain)) throw new Error(`Live selling isn't set up for ${p.chain}.`);
+      const r = await liveSellOn(p.chain, await wallets(), p.token, BigInt(p.amount_raw || "0"), tax);
+      receivedNative = r.receivedNative; sellTx = r.hash;
+      received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
     }
     const pnl = received - n(p.spent);
     await tq("ai_trader_positions").update({
-      status: "closed", received, pnl, pnl_pct: n(p.spent) ? (pnl / n(p.spent)) * 100 : null, close_reason: reason, sell_tx: sellTx,
+      status: "closed", received, received_native: receivedNative, pnl, pnl_pct: n(p.spent) ? (pnl / n(p.spent)) * 100 : null, close_reason: reason, sell_tx: sellTx,
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
     if (p.strategy === "copy" && p.new_project && reason.startsWith("Take profit") && price) await startRebuyWatch(p, price).catch(() => {});
@@ -542,28 +590,38 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean }) {
   const sb = supabaseService();
   const bnb = await bnbUsd();
+  const live = s.mode === "live" && isLiveChain(c.chain) && s.live_chains.includes(c.chain);
   // A caller with their own size buys that many dollars' worth; everyone else uses the normal trade size.
-  const spend = Math.min(o.usd && o.usd > 0 ? +(o.usd / bnb).toFixed(6) : await tradeSize(s), cash);
-  let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
-  if (s.mode === "paper" || c.chain !== "bsc") {
+  let spend = Math.min(o.usd && o.usd > 0 ? +(o.usd / bnb).toFixed(6) : await tradeSize(s), live ? Infinity : cash);
+  let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18, native: string | null = null, spentNative: number | null = null;
+  if (live) {
+    // Live on any chain: pays with that chain's own coin, worth the same dollars.
+    const chain = c.chain as LiveChain;
+    const w = await wallets();
+    const nUsd = await nativeUsd(chain);
+    const wantUsd = spend * bnb;
+    const avail = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
+    const amount = +Math.min(wantUsd / nUsd, avail).toFixed(chain === "solana" ? 6 : 8);
+    if (amount * nUsd < wantUsd * 0.5) throw new Error(`Not enough ${NATIVE[chain]} on ${CHAIN_NAME[chain]}.`);
+    const r = await liveBuyOn(chain, w, c.token, amount, c.buyTax ?? 0);
+    if (r.raw <= 0n) throw new Error("The swap went through but no tokens arrived.");
+    decimals = r.decimals; raw = r.raw.toString(); tx = r.hash; native = NATIVE[chain]; spentNative = amount;
+    qty = Number(r.raw) / 10 ** decimals;
+    spend = +((amount * nUsd) / bnb).toFixed(6); // kept in BNB terms so totals add up across chains
+  } else {
     const slip = Math.min(0.15, 0.01 + ((spend * bnb) / Math.max(1, c.liquidity)) * 2); // small pools move a lot
     qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - slip)) / c.price;
     const fresh = await getSettings();
     await sb.from("ai_trader_settings").update({ paper_cash: fresh.paper_cash - spend }).eq("id", T());
-  } else {
-    const r = await liveBuy(getAddress(c.token), spend, c.buyTax ?? 0);
-    const dec = await (walletChainClient(C) as any).readContract({ address: c.token, abi: erc20Abi, functionName: "decimals" }).catch(() => 18);
-    decimals = Number(dec); raw = r.raw.toString(); tx = r.hash;
-    qty = Number(r.raw) / 10 ** decimals;
   }
   const { error } = await tq("ai_trader_positions").insert({
-    mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
+    mode: live ? "live" : "paper", native, spent_native: spentNative, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
     strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
   const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : o.strategy === "copy" ? "📡" : "⚡";
-  await log("buy", `${icon} Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""}. Target +${o.tp}%, stop -${o.sl}%. ${o.why}`);
+  await log("buy", `${icon} Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spentNative != null ? `${spentNative} ${native}` : `${spend} BNB`}${live ? "" : " (practice)"}. Target +${o.tp}%, stop -${o.sl}%. ${o.why}`);
   return `Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain}.`;
 }
 
@@ -575,25 +633,7 @@ async function buyOne(s: Settings, cash: number, held: Set<string>) {
   const p = await pick(s, list);
   if (!p) return `Looked at ${list.length} safe coins; none looked good enough to buy.`;
   const c = p.c;
-  const spend = Math.min(await tradeSize(s), cash);
-  let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
-  const bnb = await bnbUsd();
-  if (s.mode === "paper" || c.chain !== "bsc") {
-    qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - PAPER_SLIP)) / c.price;
-    await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash - spend }).eq("id", T());
-  } else {
-    const r = await liveBuy(getAddress(c.token), spend, c.buyTax ?? 0);
-    const dec = await (walletChainClient(C) as any).readContract({ address: c.token, abi: erc20Abi, functionName: "decimals" }).catch(() => 18);
-    decimals = Number(dec); raw = r.raw.toString(); tx = r.hash;
-    qty = Number(r.raw) / 10 ** decimals;
-  }
-  const { error } = await tq("ai_trader_positions").insert({
-    mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
-    entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: s.stop_loss, take_profit: s.take_profit, trail: s.trail, why: p.why, buy_tx: tx,
-  });
-  if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); return "Save failed."; }
-  await log("buy", `Bought ${c.symbol} on ${CHAIN_NAME[c.chain]} for ${spend} BNB${s.mode === "paper" ? " (practice)" : ""} at $${c.price}. ${p.why}`);
-  return `Bought ${c.symbol} on ${CHAIN_NAME[c.chain]}.`;
+  return executeBuy(s, cash, { ...c, mcap: c.mcap ?? 0 }, { sl: s.stop_loss, tp: s.take_profit, trail: s.trail, why: p.why, strategy: "" });
 }
 
 // ---------------------------------------------------------------- One run
@@ -635,14 +675,26 @@ export async function runTrader({ force = false } = {}) {
 // ---------------------------------------------------------------- Fast loop (every minute): exits and fresh signals
 
 /** Room and money for one more buy, or why not. */
-async function buyRoom(s: Settings): Promise<{ cash: number; held: Set<string> } | string> {
-  const sb = supabaseService();
+/**
+ * Room and money for one more buy on a chain. Practice: pretend BNB. Live: that chain's own coin in the wallet
+ * (BNB, ETH or SOL), less what's kept for fees, must cover at least half a normal trade.
+ */
+async function buyRoom(s: Settings, chain = "bsc"): Promise<{ cash: number; held: Set<string> } | string> {
   const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
   if (held.size >= s.max_positions) return `Holding ${held.size} of ${s.max_positions} coins.`;
-  const cash = s.mode === "paper" ? (await getSettings()).paper_cash : Math.max(0, ((await liveBalance())?.bnb ?? 0) - GAS_KEEP);
-  if (cash < (await tradeSize(s)) * 0.5) return `Not enough BNB (${cash.toFixed(4)}).`;
-  return { cash, held };
+  if (s.mode === "paper") {
+    const cash = (await getSettings()).paper_cash;
+    if (cash < (await tradeSize(s)) * 0.5) return `Not enough practice BNB (${cash.toFixed(4)}).`;
+    return { cash, held };
+  }
+  if (!isLiveChain(chain) || !s.live_chains.includes(chain)) return `${CHAIN_NAME[chain] || chain} isn't switched on for live trading`;
+  const w = await wallets();
+  if (!walletAddress(chain, w)) return chain === "solana" ? "there's no Solana wallet yet" : "there's no trading wallet yet";
+  const have = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
+  const needUsd = (s.per_trade_usd > 0 ? s.per_trade_usd : s.per_trade * (await bnbUsd())) * 0.5;
+  if (have * (await nativeUsd(chain)) < needUsd) return `not enough ${NATIVE[chain]} on ${CHAIN_NAME[chain]} (${have.toFixed(4)} ${NATIVE[chain]})`;
+  return { cash: have, held };
 }
 
 /**
@@ -788,7 +840,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   // Telegram only mode ignores X, X only mode ignores Telegram.
   if ((source === "x" && s.trade_mode === "telegram") || (source === "telegram" && s.trade_mode === "x")) return [];
   const caller = await callerUsd(source === "x" ? "x" : "tg", post.from).catch(() => null);
-  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
   const out: string[] = [];
@@ -809,11 +861,11 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
     await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
     return r;
   };
-  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  const chains = tradeChains(s);
   if (!f || !f.price) return done(s.mode === "live" ? "skipped: no BNB Chain pool for it (live trading buys on BNB Chain only)" : "skipped: no pool on your chains yet");
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
   if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
-  const room = await buyRoom(s);
+  const room = await buyRoom(s, f.chain);
   if (typeof room === "string") return done(`skipped: ${room}`);
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
   const g = await copyGate(f.chain, f.token);
@@ -863,7 +915,7 @@ async function startRebuyWatch(p: Position, soldUsd: number) {
  */
 async function rebuyCheck(s: Settings) {
   const { data } = await tq("ai_trader_rebuy").select("*").eq("status", "watching").eq("mode", s.mode).order("sold_at", { ascending: true }).limit(10);
-  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  const chains = tradeChains(s);
   for (const w of (data || []) as any[]) {
     const set = (v: Record<string, unknown>) => tq("ai_trader_rebuy").update(v).eq("id", w.id);
     if (Date.now() - Date.parse(w.sold_at) > 48 * 36e5) { await set({ status: "expired", note: "no deep dump within 48h" }); continue; }
@@ -877,7 +929,7 @@ async function rebuyCheck(s: Settings) {
     if (!heavy) { await set({ note: `down ${drop.toFixed(0)}%, waiting for heavy volume` }); continue; }
     if (f.buys5 < f.sells5) { await set({ note: `down ${drop.toFixed(0)}% on heavy volume, waiting for buyers to step in` }); continue; }
     if (!chains.includes(f.chain)) { await set({ status: "expired", note: `${f.chain} isn't switched on` }); continue; }
-    const room = await buyRoom(s);
+    const room = await buyRoom(s, f.chain);
     if (typeof room === "string") { await set({ note: `ready, but ${room}` }); continue; }
     if (room.held.has(f.token.toLowerCase())) { await set({ status: "expired", note: "already holding it" }); continue; }
     const g = await copyGate(f.chain, f.token);
