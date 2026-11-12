@@ -3,6 +3,7 @@ import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
+import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaStart, tgaStatus } from "@/lib/tg-account";
 import { cronDenied } from "@/lib/cron-auth";
 import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
@@ -87,6 +88,7 @@ async function getMine(_req: Request, action: string) {
     copy: {
       sources: srcs || [], maxTax: COPY_MAX_TAX,
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
+      tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null })),
       x: { loginReady: xLoginReady(), signedIn: !!s.x_username, username: s.x_username, canRead: await xReadReady().catch(() => false), communities: !!process.env.TWITTERAPI_IO_KEY },
     },
     perTradeBnb: await tradeSize(s).catch(() => s.per_trade),
@@ -166,6 +168,25 @@ async function postMine(action: string, b: any) {
       await xSignOut();
       return json({ ok: true, note: "Signed out of X. Lists you follow stay saved but can't be read until you sign in again." });
     }
+    case "tga-start": {
+      try { return json({ ok: true, ...(await tgaStart(String(b.phone || ""))) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-code": {
+      try { const r = await tgaCode(String(b.code || "")); if ("ok" in r) await log("settings", `Logged in with Telegram account ${r.name}.`); return json({ ok: true, ...r }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-password": {
+      try { const r = await tgaPassword(String(b.password || "")); await log("settings", `Logged in with Telegram account ${r.name}.`); return json(r); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-chats": {
+      try { return json({ ok: true, chats: await tgaChats() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-logout": {
+      await tgaLogout();
+      await log("settings", "Logged out of the Telegram account.");
+      return json({ ok: true, note: "Logged out of Telegram. Your ticked groups are switched off." });
+    }
     case "x-following": {
       try { return json({ ok: true, accounts: await xFollowing() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
@@ -186,7 +207,11 @@ async function postMine(action: string, b: any) {
         const kind = String(b.kind || "");
         let ref = "", title = "";
         try {
-          if (kind === "x_account") {
+          if (kind === "tg_chat") {
+            ref = String(b.ref || "");
+            if (!/^(c:\d+:-?\d+|g:\d+)$/.test(ref)) return json({ error: "That isn't one of your Telegram chats." }, 400);
+            title = String(b.title || "Telegram chat").slice(0, 80);
+          } else if (kind === "x_account") {
             ref = String(b.ref || "").trim().replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, "").replace(/^@/, "").split(/[/?]/)[0];
             if (!/^[A-Za-z0-9_]{1,15}$/.test(ref)) return json({ error: "That isn't an X handle." }, 400);
             title = `@${ref}`;
@@ -199,9 +224,11 @@ async function postMine(action: string, b: any) {
             ref = c.id; title = c.name;
           } else return json({ error: "Unknown source." }, 400);
         } catch (e) { return json({ error: (e as Error).message }, 400); }
-        const { count } = await tq("ai_trader_sources").select("id", { count: "exact", head: true }).eq("enabled", true).neq("kind", "tg");
-        if ((count || 0) >= 30) return json({ error: "You're following 30 X sources already. Switch one off first." }, 400);
-        const { error } = await tq("ai_trader_sources").upsert({ kind, ref: kind === "x_account" ? ref.toLowerCase() : ref, title, enabled: true }, { onConflict: "trader_id,kind,ref" });
+        const { count } = await tq("ai_trader_sources").select("id", { count: "exact", head: true }).eq("enabled", true).eq("kind", kind === "tg_chat" ? "tg_chat" : kind).neq("kind", "tg");
+        if (kind === "tg_chat" && (count || 0) >= 25) return json({ error: "You're copying 25 Telegram chats already (the most that can be read every minute). Switch one off first." }, 400);
+        if (kind !== "tg_chat" && (count || 0) >= 30) return json({ error: "You're following 30 of these already. Switch one off first." }, 400);
+        const handle = kind === "tg_chat" && /^[A-Za-z0-9_]{4,32}$/.test(String(b.handle || "")) ? String(b.handle) : null;
+        const { error } = await tq("ai_trader_sources").upsert({ kind, ref: kind === "x_account" ? ref.toLowerCase() : ref, title, enabled: true, ...(handle ? { handle } : {}) }, { onConflict: "trader_id,kind,ref" });
         if (error) return json({ error: error.message }, 400);
         await log("settings", `Now copying ${title}.`);
         return json({ ok: true, note: `Now copying ${title}.` });

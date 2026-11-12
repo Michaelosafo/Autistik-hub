@@ -5,11 +5,13 @@
  * at the copy target (default 2x) or stop-loss (default -5%).
  */
 import { useEffect, useState } from "react";
+import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
 
-export type CopySource = { id: number; kind: "tg" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
+export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
 export type CopyData = {
   sources: CopySource[]; maxTax: number;
   tg: { ready: boolean; linked: boolean; username: string | null };
+  tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
 };
 type Settings = { enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number };
@@ -23,7 +25,7 @@ async function call(action: string, body: unknown) {
 }
 const ago = (iso: string | null) => { if (!iso) return "no posts yet"; const s = (Date.now() - Date.parse(iso)) / 1000; return s < 60 ? "posted now" : s < 3600 ? `posted ${Math.floor(s / 60)}m ago` : s < 86400 ? `posted ${Math.floor(s / 3600)}h ago` : `posted ${Math.floor(s / 86400)}d ago`; };
 
-export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData; s: Settings; owner: boolean; busy: boolean; onAct: Act }) {
+export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: CopyData; s: Settings; owner: boolean; busy: boolean; onAct: Act; reload: () => Promise<void> }) {
   const [note, setNote] = useState("");
   const [tgLink, setTgLink] = useState<{ link: string; canReadGroups: boolean; username: string } | null>(null);
   const [lists, setLists] = useState<{ id: string; name: string; members: number | null; owned: boolean }[] | null>(null);
@@ -43,9 +45,9 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
   }, []);
 
   const tgSrc = c.sources.filter((x) => x.kind === "tg");
-  const xSrc = c.sources.filter((x) => x.kind !== "tg");
+  const xSrc = c.sources.filter((x) => x.kind.startsWith("x_"));
   const following = c.sources.filter((x) => x.enabled).length;
-  const kindName = { tg: "Telegram", x_account: "X account", x_list: "X List", x_community: "X Community" } as const;
+  const kindName = { tg: "Telegram (bot)", tg_chat: "Telegram", x_account: "X account", x_list: "X List", x_community: "X Community" } as const;
 
   async function run(fn: () => Promise<void>) { setNote(""); try { await fn(); } catch (e) { setNote((e as Error).message); } }
   const toggle = (x: CopySource, on: boolean) => onAct(`src${x.id}`, "source", { op: "toggle", id: x.id, enabled: on }, on ? `Copying ${x.title || x.ref}.` : `Stopped copying ${x.title || x.ref}.`);
@@ -80,10 +82,12 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
 
       {/* Telegram */}
       <div className="aic-block">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <b>✈️ Telegram</b>
-          {c.tg.linked ? <span className="aic-ok">✓ Linked{c.tg.username ? ` as ${c.tg.username}` : ""}</span> : null}
-        </div>
+        <b>✈️ Telegram</b>
+        <AITraderTgAccount st={c.tga} sources={c.sources} busy={busy || !owner} reload={reload} onAct={onAct} />
+        <details className="aic-more" open={c.tg.linked || tgSrc.length > 0}>
+          <summary>Or use a bot instead {c.tg.linked ? <span className="aic-ok">✓ Linked{c.tg.username ? ` as ${c.tg.username}` : ""}</span> : null}</summary>
+          <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+            <small className="muted">A bot reads posts the instant they land, but someone has to add it to each group.</small>
         {!c.tg.ready ? (
           <small className="muted">First make a bot: open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a>, send <code>/newbot</code>, then send <code>/setprivacy</code>, choose the bot and pick <b>Disable</b> so it can read group messages. Add the token it gives you in Vercel as <code>TELEGRAM_BOT_TOKEN</code> and redeploy.</small>
         ) : !c.tg.linked ? (
@@ -94,7 +98,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
                 <a className="btn" href={tgLink.link} target="_blank" rel="noopener noreferrer" style={{ alignSelf: "flex-start" }}>Open @{tgLink.username} and press Start</a>
                 <small className="muted">Then come back and refresh. The link works for 15 minutes.</small>
               </>
-            ) : <button type="button" className="btn" style={{ alignSelf: "flex-start" }} disabled={busy || !owner} onClick={() => run(async () => setTgLink(await call("tg-link", {})))}>Log in with Telegram</button>}
+            ) : <button type="button" className="btn" style={{ alignSelf: "flex-start" }} disabled={busy || !owner} onClick={() => run(async () => setTgLink(await call("tg-link", {})))}>Link the bot</button>}
           </div>
         ) : (
           <small className="muted">Add the bot to any group or channel to copy it: it shows up here and is followed straight away. Telegram doesn&apos;t let bots see your other groups, so only groups the bot is in can be listed. In channels the bot must be an admin.</small>
@@ -102,6 +106,8 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
         {tgLink && !tgLink.canReadGroups && <small className="aic-warn">⚠ The bot can&apos;t read normal group messages yet. In @BotFather send <code>/setprivacy</code>, pick the bot, choose <b>Disable</b>, then remove and re-add it to your groups (or make it a group admin).</small>}
         {tgSrc.length > 0 && <div className="aic-list">{tgSrc.map((x) => <Row key={x.id} x={x} />)}</div>}
         {c.tg.linked && owner && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => onAct("tgu", "tg-unlink", {})}>Unlink Telegram</button>}
+          </div>
+        </details>
       </div>
 
       {/* X */}

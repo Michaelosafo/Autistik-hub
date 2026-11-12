@@ -6092,3 +6092,4 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .aic-scroll{max-height:340px;overflow-y:auto;margin-top:6px}
 .aic-av{width:28px;height:28px;border-radius:50%;flex:none;background:var(--surface-2);object-fit:cover}
 .ait-mine{font-size:.85em}
+.aic-more summary{cursor:pointer;font-weight:600;font-size:.9em;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
