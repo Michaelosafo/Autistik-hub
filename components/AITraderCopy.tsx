@@ -15,7 +15,7 @@ export type CopyData = {
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
 };
-type Settings = { use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean; enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
+type Settings = { callers_only: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean; enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
 
 async function call(action: string, body: unknown) {
@@ -118,7 +118,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
         </details>
       </div>
 
-      <Callers list={c.callers || []} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
+      <Callers list={c.callers || []} only={s.callers_only} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
       <RebuyBox on={s.rebuy_on} dump={s.rebuy_dump} tp={s.rebuy_tp} sl={s.copy_sl} list={c.rebuys || []} busy={busy || !owner} onAct={onAct} />
 
       {/* X */}
