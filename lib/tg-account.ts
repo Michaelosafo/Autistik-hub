@@ -39,12 +39,46 @@ function friendly(e: unknown): string {
   if (/SRP_ID_INVALID|SRP_PASSWORD_CHANGED/.test(m)) return "That login timed out. Tap Start over and log in again.";
   if (/FLOOD_WAIT_(\d+)/.test(m)) return `Telegram asks to wait ${Math.ceil(Number(m.match(/FLOOD_WAIT_(\d+)/)![1]) / 60)} minutes before trying again.`;
   if (/AUTH_TOKEN_(EXPIRED|INVALID|ALREADY_ACCEPTED)/.test(m)) return "That QR code has expired. Tap Show QR code again.";
+  if (DEAD.test(m)) return DEAD_NOTE;
   if (/PHONE_NUMBER_BANNED/.test(m)) return "Telegram says this number is banned.";
   if (/SEND_CODE_UNAVAILABLE/.test(m)) return "Telegram has no other way to send the code right now. Check the \"Telegram\" chat in your app, or wait a few minutes and start again.";
   if (/API_ID_INVALID/.test(m)) return "Telegram says TELEGRAM_API_ID / TELEGRAM_API_HASH don't match. Copy them again from my.telegram.org/apps into Vercel and redeploy.";
   if (/PHONE_CODE_EMPTY|PHONE_CODE_HASH_EMPTY/.test(m)) return "That login has expired. Start again.";
   return m.slice(0, 160);
 }
+
+/**
+ * One connection per Telegram login at a time. Telegram ends a login (AUTH_KEY_DUPLICATED) when it's used from two
+ * places at once, and on Vercel every request can be a different machine. The reader holds the turn while it watches;
+ * anything else (refreshing the chat list, logging out) asks for the turn, the reader steps aside within ~2 seconds.
+ */
+async function takeTurn(kind: string, seconds: number, waitMs: number): Promise<string | null> {
+  const owner = `${kind}:${Math.random().toString(36).slice(2)}`;
+  const sb = supabaseService();
+  const grab = async () => !!(await sb.rpc("ai_trader_tg_lock", { p_trader: T(), p_owner: owner, p_seconds: seconds })).data;
+  if (await grab()) return owner;
+  if (!waitMs) return null;
+  await auth().update({ want_at: new Date().toISOString() }).eq("id", T());
+  const end = Date.now() + waitMs;
+  while (Date.now() < end) { await new Promise((ok) => setTimeout(ok, 500)); if (await grab()) return owner; }
+  return null;
+}
+const giveTurn = (owner: string | null) => (owner ? supabaseService().rpc("ai_trader_tg_unlock", { p_trader: T(), p_owner: owner }).then(() => {}, () => {}) : Promise.resolve());
+/** Someone else asked for the turn after `since`. */
+async function wanted(since: number): Promise<boolean> {
+  const { data } = await auth().select("want_at").eq("id", T()).maybeSingle();
+  return !!data?.want_at && Date.parse(data.want_at) > since;
+}
+/** Telegram ended the login: forget it so the page asks to log in again (ticked chats are kept for after). */
+const DEAD = /AUTH_KEY_DUPLICATED|AUTH_KEY_UNREGISTERED|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED/;
+async function loginDied(e: unknown): Promise<boolean> {
+  const m = String((e as any)?.errorMessage || (e as Error)?.message || e);
+  if (!DEAD.test(m)) return false;
+  await sessionSet(null);
+  await auth().update({ signed_in_at: null }).eq("id", T());
+  return true;
+}
+const DEAD_NOTE = "Telegram logged the bot out (the login was used from two places at once). Log in to Telegram again on the AI trader page; your ticked groups are kept.";
 
 const sessionGet = async (): Promise<string> => {
   const { data } = await supabaseService().rpc("ai_trader_tg_session_get_for", { p_trader: T() });
@@ -223,7 +257,7 @@ export async function tgaReset() {
 /** Signs the session out on Telegram's side too, and forgets it. */
 export async function tgaLogout() {
   const s = await sessionGet();
-  if (s) { let c: TelegramClient | null = null; try { c = await client(s); await c.invoke(new Api.auth.LogOut()); } catch { /* already gone */ } finally { await close(c); } }
+  if (s) { const turn = await takeTurn("logout", 30, 12_000); let c: TelegramClient | null = null; try { c = await client(s); await c.invoke(new Api.auth.LogOut()); } catch { /* already gone */ } finally { await close(c); await giveTurn(turn); } }
   await sessionSet(null);
   await auth().update({ account_name: null, signed_in_at: null, pending_session: null, code_hash: null, stage: null, pw_hint: null, chats: null, chats_at: null }).eq("id", T());
   await tq("ai_trader_sources").update({ enabled: false }).eq("kind", "tg_chat");
@@ -281,10 +315,12 @@ async function saveChats(c: TelegramClient): Promise<MyChat[]> {
 export async function tgaChats(): Promise<MyChat[]> {
   const s = await sessionGet();
   if (!s) throw new Error("Log in with your Telegram account first.");
+  const turn = await takeTurn("chats", 40, 12_000);
+  if (!turn) throw new Error("The bot is busy reading your groups. Try again in a few seconds.");
   let c: TelegramClient | null = null;
   try { c = await client(s); return await saveChats(c); }
-  catch (e) { throw new Error(friendly(e)); }
-  finally { await close(c); }
+  catch (e) { if (await loginDied(e)) throw new Error(DEAD_NOTE); throw new Error(friendly(e)); }
+  finally { await close(c); await giveTurn(turn); }
 }
 
 export type ChatPost = { text: string; chat: string; chatRef: string; isChannel: boolean; url: string; at: number; from: { id: string | null; username: string | null } };
@@ -307,10 +343,15 @@ export async function tgaWatch(onPost: (p: ChatPost) => Promise<unknown>, ms = 4
   const last = new Map(chats.map((ch) => [ch.id, ch.last_msg_id]));
   const failed = new Set<number>();
   let c: TelegramClient | null = null;
-  const end = Date.now() + ms;
+  const started = Date.now();
+  const end = started + ms;
+  const turn = await takeTurn("watch", Math.ceil(ms / 1000) + 15, 6_000);
+  if (!turn) return []; // another reader still has the turn: it covers these chats
+  let dead = false;
   try {
     c = await client(s);
-    while (Date.now() < end) {
+    while (Date.now() < end && !dead) {
+      if (await wanted(started)) break; // the page wants to refresh the chat list: step aside
       const t0 = Date.now();
       const found: ChatPost[] = [];
       await Promise.all(chats.filter((ch) => !failed.has(ch.id)).map(async (ch) => {
@@ -331,6 +372,7 @@ export async function tgaWatch(onPost: (p: ChatPost) => Promise<unknown>, ms = 4
             found.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: ch.handle ? `https://t.me/${ch.handle}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from });
           }
         } catch (e) {
+          if (DEAD.test(String((e as any)?.errorMessage || (e as Error)?.message || e))) { dead = true; await loginDied(e); return; }
           const msg = friendly(e);
           // Telegram asked us to slow down: wait it out instead of hammering.
           const wait = /FLOOD_WAIT_(\d+)|wait of (\d+) seconds/i.exec(String((e as any)?.message || ""));
@@ -343,8 +385,9 @@ export async function tgaWatch(onPost: (p: ChatPost) => Promise<unknown>, ms = 4
       const left = every - (Date.now() - t0);
       if (left > 0 && Date.now() + left < end) await new Promise((r) => setTimeout(r, left));
     }
-  } catch (e) { errors.push(friendly(e)); }
-  finally { await close(c); }
+  } catch (e) { await loginDied(e); errors.push(friendly(e)); }
+  finally { await close(c); await giveTurn(turn); }
+  if (dead) return [DEAD_NOTE];
   return errors;
 }
 
@@ -356,6 +399,8 @@ export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string
   if (!s) return { posts: [], errors: ["Telegram account isn't logged in any more. Log in again on the AI trader page."] };
   const posts: ChatPost[] = [], errors: string[] = [];
   let c: TelegramClient | null = null;
+  const turn = await takeTurn("poll", 60, 0);
+  if (!turn) return { posts, errors };
   try {
     c = await client(s);
     for (const ch of chats) {
@@ -377,7 +422,7 @@ export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string
         }
       } catch (e) { errors.push(`${ch.title || "a chat"}: ${friendly(e)}`); }
     }
-  } catch (e) { errors.push(friendly(e)); }
-  finally { await close(c); }
+  } catch (e) { await loginDied(e); errors.push(friendly(e)); }
+  finally { await close(c); await giveTurn(turn); }
   return { posts, errors };
 }
