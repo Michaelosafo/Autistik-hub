@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPublicClient, encodeFunctionData, erc20Abi, getAddress, http } from "viem";
 import { IMPACT_BLOCK, IMPACT_CONFIRM, IMPACT_WARN, toUnits, WSOL } from "@/lib/wallet-chains";
-import { isXAddress, isXNative, lifiDiamond, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
+import { isXAddress, isXNative, lifiDiamond, trustedSwapTx, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
 import type { Signer } from "@/components/wallet/types";
 import { addTrade, amt, api, friendlyError, raw2num, sendSol, short, store, usd, type Holding } from "@/components/wallet/util";
 import { toast } from "@/lib/toast";
@@ -125,7 +125,7 @@ export default function BridgeForm({ signer, from, to, fromToken, toToken, onFro
       } else {
         const ev = signer.evm!, tx = x.evm!;
         // Never send to a contract we don't expect, even if the server were tampered with.
-        if (getAddress(tx.to) !== getAddress(lifiDiamond(from.id)) || (tx.spender && getAddress(tx.spender) !== getAddress(tx.to))) throw new Error("Unexpected swap contract. Stopped for your safety.");
+        if (!(await trustedSwapTx(from, x.tool, tx))) throw new Error("Unexpected swap contract. Stopped for your safety.");
         if (tx.spender) {
           const have: bigint = await pc(from).readContract({ address: fromToken.address as `0x${string}`, abi: erc20Abi, functionName: "allowance", args: [ev.address, tx.spender] });
           if (have < BigInt(x.fromAmount)) {

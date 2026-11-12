@@ -1,12 +1,14 @@
 /**
- * Swap across networks, server side: token lists, routes and transfer status from LI.FI.
+ * Swap across networks, server side: token lists, routes and transfer status from LI.FI, plus Relay routes (when
+ * RELAY_API_KEY is set) for swaps starting on EVM networks: both are asked and the one that delivers more wins.
  * Like the rest of the Wallet, the server never holds keys or money: it asks LI.FI for a route that pays out to the
  * address the member picked, checks the route goes through the LI.FI contract, and hands it to their wallet to sign.
  * Server only.
  */
 import { createPublicClient, erc20Abi, getAddress, http } from "viem";
 import { FEE_BPS, WCHAINS } from "@/lib/wallet-chains";
-import { XCHAINS, XCHAIN_BY_KEY, isXAddress, isXNative, lifiDiamond, xNative, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
+import { XCHAINS, XCHAIN_BY_KEY, isXAddress, isXNative, lifiDiamond, relayTrusted, xNative, type XChain, type XQuote, type XToken } from "@/lib/bridge-chains";
+import { relayFeeOn, relayQuote, relayStatus } from "@/lib/relay";
 
 const LIFI = process.env.LIFI_API || "https://li.quest/v1";
 /**
@@ -100,7 +102,18 @@ const same = (a: unknown, b: string, c: XChain) => c.kind === "solana" ? String(
  * Every answer is checked: right networks, right coins, right amount, paying out to `toAddress`, and (EVM) only
  * through the LI.FI contract.
  */
-export async function xQuote(p: { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST"; feeBps?: number }): Promise<XQuote> {
+type XQ = { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST"; feeBps?: number };
+
+/** The best route: LI.FI and (from EVM networks, with RELAY_API_KEY) Relay are both asked; whichever delivers more wins. */
+export async function xQuote(p: XQ): Promise<XQuote> {
+  const [l, r] = await Promise.allSettled([lifiXQuote(p), relayXQuote(p)]);
+  const lq = l.status === "fulfilled" ? l.value : null, rq = r.status === "fulfilled" ? r.value : null;
+  if (lq && rq) return BigInt(rq.toAmount) > BigInt(lq.toAmount) ? rq : lq;
+  if (lq || rq) return (lq || rq)!;
+  throw (l as PromiseRejectedResult).reason;
+}
+
+async function lifiXQuote(p: XQ): Promise<XQuote> {
   // LI.FI only pays a fee once the site is registered with it (LIFI_INTEGRATOR); then it goes to the wallet set there.
   const feeBps = INTEGRATOR ? (p.feeBps ?? xFeeBps) : 0;
   const q = new URLSearchParams({
@@ -146,6 +159,10 @@ export type XStatus = { status: "pending" | "done" | "failed" | "refunded"; mess
 
 /** Where a cross-network transfer is: still on its way, arrived, or failed (and refunded). */
 export async function xStatus(txHash: string, fromChain: number, toChain: number, tool: string): Promise<XStatus> {
+  if (tool.startsWith("relay:")) {
+    const r = await relayStatus(tool.slice(6));
+    return { status: r.status === "failed" ? "pending" : r.status, message: null, receiveHash: r.receiveHash, receiveAmount: null, link: `https://relay.link/transaction/${tool.slice(6)}` };
+  }
   const q = new URLSearchParams({ txHash, fromChain: String(fromChain), toChain: String(toChain) });
   if (/^[a-z0-9-]{1,40}$/i.test(tool)) q.set("bridge", tool);
   const j = await lifi(`/status?${q}`).catch(() => null);
@@ -240,4 +257,34 @@ export async function xDetect(raw: string): Promise<{ chain: number; token: XTok
     .multicall({ contracts: [read("name"), read("symbol"), read("decimals")], allowFailure: true }).catch(() => null);
   if (!res || res[2].status !== "success") return null;
   return { chain: found.id, token: { address: addr, symbol: String(res[1].result ?? hint.symbol ?? "?"), name: String(res[0].result ?? hint.name ?? ""), decimals: Number(res[2].result), logo: hint.logo ?? null, priceUsd: hint.priceUsd ?? null } };
+}
+
+// ---------------------------------------------------------------- Relay routes
+
+/**
+ * A Relay route (lib/relay.ts, already used by swap-by-message and fully checked there: right network, approval only
+ * for the coin being paid and only for this amount, never more of the chain's coin than the swap) shaped like a LI.FI
+ * one, so the Wallet signs it the same way: one optional approval, then one transaction. Starts on EVM networks.
+ */
+async function relayXQuote(p: XQ): Promise<XQuote> {
+  if (!relayFeeOn) throw new Error("Relay is off (no RELAY_API_KEY).");
+  if (p.from.kind !== "evm") throw new Error("Relay routes here start on EVM networks.");
+  const feeBps = p.feeBps ?? xFeeBps;
+  const treasury = /^0x[0-9a-fA-F]{40}$/.test(process.env.NEXT_PUBLIC_TREASURY_WALLET || "") ? process.env.NEXT_PUBLIC_TREASURY_WALLET! : null;
+  const q = await relayQuote({ from: p.from, to: p.to, fromToken: p.fromToken, toToken: p.toToken, amount: p.amount, user: p.fromAddress, recipient: p.toAddress, slippageBps: p.slippageBps, feeBps: treasury ? feeBps : 0, feeWallet: treasury });
+  const sends = q.txs.filter((t) => t.kind === "tx"), approve = q.txs.find((t) => t.kind === "approve");
+  if (sends.length !== 1 || q.txs.length > 2 || !q.requestId) throw new Error("Relay route has more steps than the Wallet signs.");
+  const native = isXNative(p.from, p.fromToken);
+  const spender = !native && approve ? getAddress("0x" + approve.data.slice(34, 74)) : null;
+  // Only Relay's own published contracts (the page checks the same list before signing).
+  const trusted = await relayTrusted(p.from.id);
+  if (!trusted || !trusted.has(sends[0].to.toLowerCase()) || (spender && !trusted.has(spender.toLowerCase()))) throw new Error("Relay route goes to a contract that isn't Relay's.");
+  if (!/^\d+$/.test(q.toAmount) || q.toAmount === "0") throw new Error("No Relay route.");
+  return {
+    fromChain: p.from.id, toChain: p.to.id, fromToken: p.fromToken, toToken: p.toToken, fromAddress: p.fromAddress, toAddress: p.toAddress,
+    fromAmount: p.amount.toString(), toAmount: q.toAmount, toAmountMin: q.toAmountMin, fromUsd: q.fromUsd, toUsd: q.toUsd,
+    gasUsd: q.gasUsd, feeUsd: (q.relayerUsd ?? 0) + (q.appUsd ?? 0) || null, feeBps: treasury ? feeBps : 0, seconds: q.seconds,
+    tool: `relay:${q.requestId}`, toolName: "Relay", toolLogo: null, steps: [{ kind: "bridge", name: "Relay", logo: null }],
+    evm: { to: sends[0].to, data: sends[0].data, value: sends[0].value, spender }, sol: null, at: Date.now(),
+  };
 }
