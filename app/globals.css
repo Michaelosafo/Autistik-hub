@@ -6352,3 +6352,33 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .ait-cancel .ait-sell{color:#fff;background:linear-gradient(135deg,#E5484D,#B4233C)}
 .ait-cancel .ait-keep{color:var(--ink);background:rgba(var(--wc),.07)}
 .ait-cancel button:focus-visible,.ait-cancel summary:focus-visible{outline:2px solid #F0B90B}
+
+/* AI trader: Squads */
+.sq{gap:10px}
+.sq-head{display:flex;flex-direction:column;gap:2px}
+.sq-card{display:flex;flex-direction:column;gap:8px;padding:10px;border-radius:14px;background:var(--surface);border:1px solid rgba(181,124,255,.22);transition:opacity .2s}
+.sq-card.off{opacity:.55}
+.sq-card-h{display:flex;align-items:center;gap:8px}
+.sq-usd{width:96px}
+.sq-x{all:unset;cursor:pointer;padding:4px 6px;border-radius:8px}
+.sq-x:hover{background:rgba(229,72,77,.12)}
+.sq-switch{position:relative;display:inline-flex;cursor:pointer}
+.sq-switch input{position:absolute;opacity:0;width:1px;height:1px}
+.sq-switch i{width:34px;height:20px;border-radius:99px;background:rgba(var(--wc),.18);position:relative;transition:background .2s}
+.sq-switch i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s}
+.sq-switch input:checked + i{background:linear-gradient(135deg,#22c55e,#16a34a)}
+.sq-switch input:checked + i::after{transform:translateX(14px)}
+.sq-switch input:focus-visible + i{outline:2px solid #F0B90B;outline-offset:2px}
+.sq-chips{display:flex;flex-wrap:wrap;gap:6px}
+.sq-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 4px 4px 9px;border-radius:99px;font-size:.78em;font-weight:700;background:rgba(var(--wc),.07);max-width:100%}
+.sq-chip i{font-style:normal}
+.sq-chip.chat{background:rgba(79,168,255,.13)}
+.sq-chip.wallet{background:rgba(240,185,11,.14)}
+.sq-chip.x{background:rgba(var(--wc),.1)}
+.sq-chip.person{background:rgba(181,124,255,.14)}
+.sq-chip button{all:unset;cursor:pointer;width:18px;height:18px;display:grid;place-items:center;border-radius:50%;font-weight:900;opacity:.6}
+.sq-chip button:hover{opacity:1;background:rgba(229,72,77,.18)}
+.sq-box,.sq-new{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.sq-box input,.sq-new > input{flex:1;min-width:160px;padding:9px 12px;border-radius:12px;border:1px solid rgba(var(--wc),.12);background:var(--surface-2);color:var(--ink)}
+.sq-new .ait-in{width:100px}
+.sq-pick{padding:8px 10px;border-radius:12px;border:1px solid rgba(var(--wc),.12);background:var(--surface-2);color:var(--ink);font-size:.85em}

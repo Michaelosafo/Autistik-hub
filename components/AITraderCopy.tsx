@@ -6,11 +6,11 @@
  */
 import { useEffect, useState } from "react";
 import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
-import { Callers, LiveChains, SourcePicker, RebuyBox, type Caller, type LiveWallet, type Rebuy } from "@/components/AITraderCopyExtras";
+import { Callers, LiveChains, SourcePicker, RebuyBox, Squads, type Caller, type LiveWallet, type Rebuy, type Squad } from "@/components/AITraderCopyExtras";
 
 export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
 export type CopyData = {
-  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[]; wallets: LiveWallet[]; relay: boolean;
+  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[]; wallets: LiveWallet[]; relay: boolean; squads?: Squad[];
   tg: { ready: boolean; linked: boolean; username: string | null };
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
@@ -118,6 +118,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
         </details>
       </div>
 
+      <Squads list={c.squads || []} chats={(c.tga.chats || []) as { ref: string; title: string; kind: string }[]} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
       <Callers list={c.callers || []} groups={c.sources.filter((x) => (x.kind === "tg_chat" || x.kind === "tg") && x.enabled && c.tga.chats?.find((ch) => ch.ref === x.ref)?.kind !== "channel").map((x) => ({ ref: x.ref, title: x.title || x.ref }))}
         channels={c.sources.filter((x) => x.kind === "tg_chat" && x.enabled && c.tga.chats?.find((ch) => ch.ref === x.ref)?.kind === "channel").map((x) => x.title || x.ref)} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
       <RebuyBox on={s.rebuy_on} dump={s.rebuy_dump} tp={s.rebuy_tp} sl={s.copy_sl} list={c.rebuys || []} busy={busy || !owner} onAct={onAct} />
