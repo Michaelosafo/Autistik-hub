@@ -118,9 +118,9 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
         </details>
       </div>
 
-      <Squads list={c.squads || []} chats={(c.tga.chats || []) as { ref: string; title: string; kind: string }[]} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
+      <Squads list={c.squads || []} chats={(c.tga.chats || []) as { ref: string; title: string; kind: string }[]} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} dsl={s.copy_sl} dtp={s.copy_tp} />
       <Callers list={c.callers || []} groups={c.sources.filter((x) => (x.kind === "tg_chat" || x.kind === "tg") && x.enabled && c.tga.chats?.find((ch) => ch.ref === x.ref)?.kind !== "channel").map((x) => ({ ref: x.ref, title: x.title || x.ref }))}
-        channels={c.sources.filter((x) => x.kind === "tg_chat" && x.enabled && c.tga.chats?.find((ch) => ch.ref === x.ref)?.kind === "channel").map((x) => x.title || x.ref)} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
+        channels={c.sources.filter((x) => x.kind === "tg_chat" && x.enabled && c.tga.chats?.find((ch) => ch.ref === x.ref)?.kind === "channel").map((x) => x.title || x.ref)} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} dsl={s.copy_sl} dtp={s.copy_tp} />
       <RebuyBox on={s.rebuy_on} dump={s.rebuy_dump} tp={s.rebuy_tp} sl={s.copy_sl} list={c.rebuys || []} busy={busy || !owner} onAct={onAct} />
 
       {/* X */}

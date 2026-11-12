@@ -82,10 +82,10 @@ async function getMine(_req: Request, action: string) {
   ]);
   const [{ data: srcs }, { data: callers }, { data: rebuys }, { data: squads }, { data: squadMembers }] = await Promise.all([
     tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true }),
-    tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title").order("usd", { ascending: false }),
+    tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title,sl,tp").order("usd", { ascending: false }),
     tq("ai_trader_rebuy").select("id,chain,token,symbol,sold_usd,low_usd,status,note,sold_at").order("sold_at", { ascending: false }).limit(15),
-    tq("ai_trader_squads").select("id,name,usd,enabled").order("created_at", { ascending: true }),
-    tq("ai_trader_squad_members").select("id,squad_id,kind,value,label").order("added_at", { ascending: true }),
+    tq("ai_trader_squads").select("id,name,usd,enabled,sl,tp").order("created_at", { ascending: true }),
+    tq("ai_trader_squad_members").select("id,squad_id,kind,value,label,usd,sl,tp").order("added_at", { ascending: true }),
   ]);
   const done = ((closed || []) as Position[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + (Number(p.pnl) || 0), 0);
@@ -256,8 +256,18 @@ async function postMine(action: string, b: any) {
         if (b.name != null) up.name = String(b.name).trim().slice(0, 40) || sq.name;
         if (b.usd != null) up.usd = Math.max(0, Math.min(100_000, Number(b.usd) || 0));
         if (b.enabled != null) up.enabled = !!b.enabled;
+        const pc = (v: unknown, max: number) => (v === "" || v == null ? null : isFinite(Number(v)) && Number(v) > 0 ? Math.min(max, Number(v)) : null);
+        if ("sl" in b) up.sl = pc(b.sl, 95);
+        if ("tp" in b) up.tp = pc(b.tp, 10000);
         await tq("ai_trader_squads").update(up).eq("id", sid);
         return json({ ok: true });
+      }
+      if (op === "member") {
+        // One person's own size / stop-loss / take profit inside the squad (blank = the squad's).
+        const pc = (v: unknown, max: number) => (v === "" || v == null ? null : isFinite(Number(v)) && Number(v) > 0 ? Math.min(max, Number(v)) : null);
+        const { data, error } = await tq("ai_trader_squad_members").update({ usd: pc(b.usd, 100_000), sl: pc(b.sl, 95), tp: pc(b.tp, 10000) }).eq("id", Number(b.member)).eq("squad_id", sid).select("label,value");
+        if (error || !data?.length) return json({ error: "That member isn't there any more." }, 400);
+        return json({ ok: true, note: `Saved ${data[0].label || data[0].value}.` });
       }
       if (op === "unmember") { await tq("ai_trader_squad_members").delete().eq("id", Number(b.member)).eq("squad_id", sid); return json({ ok: true }); }
       if (op === "add") {
@@ -316,6 +326,15 @@ async function postMine(action: string, b: any) {
     case "caller": {
       // Callers whose posts buy a set $ amount: a Telegram @username or user id, or an X handle.
       if (b.op === "remove") { await tq("ai_trader_callers").delete().eq("id", Number(b.id)); return json({ ok: true, note: "Caller removed." }); }
+      // Stop-loss / take profit in %, blank = the copy-trading default.
+      const pct = (v: unknown, max: number) => (v === "" || v == null ? null : isFinite(Number(v)) && Number(v) > 0 ? Math.min(max, Number(v)) : null);
+      if (b.op === "edit") {
+        const usd = Number(b.usd);
+        if (!isFinite(usd) || usd <= 0 || usd > 100_000) return json({ error: "Type a dollar amount, like 50." }, 400);
+        const { data, error } = await tq("ai_trader_callers").update({ usd, sl: pct(b.sl, 95), tp: pct(b.tp, 10000) }).eq("id", Number(b.id)).select("who");
+        if (error || !data?.length) return json({ error: "That caller isn't there any more." }, 400);
+        return json({ ok: true, note: `Saved @${data[0].who}: $${usd}${pct(b.sl, 95) ? `, stop-loss ${pct(b.sl, 95)}%` : ""}${pct(b.tp, 10000) ? `, take profit ${pct(b.tp, 10000)}%` : ""}.` });
+      }
       const platform = b.platform === "x" ? "x" : "tg";
       const usd = Number(b.usd);
       if (!isFinite(usd) || usd <= 0 || usd > 100_000) return json({ error: "Type a dollar amount, like 50." }, 400);
@@ -325,7 +344,7 @@ async function postMine(action: string, b: any) {
       // Which group they're picked for ('' = every group). A group with callers of its own buys only their calls.
       const chat = platform === "tg" ? String(b.chat || "").replace(/[^0-9]/g, "").slice(0, 24) : "";
       const chatTitle = chat ? String(b.chatTitle || "").slice(0, 80) || null : null;
-      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd, chat, chat_title: chatTitle })), { onConflict: "trader_id,platform,who,chat" });
+      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd, chat, chat_title: chatTitle, sl: pct(b.sl, 95), tp: pct(b.tp, 10000) })), { onConflict: "trader_id,platform,who,chat" });
       if (error) return json({ error: error.message }, 400);
       await log("settings", `Caller $${usd} for ${ok.map((w) => (/^\d+$/.test(w) ? w : `@${w}`)).join(", ")} (${platform === "x" ? "X" : chatTitle ? `only in ${chatTitle}` : "Telegram, all groups"}).`);
       return json({ ok: true, note: `Saved: posts by ${ok.length === 1 ? (/^\d+$/.test(ok[0]) ? ok[0] : `@${ok[0]}`) : `${ok.length} callers`} buy $${usd}.` });

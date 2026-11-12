@@ -894,18 +894,20 @@ export const chatKey = (ref: string | number | null | undefined): string => {
  * group is skipped); a group with nobody picked buys every call. Callers picked for "all groups" set their own size
  * wherever they post. Returns skip: true when the group has its own callers and the poster isn't one of them.
  */
-async function callerFor(platform: "tg" | "x", from: From, chat: string): Promise<{ skip: true } | { skip: false; caller: { usd: number; who: string } | null }> {
+export type CallerRule = { usd: number; who: string; sl?: number | null; tp?: number | null };
+async function callerFor(platform: "tg" | "x", from: From, chat: string): Promise<{ skip: true } | { skip: false; caller: CallerRule | null }> {
   const keys = [from?.username?.replace(/^@/, "").toLowerCase(), from?.id ? String(from.id) : null].filter(Boolean) as string[];
-  const { data } = await tq("ai_trader_callers").select("who,usd,chat").eq("platform", platform).in("chat", chat ? [chat, ""] : [""]);
-  const rows = (data || []) as { who: string; usd: number; chat: string }[];
+  const { data } = await tq("ai_trader_callers").select("who,usd,chat,sl,tp").eq("platform", platform).in("chat", chat ? [chat, ""] : [""]);
+  const rows = (data || []) as { who: string; usd: number; chat: string; sl: number | null; tp: number | null }[];
+  const rule = (r: (typeof rows)[number]): CallerRule => ({ usd: n(r.usd), who: String(r.who), sl: r.sl != null ? n(r.sl) : null, tp: r.tp != null ? n(r.tp) : null });
   const mine = chat ? rows.filter((r) => r.chat === chat) : [];
   const hit = (list: typeof rows) => list.find((r) => keys.includes(String(r.who)));
   if (mine.length) {
     const m = hit(mine);
-    return m ? { skip: false, caller: { usd: n(m.usd), who: String(m.who) } } : { skip: true };
+    return m ? { skip: false, caller: rule(m) } : { skip: true };
   }
   const g = hit(rows.filter((r) => r.chat === ""));
-  return { skip: false, caller: g ? { usd: n(g.usd), who: String(g.who) } : null };
+  return { skip: false, caller: g ? rule(g) : null };
 }
 
 /**
@@ -913,8 +915,8 @@ async function callerFor(platform: "tg" | "x", from: From, chat: string): Promis
  * mentioning) a member of a squad that's switched on is always bought, even in a group with its own picked callers,
  * at the squad's size ($0 = the normal size). The biggest matching squad wins.
  */
-export async function squadFor(post: { text: string; user: string; from?: From; chat?: string }, source: "x" | "telegram"): Promise<{ usd: number; name: string; member: string } | null> {
-  const { data } = await tq("ai_trader_squad_members").select("kind,value,label,squad:ai_trader_squads!inner(name,usd,enabled)").eq("squad.enabled", true);
+export async function squadFor(post: { text: string; user: string; from?: From; chat?: string }, source: "x" | "telegram"): Promise<{ usd: number; name: string; member: string; sl: number | null; tp: number | null } | null> {
+  const { data } = await tq("ai_trader_squad_members").select("kind,value,label,usd,sl,tp,squad:ai_trader_squads!inner(name,usd,sl,tp,enabled)").eq("squad.enabled", true);
   const rows = (data || []) as any[];
   if (!rows.length) return null;
   const uname = post.from?.username?.replace(/^@/, "").toLowerCase() || null;
@@ -930,8 +932,11 @@ export async function squadFor(post: { text: string; user: string; from?: From; 
     return false;
   });
   if (!hits.length) return null;
-  const best = hits.sort((a, b) => n(b.squad.usd) - n(a.squad.usd))[0];
-  return { usd: n(best.squad.usd), name: String(best.squad.name), member: String(best.label || best.value) };
+  // The person's own size / stop-loss / take profit if set, else the squad's.
+  const eff = (m: any) => ({ usd: m.usd != null ? n(m.usd) : n(m.squad.usd), sl: m.sl != null ? n(m.sl) : m.squad.sl != null ? n(m.squad.sl) : null, tp: m.tp != null ? n(m.tp) : m.squad.tp != null ? n(m.squad.tp) : null });
+  const best = hits.sort((a, b) => eff(b).usd - eff(a).usd)[0];
+  const e = eff(best);
+  return { usd: e.usd, sl: e.sl, tp: e.tp, name: String(best.squad.name), member: String(best.label || best.value) };
 }
 
 /** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
@@ -949,7 +954,10 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const squad = await squadFor(post, source).catch(() => null);
   // This group has its own callers and the poster isn't one of them (and isn't in a squad): not bought.
   if (who.skip && !squad) return [];
-  const caller = squad ? (squad.usd > 0 ? { usd: squad.usd, who: `${squad.member} (squad ${squad.name})` } : who.skip ? null : who.caller) : who.skip ? null : who.caller;
+  const base = who.skip ? null : who.caller;
+  const caller: CallerRule | null = squad
+    ? { usd: squad.usd > 0 ? squad.usd : base?.usd ?? 0, who: `${squad.member} (squad ${squad.name})`, sl: squad.sl ?? base?.sl ?? null, tp: squad.tp ?? base?.tp ?? null }
+    : base;
   if (squad) label = `${label} · squad "${squad.name}"`;
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
@@ -984,7 +992,10 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   return out;
 }
 
-async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: { usd: number; who: string } | null = null, src?: { group: string; who: string | null }): Promise<string> {
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, src?: { group: string; who: string | null }): Promise<string> {
+  // This caller's own stop-loss / take profit (set on Callers or Squads), else the copy-trading ones.
+  const sl = caller?.sl && caller.sl > 0 ? caller.sl : s.copy_sl, tp = caller?.tp && caller.tp > 0 ? caller.tp : s.copy_tp;
+  const usdSize = caller && caller.usd > 0 ? caller.usd : null;
   const sb = supabaseService();
   const done = async (r: string) => {
     await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
@@ -1000,11 +1011,11 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
   if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
   const newProject = f.ageHours < 24;
-  const why = `📡 Copy: ${label}.${caller ? ` Caller size $${caller.usd}.` : ""} Sells at +${s.copy_tp}% or -${s.copy_sl}%.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
+  const why = `📡 Copy: ${label}.${usdSize ? ` Caller size $${usdSize}.` : ""} Sells at +${tp}% or -${sl}%${caller && (caller.sl || caller.tp) ? " (this caller's own)" : ""}.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
   try {
-    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.copy_tp, why, strategy: "copy", trail: 0, usd: caller?.usd ?? null, newProject, src });
-    const spend = caller ? caller.usd / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
-    await tgNotify(`📡 Bought ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(Math.min(spend, room.cash))} BNB${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${s.copy_tp}% or -${s.copy_sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
+    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl, tp, why, strategy: "copy", trail: 0, usd: usdSize, newProject, src });
+    const spend = usdSize ? usdSize / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
+    await tgNotify(`📡 Bought ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(Math.min(spend, room.cash))} BNB${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${tp}% or -${sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
     return done(`bought: ${r}`);
   } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`); }
 }
