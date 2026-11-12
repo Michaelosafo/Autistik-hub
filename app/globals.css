@@ -6278,3 +6278,43 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .sc-route button:focus-visible{outline:2px solid #F0B90B}
 .sc-route + .sc-mode{margin-left:6px}
 @media (max-width:520px){.sc-route + .sc-mode{display:none}}
+
+/* ===== Live room: smaller controls, compact hype bar, request-to-speak pop-up ===== */
+.lv-ctl{gap:4px !important;padding:8px 8px 7px !important;border-radius:18px}
+.lv-ctl .ctl-ic{width:36px;height:36px}
+.lv-ctl .ctl-ic svg{width:17px;height:17px}
+.lv-ctl .ctl small{font-size:.58rem}
+.lv-ctl > .ctl,.lv-ctl > .spk{max-width:54px}
+.lv-ctl .mic-core{transform:scale(.86);transform-origin:center}
+/* Hype bar: one slim row, the fire pill first */
+.lv-hype{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;padding:6px;border-radius:99px;align-self:center;
+  background:rgba(var(--wc),.05);border:1px solid rgba(var(--wc),.07)}
+.lv-fire.sm{gap:5px;padding:4px 11px 4px 6px;font-size:.78em;border-radius:99px}
+.lv-fire.sm .lv-fire-ic{font-size:1em}
+.lv-fire.sm .lv-fire-t{flex-direction:row;align-items:baseline;gap:5px}
+.lv-fire.sm .lv-fire-t b{font-size:.92em;letter-spacing:.12em}
+.lv-fire.sm .lv-fire-t small{font-size:.82em;font-weight:800;opacity:.95}
+.lv-emo{all:unset;cursor:pointer;width:34px;height:34px;display:grid;place-items:center;border-radius:50%;background:var(--surface);
+  box-shadow:0 3px 10px -6px rgba(0,0,0,.5);transition:transform .14s cubic-bezier(.3,1.6,.5,1)}
+.lv-emo:hover{transform:translateY(-2px) scale(1.08)}
+.lv-emo:active{transform:scale(1.25)}
+.lv-emo:focus-visible{outline:2px solid #F0B90B}
+/* Request to speak: a pop-up for the host */
+.lv-req{position:sticky;top:8px;z-index:45;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px;border-radius:16px;
+  background:color-mix(in srgb,var(--surface) 88%,transparent);backdrop-filter:blur(12px);border:1px solid rgba(240,185,11,.45);
+  box-shadow:0 12px 30px -16px rgba(240,185,11,.7);animation:lvReq .3s cubic-bezier(.2,1.3,.4,1)}
+.lv-req span{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.15}
+.lv-req small{color:var(--muted);font-weight:700}
+.lv-req button{all:unset;cursor:pointer;padding:7px 12px;border-radius:99px;font-weight:900;font-size:.8em}
+.lv-req-ok{color:#191326;background:linear-gradient(135deg,#FFD84D,#F0B90B)}
+.lv-req-no{color:var(--ink);background:rgba(var(--wc),.08)}
+.lv-req button:focus-visible{outline:2px solid #F0B90B}
+@keyframes lvReq{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+.lv-chat-wrap{scroll-margin:90px}
+/* Floating reactions: lighter on phones */
+.lv-floats span{will-change:transform,opacity}
+@media (max-width:520px){
+  .lv-ctl .ctl-ic{width:34px;height:34px}
+  .lv-emo{width:32px;height:32px}
+}
+@media (prefers-reduced-motion:reduce){.lv-req{animation:none}}
