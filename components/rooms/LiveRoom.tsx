@@ -36,7 +36,7 @@ async function loadIce() {
 }
 // The chat holds hundreds of messages: only redraw it when its own inputs change (not on every voice level tick).
 const LiveChat = memo(LiveChatRaw);
-const MAX_STAGE = 8; // host + co-hosts + speakers
+const MAX_STAGE = 10; // host + co-hosts + speakers
 const MAX_COHOSTS = 3;
 const REACTIONS = ["🚀", "💎", "❤️", "😂", "👏", "🔥"];
 const fmt = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
@@ -541,6 +541,57 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     } else { try { ms.metadata = null; ms.playbackState = "none"; } catch {} }
   }, [joined, room.title]);
 
+  // ---- Float: the live in a small window that stays on screen over other apps (Picture-in-Picture). The window
+  // shows the room, who's speaking and your mic; its buttons mute/unmute and hang up. The sound keeps going.
+  const canSpeakRef = useRef(false); canSpeakRef.current = canSpeak;
+  const [floating, setFloating] = useState(false);
+  const [pipOk, setPipOk] = useState(false);
+  const pip = useRef<{ v: HTMLVideoElement; c: HTMLCanvasElement; t: ReturnType<typeof setInterval> } | null>(null);
+  const pipInfo = useRef({ title: room.title, speaking: "", count: 0, muted: true, canSpeak: false });
+  useEffect(() => { try { setPipOk(!!(document as any).pictureInPictureEnabled && typeof HTMLCanvasElement.prototype.captureStream === "function"); } catch {} }, []);
+  function drawPip() {
+    const p = pip.current; if (!p) return;
+    const g = p.c.getContext("2d"); if (!g) return;
+    const { title, speaking, count, muted: m, canSpeak: cs } = pipInfo.current;
+    const W = p.c.width, H = p.c.height;
+    const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, "#2A1F45"); bg.addColorStop(1, "#120C20");
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    g.fillStyle = "#FF3B5C"; g.beginPath(); g.arc(28, 30, 8, 0, Math.PI * 2); g.fill();
+    g.fillStyle = "#fff"; g.font = "700 22px system-ui, sans-serif"; g.fillText("LIVE", 44, 38);
+    g.font = "800 30px system-ui, sans-serif"; g.fillText(title.slice(0, 22), 20, 92);
+    g.font = "600 22px system-ui, sans-serif"; g.fillStyle = "#cbb8ff";
+    g.fillText(speaking ? `🎙 ${speaking}`.slice(0, 32) : `${count} in the live`, 20, 132);
+    g.fillStyle = cs ? (m ? "#E5484D" : "#22c55e") : "#9aa0a6"; g.font = "700 22px system-ui, sans-serif";
+    g.fillText(cs ? (m ? "Your mic: off" : "Your mic: on") : "Listening", 20, 168);
+  }
+  async function popOut() {
+    try {
+      if ((document as any).pictureInPictureElement) { await (document as any).exitPictureInPicture(); return; }
+      if (!pip.current) {
+        const c = document.createElement("canvas"); c.width = 480; c.height = 190;
+        const v = document.createElement("video"); v.muted = true; v.playsInline = true; v.autoplay = true;
+        v.srcObject = (c as any).captureStream(4);
+        v.addEventListener("enterpictureinpicture", () => setFloating(true));
+        v.addEventListener("leavepictureinpicture", () => setFloating(false));
+        pip.current = { v, c, t: setInterval(drawPip, 500) };
+        drawPip();
+      }
+      await pip.current.v.play().catch(() => {});
+      await (pip.current.v as any).requestPictureInPicture();
+    } catch { setMsg("Your browser can't float the live. It keeps playing while you browse the site."); }
+  }
+  // Mic and hang-up buttons in the floating window / lock screen (where the browser supports them).
+  useEffect(() => {
+    const ms: any = (navigator as any).mediaSession; if (!ms || !joined) return;
+    const set = (a: string, f: (() => void) | null) => { try { ms.setActionHandler(a, f); } catch {} };
+    set("togglemicrophone", () => { if (canSpeakRef.current) toggleMute(); });
+    set("hangup", () => leave());
+    set("enterpictureinpicture", () => { popOut(); }); // some browsers float it by themselves when you leave the app
+    return () => { set("togglemicrophone", null); set("hangup", null); set("enterpictureinpicture", null); };
+  }, [joined]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { const p = pip.current; if (p) { clearInterval(p.t); try { (p.v.srcObject as MediaStream)?.getTracks().forEach((t) => t.stop()); } catch {} } }, []);
+  useEffect(() => { if (!joined && (document as any).pictureInPictureElement) (document as any).exitPictureInPicture?.().catch(() => {}); }, [joined]);
+
   // Keep the screen on while you're in a live, so the phone doesn't sleep and drop you after a few minutes.
   const wake = useRef<any>(null);
   function keepAwake() {
@@ -744,6 +795,10 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const list = useMemo(() => Object.values(peers).sort((a, b) => a.at - b.at), [peers]);
   const onStage = list.filter((p) => roleOf(p.id) !== "listener").sort((a, b) => ["host", "cohost", "speaker"].indexOf(roleOf(a.id)) - ["host", "cohost", "speaker"].indexOf(roleOf(b.id)));
   const audience = list.filter((p) => roleOf(p.id) === "listener");
+  // What the floating window shows (read by its drawing timer).
+  pipInfo.current = { title: room.title, speaking: onStage.filter((p) => talking[p.id] && !p.muted).map((p) => (p.id === me.id ? "You" : p.alias)).slice(0, 2).join(", "),
+    count: list.length, muted, canSpeak };
+  try { (navigator as any).mediaSession?.setMicrophoneActive?.(canSpeak && !muted); } catch {}
   const hands = audience.filter((p) => p.hand);
   const badge = { host: "Host", cohost: "Co-host", speaker: "Speaker", listener: "" } as const;
   // Requests to speak pop up for the host one at a time (Accept / Not now); all of them stay listed under the stage.
@@ -860,7 +915,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             </div>
           )}
 
-          <section className="lv-stage" aria-label="On stage">
+          <section className={"lv-stage" + (onStage.length > 4 ? " dense" : "")} aria-label="On stage">
             {onStage.map((p) => {
               const role = roleOf(p.id);
               const mine = myTile(p);
@@ -907,7 +962,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             </section>
           )}
 
-          <section className="lv-crowd" aria-label="Listening">
+          <section className={"lv-crowd" + (audience.length > 24 ? " packed" : audience.length > 10 ? " dense" : "")} aria-label="Listening">
             {audience.map((p) => (
               <div key={p.id} className={"lv-box sm" + (myTile(p) ? " me" : "")}>
                 <button type="button" className="lv-face" onClick={() => setSheet(p)} title={p.alias} aria-label={`${p.alias}, ${followers[p.id] ?? 0} followers`}>
@@ -950,6 +1005,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             ? <MicBtn muted={muted} talking={!!talking[me.id]} onClick={toggleMute} />
             : <Ctl icon="hand" label={openMic ? "Speak" : hand ? "Requested" : "Request"} title={openMic ? "Speak" : hand ? "Cancel your request to speak" : "Request to speak"} on={hand} tone={hand ? "gold" : undefined} onClick={raiseHand} pressed={hand} />}
           {!mini && <Ctl icon="chat" label="Comment" onClick={openChat} />}
+          {pipOk && <Ctl icon="float" label={floating ? "Floating" : "Float"} on={floating} title="Keep the live in a small window over other apps" onClick={popOut} pressed={floating} />}
           <SpeakerOut audios={allAudios} />
           {!mini && canSpeak && coinLive && <Ctl icon={cam ? "cam" : "camOff"} label={cam ? "Camera on" : "Camera"} on={cam} onClick={toggleCam} pressed={cam} />}
           {isHost && <Ctl icon={rec ? "stop" : "rec"} label={rec ? "Stop rec" : "Record"} on={rec} tone="red" onClick={() => (rec ? stopRec() : startRec())} pressed={rec} />}

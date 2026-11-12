@@ -6399,3 +6399,57 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .logo-badge small{font-family:var(--f-display,inherit);font-size:7.5px;font-weight:900;letter-spacing:.22em;padding-left:.22em;
   background:linear-gradient(90deg,#FFD84D,#B57CFF,#4FD1FF);-webkit-background-clip:text;background-clip:text;color:transparent;opacity:.95}
 .ax-logo .logo-badge,.lp-logo .logo-badge{transition:transform .2s}
+
+/* ===== Live: see everyone without scrolling ===== */
+/* Stage (up to 10): smaller pictures, more per row; tighter still past 4 people */
+.lv-stage{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;padding:10px}
+.lv-face.big .lv-av{width:56px !important;height:56px !important;font-size:1.15em}
+.lv-stage .lv-box{padding:8px 4px 7px;gap:4px}
+.lv-stage .lv-f{display:none}
+.lv-stage .lv-box-ctl{gap:4px}
+.lv-stage .lv-mic,.lv-stage .lv-mic-st{font-size:.68em;padding:3px 8px}
+.lv-stage .lv-mini-btn{font-size:.64em;padding:2px 7px}
+.lv-stage.dense{grid-template-columns:repeat(auto-fill,minmax(78px,1fr))}
+.lv-stage.dense .lv-face.big .lv-av{width:44px !important;height:44px !important;font-size:.95em}
+.lv-stage.dense .lv-name{font-size:.72em}
+.lv-stage.dense .lv-role{font-size:.6em;padding:1px 6px}
+.lv-stage.dense .lv-mic-st{font-size:0;padding:4px}
+.lv-stage.dense .lv-mic-st svg{width:12px;height:12px}
+@media (max-width:520px){
+  .lv-stage{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;padding:8px}
+  .lv-stage .lv-face.big .lv-av{width:44px !important;height:44px !important}
+  .lv-stage .lv-name{font-size:.68em;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lv-stage .lv-role{font-size:.58em}
+  .lv-stage .lv-mic-st{font-size:0;padding:4px}
+  .lv-stage .lv-mic-st svg{width:12px;height:12px}
+}
+/* Listeners: small faces, more per row as the crowd grows */
+.lv-crowd{grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:6px}
+.lv-crowd .lv-box.sm{padding:5px 2px;gap:3px}
+.lv-crowd .lv-av{width:38px !important;height:38px !important;font-size:.85em}
+.lv-crowd .lv-name.sm{font-size:.64em;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-crowd .lv-f{display:none}
+.lv-crowd .lv-mini-btn{font-size:.58em;padding:1px 6px}
+.lv-crowd.dense{grid-template-columns:repeat(auto-fill,minmax(48px,1fr))}
+.lv-crowd.dense .lv-av{width:32px !important;height:32px !important}
+.lv-crowd.dense .lv-box.sm:not(.me) .lv-mini-btn{display:none}
+.lv-crowd.packed{grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:4px}
+.lv-crowd.packed .lv-av{width:26px !important;height:26px !important;font-size:.6em}
+.lv-crowd.packed .lv-name.sm{font-size:.55em}
+.lv-crowd.packed .lv-box.sm:not(.me) .lv-mini-btn,.lv-crowd.packed .lv-box.sm:not(.me) .lv-f{display:none}
+@media (max-width:520px){
+  .lv-crowd{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .lv-crowd.dense{grid-template-columns:repeat(7,minmax(0,1fr))}
+  .lv-crowd.packed{grid-template-columns:repeat(9,minmax(0,1fr))}
+}
+.lv-crowd .lv-box.me .lv-mic{font-size:.62em;padding:3px 6px}
+
+/* Leaving the live page on a phone: a small floating bubble (mic + leave), not a full-width bar */
+@media (max-width:860px){
+  .lv-dock.on{left:auto;right:10px;width:auto;max-width:min(300px,calc(100vw - 20px))}
+  .lv-mini{padding:5px 5px 5px 9px;border-radius:99px;gap:4px}
+  .lv-mini-txt b{font-size:.8em}
+  .lv-mini-txt small{font-size:.66em}
+  .lv-mini .lv-ctl.mini .ctl,.lv-mini .lv-ctl.mini .mic{width:38px}
+  .lv-mini .lv-ctl.mini .ctl-ic{width:32px;height:32px}
+}

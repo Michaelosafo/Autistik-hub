@@ -15,6 +15,7 @@ const I: Record<string, ReactNode> = {
   stop: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" />,
   rocket: <><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z" /><circle cx="15" cy="9" r="1.5" /></>,
   link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>,
+  float: <><rect x="3" y="5" width="18" height="14" rx="2.5" /><rect x="12" y="11" width="7" height="6" rx="1.2" fill="currentColor" stroke="none" /></>,
   chat: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" />,
   leave: <><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 16l-4-4 4-4M6 12h10" /></>,
   end: <path d="M3 13.5c5-4.7 13-4.7 18 0l-2.3 2.6-3.4-1.6v-2.6a12 12 0 0 0-6.6 0v2.6l-3.4 1.6z" fill="currentColor" stroke="none" />,
