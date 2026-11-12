@@ -6271,3 +6271,10 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
   .ptik,.tik-burst svg,.tik-act.pop svg,.tik-replies>.tik.compact,.ptik .tik,.tik-zoom,.tik-zoom figure{animation:none}
   .tik-img::after{display:none}.tik-img:hover img,.tik-pro .tik:not(.compact):hover{transform:none}
 }
+/* Swap route switch: Relay (default) or KyberSwap */
+.sc-route{display:inline-flex;gap:2px;padding:3px;border-radius:99px;background:rgba(var(--wc),.07);margin-left:auto}
+.sc-route button{all:unset;cursor:pointer;padding:5px 10px;border-radius:99px;font-size:.72em;font-weight:800;color:var(--muted);transition:background .15s,color .15s}
+.sc-route button.on{color:#fff;background:linear-gradient(135deg,#7B5CFF,#B57CFF);box-shadow:0 4px 12px -6px #7B5CFF}
+.sc-route button:focus-visible{outline:2px solid #F0B90B}
+.sc-route + .sc-mode{margin-left:6px}
+@media (max-width:520px){.sc-route + .sc-mode{display:none}}

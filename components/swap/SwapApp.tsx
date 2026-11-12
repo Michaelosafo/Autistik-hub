@@ -36,7 +36,13 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   const [toNet, setToNet] = useState<XChain>(first);
   const [logos, setLogos] = useState<Record<number, string>>({});
   useEffect(() => { api<{ logos: Record<number, string> }>("x-chains", {}).then((d) => setLogos(d.logos)).catch(() => {}); }, []);
-  const local = fromNet.id === toNet.id && fromNet.wchain ? fromNet.wchain : null;
+  // Route on one network: Relay by default (lowest cost); KyberSwap only when the member picks it. Solana stays on Jupiter.
+  const [route, setRoute] = useState<"relay" | "kyber">("relay");
+  useEffect(() => { try { if (localStorage.getItem("sw-route") === "kyber") setRoute("kyber"); } catch {} }, []);
+  const pickRoute = (r: "relay" | "kyber") => { setRoute(r); try { localStorage.setItem("sw-route", r); } catch {} };
+  const evmSame = fromNet.id === toNet.id && fromNet.kind === "evm";
+  const viaRelay = evmSame && route === "relay";
+  const local = fromNet.id === toNet.id && fromNet.wchain && !viaRelay ? fromNet.wchain : null;
   const solFromOk = (_c: XChain): string | null => null;
 
   const [xFrom, setXFrom] = useState<XToken | null>(nativeOf(first));
@@ -118,6 +124,12 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         <div className="sc-head" role="tablist" aria-label="Swap or buy with MoMo">
           {mode === "swap" ? <h1>Swap</h1> : <button type="button" role="tab" aria-selected={false} className="sc-tab sc-btn" onClick={() => setMode("swap")}>Swap</button>}
           <Link href="/wallet" className="sc-tab">Limit</Link>
+          {mode === "swap" && evmSame && (
+            <span className="sc-route" role="radiogroup" aria-label="Swap route">
+              <button type="button" role="radio" aria-checked={route === "relay"} className={route === "relay" ? "on" : ""} onClick={() => pickRoute("relay")} title="Relay: lowest fees">⚡ Relay</button>
+              <button type="button" role="radio" aria-checked={route === "kyber"} className={route === "kyber" ? "on" : ""} onClick={() => pickRoute("kyber")} title="KyberSwap">KyberSwap</button>
+            </span>
+          )}
           {mode === "swap" && <span className={"sc-mode" + (cross ? " x" : "")}>{cross ? <><i className="sx-arc" aria-hidden="true">∞</i>{fromNet.name} → {toNet.name}</> : `${XCHAIN_LIST.length} networks`}</span>}
         </div>
 
@@ -128,7 +140,7 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
             <button type="button" className="sw-alt" onClick={() => setMode("swap")}>Got USDT or BNB? Swap it to any coin, like AUTISTIK →</button>
           </div>
         ) : !local ? (
-          <BridgeForm key={`${fromNet.id}-${toNet.id}`} signer={signer} from={fromNet} to={toNet} fromToken={xFrom} toToken={xTo}
+          <BridgeForm key={`${fromNet.id}-${toNet.id}-${route}`} signer={signer} from={fromNet} to={toNet} fromToken={xFrom} toToken={xTo}
             onFromToken={setXFrom} onToToken={setXTo} logos={logos} card={card} />
         ) : owner && from && to ? (
           <MarketForm key={`${chainKey}-${from.address}-${to.address}`} c={c} signer={signer} owner={owner} from={from} to={to} side="convert" tokens={tokens}
@@ -150,7 +162,7 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
         {local && to && <Link href={`/analytics/${chainKey}/${to.address}`}>Scan {to.symbol} →</Link>}
         <Link href="/stake">Stake AUTISTIK, earn BNB →</Link>
       </div>
-      <p className="sw-note">{local ? (FEE_BPS ? `Best price across every DEX (KyberSwap, Jupiter). A ${FEE_BPS / 100}% fee per swap goes to AUTISTIK marketing.` : "Best price across every DEX (KyberSwap, Jupiter). No AUTISTIK fee. Gas-free where we can: on Solana the network fee is covered for you, and on BNB Chain with the built-in AUTISTIK wallet.") : "Routes across bridges and DEXs on every network, found by LI.FI."} Your keys stay in your wallet.</p>
+      <p className="sw-note">{local ? (FEE_BPS ? `Best price across every DEX (KyberSwap, Jupiter). A ${FEE_BPS / 100}% fee per swap goes to AUTISTIK marketing.` : "Best price across every DEX (KyberSwap, Jupiter). No AUTISTIK fee. Gas-free where we can: on Solana the network fee is covered for you, and on BNB Chain with the built-in AUTISTIK wallet.") : "Routed through Relay for the lowest fees (LI.FI only if Relay has no route). No AUTISTIK fee."} Your keys stay in your wallet.</p>
       </>}
     </div>
   );

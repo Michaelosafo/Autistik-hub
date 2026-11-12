@@ -161,7 +161,7 @@ async function cross(action: string, b: any) {
         if (!/^\d{1,78}$/.test(String(b.amount)) || BigInt(b.amount) <= 0n) return json({ error: "Enter an amount." }, 400);
         const slip = Math.round(Number(b.slippageBps));
         if (!(slip >= 10 && slip <= MAX_SLIPPAGE_BPS)) return json({ error: `Slippage must be between 0.1% and ${MAX_SLIPPAGE_BPS / 100}%.` }, 400);
-        return json({ quote: await xQuote({ from, to, fromToken: b.fromToken, toToken: b.toToken, amount: BigInt(b.amount), fromAddress: b.fromAddress, toAddress: b.toAddress, slippageBps: slip }) });
+        return json({ quote: await xQuote({ from, to, fromToken: b.fromToken, toToken: b.toToken, amount: BigInt(b.amount), fromAddress: b.fromAddress, toAddress: b.toAddress, slippageBps: slip, route: b.route === "best" ? "best" : "relay" }) });
       }
       case "x-plan": {
         // Swap by message: every route for what the member typed, cheapest first, paying out only to their own wallets.

@@ -102,10 +102,15 @@ const same = (a: unknown, b: string, c: XChain) => c.kind === "solana" ? String(
  * Every answer is checked: right networks, right coins, right amount, paying out to `toAddress`, and (EVM) only
  * through the LI.FI contract.
  */
-type XQ = { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST"; feeBps?: number };
+type XQ = { from: XChain; to: XChain; fromToken: string; toToken: string; amount: bigint; fromAddress: string; toAddress: string; slippageBps: number; order?: "CHEAPEST" | "FASTEST"; feeBps?: number; route?: "relay" | "best" };
 
 /** The best route: LI.FI and (from EVM networks, with RELAY_API_KEY) Relay are both asked; whichever delivers more wins. */
 export async function xQuote(p: XQ): Promise<XQuote> {
+  // Relay first (cheapest and fastest for most swaps); LI.FI only when Relay has no route.
+  if ((p.route ?? "relay") === "relay" && p.from.kind === "evm" && relayFeeOn) {
+    try { return await relayXQuote(p); } catch { /* fall through to LI.FI */ }
+    return lifiXQuote({ order: "CHEAPEST", ...p });
+  }
   const [l, r] = await Promise.allSettled([lifiXQuote({ order: "CHEAPEST", ...p }), relayXQuote(p)]);
   const lq = l.status === "fulfilled" ? l.value : null, rq = r.status === "fulfilled" ? r.value : null;
   if (lq && rq) {
