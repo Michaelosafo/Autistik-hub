@@ -427,7 +427,16 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
     } else {
       // Live on any chain: sold for that chain's coin, counted in BNB terms like the buy.
       if (!isLiveChain(p.chain)) throw new Error(`Live selling isn't set up for ${p.chain}.`);
-      const r = await liveSellOn(p.chain, await myWallets(), p.token, BigInt(p.amount_raw || "0"), tax);
+      // A stop-loss or rug exit in a crashing coin: if the normal sell is refused (price moved too fast), try again at
+      // once allowing 15%, then 35%, then 49% slippage. Getting out beats waiting a minute while it falls further.
+      const urgent = /^(Stop-loss|Liquidity|Trailing|Closed by admin|Cancelled)/.test(reason);
+      const w = await myWallets();
+      let r: Awaited<ReturnType<typeof liveSellOn>> | null = null, last: unknown = null;
+      for (const extra of urgent ? [0, 1200, 3200, 4600] : [0]) {
+        try { r = await liveSellOn(p.chain, w, p.token, BigInt(p.amount_raw || "0"), tax, extra); break; }
+        catch (e) { last = e; if (/holds none/i.test(String((e as Error)?.message))) break; }
+      }
+      if (!r) throw last instanceof Error ? last : new Error("The sell didn't go through.");
       receivedNative = r.receivedNative; sellTx = r.hash;
       received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
     }
@@ -799,10 +808,21 @@ export async function runFast() {
   const s = await getSettings();
   if (s.mode === "live" && !(await traderAccount())) return { skipped: "no wallet" };
   await manage(s).catch((e) => log("error", `Exit check failed: ${(e as Error).message}`));
+  // Exit guard: while this minute runs, re-check open trades every ~4 seconds (stop-loss, take profit, rug) instead of
+  // once a minute, so a crash is sold seconds after it starts.
+  let guardOn = true;
+  const guard = (async () => {
+    while (guardOn && Date.now() - started < 52_000) {
+      await new Promise((ok) => setTimeout(ok, 4_000));
+      if (!guardOn) break;
+      const { count } = await tq("ai_trader_positions").select("id", { count: "exact", head: true }).in("status", ["open", "closing"]);
+      if (count) await manage(s).catch(() => {});
+    }
+  })();
   const general = s.use_general;
   if (s.enabled && general) await recheckWatch(s).catch((e) => log("error", `Watch list check failed: ${(e as Error).message}`));
   if (s.enabled && s.copy_on && s.rebuy_on) await rebuyCheck(s).catch((e) => log("error", `Re-buy check failed: ${(e as Error).message}`));
-  if (!s.enabled) return { ok: true, buys: "stopped" };
+  if (!s.enabled) { await guard; return { ok: true, buys: "stopped" }; }
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const out: string[] = [];
   // Copy trades from what you follow, depending on the trading mode.
@@ -835,6 +855,7 @@ export async function runFast() {
     const dex = await unseen((await dexSignals(chains).catch(() => [])).slice(0, 12));
     for (const g of dex) out.push(await actOnSignal(s, g, null));
   }
+  await guard; // keep guarding open trades until the minute's run ends
   return { ok: true, signals: out.length, bought: out.filter((x) => x.startsWith("bought")).length };
 }
 

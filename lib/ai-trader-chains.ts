@@ -219,14 +219,17 @@ async function evmBuy(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAc
   return { hash, raw: after - before, decimals };
 }
 
-async function evmSell(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount, token: string, raw: bigint, tax: number) {
+/** Normal sells allow 3% + tax; an emergency exit (stop-loss in a crash, a rug) passes `extra` to allow much more. */
+const sellSlip = (tax: number, extra = 0) => Math.min(extra ? 4900 : 1500, SLIP_BPS + Math.ceil(tax * 100) + extra);
+
+async function evmSell(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount, token: string, raw: bigint, tax: number, extra = 0) {
   const pc = pub(chain);
   const tok = getAddress(token);
   const have: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
   const before: bigint = await pc.getBalance({ address: account.address });
-  const slip = Math.min(1500, SLIP_BPS + Math.ceil(tax * 100));
+  const slip = sellSlip(tax, extra);
   let res: { hash: string; gas: bigint };
   if (chain === "elysium") {
     res = await elysiumSwap(account, tok, ZERO, amount, slip, tok);
@@ -304,13 +307,13 @@ async function solBuy(kp: Keypair, mint: string, amountSol: number, tax: number)
   return { hash: sig, raw: after.raw - before.raw, decimals: after.decimals || before.decimals || 6 };
 }
 
-async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number) {
+async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0) {
   const have = (await solTokenRaw(kp.publicKey, mint)).raw;
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
   const conn = solConn();
   const before = await conn.getBalance(kp.publicKey);
-  const sig = await jupSwap(kp, mint, WSOL, amount, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)));
+  const sig = await jupSwap(kp, mint, WSOL, amount, sellSlip(tax, extra));
   const after = await conn.getBalance(kp.publicKey);
   return { hash: sig, receivedNative: Math.max(0, after - before) / 1e9 };
 }
@@ -323,8 +326,8 @@ export async function liveBuyOn(chain: LiveChain, w: Wallets, token: string, amo
   return evmBuy(chain, w.evm, token, amountNative, tax);
 }
 
-export async function liveSellOn(chain: LiveChain, w: Wallets, token: string, raw: bigint, tax: number) {
-  if (chain === "solana") { if (!w.sol) throw new Error("There's no Solana wallet, so this can't be sold here."); return solSell(w.sol, token, raw, tax); }
+export async function liveSellOn(chain: LiveChain, w: Wallets, token: string, raw: bigint, tax: number, extra = 0) {
+  if (chain === "solana") { if (!w.sol) throw new Error("There's no Solana wallet, so this can't be sold here."); return solSell(w.sol, token, raw, tax, extra); }
   if (!w.evm) throw new Error("There's no trading wallet, so this can't be sold here.");
-  return evmSell(chain, w.evm, token, raw, tax);
+  return evmSell(chain, w.evm, token, raw, tax, extra);
 }
