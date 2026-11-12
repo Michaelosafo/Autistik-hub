@@ -179,7 +179,7 @@ export default function WalletApp({ signer, start, member }: { signer: Signer; s
 
       <div className="tx-panel tx-bottom">
         <div className="tx-tabs" role="tablist" aria-label="Account">
-          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Receive"], ["momo", "Buy with MoMo"], ["security", "Security"]] as const).map(([k, name]) => (
+          {([["assets", "Assets"], ["orders", "Open orders"], ["history", "History"], ["convert", "Convert"], ["send", "Send"], ["receive", "Receive"], ["security", "Security"]] as const).map(([k, name]) => (
             <button key={k} type="button" role="tab" aria-selected={btab === k} className={btab === k ? "on" : ""} onClick={() => setBtab(k)}>{name}</button>
           ))}
         </div>

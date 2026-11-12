@@ -160,7 +160,7 @@ export default function CompanionChat({ signedIn, start, appId = null, member = 
     // In the Google Play app there's no buying, selling or swapping (coin scans still work).
     const noMoney = appNoMoney();
     // "buy usdt with momo", "100 cedis of bnb with mobile money": the MoMo checkout, paying into their own wallet.
-    const momo = /\b(momo|mobile\s*money|telecel\s*cash|airteltigo|cedis?|ghs|gh₵)\b/i.test(text) && /\b(buy|get|purchase|pay|fund|top\s*up)\b/i.test(text);
+    const momo = false && /\b(momo|mobile\s*money|telecel\s*cash|airteltigo|cedis?|ghs|gh₵)\b/i.test(text) && /\b(buy|get|purchase|pay|fund|top\s*up)\b/i.test(text);
     const buy = readBuy(text);
     if ((buy || momo || looksLikeSwap(text)) && noMoney) {
       edit(id, (x) => ({ ...x, msgs: [...x.msgs, { kind: "me", text }, { kind: "sys", text: "Buying, selling and swapping aren't part of the app. I can still scan any coin for you: paste its address." }], at: Date.now() }));

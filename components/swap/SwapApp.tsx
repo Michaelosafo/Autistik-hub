@@ -110,14 +110,13 @@ export default function SwapApp({ signer, start }: { signer: Signer; start: { ch
   const cross = fromNet.id !== toNet.id;
   // Swap one coin for another, or buy USDT / BNB / SOL with MoMo (cedis) straight into the wallet. ?momo opens MoMo.
   const [mode, setMode] = useState<"swap" | "momo">("swap");
-  useEffect(() => { if (/[?&]momo\b/.test(window.location.search)) setMode("momo"); }, []);
+  // MoMo is switched off for now (no payment partner yet), so ?momo just opens the swap.
 
   return (
     <div className="sw">
       <div className="sw-card sc-card">
         <div className="sc-head" role="tablist" aria-label="Swap or buy with MoMo">
           {mode === "swap" ? <h1>Swap</h1> : <button type="button" role="tab" aria-selected={false} className="sc-tab sc-btn" onClick={() => setMode("swap")}>Swap</button>}
-          {mode === "momo" ? <h1>MoMo</h1> : <button type="button" role="tab" aria-selected={false} className="sc-tab sc-btn" onClick={() => setMode("momo")}>MoMo</button>}
           <Link href="/wallet" className="sc-tab">Limit</Link>
           {mode === "swap" && <span className={"sc-mode" + (cross ? " x" : "")}>{cross ? <><i className="sx-arc" aria-hidden="true">∞</i>{fromNet.name} → {toNet.name}</> : `${XCHAIN_LIST.length} networks`}</span>}
         </div>

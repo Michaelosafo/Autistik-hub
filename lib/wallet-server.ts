@@ -21,11 +21,11 @@ const SOL_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const SOL_TREASURY = solFeeWallet();
 /**
  * The fee on swaps done from the AI chat (Believer's swap and trade bots), in basis points, paid to the marketing
- * wallet (the treasury). CHAT_SWAP_FEE_BPS in Vercel changes it (30 = 0.3%, at most 100; 0 turns it off).
+ * wallet (the treasury). Off by default (swaps are as cheap as possible); CHAT_SWAP_FEE_BPS in Vercel turns it on (30 = 0.3%, at most 100).
  */
 export const CHAT_FEE_BPS = (() => {
-  const n = Number(process.env.CHAT_SWAP_FEE_BPS ?? 30);
-  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : 30;
+  const n = Number(process.env.CHAT_SWAP_FEE_BPS ?? 0);
+  return Number.isInteger(n) && n >= 0 && n <= 100 ? n : 0;
 })();
 /** A fee a quote may carry: the Wallet's, the chat's, or none. */
 const okFee = (bps: unknown) => bps === 0 || bps === FEE_BPS || bps === CHAT_FEE_BPS;
