@@ -81,7 +81,7 @@ async function getMine(_req: Request, action: string) {
   ]);
   const [{ data: srcs }, { data: callers }, { data: rebuys }] = await Promise.all([
     tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true }),
-    tq("ai_trader_callers").select("id,platform,who,usd").order("usd", { ascending: false }),
+    tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title").order("usd", { ascending: false }),
     tq("ai_trader_rebuy").select("id,chain,token,symbol,sold_usd,low_usd,status,note,sold_at").order("sold_at", { ascending: false }).limit(15),
   ]);
   const done = ((closed || []) as Position[]).filter((p) => p.mode === s.mode);
@@ -237,9 +237,12 @@ async function postMine(action: string, b: any) {
       const list = String(b.who || "").split(/[\s,;]+/).map((w) => w.trim().replace(/^https?:\/\/(www\.)?(t\.me|x\.com|twitter\.com)\//i, "").replace(/^@/, "").split(/[/?]/)[0].toLowerCase()).filter(Boolean);
       const ok = [...new Set(list.filter((w) => /^\d{3,20}$/.test(w) || /^[a-z0-9_]{3,32}$/.test(w)))].slice(0, 50);
       if (!ok.length) return json({ error: "Paste @usernames or numeric user ids, separated by spaces or commas." }, 400);
-      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd })), { onConflict: "trader_id,platform,who" });
+      // Which group they're picked for ('' = every group). A group with callers of its own buys only their calls.
+      const chat = platform === "tg" ? String(b.chat || "").replace(/[^0-9]/g, "").slice(0, 24) : "";
+      const chatTitle = chat ? String(b.chatTitle || "").slice(0, 80) || null : null;
+      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd, chat, chat_title: chatTitle })), { onConflict: "trader_id,platform,who,chat" });
       if (error) return json({ error: error.message }, 400);
-      await log("settings", `Caller size $${usd} for ${ok.map((w) => (/^\d+$/.test(w) ? w : `@${w}`)).join(", ")} (${platform === "x" ? "X" : "Telegram"}).`);
+      await log("settings", `Caller $${usd} for ${ok.map((w) => (/^\d+$/.test(w) ? w : `@${w}`)).join(", ")} (${platform === "x" ? "X" : chatTitle ? `only in ${chatTitle}` : "Telegram, all groups"}).`);
       return json({ ok: true, note: `Saved: posts by ${ok.length === 1 ? (/^\d+$/.test(ok[0]) ? ok[0] : `@${ok[0]}`) : `${ok.length} callers`} buy $${usd}.` });
     }
     case "source": {
