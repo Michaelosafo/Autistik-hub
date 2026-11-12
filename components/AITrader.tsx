@@ -104,7 +104,7 @@ export default function AITrader() {
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>
 
-      <AITraderCopy c={d.copy} s={s} owner={d.owner} busy={!!busy} onAct={act} />
+      <AITraderCopy c={d.copy} s={s} owner={d.owner} busy={!!busy} onAct={act} reload={load} />
 
       <section className="ait-stats">
         <div><small>{live ? "Wallet BNB" : "Practice BNB"}</small><b>{cash == null ? "–" : fmtAmount(cash)}</b></div>

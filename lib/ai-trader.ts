@@ -26,6 +26,7 @@ import { SAFETY, safetyGate, type Gate } from "@/lib/ai-safety";
 import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
 import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
+import { tgaNewPosts } from "@/lib/tg-account";
 
 export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
 export type TradeChain = (typeof TRADE_CHAINS)[number];
@@ -704,6 +705,10 @@ export async function runFast() {
     const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
     if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", T());
     for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at }, "x", post.label).catch(() => [])));
+    // Groups and channels read through the admin's own Telegram account.
+    const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
+    if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
+    for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at }, "telegram", `posted in "${post.chat}" on Telegram`).catch(() => [])));
   }
   // X callers first (they move fastest), then DexScreener.
   if (xReady() && s.callers.length) {

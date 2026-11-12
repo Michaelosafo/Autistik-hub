@@ -6,6 +6,8 @@ const nextConfig = {
   // Keeps first deploys smooth; run `npx tsc --noEmit` locally to see type hints.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },
+  // Telegram account login (GramJS) opens raw network connections: loaded from node_modules, not bundled.
+  experimental: { serverComponentsExternalPackages: ["telegram"] },
   // Optional add-ons of the wallet library (Privy) that the Hub doesn't use: left out of the bundle.
   webpack(config) {
     config.resolve.alias = { ...config.resolve.alias, "@farcaster/mini-app-solana": false, "@abstract-foundation/agw-client": false };
