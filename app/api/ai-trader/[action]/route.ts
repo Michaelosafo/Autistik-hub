@@ -135,6 +135,7 @@ async function postMine(action: string, b: any) {
       if (typeof b.signals_on === "boolean") up.signals_on = b.signals_on;
       if (typeof b.copy_on === "boolean") up.copy_on = b.copy_on;
       if (typeof b.rebuy_on === "boolean") up.rebuy_on = b.rebuy_on;
+      if (typeof b.copy_check === "boolean") up.copy_check = b.copy_check;
       if (["telegram", "both", "x", "general"].includes(b.trade_mode)) up.trade_mode = b.trade_mode;
       // Chains to trade on with real money (each needs its own coin in the wallet). BNB Chain can be switched off too.
       if (Array.isArray(b.live_chains)) {

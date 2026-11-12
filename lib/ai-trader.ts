@@ -43,7 +43,7 @@ export type Settings = {
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
-  live_chains: LiveChain[];
+  live_chains: LiveChain[]; copy_check: boolean;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -192,6 +192,7 @@ export async function getSettings(): Promise<Settings> {
   for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl", "rebuy_dump", "rebuy_tp"]) s[k] = n(s[k]);
   if (!["telegram", "both", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
   s.rebuy_on = s.rebuy_on !== false;
+  s.copy_check = s.copy_check === true;
   s.live_chains = (Array.isArray(s.live_chains) ? s.live_chains : ["bsc"]).filter((c: string) => isLiveChain(c));
   if (!s.live_chains.length) s.live_chains = ["bsc"];
   s.copy_on = s.copy_on !== false;
@@ -820,6 +821,16 @@ export async function copyGate(chain: string, token: string): Promise<{ ok: true
 }
 
 /**
+ * Copy trades buy with no checks unless the trader switched the honeypot check on. Without it, the coin's buy tax is
+ * still looked up (never blocking) only to set enough slippage for the swap to go through.
+ */
+async function copyCheckFor(s: Settings, chain: string, token: string): Promise<{ ok: true; buyTax: number; sellTax: number } | { ok: false; reason: string }> {
+  if (s.copy_check) return copyGate(chain, token);
+  const risk = await Promise.race([riskFor(chain, token).catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), 3000))]);
+  return { ok: true, buyTax: Math.min(50, n(risk?.buyTax)), sellTax: Math.min(50, n(risk?.sellTax)) };
+}
+
+/**
  * A post from a followed Telegram group or X account / List / Community: every contract address in it is bought
  * (no market-cap, liquidity, socials or momentum rules), as long as it isn't a honeypot, with the copy target and
  * stop-loss. $TICKERS alone are ignored, since many coins share a ticker and copycats use them.
@@ -868,7 +879,7 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const room = await buyRoom(s, f.chain);
   if (typeof room === "string") return done(`skipped: ${room}`);
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
-  const g = await copyGate(f.chain, f.token);
+  const g = await copyCheckFor(s, f.chain, f.token);
   if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
   const newProject = f.ageHours < 24;
   const why = `📡 Copy: ${label}.${caller ? ` Caller size $${caller.usd}.` : ""} Sells at +${s.copy_tp}% or -${s.copy_sl}%.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
@@ -910,7 +921,8 @@ async function startRebuyWatch(p: Position, soldUsd: number) {
 /**
  * Every minute: for each watched coin (up to 48 hours after its sale), buy it back once it has dumped the re-buy
  * amount (default 60%) below the sell price AND trading is heavy (last-hour volume at least half the pool, or 30+
- * trades in 5 minutes) AND buyers are back (at least as many buys as sells in 5 minutes). Still honeypot-checked.
+ * trades in 5 minutes) AND buyers are back (at least as many buys as sells in 5 minutes). Honeypot-checked only if
+ * the copy-trade check is on.
  * It then sells on the bounce (default +40%) or the copy stop-loss.
  */
 async function rebuyCheck(s: Settings) {
@@ -932,7 +944,7 @@ async function rebuyCheck(s: Settings) {
     const room = await buyRoom(s, f.chain);
     if (typeof room === "string") { await set({ note: `ready, but ${room}` }); continue; }
     if (room.held.has(f.token.toLowerCase())) { await set({ status: "expired", note: "already holding it" }); continue; }
-    const g = await copyGate(f.chain, f.token);
+    const g = await copyCheckFor(s, f.chain, f.token);
     if (!g.ok) { await set({ status: "expired", note: g.reason }); continue; }
     try {
       const why = `🔁 Dump re-buy: down ${drop.toFixed(0)}% from the 2x sell with heavy volume (${f.buys5} buys / ${f.sells5} sells in 5m). Sells at +${s.rebuy_tp}% or -${s.copy_sl}%.`;
