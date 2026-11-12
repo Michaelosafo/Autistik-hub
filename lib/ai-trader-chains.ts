@@ -5,7 +5,9 @@
  * SOL on Solana. Nothing is bridged.
  *
  * Swaps: BNB Chain and Ethereum through KyberSwap (the route the Wallet already uses, fee-free for the trader's own
- * wallet), Robinhood Chain through LI.FI, Solana through Jupiter. Each buy reports exactly how many tokens arrived
+ * wallet), Robinhood Chain through LI.FI, Elysium (Kinetiq's Hyperliquid L2, gas in HYPE) through Relay with LI.FI as
+ * the fallback, Solana through Jupiter. Moving money between the trader's wallets on different chains goes through
+ * Relay (relayBridge), which needs RELAY_API_KEY. Each buy reports exactly how many tokens arrived
  * and each sell exactly how much of the chain's coin came back.
  */
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, getAddress, http, type PrivateKeyAccount } from "viem";
@@ -13,36 +15,62 @@ import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/we
 import { WCHAINS, WSOL } from "@/lib/wallet-chains";
 import { build, market, quote, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 
-export const LIVE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
+export const LIVE_CHAINS = ["bsc", "ethereum", "robinhood", "elysium", "solana"] as const;
 export type LiveChain = (typeof LIVE_CHAINS)[number];
 export const isLiveChain = (c: string): c is LiveChain => (LIVE_CHAINS as readonly string[]).includes(c);
-export const NATIVE: Record<LiveChain, string> = { bsc: "BNB", ethereum: "ETH", robinhood: "ETH", solana: "SOL" };
+export const NATIVE: Record<LiveChain, string> = { bsc: "BNB", ethereum: "ETH", robinhood: "ETH", elysium: "HYPE", solana: "SOL" };
 /** Always left in each wallet for fees. */
-export const GAS_KEEP: Record<LiveChain, number> = { bsc: 0.003, ethereum: 0.004, robinhood: 0.0005, solana: 0.01 };
+export const GAS_KEEP: Record<LiveChain, number> = { bsc: 0.003, ethereum: 0.004, robinhood: 0.0005, elysium: 0.02, solana: 0.01 };
 const SLIP_BPS = 300; // 3% plus the coin's tax
 const ZERO = "0x0000000000000000000000000000000000000000";
 
 const RH_RPC = process.env.ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com";
 const ROBINHOOD = defineChain({ id: 4663, name: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [RH_RPC] } } });
+const EL_RPC = process.env.ELYSIUM_RPC || "https://rpc.elysium.kinetiq.xyz";
+const ELYSIUM = defineChain({ id: 99901, name: "Elysium", nativeCurrency: { name: "HYPE", symbol: "HYPE", decimals: 18 }, rpcUrls: { default: { http: [EL_RPC] } } });
 const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
+/** Chain ids as Relay knows them (Solana has its own Relay id). */
+export const RELAY_ID: Record<LiveChain, number> = { bsc: 56, ethereum: 1, robinhood: 4663, elysium: 99901, solana: 792703809 };
+const SOL_NATIVE_RELAY = "11111111111111111111111111111111";
+type EvmKey = Exclude<LiveChain, "solana">;
 const solConn = () => new Connection(WCHAINS.solana.rpc, "confirmed");
 
 const evmChain = (chain: "bsc" | "ethereum") => WCHAINS[chain];
-function pub(chain: Exclude<LiveChain, "solana">): any {
-  return chain === "robinhood" ? createPublicClient({ chain: ROBINHOOD, transport: http(RH_RPC, { timeout: 20_000 }) }) : walletChainClient(evmChain(chain));
+const custom = (chain: EvmKey) => (chain === "robinhood" ? { c: ROBINHOOD, rpc: RH_RPC } : chain === "elysium" ? { c: ELYSIUM, rpc: EL_RPC } : null);
+function pub(chain: EvmKey): any {
+  const x = custom(chain);
+  return x ? createPublicClient({ chain: x.c, transport: http(x.rpc, { timeout: 20_000 }) }) : walletChainClient(evmChain(chain as "bsc" | "ethereum"));
 }
-function wallet(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount): any {
-  return chain === "robinhood"
-    ? createWalletClient({ account, chain: ROBINHOOD, transport: http(RH_RPC, { timeout: 20_000 }) })
-    : createWalletClient({ account, chain: evmChain(chain).viem, transport: http(evmChain(chain).rpc, { timeout: 20_000 }) });
+function wallet(chain: EvmKey, account: PrivateKeyAccount): any {
+  const x = custom(chain);
+  if (x) return createWalletClient({ account, chain: x.c, transport: http(x.rpc, { timeout: 20_000 }) });
+  const c = evmChain(chain as "bsc" | "ethereum");
+  return createWalletClient({ account, chain: c.viem, transport: http(c.rpc, { timeout: 20_000 }) });
 }
+const evmKeyOfId = (id: number): EvmKey | null => (Object.entries(RELAY_ID).find(([k, v]) => v === id && k !== "solana")?.[0] as EvmKey) || null;
 
 /** Dollar price of each chain's coin (ETH for Ethereum and Robinhood Chain). */
 export async function nativeUsd(chain: LiveChain): Promise<number> {
+  if (chain === "elysium") return hypeUsd();
   const c = chain === "bsc" ? WCHAINS.bsc : chain === "solana" ? WCHAINS.solana : WCHAINS.ethereum;
   const m = await market(c, c.native.address);
   if (!m.priceUsd) throw new Error(`No ${NATIVE[chain]} price right now.`);
   return m.priceUsd;
+}
+
+/** HYPE in dollars (CoinGecko, then DexScreener's busiest HYPE pair as a fallback). */
+let hypeCache: { at: number; usd: number } | null = null;
+async function hypeUsd(): Promise<number> {
+  if (hypeCache && Date.now() - hypeCache.at < 60_000) return hypeCache.usd;
+  let usd = Number((await fetch("https://api.coingecko.com/api/v3/simple/price?ids=hyperliquid&vs_currencies=usd", { cache: "no-store", signal: AbortSignal.timeout(6000) }).then((r) => r.json()).catch(() => null))?.hyperliquid?.usd) || 0;
+  if (!usd) {
+    const j = await fetch("https://api.dexscreener.com/latest/dex/search?q=WHYPE%20USDC", { cache: "no-store", signal: AbortSignal.timeout(6000) }).then((r) => r.json()).catch(() => null);
+    const p = ((j?.pairs || []) as any[]).filter((x) => /^W?HYPE$/i.test(String(x?.baseToken?.symbol))).sort((a, b) => Number(b?.liquidity?.usd || 0) - Number(a?.liquidity?.usd || 0))[0];
+    usd = Number(p?.priceUsd) || 0;
+  }
+  if (!usd) throw new Error("No HYPE price right now.");
+  hypeCache = { at: Date.now(), usd };
+  return usd;
 }
 
 export type Wallets = { evm: PrivateKeyAccount | null; sol: Keypair | null };
@@ -77,13 +105,94 @@ async function sendEvm(chain: Exclude<LiveChain, "solana">, account: PrivateKeyA
 }
 
 /** A swap route on Robinhood Chain from LI.FI (native ETH is the zero address there). */
-async function lifiQuote(from: string, to: string, amount: bigint, wallet: string, slipPct: number) {
-  const q = new URLSearchParams({ fromChain: "4663", toChain: "4663", fromToken: from, toToken: to, fromAmount: amount.toString(), fromAddress: wallet, slippage: String(Math.min(0.5, slipPct / 100)), integrator: "autistik" });
+async function lifiQuote(from: string, to: string, amount: bigint, wallet: string, slipPct: number) { return lifiQuoteOn(4663, from, to, amount, wallet, slipPct); }
+async function lifiQuoteOn(chainId: number, from: string, to: string, amount: bigint, wallet: string, slipPct: number) {
+  const q = new URLSearchParams({ fromChain: String(chainId), toChain: String(chainId), fromToken: from, toToken: to, fromAmount: amount.toString(), fromAddress: wallet, slippage: String(Math.min(0.5, slipPct / 100)), integrator: "autistik" });
   const r = await fetch(`https://li.quest/v1/quote?${q}`, { headers: { accept: "application/json", ...(process.env.LIFI_API_KEY ? { "x-lifi-api-key": process.env.LIFI_API_KEY } : {}) }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
   const j = await r.json().catch(() => null);
-  if (!r.ok || !j?.transactionRequest) throw new Error(`No Robinhood Chain route: ${j?.message || r.status}`);
+  if (!r.ok || !j?.transactionRequest) throw new Error(`No ${chainId === 4663 ? "Robinhood Chain" : chainId === 99901 ? "Elysium" : "swap"} route: ${j?.message || r.status}`);
   const t = j.transactionRequest;
   return { tx: { to: String(t.to), data: String(t.data), value: BigInt(t.value || "0"), gas: t.gasLimit ? BigInt(t.gasLimit) : undefined }, spender: j.estimate?.approvalAddress ? String(j.estimate.approvalAddress) : String(t.to) };
+}
+
+// ---------------------------------------------------------------- Relay (bridging, and swaps on Elysium)
+
+export const relayReady = () => !!process.env.RELAY_API_KEY;
+async function relayQuote(body: Record<string, unknown>) {
+  if (!relayReady()) throw new Error("Add RELAY_API_KEY (free from relay.link) in Vercel to use Relay, then redeploy.");
+  const r = await fetch("https://api.relay.link/quote/v2", { method: "POST", headers: { "content-type": "application/json", "x-api-key": String(process.env.RELAY_API_KEY) }, body: JSON.stringify({ tradeType: "EXACT_INPUT", ...body }), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !Array.isArray(j?.steps)) throw new Error(`Relay: ${j?.message || j?.error || r.status}`);
+  return j;
+}
+
+/** Sends every transaction step of a Relay quote from the trader's EVM wallet, in order, waiting for each. */
+async function relayRun(q: any, account: PrivateKeyAccount): Promise<{ hashes: string[]; requestId: string | null }> {
+  const hashes: string[] = [];
+  let requestId: string | null = null;
+  for (const step of q.steps) {
+    requestId = requestId || step.requestId || null;
+    if (step.kind !== "transaction") throw new Error("Relay asked for a signature step, which the trader can't do here.");
+    for (const it of step.items || []) {
+      if (it.status === "complete") continue;
+      const d = it.data || {};
+      const key = evmKeyOfId(Number(d.chainId));
+      if (!key) throw new Error(`Relay wants a transaction on chain ${d.chainId}, which the trader doesn't use.`);
+      if (String(d.from || "").toLowerCase() !== account.address.toLowerCase()) throw new Error("Relay's transaction isn't from the trading wallet.");
+      const hash = await wallet(key, account).sendTransaction({ to: getAddress(d.to), data: d.data || "0x", value: BigInt(d.value || "0"), ...(d.gas ? { gas: BigInt(d.gas) } : {}) });
+      const r = await pub(key).waitForTransactionReceipt({ hash, timeout: 120_000 });
+      if (r.status !== "success") throw new Error("A Relay transaction failed on-chain.");
+      hashes.push(hash);
+    }
+  }
+  return { hashes, requestId };
+}
+
+/** Where a Relay order stands: waiting, depositing, pending, success, refund or failure. */
+export async function relayStatus(requestId: string): Promise<{ status: string; txs: string[] }> {
+  const j = await fetch(`https://api.relay.link/intents/status/v3?requestId=${encodeURIComponent(requestId)}`, { headers: process.env.RELAY_API_KEY ? { "x-api-key": String(process.env.RELAY_API_KEY) } : {}, cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => null);
+  return { status: String(j?.status || "unknown"), txs: ((j?.txHashes || j?.outTxHashes || []) as any[]).map(String) };
+}
+
+const currencyOf = (chain: LiveChain) => (chain === "solana" ? SOL_NATIVE_RELAY : ZERO);
+
+/**
+ * A quote for moving the trader's own coin from one chain to another through Relay (e.g. BNB on BNB Chain → HYPE on
+ * Elysium). The coins always arrive in the same trader's wallet on the other chain.
+ */
+export async function relayBridgeQuote(from: LiveChain, to: LiveChain, amountNative: number, w: Wallets) {
+  if (from === "solana") throw new Error("Moving money out of Solana isn't supported here yet: send it from Phantom instead.");
+  if (!w.evm) throw new Error("Create the trading wallet first.");
+  const recipient = to === "solana" ? w.sol?.publicKey.toBase58() : w.evm.address;
+  if (!recipient) throw new Error("Create or import the Solana wallet first.");
+  if (from === to) throw new Error("Pick two different chains.");
+  const q = await relayQuote({ user: w.evm.address, recipient, originChainId: RELAY_ID[from], destinationChainId: RELAY_ID[to], originCurrency: ZERO, destinationCurrency: currencyOf(to), amount: BigInt(Math.floor(amountNative * 1e18)).toString() });
+  const out = q.details?.currencyOut;
+  const fees = q.fees || {};
+  const feeUsd = ["gas", "relayer", "app"].reduce((a, k) => a + (Number(fees[k]?.amountUsd) || 0), 0);
+  return { quote: q, receive: Number(out?.amountFormatted) || null, receiveSymbol: NATIVE[to], feeUsd: +feeUsd.toFixed(4), seconds: Number(q.details?.timeEstimate) || null };
+}
+
+/** Moves the money: sends the Relay deposit from the trader's EVM wallet and returns the order id to follow. */
+export async function relayBridge(from: LiveChain, to: LiveChain, amountNative: number, w: Wallets) {
+  const avail = Math.max(0, (await chainBalance(from, w)) - GAS_KEEP[from]);
+  if (amountNative > avail) throw new Error(`Only ${avail.toFixed(5)} ${NATIVE[from]} can be moved (some is kept for fees).`);
+  const { quote, receive } = await relayBridgeQuote(from, to, amountNative, w);
+  const r = await relayRun(quote, w.evm!);
+  return { ...r, receive };
+}
+
+/** Same-chain swap on Elysium through Relay (LI.FI as the fallback). */
+async function elysiumSwap(account: PrivateKeyAccount, fromToken: string, toToken: string, amount: bigint, slipBps: number, approveToken?: string) {
+  try {
+    const q = await relayQuote({ user: account.address, recipient: account.address, originChainId: 99901, destinationChainId: 99901, originCurrency: fromToken, destinationCurrency: toToken, amount: amount.toString(), slippageTolerance: String(slipBps) });
+    const r = await relayRun(q, account);
+    return { hash: r.hashes[r.hashes.length - 1] || "", gas: 0n };
+  } catch (e) {
+    // Fallback: LI.FI on Elysium.
+    const q = await lifiQuoteOn(99901, fromToken, toToken, amount, account.address, slipBps / 100).catch(() => { throw e; });
+    return sendEvm("elysium", account, q.tx, approveToken ? { token: approveToken, spender: q.spender, amount } : undefined);
+  }
 }
 
 async function evmBuy(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount, token: string, amountNative: number, tax: number) {
@@ -93,7 +202,9 @@ async function evmBuy(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAc
   const before: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
   const slip = Math.min(1500, SLIP_BPS + Math.ceil(tax * 100));
   let hash: string;
-  if (chain === "robinhood") {
+  if (chain === "elysium") {
+    hash = (await elysiumSwap(account, ZERO, tok, wei, slip)).hash;
+  } else if (chain === "robinhood") {
     const q = await lifiQuote(ZERO, tok, wei, account.address, slip / 100);
     hash = (await sendEvm(chain, account, q.tx)).hash;
   } else {
@@ -116,7 +227,9 @@ async function evmSell(chain: Exclude<LiveChain, "solana">, account: PrivateKeyA
   const before: bigint = await pc.getBalance({ address: account.address });
   const slip = Math.min(1500, SLIP_BPS + Math.ceil(tax * 100));
   let res: { hash: string; gas: bigint };
-  if (chain === "robinhood") {
+  if (chain === "elysium") {
+    res = await elysiumSwap(account, tok, ZERO, amount, slip, tok);
+  } else if (chain === "robinhood") {
     const q = await lifiQuote(tok, ZERO, amount, account.address, slip / 100);
     res = await sendEvm(chain, account, q.tx, { token: tok, spender: q.spender, amount });
   } else {

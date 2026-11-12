@@ -30,6 +30,7 @@ const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
   { k: "ethereum", name: "Ethereum", note: "ETH coins" },
   { k: "robinhood", name: "Robinhood Chain", note: "Robinhood Chain coins" },
+  { k: "elysium", name: "Elysium", note: "Hyperliquid's L2 (HYPE)" },
   { k: "solana", name: "Solana", note: "Optional" },
 ];
 const chainName = (k: string) => CHAINS.find((c) => c.k === k)?.name || k;

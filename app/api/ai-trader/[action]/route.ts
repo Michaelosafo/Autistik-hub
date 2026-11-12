@@ -7,7 +7,8 @@ import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaR
 import { cronDenied } from "@/lib/cron-auth";
 import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
-import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, revealSolKey } from "@/lib/ai-trader";
+import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, revealSolKey, relayMove, relayMoveQuote } from "@/lib/ai-trader";
+import { relayReady, relayStatus } from "@/lib/ai-trader-chains";
 import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xFollowing, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
 
 export const runtime = "nodejs";
@@ -92,6 +93,7 @@ async function getMine(_req: Request, action: string) {
     copy: {
       sources: srcs || [], maxTax: COPY_MAX_TAX, callers: callers || [], rebuys: rebuys || [],
       wallets: await liveWallets(s).catch(() => []),
+      relay: relayReady(),
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
       tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null, stage: null, hint: null, chats: null, chatsAt: null })),
       x: { loginReady: xLoginReady(), signedIn: !!s.x_username, username: s.x_username, canRead: await xReadReady().catch(() => false), communities: !!process.env.TWITTERAPI_IO_KEY },
@@ -146,7 +148,7 @@ async function postMine(action: string, b: any) {
       if (["telegram", "both", "x", "general"].includes(b.trade_mode)) up.trade_mode = b.trade_mode;
       // Chains to trade on with real money (each needs its own coin in the wallet). BNB Chain can be switched off too.
       if (Array.isArray(b.live_chains)) {
-        const lc = ["bsc", "ethereum", "robinhood", "solana"].filter((c) => b.live_chains.includes(c));
+        const lc = ["bsc", "ethereum", "robinhood", "elysium", "solana"].filter((c) => b.live_chains.includes(c));
         if (!lc.length) return json({ error: "Keep at least one chain on for live trading." }, 400);
         up.live_chains = lc;
       }
@@ -304,6 +306,16 @@ async function postMine(action: string, b: any) {
     case "sol-wallet": {
       try { const address = await createSolWallet(); return json({ ok: true, address, note: "Solana wallet created. Send SOL to it, then switch Solana on for live trading." }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "relay-quote": {
+      try { return json({ ok: true, ...(await relayMoveQuote(String(b.from), String(b.to), Number(b.amount))) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "relay-move": {
+      try { const r = await relayMove(String(b.from), String(b.to), Number(b.amount)); return json({ ok: true, ...r, note: `Sent. About ${r.receive ?? "?"} arrives on the other chain in a few seconds.` }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "relay-status": {
+      return json({ ok: true, ...(await relayStatus(String(b.requestId || ""))) });
     }
     case "sol-key-import": {
       try { const address = await importSolKey(String(b.key || "")); return json({ ok: true, address, note: `Now trading Solana from your wallet ${address.slice(0, 4)}…${address.slice(-4)}.` }); }

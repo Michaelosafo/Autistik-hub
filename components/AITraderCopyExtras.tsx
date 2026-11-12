@@ -120,10 +120,10 @@ export function RebuyBox({ on, dump, tp, sl, list, busy, onAct }: { on: boolean;
 }
 
 export type LiveWallet = { chain: string; native: string; on: boolean; address: string | null; balance: number | null };
-const CHAIN_LABEL: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", solana: "Solana" };
+const CHAIN_LABEL: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", elysium: "Elysium", solana: "Solana" };
 
 /** Live chains: switch each on or off, see its wallet address and balance, and make the Solana wallet. */
-export function LiveChains({ list, live, busy, onAct }: { list: LiveWallet[]; live: boolean; busy: boolean; onAct: Act }) {
+export function LiveChains({ list, live, relay, busy, onAct }: { list: LiveWallet[]; live: boolean; relay: boolean; busy: boolean; onAct: Act }) {
   const [copied, setCopied] = useState("");
   const on = list.filter((w) => w.on).map((w) => w.chain);
   const toggle = (chain: string, v: boolean) => onAct(`lc${chain}`, "settings", { live_chains: v ? [...on, chain] : on.filter((c) => c !== chain) }, v ? `${CHAIN_LABEL[chain]} on for live trading.` : `${CHAIN_LABEL[chain]} off for live trading.`);
@@ -131,7 +131,7 @@ export function LiveChains({ list, live, busy, onAct }: { list: LiveWallet[]; li
   return (
     <div className="aic-block">
       <b>⛓ Live chains</b>
-      <small className="muted">{live ? "Live trading buys on the chains switched on here." : "You're in practice mode: these apply once you switch to Live."} Each chain pays with its own coin, so send that coin to the wallet: BNB on BNB Chain, ETH on Ethereum, ETH on Robinhood Chain, SOL on Solana. The same address works on BNB Chain, Ethereum and Robinhood Chain. Calls on a chain that&apos;s off (or has no money) are skipped.</small>
+      <small className="muted">{live ? "Live trading buys on the chains switched on here." : "You're in practice mode: these apply once you switch to Live."} Each chain pays with its own coin, so the wallet needs that coin there: BNB on BNB Chain, ETH on Ethereum, ETH on Robinhood Chain, HYPE on Elysium, SOL on Solana. The same address works on BNB Chain, Ethereum, Robinhood Chain and Elysium. Use Move funds below to bridge between them. Calls on a chain that&apos;s off (or has no money) are skipped.</small>
       <div className="aic-list">{list.map((w) => (
         <div key={w.chain} className={"aic-row aic-chain" + (w.on ? " on" : "")}>
           <input type="checkbox" checked={w.on} disabled={busy || (!w.address && !w.on)} onChange={(e) => toggle(w.chain, e.target.checked)} aria-label={`Trade live on ${CHAIN_LABEL[w.chain]}`} />
@@ -142,6 +142,7 @@ export function LiveChains({ list, live, busy, onAct }: { list: LiveWallet[]; li
           {w.chain === "solana" && !w.address && <button type="button" className="btn small" disabled={busy} onClick={() => onAct("solw", "sol-wallet", {})}>Create Solana wallet</button>}
         </div>
       ))}</div>
+      <MoveFunds list={list} relay={relay} busy={busy} onAct={onAct} />
       <SolImport has={list.some((w) => w.chain === "solana" && w.address)} busy={busy} onAct={onAct} />
       {list.some((w) => w.chain === "solana" && w.address) && (
         <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy}
@@ -163,6 +164,74 @@ function SolImport({ has, busy, onAct }: { has: boolean; busy: boolean; onAct: A
         <button type="button" className="btn small primary" disabled={busy || key.trim().length < 40} onClick={() => onAct("solimp", "sol-key-import", { key: key.trim() }).then(() => { setKey(""); setOpen(false); })}>Use this wallet</button>
         <button type="button" className="btn small" onClick={() => { setKey(""); setOpen(false); }}>Cancel</button>
       </div>
+    </div>
+  );
+}
+
+/** Bridge the trader's own money between its chains through Relay (low fees, usually seconds). */
+function MoveFunds({ list, relay, busy, onAct }: { list: LiveWallet[]; relay: boolean; busy: boolean; onAct: Act }) {
+  const evm = list.filter((w) => w.chain !== "solana" && w.address);
+  const [open, setOpen] = useState(false);
+  const [from, setFrom] = useState(evm[0]?.chain || "bsc");
+  const [to, setTo] = useState("elysium");
+  const [amount, setAmount] = useState("");
+  const [q, setQ] = useState<{ receive: number | null; receiveSymbol: string; feeUsd: number; seconds: number | null } | null>(null);
+  const [state, setState] = useState("");
+  const [working, setWorking] = useState(false);
+  const fw = list.find((w) => w.chain === from);
+  const call = async (action: string, body: unknown) => {
+    const r = await fetch(`/api/ai-trader/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || "Something went wrong.");
+    return d;
+  };
+  const getQuote = async () => { setWorking(true); setState(""); setQ(null); try { setQ(await call("relay-quote", { from, to, amount: Number(amount) })); } catch (e) { setState((e as Error).message); } setWorking(false); };
+  const move = async () => {
+    if (!confirm(`Move ${amount} ${fw?.native} from ${CHAIN_LABEL[from]} to ${CHAIN_LABEL[to]} through Relay?`)) return;
+    setWorking(true); setState("Sending…");
+    try {
+      const r = await call("relay-move", { from, to, amount: Number(amount) });
+      setState(r.note || "Sent."); setQ(null); setAmount("");
+      if (r.requestId) for (let i = 0; i < 40; i++) {
+        await new Promise((res) => setTimeout(res, 3000));
+        const st = await call("relay-status", { requestId: r.requestId }).catch(() => null);
+        if (st?.status === "success") { setState(`✅ Arrived on ${CHAIN_LABEL[to]}.`); break; }
+        if (st?.status === "refund") { setState("Relay couldn't complete it and refunded the money to the wallet."); break; }
+        if (st?.status) setState(`Moving… (${st.status})`);
+      }
+      await onAct("refresh", "settings", {}, "");
+    } catch (e) { setState((e as Error).message); }
+    setWorking(false);
+  };
+  if (!evm.length) return null;
+  if (!open) return <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => setOpen(true)}>⇄ Move funds between chains (Relay)</button>;
+  return (
+    <div className="ait-key">
+      <b>⇄ Move funds (Relay bridge)</b>
+      {!relay && <small className="aic-warn">Needs a free Relay API key: create one at relay.link (Developers → API keys) and add it in Vercel as <code>RELAY_API_KEY</code>, then redeploy.</small>}
+      <small className="muted">Bridges the trader&apos;s own coin to another of its chains, arriving in the same trader&apos;s wallet there, usually within seconds. Example: BNB on BNB Chain → HYPE on Elysium.</small>
+      <div className="aic-caller">
+        <select className="input" value={from} onChange={(e) => { setFrom(e.target.value); setQ(null); }} aria-label="From chain">
+          {evm.map((w) => <option key={w.chain} value={w.chain}>From {CHAIN_LABEL[w.chain]} ({w.balance == null ? "?" : w.balance.toFixed(4)} {w.native})</option>)}
+        </select>
+        <select className="input" value={to} onChange={(e) => { setTo(e.target.value); setQ(null); }} aria-label="To chain">
+          {list.filter((w) => w.chain !== from).map((w) => <option key={w.chain} value={w.chain}>To {CHAIN_LABEL[w.chain]} ({w.native})</option>)}
+        </select>
+        <span className="ait-in" style={{ width: 150 }}><input inputMode="decimal" placeholder="0.05" value={amount} onChange={(e) => { setAmount(e.target.value); setQ(null); }} aria-label="Amount to move" /><em>{fw?.native}</em></span>
+        <button type="button" className="btn small" disabled={working || busy || !relay || !(Number(amount) > 0)} onClick={getQuote}>{working && !q ? "Getting a price…" : "Get price"}</button>
+      </div>
+      {q && (
+        <div className="aic-sent">
+          <b>You get about {q.receive ?? "?"} {q.receiveSymbol} on {CHAIN_LABEL[to]}</b>
+          <small className="muted">Relay fee about ${q.feeUsd}{q.seconds ? ` · about ${q.seconds}s` : ""}</small>
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn small primary" disabled={working} onClick={move}>{working ? "Moving…" : "Move it"}</button>
+            <button type="button" className="btn small" onClick={() => setQ(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {state && <small className="aic-note" role="status">{state}</small>}
+      <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => { setOpen(false); setQ(null); setState(""); }}>Close</button>
     </div>
   );
 }
