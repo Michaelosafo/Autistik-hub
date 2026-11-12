@@ -6382,3 +6382,14 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .sq-box input,.sq-new > input{flex:1;min-width:160px;padding:9px 12px;border-radius:12px;border:1px solid rgba(var(--wc),.12);background:var(--surface-2);color:var(--ink)}
 .sq-new .ait-in{width:100px}
 .sq-pick{padding:8px 10px;border-radius:12px;border:1px solid rgba(var(--wc),.12);background:var(--surface-2);color:var(--ink);font-size:.85em}
+/* Per-caller / per-person size, stop-loss, take profit */
+.cr-row{flex-wrap:wrap}
+.cr-row .down{color:#E5484D}.cr-row .up{color:#22c55e}
+.cr-edit,.sq-medit{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%;padding-top:6px}
+.cr-edit .ait-in,.sq-medit .ait-in,.sq-risk .ait-in{width:112px}
+.sq-risk{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.sq-medit{padding:8px;border-radius:12px;background:rgba(181,124,255,.08);border:1px dashed rgba(181,124,255,.35)}
+.sq-chip-b{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.sq-chip-b small{font-weight:800;opacity:.8}
+.sq-chip.on{outline:2px solid rgba(181,124,255,.6)}
+.sq-chip-b:focus-visible{outline:2px solid #F0B90B;border-radius:8px}

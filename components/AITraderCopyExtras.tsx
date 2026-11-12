@@ -6,7 +6,31 @@
 import { useState } from "react";
 
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
-export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number; chat: string; chat_title: string | null };
+export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number; chat: string; chat_title: string | null; sl?: number | null; tp?: number | null };
+
+/** One caller: their size, stop-loss and take profit, editable in place. */
+function CallerRow({ c, label, busy, onAct, dsl, dtp }: { c: Caller; label: string; busy: boolean; onAct: Act; dsl: number; dtp: number }) {
+  const [edit, setEdit] = useState(false);
+  const [usd, setUsd] = useState(String(c.usd)), [sl, setSl] = useState(c.sl ? String(c.sl) : ""), [tp, setTp] = useState(c.tp ? String(c.tp) : "");
+  return (
+    <div className="aic-row on cr-row">
+      <span className="grow"><b>{label}</b>
+        <small className="muted">buys <b>${Number(c.usd).toLocaleString("en-US")}</b> · stop-loss <b className="down">−{c.sl || dsl}%</b>{c.sl ? "" : " (default)"} · take profit <b className="up">+{c.tp || dtp}%</b>{c.tp ? "" : " (default)"}</small>
+      </span>
+      {!edit && <button type="button" className="aic-x" disabled={busy} onClick={() => setEdit(true)} aria-label={`Edit ${label}`}>✏️</button>}
+      <button type="button" className="aic-x" aria-label={`Remove ${label}`} disabled={busy} onClick={() => onAct(`cl${c.id}`, "caller", { op: "remove", id: c.id })}>✕</button>
+      {edit && (
+        <form className="cr-edit" onSubmit={(e) => { e.preventDefault(); onAct(`cle${c.id}`, "caller", { op: "edit", id: c.id, usd: Number(usd), sl, tp }).then(() => setEdit(false)); }}>
+          <span className="ait-in"><em>$</em><input inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} aria-label="Dollars per buy" /></span>
+          <span className="ait-in"><em>SL −</em><input inputMode="decimal" value={sl} placeholder={String(dsl)} onChange={(e) => setSl(e.target.value)} aria-label="Stop-loss %" /><em>%</em></span>
+          <span className="ait-in"><em>TP +</em><input inputMode="decimal" value={tp} placeholder={String(dtp)} onChange={(e) => setTp(e.target.value)} aria-label="Take profit %" /><em>%</em></span>
+          <button type="submit" className="btn small primary" disabled={busy || !(Number(usd) > 0)}>Save</button>
+          <button type="button" className="btn small" onClick={() => setEdit(false)}>Cancel</button>
+        </form>
+      )}
+    </div>
+  );
+}
 export type Rebuy = { id: number; chain: string; token: string; symbol: string | null; sold_usd: number; low_usd: number | null; status: string; note: string | null; sold_at: string };
 
 /** What the trader buys from: tick any mix. Telegram and X calls are bought as called; General has the safety checks. */
@@ -36,8 +60,9 @@ export function SourcePicker({ tg, x, general, busy, onAct }: { tg: boolean; x: 
 /** A Telegram chat's id in one form ("c:123:hash" / "g:123" from the account login, -100123 / -123 from the bot). */
 const chatKey = (ref: string) => (/^[cgu]:/.test(ref) ? ref.split(":")[1] || "" : ref.replace(/^-100/, "").replace(/^-/, ""));
 
-export function Callers({ list, normal, groups, channels, busy, onAct }: { list: Caller[]; normal: string; groups: { ref: string; title: string }[]; channels: string[]; busy: boolean; onAct: Act }) {
+export function Callers({ list, normal, groups, channels, busy, onAct, dsl = 5, dtp = 100 }: { list: Caller[]; normal: string; groups: { ref: string; title: string }[]; channels: string[]; busy: boolean; onAct: Act; dsl?: number; dtp?: number }) {
   const [platform, setPlatform] = useState<"tg" | "x">("tg");
+  const [sl, setSl] = useState(""), [tp, setTp] = useState("");
   const [chat, setChat] = useState("");
   const [who, setWho] = useState("");
   const [usd, setUsd] = useState("");
@@ -50,8 +75,8 @@ export function Callers({ list, normal, groups, channels, busy, onAct }: { list:
   return (
     <div className="aic-block">
       <b>⭐ Callers</b>
-      <small className="muted"><b>Channels always buy every call.</b> For group chats, pick a group and add the good callers there: <b>a group with callers picked buys only their calls</b>; a group with nobody picked buys every call. Each caller has their own dollar amount per call (normal size is {normal}).</small>
-      <form className="aic-caller" onSubmit={(e) => { e.preventDefault(); if (who.trim() && Number(usd) > 0) { const t = opts.find((o) => o.key === chat)?.title; onAct("caller", "caller", { op: "add", platform, who, usd: Number(usd), chat: platform === "tg" ? chat : "", chatTitle: t }).then(() => setWho("")); } }}>
+      <small className="muted"><b>Channels always buy every call.</b> For group chats, pick a group and add the good callers there: <b>a group with callers picked buys only their calls</b>; a group with nobody picked buys every call. Each caller has their own dollar amount per call (normal size is {normal}) and can have their own stop-loss and take profit (blank = −{dsl}% / +{dtp}%).</small>
+      <form className="aic-caller" onSubmit={(e) => { e.preventDefault(); if (who.trim() && Number(usd) > 0) { const t = opts.find((o) => o.key === chat)?.title; onAct("caller", "caller", { op: "add", platform, who, usd: Number(usd), sl, tp, chat: platform === "tg" ? chat : "", chatTitle: t }).then(() => setWho("")); } }}>
         <select className="input" value={platform} onChange={(e) => setPlatform(e.target.value as "tg" | "x")} aria-label="Where they post">
           <option value="tg">Telegram</option>
           <option value="x">X</option>
@@ -64,6 +89,8 @@ export function Callers({ list, normal, groups, channels, busy, onAct }: { list:
         )}
         <input className="input" placeholder={platform === "tg" ? "@username or user id (several ok)" : "@handle"} value={who} onChange={(e) => setWho(e.target.value)} aria-label="Callers" />
         <span className="ait-in" style={{ width: 110 }}><em>$</em><input inputMode="decimal" placeholder="50" value={usd} onChange={(e) => setUsd(e.target.value)} aria-label="Dollars per buy" /></span>
+        <span className="ait-in" style={{ width: 118 }} title="Stop-loss for this caller's buys (blank = default)"><em>SL −</em><input inputMode="decimal" placeholder={String(dsl)} value={sl} onChange={(e) => setSl(e.target.value)} aria-label="Stop-loss %" /><em>%</em></span>
+        <span className="ait-in" style={{ width: 124 }} title="Take profit for this caller's buys (blank = default)"><em>TP +</em><input inputMode="decimal" placeholder={String(dtp)} value={tp} onChange={(e) => setTp(e.target.value)} aria-label="Take profit %" /><em>%</em></span>
         <button type="submit" className="btn small" disabled={busy || !who.trim() || !(Number(usd) > 0)}>Add</button>
       </form>
       {platform === "tg" && !chat && <small className="muted">&ldquo;All groups&rdquo; only sets their size wherever they post; it doesn&apos;t limit any group. To make a group buy only certain people, pick that group.</small>}
@@ -71,12 +98,7 @@ export function Callers({ list, normal, groups, channels, busy, onAct }: { list:
         <div className="stack" style={{ gap: 10 }}>{[...byGroup.entries()].map(([k, cs]) => (
           <div key={k} className="stack" style={{ gap: 6 }}>
             <small><b>{groupName(k)}</b>{k !== "" && k !== "x" ? " · only these callers are bought here" : ""}</small>
-            <div className="aic-list">{cs.map((c) => (
-              <div key={c.id} className="aic-row on">
-                <span className="grow"><b>{label(c)}</b><small className="muted">buys ${Number(c.usd).toLocaleString("en-US")} per call</small></span>
-                <button type="button" className="aic-x" aria-label={`Remove ${label(c)}`} disabled={busy} onClick={() => onAct(`cl${c.id}`, "caller", { op: "remove", id: c.id })}>✕</button>
-              </div>
-            ))}</div>
+            <div className="aic-list">{cs.map((c) => <CallerRow key={c.id} c={c} label={label(c)} busy={busy} onAct={onAct} dsl={dsl} dtp={dtp} />)}</div>
           </div>
         ))}</div>
       ) : <small className="muted">No callers yet: every call in your ticked groups is bought.</small>}
@@ -236,14 +258,30 @@ function MoveFunds({ list, relay, busy, onAct }: { list: LiveWallet[]; relay: bo
   );
 }
 
-export type Squad = { id: number; name: string; usd: number; enabled: boolean; members: { id: number; kind: "person" | "chat" | "x" | "wallet"; value: string; label: string | null }[] };
+export type Squad = { id: number; name: string; usd: number; enabled: boolean; sl?: number | null; tp?: number | null; members: { id: number; kind: "person" | "chat" | "x" | "wallet"; value: string; label: string | null; usd?: number | null; sl?: number | null; tp?: number | null }[] };
 const KIND_ICON: Record<string, string> = { person: "👤", chat: "📢", x: "𝕏", wallet: "👛" };
 
 /**
  * Squads: your own named groups of the people, chats, X accounts and wallets the bot buys from, filled from one box.
  * A squad member's call is always bought (even in a group with its own picked callers), at the squad's size.
  */
-export function Squads({ list, chats, normal, busy, onAct }: { list: Squad[]; chats: { ref: string; title: string; kind: string }[]; normal: string; busy: boolean; onAct: Act }) {
+/** One person in a squad: their own size, stop-loss and take profit (blank = the squad's). */
+function MemberEdit({ m, q, normal, dsl, dtp, busy, onAct, onDone }: { m: Squad["members"][number]; q: Squad; normal: string; dsl: number; dtp: number; busy: boolean; onAct: Act; onDone: () => void }) {
+  const [usd, setUsd] = useState(m.usd ? String(m.usd) : ""), [sl, setSl] = useState(m.sl ? String(m.sl) : ""), [tp, setTp] = useState(m.tp ? String(m.tp) : "");
+  return (
+    <form className="sq-medit" onSubmit={(e) => { e.preventDefault(); onAct(`sqm-${m.id}`, "squad", { op: "member", id: q.id, member: m.id, usd, sl, tp }).then(onDone); }}>
+      <b>{KIND_ICON[m.kind]} {m.label || m.value}</b>
+      <span className="ait-in"><em>$</em><input inputMode="decimal" value={usd} placeholder={q.usd ? String(q.usd) : normal} onChange={(e) => setUsd(e.target.value)} aria-label="Dollars per buy" /></span>
+      <span className="ait-in"><em>SL −</em><input inputMode="decimal" value={sl} placeholder={String(q.sl || dsl)} onChange={(e) => setSl(e.target.value)} aria-label="Stop-loss %" /><em>%</em></span>
+      <span className="ait-in"><em>TP +</em><input inputMode="decimal" value={tp} placeholder={String(q.tp || dtp)} onChange={(e) => setTp(e.target.value)} aria-label="Take profit %" /><em>%</em></span>
+      <button type="submit" className="btn small primary" disabled={busy}>Save</button>
+      <button type="button" className="btn small" onClick={onDone}>Close</button>
+      <small className="muted">Blank = the squad&apos;s setting.</small>
+    </form>
+  );
+}
+
+export function Squads({ list, chats, normal, busy, onAct, dsl = 5, dtp = 100 }: { list: Squad[]; chats: { ref: string; title: string; kind: string }[]; normal: string; busy: boolean; onAct: Act; dsl?: number; dtp?: number }) {
   const [name, setName] = useState("");
   const [usd, setUsd] = useState("");
   return (
@@ -252,7 +290,7 @@ export function Squads({ list, chats, normal, busy, onAct }: { list: Squad[]; ch
         <b>👥 Squads</b>
         <small className="muted">Group the people, channels, X accounts and wallets you trust. Their calls are always bought, at the squad&apos;s size (blank = normal size, {normal}).</small>
       </div>
-      {list.map((q) => <SquadCard key={q.id} q={q} chats={chats} normal={normal} busy={busy} onAct={onAct} />)}
+      {list.map((q) => <SquadCard key={q.id} q={q} chats={chats} normal={normal} busy={busy} onAct={onAct} dsl={dsl} dtp={dtp} />)}
       <form className="sq-new" onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return; onAct("squad-new", "squad", { op: "create", name, usd: Number(usd) || 0 }).then(() => { setName(""); setUsd(""); }); }}>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New squad name, like Top callers" maxLength={40} aria-label="Squad name" />
         <span className="ait-in"><em>$</em><input inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="Size" aria-label="Buy size in dollars" /></span>
@@ -262,8 +300,11 @@ export function Squads({ list, chats, normal, busy, onAct }: { list: Squad[]; ch
   );
 }
 
-function SquadCard({ q, chats, normal, busy, onAct }: { q: Squad; chats: { ref: string; title: string; kind: string }[]; normal: string; busy: boolean; onAct: Act }) {
+function SquadCard({ q, chats, normal, busy, onAct, dsl = 5, dtp = 100 }: { q: Squad; chats: { ref: string; title: string; kind: string }[]; normal: string; busy: boolean; onAct: Act; dsl?: number; dtp?: number }) {
   const [text, setText] = useState("");
+  const [sl, setSl] = useState(q.sl ? String(q.sl) : ""), [tp, setTp] = useState(q.tp ? String(q.tp) : "");
+  const [open, setOpen] = useState<number | null>(null);
+  const saveRisk = () => { if ((Number(sl) || null) !== (q.sl ?? null) || (Number(tp) || null) !== (q.tp ?? null)) onAct(`squad-risk-${q.id}`, "squad", { op: "update", id: q.id, sl, tp }, `${q.name}: stop-loss ${Number(sl) || dsl}%, take profit ${Number(tp) || dtp}%.`); };
   const [usd, setUsd] = useState(q.usd ? String(q.usd) : "");
   const add = (t: string) => { if (!t.trim()) return; onAct(`squad-add-${q.id}`, "squad", { op: "add", id: q.id, text: t }).then(() => setText("")); };
   const pickable = chats.filter((c) => c.kind === "group" || c.kind === "channel");
@@ -279,14 +320,23 @@ function SquadCard({ q, chats, normal, busy, onAct }: { q: Squad; chats: { ref: 
           onBlur={() => { if ((Number(usd) || 0) !== Number(q.usd)) onAct(`squad-usd-${q.id}`, "squad", { op: "update", id: q.id, usd: Number(usd) || 0 }, `${q.name}: ${Number(usd) ? `$${Number(usd)} a buy` : "normal size"}.`); }} aria-label={`${q.name} buy size`} /></span>
         <button type="button" className="sq-x" disabled={busy} onClick={() => { if (confirm(`Delete the squad "${q.name}"?`)) onAct(`squad-del-${q.id}`, "squad", { op: "delete", id: q.id }); }} aria-label={`Delete ${q.name}`}>🗑</button>
       </div>
+      <div className="sq-risk">
+        <span className="ait-in" title="Stop-loss for this squad's buys (blank = default)"><em>SL −</em><input inputMode="decimal" value={sl} placeholder={String(dsl)} onChange={(e) => setSl(e.target.value)} onBlur={saveRisk} aria-label={`${q.name} stop-loss %`} /><em>%</em></span>
+        <span className="ait-in" title="Take profit for this squad's buys (blank = default)"><em>TP +</em><input inputMode="decimal" value={tp} placeholder={String(dtp)} onChange={(e) => setTp(e.target.value)} onBlur={saveRisk} aria-label={`${q.name} take profit %`} /><em>%</em></span>
+        <small className="muted">Tap a person to give them their own size and stop-loss.</small>
+      </div>
       <div className="sq-chips">
         {q.members.length ? q.members.map((m) => (
-          <span key={m.id} className={"sq-chip " + m.kind} title={m.value}>
-            <i aria-hidden="true">{KIND_ICON[m.kind]}</i>{m.label || m.value}
+          <span key={m.id} className={"sq-chip " + m.kind + (open === m.id ? " on" : "")} title={m.value}>
+            <button type="button" className="sq-chip-b" onClick={() => setOpen(open === m.id ? null : m.id)} aria-expanded={open === m.id}>
+              <i aria-hidden="true">{KIND_ICON[m.kind]}</i>{m.label || m.value}
+              {(m.usd || m.sl || m.tp) && <small>{m.usd ? ` $${m.usd}` : ""}{m.sl ? ` −${m.sl}%` : ""}{m.tp ? ` +${m.tp}%` : ""}</small>}
+            </button>
             <button type="button" disabled={busy} onClick={() => onAct(`squad-rm-${m.id}`, "squad", { op: "unmember", id: q.id, member: m.id })} aria-label={`Remove ${m.label || m.value}`}>×</button>
           </span>
         )) : <small className="muted">Empty. Add people, channels or wallets below.</small>}
       </div>
+      {open != null && q.members.find((m) => m.id === open) && <MemberEdit key={open} m={q.members.find((m) => m.id === open)!} q={q} normal={normal} dsl={dsl} dtp={dtp} busy={busy} onAct={onAct} onDone={() => setOpen(null)} />}
       <form className="sq-box" onSubmit={(e) => { e.preventDefault(); add(text); }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder="@username, user id, t.me/… link, x.com/… link, or a wallet" aria-label={`Add to ${q.name}`} />
         <button type="submit" className="btn small primary" disabled={busy || !text.trim()}>Add</button>
