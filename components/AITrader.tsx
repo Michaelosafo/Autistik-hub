@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
+import AITraderCopy, { type CopyData } from "@/components/AITraderCopy";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
@@ -14,6 +15,7 @@ type S = {
   use_ai: boolean; last_run: string; last_note: string | null; chains: string[]; need_socials: boolean; manual_active: boolean; away_take_profit: number;
   signals_on: boolean; callers: string[]; caller_mcap_max: number; per_trade_usd: number;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
+  copy_on: boolean; copy_tp: number; copy_sl: number;
 };
 type P = {
   id: string; mode: string; chain: string; strategy?: string | null; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
@@ -21,7 +23,7 @@ type P = {
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
 type Sig = { id: number; at: string; source: string; who: string | null; body: string | null; url: string; chain: string; token: string; symbol: string | null; mcap: number | null; result: string | null };
-type Data = { perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
+type Data = { isOwner: boolean; traderId: number; copy: CopyData; perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
 const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
@@ -81,8 +83,9 @@ export default function AITrader() {
     <div className="stack ait">
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
-        <div className="label">Admin · testing</div>
+        <div className="label">{d.isOwner ? "Owner" : "Admin"} · your own trader</div>
         <h1>🤖 AI trader</h1>
+        <p className="muted ait-mine">This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>
         <p className="muted">It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
       </div>
 
@@ -100,6 +103,8 @@ export default function AITrader() {
         <small className="muted">{s.enabled ? "Stop halts all buying until you press Start again." : "Start makes it look for trades and buy."} Open coins are always protected by their stop-loss and target.</small>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>
+
+      <AITraderCopy c={d.copy} s={s} owner={d.owner} busy={!!busy} onAct={act} />
 
       <section className="ait-stats">
         <div><small>{live ? "Wallet BNB" : "Practice BNB"}</small><b>{cash == null ? "–" : fmtAmount(cash)}</b></div>

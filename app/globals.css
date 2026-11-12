@@ -6070,3 +6070,25 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .ait-tag.caller{background:rgba(181,124,255,.16);color:#9B5CFF}
 .ait-size{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
 .ait-size .btn{margin-left:auto}
+
+/* AI trader: copy trading */
+.aic.on{border-color:rgba(59,158,255,.45)}
+.aic-rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.aic-rules label{display:flex;flex-direction:column;gap:4px}
+.aic-block{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--surface-2)}
+.aic-ok{font-size:.8em;font-weight:700;padding:3px 10px;border-radius:99px;background:rgba(34,197,94,.14);color:#16a34a}
+.aic-warn{color:#d97706}
+.aic-list{display:flex;flex-direction:column;gap:6px}
+.aic-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer}
+.aic-row.on{border-color:rgba(59,158,255,.5)}
+.aic-row input{width:18px;height:18px;flex:none}
+.aic-row .grow{display:flex;flex-direction:column;min-width:0}
+.aic-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aic-x{border:0;background:none;color:var(--muted);font-size:1em;padding:4px 6px;cursor:pointer}
+.aic-add{display:flex;gap:6px;margin-top:4px}
+.aic-add .input{flex:1;min-width:0}
+.aic-note{font-weight:600}
+@media (max-width:520px){.aic-rules{grid-template-columns:1fr}}
+.aic-scroll{max-height:340px;overflow-y:auto;margin-top:6px}
+.aic-av{width:28px;height:28px;border-radius:50%;flex:none;background:var(--surface-2);object-fit:cover}
+.ait-mine{font-size:.85em}
