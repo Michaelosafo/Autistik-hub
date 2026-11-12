@@ -11,7 +11,7 @@ const I: Record<string, ReactNode> = {
   speakerOff: <><path d="M11 5 6 9H3v6h3l5 4z" /><path d="m16 9 5 6M21 9l-5 6" /></>,
   cam: <><rect x="2.5" y="6" width="13" height="12" rx="2.5" /><path d="m15.5 10.5 6-3.5v10l-6-3.5" /></>,
   camOff: <><path d="M15.5 13.5V8.5A2.5 2.5 0 0 0 13 6H8M2.5 8.5v7A2.5 2.5 0 0 0 5 18h8.5M15.5 10.5l6-3.5v10M3 3l18 18" /></>,
-  rec: <circle cx="12" cy="12" r="6" fill="currentColor" stroke="none" />,
+  rec: <><circle cx="12" cy="12" r="8.2" /><circle cx="12" cy="12" r="4.4" fill="currentColor" stroke="none" /></>,
   stop: <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor" stroke="none" />,
   rocket: <><path d="M5 15c-1.5 1.5-2 5-2 5s3.5-.5 5-2M14 4c3-1 6-1 6-1s0 3-1 6l-6 6-5-5z" /><circle cx="15" cy="9" r="1.5" /></>,
   link: <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></>,
