@@ -12,6 +12,7 @@
  */
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, getAddress, http, type PrivateKeyAccount } from "viem";
 import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { WCHAINS, WSOL } from "@/lib/wallet-chains";
 import { build, market, quote, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 
@@ -244,10 +245,16 @@ async function evmSell(chain: Exclude<LiveChain, "solana">, account: PrivateKeyA
 
 // ---------------------------------------------------------------- Solana (Jupiter)
 
+/**
+ * How much of a coin the wallet holds, read straight from its token accounts (classic and Token-2022). The free public
+ * Solana RPC refuses "list every token account" lookups (403 "Indexed requests"), so this asks for the exact accounts.
+ */
 async function solTokenRaw(owner: PublicKey, mint: string): Promise<{ raw: bigint; decimals: number }> {
-  const r = await solConn().getParsedTokenAccountsByOwner(owner, { mint: new PublicKey(mint) });
+  const m = new PublicKey(mint), conn = solConn();
+  const atas = [TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID].map((prog) => getAssociatedTokenAddressSync(m, owner, true, prog));
+  const bals = await Promise.all(atas.map((a) => conn.getTokenAccountBalance(a, "confirmed").then((r) => r.value).catch(() => null)));
   let raw = 0n, decimals = 0;
-  for (const a of r.value) { const t = (a.account.data as any).parsed?.info?.tokenAmount; if (t) { raw += BigInt(t.amount); decimals = Number(t.decimals); } }
+  for (const b of bals) if (b) { raw += BigInt(b.amount); decimals = Number(b.decimals); }
   return { raw, decimals };
 }
 
