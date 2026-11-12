@@ -7,7 +7,7 @@ import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaR
 import { cronDenied } from "@/lib/cron-auth";
 import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
-import { COPY_MAX_TAX, createSolWallet, liveWallets, revealSolKey } from "@/lib/ai-trader";
+import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, revealSolKey } from "@/lib/ai-trader";
 import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xFollowing, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
 
 export const runtime = "nodejs";
@@ -136,6 +136,12 @@ async function postMine(action: string, b: any) {
       if (typeof b.copy_on === "boolean") up.copy_on = b.copy_on;
       if (typeof b.rebuy_on === "boolean") up.rebuy_on = b.rebuy_on;
       if (typeof b.copy_check === "boolean") up.copy_check = b.copy_check;
+      // What it buys from: tick boxes. At least one stays on.
+      if (typeof b.use_tg === "boolean" || typeof b.use_x === "boolean" || typeof b.use_general === "boolean") {
+        const nx = { use_tg: typeof b.use_tg === "boolean" ? b.use_tg : cur.use_tg, use_x: typeof b.use_x === "boolean" ? b.use_x : cur.use_x, use_general: typeof b.use_general === "boolean" ? b.use_general : cur.use_general };
+        if (!nx.use_tg && !nx.use_x && !nx.use_general) return json({ error: "Keep at least one ticked: Telegram, X or General." }, 400);
+        Object.assign(up, nx, { trade_mode: nx.use_general ? "general" : nx.use_tg && nx.use_x ? "both" : nx.use_x ? "x" : "telegram" });
+      }
       if (["telegram", "both", "x", "general"].includes(b.trade_mode)) up.trade_mode = b.trade_mode;
       // Chains to trade on with real money (each needs its own coin in the wallet). BNB Chain can be switched off too.
       if (Array.isArray(b.live_chains)) {
@@ -293,6 +299,10 @@ async function postMine(action: string, b: any) {
     }
     case "sol-wallet": {
       try { const address = await createSolWallet(); return json({ ok: true, address, note: "Solana wallet created. Send SOL to it, then switch Solana on for live trading." }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "sol-key-import": {
+      try { const address = await importSolKey(String(b.key || "")); return json({ ok: true, address, note: `Now trading Solana from your wallet ${address.slice(0, 4)}…${address.slice(-4)}.` }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "sol-key-reveal": {

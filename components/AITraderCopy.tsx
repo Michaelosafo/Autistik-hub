@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
-import { Callers, LiveChains, ModePicker, RebuyBox, type Caller, type LiveWallet, type Rebuy } from "@/components/AITraderCopyExtras";
+import { Callers, LiveChains, SourcePicker, RebuyBox, type Caller, type LiveWallet, type Rebuy } from "@/components/AITraderCopyExtras";
 
 export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
 export type CopyData = {
@@ -15,7 +15,7 @@ export type CopyData = {
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
 };
-type Settings = { copy_check: boolean; enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
+type Settings = { use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean; enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
 
 async function call(action: string, body: unknown) {
@@ -75,7 +75,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
         <span>Honeypot check on copy trades <small className="muted">(off: buys every call. A honeypot can&apos;t be sold, so its stop-loss can&apos;t work.)</small></span>
       </label>
 
-      <ModePicker mode={s.trade_mode} busy={busy || !owner} onAct={onAct} />
+      <SourcePicker tg={s.use_tg} x={s.use_x} general={s.use_general} busy={busy || !owner} onAct={onAct} />
       <LiveChains list={c.wallets || []} live={s.mode === "live"} busy={busy || !owner} onAct={onAct} />
 
       <div className="aic-rules">
