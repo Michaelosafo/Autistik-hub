@@ -6318,3 +6318,26 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
   .lv-emo{width:32px;height:32px}
 }
 @media (prefers-reduced-motion:reduce){.lv-req{animation:none}}
+
+/* AI trader: trade facts (amount, source group, price range) */
+.ait-facts{display:flex;flex-direction:column;gap:6px;margin-top:6px;min-width:0}
+.ait-fact{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;font-size:.82em;color:var(--muted)}
+.ait-fact b{color:var(--ink)}
+.ait-fact i{font-style:normal}
+.ait-range{display:flex;flex-direction:column;gap:5px;padding:8px 10px;border-radius:12px;background:rgba(var(--wc),.05)}
+.ait-range-bar{position:relative;height:8px;border-radius:99px;background:linear-gradient(90deg,rgba(229,72,77,.35),rgba(var(--wc),.12) 50%,rgba(34,197,94,.35))}
+.ait-range-fill{position:absolute;top:0;bottom:0;border-radius:99px;min-width:2px}
+.ait-range-fill[data-up="1"]{background:#22c55e}
+.ait-range-fill[data-up="0"]{background:#E5484D}
+.ait-mk{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid var(--surface)}
+.ait-mk.entry{background:#F0B90B}
+.ait-mk.now.up{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25)}
+.ait-mk.now.down{background:#E5484D;box-shadow:0 0 0 3px rgba(229,72,77,.25)}
+.ait-range-l{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;font-size:.72em;color:var(--muted)}
+.ait-range-l span{display:flex;flex-direction:column;min-width:0}
+.ait-range-l span:nth-child(n+3){text-align:right}
+.ait-range-l b{color:var(--ink);font-weight:800;overflow:hidden;text-overflow:ellipsis}
+.ait-range-l b.up{color:#22c55e}.ait-range-l b.down{color:#E5484D}
+.ait-range-t{font-size:.72em;color:var(--muted)}
+.ait-range-t b.up{color:#22c55e}.ait-range-t b.down{color:#E5484D}
+.ait-b-name{min-width:0}
