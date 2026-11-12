@@ -6099,3 +6099,10 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .aic-qr{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px;border-radius:12px;background:var(--surface)}
 .aic-qr img{border-radius:10px;background:#fff;padding:6px;width:220px;height:220px}
 .aic-qr .stack{flex:1;min-width:200px}
+.aic-row.changed{outline:2px dashed rgba(59,158,255,.6);outline-offset:-2px}
+.aic-save{position:sticky;bottom:8px;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--line);font-weight:600;font-size:.9em;z-index:2}
+.aic-save span{flex:1}
+.aic-save.on{border-color:rgba(59,158,255,.7);box-shadow:0 6px 20px -10px rgba(59,158,255,.7)}
+.aic-caller{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.aic-caller select{width:auto;flex:none}
+.aic-caller > .input{flex:1;min-width:140px}
