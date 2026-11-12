@@ -106,9 +106,14 @@ type XQ = { from: XChain; to: XChain; fromToken: string; toToken: string; amount
 
 /** The best route: LI.FI and (from EVM networks, with RELAY_API_KEY) Relay are both asked; whichever delivers more wins. */
 export async function xQuote(p: XQ): Promise<XQuote> {
-  const [l, r] = await Promise.allSettled([lifiXQuote(p), relayXQuote(p)]);
+  const [l, r] = await Promise.allSettled([lifiXQuote({ order: "CHEAPEST", ...p }), relayXQuote(p)]);
   const lq = l.status === "fulfilled" ? l.value : null, rq = r.status === "fulfilled" ? r.value : null;
-  if (lq && rq) return BigInt(rq.toAmount) > BigInt(lq.toAmount) ? rq : lq;
+  if (lq && rq) {
+    // Cheapest overall: what arrives minus the gas you pay to send it. Both are priced in dollars when the routes say so.
+    const net = (q: XQuote) => (q.toUsd ?? 0) - (q.gasUsd ?? 0);
+    if (lq.toUsd != null && rq.toUsd != null) return net(rq) > net(lq) ? rq : lq;
+    return BigInt(rq.toAmount) > BigInt(lq.toAmount) ? rq : lq;
+  }
   if (lq || rq) return (lq || rq)!;
   throw (l as PromiseRejectedResult).reason;
 }
