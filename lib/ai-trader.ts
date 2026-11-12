@@ -26,7 +26,7 @@ import { SAFETY, safetyGate, type Gate } from "@/lib/ai-safety";
 import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
 import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
-import { tgaNewPosts } from "@/lib/tg-account";
+import { tgaWatch } from "@/lib/tg-account";
 import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, relayBridge, relayBridgeQuote, walletAddress, type LiveChain, type Wallets } from "@/lib/ai-trader-chains";
 import { Keypair } from "@solana/web3.js";
 
@@ -790,6 +790,7 @@ async function unseen(sigs: Signal[]): Promise<Signal[]> {
 
 /** Every minute: watch open coins for fast exits, then act on fresh signals (if the trader is started). */
 export async function runFast() {
+  const started = Date.now();
   const sb = supabaseService();
   const { data: go } = await sb.rpc("ai_trader_fast_lease_for", { p_trader: T(), p_seconds: 50 });
   if (go !== true) return { skipped: "running" };
@@ -811,9 +812,11 @@ export async function runFast() {
     }
     if (s.use_tg) {
       // Groups, channels and chats read through the admin's own Telegram account.
-      const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
-      if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
-      for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => [])));
+      // Kept open for most of the minute, checking every chat every ~2 seconds: buys land seconds after the call.
+      // Watch until ~50 seconds after this run started (the next run takes over a few seconds later).
+      const watchMs = Math.max(8_000, 50_000 - (Date.now() - started));
+      const errs = await tgaWatch(async (post) => out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => []))), watchMs).catch((e) => [(e as Error).message]);
+      if (errs.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${errs[0]}`.slice(0, 300) }).eq("id", T());
     }
   }
   // General mode only: X callers and DexScreener signals.
@@ -903,6 +906,9 @@ async function callerFor(platform: "tg" | "x", from: From, chat: string): Promis
   return { skip: false, caller: g ? { usd: n(g.usd), who: String(g.who) } : null };
 }
 
+/** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
+const claimed = new Set<string>();
+
 export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string; isChannel?: boolean }, source: "x" | "telegram", label: string): Promise<string[]> {
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
@@ -921,8 +927,21 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   for (const r of refs) {
     const f = await resolve(r, chains).catch(() => null);
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
+    // First call only: a CA that came through any of your groups or accounts before (or was ever traded) isn't bought again.
+    const key = sig.chain === "solana" ? sig.token : sig.token.toLowerCase();
+    const [{ data: seenSig }, { data: seenPos }] = await Promise.all([
+      tq("ai_trader_signals").select("id").eq("token", key).in("source", ["x", "telegram"]).limit(1),
+      tq("ai_trader_positions").select("id").eq("token", key).limit(1),
+    ]);
+    const sharedBefore = !!(seenSig?.length || seenPos?.length) || claimed.has(`${T()}:${key}`);
+    claimed.add(`${T()}:${key}`);
     const { data } = await tq("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("id");
     if (!data?.length) continue; // already handled this post
+    if (sharedBefore) {
+      await tq("ai_trader_signals").update({ result: "skipped: CA was shared before (only the first call is bought)", symbol: f?.symbol ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
+      out.push("skipped: shared before");
+      continue;
+    }
     out.push(await actOnCopy(s, sig, f, label, caller));
   }
   return out;
@@ -938,10 +957,10 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (!f || !f.price) return done(s.mode === "live" ? "skipped: no BNB Chain pool for it (live trading buys on BNB Chain only)" : "skipped: no pool on your chains yet");
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
   if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
-  const room = await buyRoom(s, f.chain);
+  // Money check and coin check side by side: every second counts on a fresh call.
+  const [room, g] = await Promise.all([buyRoom(s, f.chain), copyCheckFor(s, f.chain, f.token)]);
   if (typeof room === "string") return done(`skipped: ${room}`);
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
-  const g = await copyCheckFor(s, f.chain, f.token);
   if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
   const newProject = f.ageHours < 24;
   const why = `📡 Copy: ${label}.${caller ? ` Caller size $${caller.usd}.` : ""} Sells at +${s.copy_tp}% or -${s.copy_sl}%.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;

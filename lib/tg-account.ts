@@ -293,6 +293,61 @@ export type ChatPost = { text: string; chat: string; chatRef: string; isChannel:
  * Every minute: new messages in the trader's followed chats (groups, channels, private chats) (up to 25 chats, 30 messages each), since the last one
  * read. The first read of a chat only marks where to start, so old posts are never bought.
  */
+/**
+ * Fast watch: one Telegram connection kept open for `ms`, every ticked chat checked every `every` ms, each new post
+ * handed to `onPost` the moment it's seen (so a call is bought seconds after it's posted, not up to a minute later).
+ */
+export async function tgaWatch(onPost: (p: ChatPost) => Promise<unknown>, ms = 42_000, every = 2_000): Promise<string[]> {
+  const { data } = await tq("ai_trader_sources").select("id,ref,title,handle,last_msg_id").eq("kind", "tg_chat").eq("enabled", true).order("polled_at", { ascending: true }).limit(25);
+  const chats = (data || []) as { id: number; ref: string; title: string | null; handle: string | null; last_msg_id: number | null }[];
+  if (!chats.length) return [];
+  const s = await sessionGet();
+  if (!s) return ["Telegram account isn't logged in any more. Log in again on the AI trader page."];
+  const errors: string[] = [];
+  const last = new Map(chats.map((ch) => [ch.id, ch.last_msg_id]));
+  const failed = new Set<number>();
+  let c: TelegramClient | null = null;
+  const end = Date.now() + ms;
+  try {
+    c = await client(s);
+    while (Date.now() < end) {
+      const t0 = Date.now();
+      const found: ChatPost[] = [];
+      await Promise.all(chats.filter((ch) => !failed.has(ch.id)).map(async (ch) => {
+        try {
+          const prev = last.get(ch.id) ?? null;
+          const msgs: any[] = await c!.getMessages(peerOf(ch.ref), prev == null ? { limit: 1 } : { limit: 30, minId: Number(prev) });
+          const top = msgs.reduce((m, x) => Math.max(m, Number(x.id) || 0), Number(prev) || 0);
+          if (prev == null || top !== prev) {
+            last.set(ch.id, top);
+            await tq("ai_trader_sources").update({ polled_at: new Date().toISOString(), last_msg_id: top, ...(msgs.length && prev != null ? { last_post_at: new Date().toISOString() } : {}) }).eq("id", ch.id);
+          }
+          if (prev == null) return;
+          for (const m of [...msgs].sort((a, b) => Number(a.id) - Number(b.id))) {
+            const text = String(m.message || "");
+            if (!text) continue;
+            const snd: any = m.sender;
+            const from = { id: m.senderId != null ? String(m.senderId) : null, username: snd?.username ? String(snd.username).toLowerCase() : null };
+            found.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: ch.handle ? `https://t.me/${ch.handle}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from });
+          }
+        } catch (e) {
+          const msg = friendly(e);
+          // Telegram asked us to slow down: wait it out instead of hammering.
+          const wait = /FLOOD_WAIT_(\d+)|wait of (\d+) seconds/i.exec(String((e as any)?.message || ""));
+          if (wait) { failed.add(ch.id); errors.push(`${ch.title || "a chat"}: Telegram asked to slow down for ${wait[1] || wait[2]}s`); return; }
+          failed.add(ch.id); errors.push(`${ch.title || "a chat"}: ${msg}`);
+        }
+      }));
+      // Oldest first, one at a time, so two chats sharing the same coin can't both buy it.
+      for (const p of found.sort((a, b) => a.at - b.at)) await onPost(p).catch(() => {});
+      const left = every - (Date.now() - t0);
+      if (left > 0 && Date.now() + left < end) await new Promise((r) => setTimeout(r, left));
+    }
+  } catch (e) { errors.push(friendly(e)); }
+  finally { await close(c); }
+  return errors;
+}
+
 export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string[] }> {
   const { data } = await tq("ai_trader_sources").select("id,ref,title,handle,last_msg_id").eq("kind", "tg_chat").eq("enabled", true).order("polled_at", { ascending: true }).limit(25);
   const chats = (data || []) as { id: number; ref: string; title: string | null; handle: string | null; last_msg_id: number | null }[];
