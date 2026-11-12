@@ -3,7 +3,7 @@ import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
-import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaStart, tgaStatus } from "@/lib/tg-account";
+import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
 import { cronDenied } from "@/lib/cron-auth";
 import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
@@ -88,7 +88,7 @@ async function getMine(_req: Request, action: string) {
     copy: {
       sources: srcs || [], maxTax: COPY_MAX_TAX,
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
-      tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null })),
+      tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null, stage: null, hint: null, chats: null, chatsAt: null })),
       x: { loginReady: xLoginReady(), signedIn: !!s.x_username, username: s.x_username, canRead: await xReadReady().catch(() => false), communities: !!process.env.TWITTERAPI_IO_KEY },
     },
     perTradeBnb: await tradeSize(s).catch(() => s.per_trade),
@@ -169,14 +169,18 @@ async function postMine(action: string, b: any) {
       return json({ ok: true, note: "Signed out of X. Lists you follow stay saved but can't be read until you sign in again." });
     }
     case "tga-start": {
-      try { return json({ ok: true, ...(await tgaStart(String(b.phone || ""))) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+      try { return json({ ok: true, ...(await tgaStart(String(b.phone || ""), b.force === true)) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "tga-qr": {
-      try { return json({ ok: true, ...(await tgaQrStart()) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+      try { return json({ ok: true, ...(await tgaQrStart(b.force === true)) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "tga-qr-check": {
       try { const r = await tgaQrCheck(); if ("ok" in r) await log("settings", `Logged in with Telegram account ${r.name}.`); return json({ ok: true, ...r }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "tga-reset": {
+      await tgaReset();
+      return json({ ok: true });
     }
     case "tga-resend": {
       try { return json({ ok: true, ...(await tgaResend()) }); } catch (e) { return json({ error: (e as Error).message }, 400); }

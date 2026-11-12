@@ -34,7 +34,8 @@ function friendly(e: unknown): string {
   if (/PHONE_NUMBER_INVALID/.test(m)) return "That phone number isn't valid. Include the country code, like +233…";
   if (/PHONE_CODE_INVALID/.test(m)) return "That code is wrong. Check the code Telegram sent you and try again.";
   if (/PHONE_CODE_EXPIRED/.test(m)) return "That code has expired. Start again to get a new one.";
-  if (/PASSWORD_HASH_INVALID/.test(m)) return "That 2-step verification password is wrong.";
+  if (/PASSWORD_HASH_INVALID/.test(m)) return "That 2-step verification password is wrong. It's the extra password you set in Telegram → Settings → Privacy and Security → Two-Step Verification.";
+  if (/SRP_ID_INVALID|SRP_PASSWORD_CHANGED/.test(m)) return "That login timed out. Tap Start over and log in again.";
   if (/FLOOD_WAIT_(\d+)/.test(m)) return `Telegram asks to wait ${Math.ceil(Number(m.match(/FLOOD_WAIT_(\d+)/)![1]) / 60)} minutes before trying again.`;
   if (/AUTH_TOKEN_(EXPIRED|INVALID|ALREADY_ACCEPTED)/.test(m)) return "That QR code has expired. Tap Show QR code again.";
   if (/PHONE_NUMBER_BANNED/.test(m)) return "Telegram says this number is banned.";
@@ -67,8 +68,17 @@ const nextWay = (r: any): string | null => {
   return !k ? null : /Sms/.test(k) ? "by SMS" : /Call/.test(k) ? "by phone call" : /Email/.test(k) ? "by email" : "another way";
 };
 
+/** A login on another device is waiting for the 2-step password: don't throw it away unless asked to. */
+async function guard(force: boolean) {
+  if (force) return;
+  const { data } = await auth().select("stage,pending_at").eq("id", T()).maybeSingle();
+  if (data?.stage === "password" && data.pending_at && Date.now() - Date.parse(data.pending_at) < 10 * 60_000)
+    throw new Error("A login is already waiting for your 2-step password (maybe from another device). Type the password, or tap Start over.");
+}
+
 /** Step 1: Telegram sends a login code (it decides where: usually in the Telegram app itself). */
-export async function tgaStart(phoneRaw: string): Promise<{ sentTo: string; resend: string | null }> {
+export async function tgaStart(phoneRaw: string, force = false): Promise<{ sentTo: string; resend: string | null }> {
+  await guard(force);
   const phone = phoneRaw.replace(/[^\d+]/g, "").replace(/^(?!\+)/, "+");
   if (!/^\+\d{7,15}$/.test(phone)) throw new Error("Type your phone number with the country code, like +233…");
   let c: TelegramClient | null = null;
@@ -76,7 +86,7 @@ export async function tgaStart(phoneRaw: string): Promise<{ sentTo: string; rese
     c = await client();
     const r: any = await c.invoke(new Api.auth.SendCode({ phoneNumber: phone, apiId: apiId(), apiHash: apiHash(), settings: new Api.CodeSettings({}) }));
     // The half-finished session (same server key) has to be reused for the next step.
-    await auth().upsert({ id: T(), phone, code_hash: String(r.phoneCodeHash), pending_session: String(c.session.save()), pending_at: new Date().toISOString() });
+    await auth().upsert({ id: T(), phone, code_hash: String(r.phoneCodeHash), pending_session: String(c.session.save()), pending_at: new Date().toISOString(), stage: "code", pw_hint: null });
     return { sentTo: where(r), resend: nextWay(r) };
   } catch (e) { throw new Error(friendly(e)); }
   finally { await close(c); }
@@ -99,12 +109,14 @@ async function finish(c: TelegramClient) {
   const me: any = await c.getMe();
   await sessionSet(String(c.session.save()));
   const name = me?.username ? `@${me.username}` : [me?.firstName, me?.lastName].filter(Boolean).join(" ") || "your account";
-  await auth().update({ pending_session: null, code_hash: null, account_name: name, signed_in_at: new Date().toISOString() }).eq("id", T());
+  await auth().update({ pending_session: null, code_hash: null, stage: null, pw_hint: null, account_name: name, signed_in_at: new Date().toISOString() }).eq("id", T());
+  // Load the chat list right away, so it's there on every device.
+  await saveChats(c).catch(() => {});
   return name;
 }
 
-async function pending(): Promise<{ phone: string; code_hash: string; pending_session: string }> {
-  const { data } = await auth().select("phone,code_hash,pending_session,pending_at").eq("id", T()).maybeSingle();
+async function pending(): Promise<{ phone: string; code_hash: string; pending_session: string; stage: string | null; pw_hint: string | null }> {
+  const { data } = await auth().select("phone,code_hash,pending_session,pending_at,stage,pw_hint").eq("id", T()).maybeSingle();
   if (!data?.pending_session || !data.pending_at || Date.now() - Date.parse(data.pending_at) > 10 * 60_000) throw new Error("That login has expired. Start again.");
   return data as any;
 }
@@ -121,12 +133,13 @@ async function qrOf(r: any) {
  * QR login, like Telegram Desktop: shows a QR code (and a tg://login link) that the admin scans or opens in their
  * Telegram app (Settings → Devices → Link Desktop Device). No login code is sent, so nothing can get lost.
  */
-export async function tgaQrStart(): Promise<{ link: string; qr: string; expires: number }> {
+export async function tgaQrStart(force = false): Promise<{ link: string; qr: string; expires: number }> {
+  await guard(force);
   let c: TelegramClient | null = null;
   try {
     c = await client();
     const r: any = await c.invoke(new Api.auth.ExportLoginToken({ apiId: apiId(), apiHash: apiHash(), exceptIds: [] }));
-    await auth().upsert({ id: T(), phone: null, code_hash: null, pending_session: String(c.session.save()), pending_at: new Date().toISOString() });
+    await auth().upsert({ id: T(), phone: null, code_hash: null, pending_session: String(c.session.save()), pending_at: new Date().toISOString(), stage: "qr", pw_hint: null });
     return await qrOf(r);
   } catch (e) { throw new Error(friendly(e)); }
   finally { await close(c); }
@@ -135,6 +148,8 @@ export async function tgaQrStart(): Promise<{ link: string; qr: string; expires:
 /** Checks the QR login: done, a 2-step password needed, or still waiting (with a fresh QR when the old one expired). */
 export async function tgaQrCheck(): Promise<{ ok: true; name: string } | { needPassword: true; hint: string | null } | { waiting: true; link: string; qr: string; expires: number }> {
   const p = await pending();
+  if (p.stage === "password") return { needPassword: true, hint: p.pw_hint };
+  if (p.stage !== "qr") throw new Error("This QR login was replaced by a newer login. Tap Show QR code again.");
   let c: TelegramClient | null = null;
   try {
     c = await client(p.pending_session);
@@ -149,7 +164,7 @@ export async function tgaQrCheck(): Promise<{ ok: true; name: string } | { needP
     } catch (e) {
       if (/SESSION_PASSWORD_NEEDED/.test(String((e as any)?.errorMessage || e))) {
         const pw: any = await c.invoke(new Api.account.GetPassword());
-        await auth().update({ pending_session: String(c.session.save()), pending_at: new Date().toISOString() }).eq("id", T());
+        await auth().update({ pending_session: String(c.session.save()), pending_at: new Date().toISOString(), stage: "password", pw_hint: pw?.hint ? String(pw.hint) : null }).eq("id", T());
         return { needPassword: true, hint: pw?.hint ? String(pw.hint) : null };
       }
       throw e;
@@ -174,7 +189,7 @@ export async function tgaCode(codeRaw: string): Promise<{ ok: true; name: string
     } catch (e) {
       if (/SESSION_PASSWORD_NEEDED/.test(String((e as any)?.errorMessage || e))) {
         const pw: any = await c.invoke(new Api.account.GetPassword());
-        await auth().update({ pending_session: String(c.session.save()), pending_at: new Date().toISOString() }).eq("id", T());
+        await auth().update({ pending_session: String(c.session.save()), pending_at: new Date().toISOString(), stage: "password", pw_hint: pw?.hint ? String(pw.hint) : null }).eq("id", T());
         return { needPassword: true, hint: pw?.hint ? String(pw.hint) : null };
       }
       throw e;
@@ -188,6 +203,7 @@ export async function tgaCode(codeRaw: string): Promise<{ ok: true; name: string
 export async function tgaPassword(password: string): Promise<{ ok: true; name: string }> {
   if (!password) throw new Error("Type your 2-step verification password.");
   const p = await pending();
+  if (p.stage !== "password") throw new Error("This login isn't waiting for a password any more. Tap Start over and log in again.");
   let c: TelegramClient | null = null;
   try {
     c = await client(p.pending_session);
@@ -198,18 +214,29 @@ export async function tgaPassword(password: string): Promise<{ ok: true; name: s
   finally { await close(c); }
 }
 
+/** Throws away a half-finished login (any device), so a new one can start. */
+export async function tgaReset() {
+  await auth().update({ pending_session: null, code_hash: null, stage: null, pw_hint: null }).eq("id", T());
+}
+
 /** Signs the session out on Telegram's side too, and forgets it. */
 export async function tgaLogout() {
   const s = await sessionGet();
   if (s) { let c: TelegramClient | null = null; try { c = await client(s); await c.invoke(new Api.auth.LogOut()); } catch { /* already gone */ } finally { await close(c); } }
   await sessionSet(null);
-  await auth().update({ account_name: null, signed_in_at: null, pending_session: null, code_hash: null }).eq("id", T());
+  await auth().update({ account_name: null, signed_in_at: null, pending_session: null, code_hash: null, stage: null, pw_hint: null, chats: null, chats_at: null }).eq("id", T());
   await tq("ai_trader_sources").update({ enabled: false }).eq("kind", "tg_chat");
 }
 
-export async function tgaStatus(): Promise<{ ready: boolean; signedIn: boolean; name: string | null }> {
-  const { data } = await auth().select("account_name,signed_in_at").eq("id", T()).maybeSingle();
-  return { ready: tgAccountReady(), signedIn: !!data?.signed_in_at, name: data?.account_name ?? null };
+/** What every device should show: signed in (with the saved chat list), waiting for a password, or not signed in. */
+export async function tgaStatus(): Promise<{ ready: boolean; signedIn: boolean; name: string | null; stage: string | null; hint: string | null; chats: MyChat[] | null; chatsAt: string | null }> {
+  const { data } = await auth().select("account_name,signed_in_at,stage,pw_hint,pending_at,chats,chats_at").eq("id", T()).maybeSingle();
+  const live = !!data?.pending_at && Date.now() - Date.parse(data.pending_at) < 10 * 60_000;
+  return {
+    ready: tgAccountReady(), signedIn: !!data?.signed_in_at, name: data?.account_name ?? null,
+    stage: live ? data?.stage ?? null : null, hint: live ? data?.pw_hint ?? null : null,
+    chats: Array.isArray(data?.chats) ? (data!.chats as MyChat[]) : null, chatsAt: data?.chats_at ?? null,
+  };
 }
 
 /**
@@ -226,27 +253,36 @@ function peerOf(ref: string): any {
 
 export type MyChat = { ref: string; title: string; kind: "group" | "channel" | "chat" | "bot"; members: number | null; username: string | null };
 
-/** Every group, channel and private chat (people and bots) of the signed-in account, most recent first. */
+/** Every group, channel and private chat (people and bots) of an open client, most recent first. */
+async function listChats(c: TelegramClient): Promise<MyChat[]> {
+  const ds: any[] = await c.getDialogs({ limit: 400 });
+  const out: MyChat[] = [];
+  for (const d of ds) {
+    const e: any = d.entity;
+    if (!e) continue;
+    if (e.className === "Channel") out.push({ ref: `c:${e.id}:${e.accessHash}`, title: String(e.title || "Channel"), kind: e.broadcast ? "channel" : "group", members: e.participantsCount ?? null, username: e.username || null });
+    else if (e.className === "Chat" && !e.deactivated) out.push({ ref: `g:${e.id}`, title: String(e.title || "Group"), kind: "group", members: e.participantsCount ?? null, username: null });
+    else if (e.className === "User" && !e.self && !e.deleted && e.accessHash != null && String(e.id) !== "777000") {
+      const name = [e.firstName, e.lastName].filter(Boolean).join(" ") || (e.username ? `@${e.username}` : "Chat");
+      out.push({ ref: `u:${e.id}:${e.accessHash}`, title: name, kind: e.bot ? "bot" : "chat", members: null, username: e.username || null });
+    }
+  }
+  return out;
+}
+/** Saves the chat list with the trader, so every device shows it straight away. */
+async function saveChats(c: TelegramClient): Promise<MyChat[]> {
+  const list = await listChats(c);
+  await auth().update({ chats: list, chats_at: new Date().toISOString() }).eq("id", T());
+  return list;
+}
+
+/** Reloads the chat list from Telegram (and saves it for every device). */
 export async function tgaChats(): Promise<MyChat[]> {
   const s = await sessionGet();
   if (!s) throw new Error("Log in with your Telegram account first.");
   let c: TelegramClient | null = null;
-  try {
-    c = await client(s);
-    const ds: any[] = await c.getDialogs({ limit: 400 });
-    const out: MyChat[] = [];
-    for (const d of ds) {
-      const e: any = d.entity;
-      if (!e) continue;
-      if (e.className === "Channel") out.push({ ref: `c:${e.id}:${e.accessHash}`, title: String(e.title || "Channel"), kind: e.broadcast ? "channel" : "group", members: e.participantsCount ?? null, username: e.username || null });
-      else if (e.className === "Chat" && !e.deactivated) out.push({ ref: `g:${e.id}`, title: String(e.title || "Group"), kind: "group", members: e.participantsCount ?? null, username: null });
-      else if (e.className === "User" && !e.self && !e.deleted && e.accessHash != null && String(e.id) !== "777000") {
-        const name = [e.firstName, e.lastName].filter(Boolean).join(" ") || (e.username ? `@${e.username}` : "Chat");
-        out.push({ ref: `u:${e.id}:${e.accessHash}`, title: name, kind: e.bot ? "bot" : "chat", members: null, username: e.username || null });
-      }
-    }
-    return out;
-  } catch (e) { throw new Error(friendly(e)); }
+  try { c = await client(s); return await saveChats(c); }
+  catch (e) { throw new Error(friendly(e)); }
   finally { await close(c); }
 }
 
