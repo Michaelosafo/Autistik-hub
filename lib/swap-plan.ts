@@ -215,7 +215,7 @@ export async function planSwap(input: string | SwapAsk, who: { evm: string | nul
     const none = { quote: null, engine: null, relay: null, topupUsd: null };
     const viaLifi = async (): Promise<SwapOption> => {
       const slipBps = stable(s.t.symbol, tt.symbol) ? 50 : 100;
-      const q = await xQuote({ from: s.c, to, fromToken: s.t.address, toToken: tt.address, amount: s.raw!, fromAddress: s.owner, toAddress: addr(to)!, slippageBps: slipBps, order: "CHEAPEST", feeBps: CHAT_FEE_BPS });
+      const q = await xQuote({ from: s.c, to, fromToken: s.t.address, toToken: tt.address, amount: s.raw!, fromAddress: s.owner, toAddress: addr(to)!, slippageBps: slipBps, order: "CHEAPEST", feeBps: CHAT_FEE_BPS, route: "best" });
       return { ...base, ...none, via: "lifi", toAmount: q.toAmount, toAmountMin: q.toAmountMin, fromUsd: q.fromUsd, toUsd: q.toUsd, gasUsd: q.gasUsd, feeUsd: q.feeUsd,
         tool: q.toolName, seconds: q.seconds, slipBps, feeBps: q.feeBps, costUsd: (q.gasUsd ?? 0) + (q.feeUsd ?? 0) || null, netUsd: q.toUsd != null ? q.toUsd - (q.gasUsd ?? 0) : null, quote: q };
     };
@@ -250,7 +250,10 @@ export async function planSwap(input: string | SwapAsk, who: { evm: string | nul
     throw new Error(String(why?.reason?.message || "No route found for this swap. Try a bigger amount."));
   }
   // Most value in hand after every fee first; then the lowest fees. One route per pair of networks (the better one).
-  options.sort((a, b) => (b.netUsd ?? -1) - (a.netUsd ?? -1) || (a.costUsd ?? 1e9) - (b.costUsd ?? 1e9));
+  // Relay first (lowest fees); KyberSwap first only when they ask for it ("swap … with kyber"). Then most value after fees.
+  const wantsKyber = typeof input === "string" && /\bkyber(swap)?\b/i.test(input);
+  const first = (o: SwapOption) => (wantsKyber ? (o.tool === "KyberSwap" ? 0 : 1) : (o.via === "relay" ? 0 : 1));
+  options.sort((a, b) => first(a) - first(b) || (b.netUsd ?? -1) - (a.netUsd ?? -1) || (a.costUsd ?? 1e9) - (b.costUsd ?? 1e9));
   const seen = new Set<string>();
   options = options.filter((o) => { const k = `${o.fromChain}-${o.toChain}-${o.toToken.address}`; if (seen.has(k)) return false; seen.add(k); return true; });
   const tried = new Set(results.flatMap((r) => (r.status === "fulfilled" ? [r.value.via] : []))).size;
