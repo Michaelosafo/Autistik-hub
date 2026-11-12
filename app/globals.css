@@ -6393,3 +6393,9 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .sq-chip-b small{font-weight:800;opacity:.8}
 .sq-chip.on{outline:2px solid rgba(181,124,255,.6)}
 .sq-chip-b:focus-visible{outline:2px solid #F0B90B;border-radius:8px}
+
+/* Logo in the top bars: a smaller mark with AUTISTIK written very small underneath */
+.logo-badge{display:inline-flex;flex-direction:column;align-items:center;gap:1px;line-height:1}
+.logo-badge small{font-family:var(--f-display,inherit);font-size:7.5px;font-weight:900;letter-spacing:.22em;padding-left:.22em;
+  background:linear-gradient(90deg,#FFD84D,#B57CFF,#4FD1FF);-webkit-background-clip:text;background-clip:text;color:transparent;opacity:.95}
+.ax-logo .logo-badge,.lp-logo .logo-badge{transition:transform .2s}
