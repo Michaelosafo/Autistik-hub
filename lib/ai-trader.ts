@@ -40,6 +40,7 @@ export type Settings = {
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
+  trade_mode: "telegram" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -47,6 +48,7 @@ export type Position = {
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number;
   why: string | null; buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null;
   close_reason: string | null; opened_at: string; closed_at: string | null; strategy: string | null; pool: string | null;
+  new_project?: boolean | null;
 };
 
 const C = WCHAINS.bsc;
@@ -144,7 +146,9 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", T()).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl", "rebuy_dump", "rebuy_tp"]) s[k] = n(s[k]);
+  if (!["telegram", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
+  s.rebuy_on = s.rebuy_on !== false;
   s.copy_on = s.copy_on !== false;
   s.callers = Array.isArray(s.callers) ? s.callers : [];
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
@@ -344,7 +348,8 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       status: "closed", received, pnl, pnl_pct: n(p.spent) ? (pnl / n(p.spent)) * 100 : null, close_reason: reason, sell_tx: sellTx,
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
-    if (p.strategy === "copy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
+    if (p.strategy === "copy" && p.new_project && reason.startsWith("Take profit") && price) await startRebuyWatch(p, price).catch(() => {});
+    if (p.strategy === "copy" || p.strategy === "rebuy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
     await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
     await tq("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
@@ -398,7 +403,7 @@ async function manage(s: Settings) {
     const rug = m?.liquidity != null && m.liquidity < rugLine;
     // Copy trades (coins posted in the groups you follow) always sell at their own target or stop-loss, even when
     // you're in control: nothing else (trailing stop, sellers taking over, max hold) closes them.
-    if (p.strategy === "copy") {
+    if (p.strategy === "copy" || p.strategy === "rebuy") {
       const cw = rug ? "Liquidity dropped sharply (possible rug)" : ch <= -n(p.stop_loss) ? `Stop-loss (${ch.toFixed(1)}%)` : ch >= n(p.take_profit) ? `Take profit (+${ch.toFixed(1)}%)` : null;
       if (cw) await closePosition({ ...p, high_usd: high }, cw, price);
       continue;
@@ -534,10 +539,11 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 
 /** Buys one coin (practice or live) and records it with its own stop and target. */
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
-  o: { sl: number; tp: number; why: string; strategy: string; trail?: number }) {
+  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean }) {
   const sb = supabaseService();
-  const spend = Math.min(await tradeSize(s), cash);
   const bnb = await bnbUsd();
+  // A caller with their own size buys that many dollars' worth; everyone else uses the normal trade size.
+  const spend = Math.min(o.usd && o.usd > 0 ? +(o.usd / bnb).toFixed(6) : await tradeSize(s), cash);
   let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18;
   if (s.mode === "paper" || c.chain !== "bsc") {
     const slip = Math.min(0.15, 0.01 + ((spend * bnb) / Math.max(1, c.liquidity)) * 2); // small pools move a lot
@@ -553,7 +559,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   const { error } = await tq("ai_trader_positions").insert({
     mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
-    strategy: o.strategy, pool: c.pool || null,
+    strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
   const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : o.strategy === "copy" ? "📡" : "⚡";
@@ -613,6 +619,8 @@ export async function runTrader({ force = false } = {}) {
     return note(`Paused: daily loss limit reached (${lost.toFixed(4)} BNB).`);
   }
   if (!s.enabled) return note("Checked open positions (paused, so no new buys).");
+  // Telegram only / X only: the trader buys only coins called in what you follow, never from its own scanning.
+  if (s.trade_mode !== "general") return note(s.trade_mode === "telegram" ? "Telegram only: buying coins called in your followed Telegram chats (no scanning)." : "X only: buying coins posted by your followed X sources (no scanning).");
 
   const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
@@ -696,32 +704,40 @@ export async function runFast() {
   const s = await getSettings();
   if (s.mode === "live" && !(await traderAccount())) return { skipped: "no wallet" };
   await manage(s).catch((e) => log("error", `Exit check failed: ${(e as Error).message}`));
-  if (s.enabled) await recheckWatch(s).catch((e) => log("error", `Watch list check failed: ${(e as Error).message}`));
-  if (!s.enabled || !s.signals_on) return { ok: true, buys: "stopped" };
+  const general = s.trade_mode === "general";
+  if (s.enabled && general) await recheckWatch(s).catch((e) => log("error", `Watch list check failed: ${(e as Error).message}`));
+  if (s.enabled && s.copy_on && s.rebuy_on) await rebuyCheck(s).catch((e) => log("error", `Re-buy check failed: ${(e as Error).message}`));
+  if (!s.enabled) return { ok: true, buys: "stopped" };
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const out: string[] = [];
-  // Followed X accounts, Lists and Communities: copy trades.
+  // Copy trades from what you follow, depending on the trading mode.
   if (s.copy_on) {
-    const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
-    if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", T());
-    for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at }, "x", post.label).catch(() => [])));
-    // Groups and channels read through the admin's own Telegram account.
-    const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
-    if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
-    for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at }, "telegram", `posted in "${post.chat}" on Telegram`).catch(() => [])));
-  }
-  // X callers first (they move fastest), then DexScreener.
-  if (xReady() && s.callers.length) {
-    const posts = await xPosts(s.callers).catch(() => []);
-    for (const post of posts.slice(0, 5)) {
-      const found = await postSignals(post, "x", chains).catch(() => []);
-      const newOnes = await unseen(found.map((x) => x.sig));
-      for (const x of found.filter((x) => newOnes.includes(x.sig))) out.push(await actOnSignal(s, x.sig, x.flow));
+    if (s.trade_mode !== "telegram") {
+      const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
+      if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", T());
+      for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at, from: { username: post.user } }, "x", post.label).catch(() => [])));
+    }
+    if (s.trade_mode !== "x") {
+      // Groups, channels and chats read through the admin's own Telegram account.
+      const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
+      if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
+      for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => [])));
     }
   }
-  // Only the newest few are recorded each minute, so none are marked seen without being checked.
-  const dex = await unseen((await dexSignals(chains).catch(() => [])).slice(0, 12));
-  for (const g of dex) out.push(await actOnSignal(s, g, null));
+  // General mode only: X callers and DexScreener signals.
+  if (general && s.signals_on) {
+    if (xReady() && s.callers.length) {
+      const posts = await xPosts(s.callers).catch(() => []);
+      for (const post of posts.slice(0, 5)) {
+        const found = await postSignals(post, "x", chains).catch(() => []);
+        const newOnes = await unseen(found.map((x) => x.sig));
+        for (const x of found.filter((x) => newOnes.includes(x.sig))) out.push(await actOnSignal(s, x.sig, x.flow));
+      }
+    }
+    // Only the newest few are recorded each minute, so none are marked seen without being checked.
+    const dex = await unseen((await dexSignals(chains).catch(() => [])).slice(0, 12));
+    for (const g of dex) out.push(await actOnSignal(s, g, null));
+  }
   return { ok: true, signals: out.length, bought: out.filter((x) => x.startsWith("bought")).length };
 }
 
@@ -756,9 +772,22 @@ export async function copyGate(chain: string, token: string): Promise<{ ok: true
  * (no market-cap, liquidity, socials or momentum rules), as long as it isn't a honeypot, with the copy target and
  * stop-loss. $TICKERS alone are ignored, since many coins share a ticker and copycats use them.
  */
-export async function copyPost(post: { text: string; user: string; url: string; at: number }, source: "x" | "telegram", label: string): Promise<string[]> {
+export type From = { id?: string | null; username?: string | null } | null | undefined;
+
+/** The $ amount set for whoever posted (by username or user id), if any. */
+async function callerUsd(platform: "tg" | "x", from: From): Promise<{ usd: number; who: string } | null> {
+  const keys = [from?.username?.replace(/^@/, "").toLowerCase(), from?.id ? String(from.id) : null].filter(Boolean) as string[];
+  if (!keys.length) return null;
+  const { data } = await tq("ai_trader_callers").select("who,usd").eq("platform", platform).in("who", keys).limit(1);
+  return data?.[0] ? { usd: n(data[0].usd), who: String(data[0].who) } : null;
+}
+
+export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From }, source: "x" | "telegram", label: string): Promise<string[]> {
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
+  // Telegram only mode ignores X, X only mode ignores Telegram.
+  if ((source === "x" && s.trade_mode === "telegram") || (source === "telegram" && s.trade_mode === "x")) return [];
+  const caller = await callerUsd(source === "x" ? "x" : "tg", post.from).catch(() => null);
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
@@ -769,12 +798,12 @@ export async function copyPost(post: { text: string; user: string; url: string; 
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
     const { data } = await tq("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("id");
     if (!data?.length) continue; // already handled this post
-    out.push(await actOnCopy(s, sig, f, label));
+    out.push(await actOnCopy(s, sig, f, label, caller));
   }
   return out;
 }
 
-async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string): Promise<string> {
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: { usd: number; who: string } | null = null): Promise<string> {
   const sb = supabaseService();
   const done = async (r: string) => {
     await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
@@ -789,10 +818,11 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
   const g = await copyGate(f.chain, f.token);
   if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
-  const why = `📡 Copy: ${label}. Sells at +${s.copy_tp}% or -${s.copy_sl}%.`;
+  const newProject = f.ageHours < 24;
+  const why = `📡 Copy: ${label}.${caller ? ` Caller size $${caller.usd}.` : ""} Sells at +${s.copy_tp}% or -${s.copy_sl}%.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
   try {
-    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.copy_tp, why, strategy: "copy", trail: 0 });
-    const spend = await tradeSize(s).catch(() => s.per_trade);
+    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.copy_tp, why, strategy: "copy", trail: 0, usd: caller?.usd ?? null, newProject });
+    const spend = caller ? caller.usd / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
     await tgNotify(`📡 Bought ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(Math.min(spend, room.cash))} BNB${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${s.copy_tp}% or -${s.copy_sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
     return done(`bought: ${r}`);
   } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`); }
@@ -814,4 +844,49 @@ export async function runAll(kind: "scan" | "fast") {
   const ids = [...new Set([...(on || []).map((r: any) => Number(r.id)), ...(holding || []).map((r: any) => Number(r.trader_id))])].filter((x) => x > 0);
   const out = await Promise.all(ids.map((id) => withTrader(id, () => (kind === "scan" ? runTrader() : runFast())).then((r) => [id, r] as const).catch((e) => [id, { error: (e as Error).message }] as const)));
   return Object.fromEntries(out);
+}
+
+// ---------------------------------------------------------------- Dump re-buy (new projects)
+
+/** After a new project (under 24h old when bought) is sold at its copy target, watch it for a deep dump. */
+async function startRebuyWatch(p: Position, soldUsd: number) {
+  await tq("ai_trader_rebuy").insert({ mode: p.mode, chain: p.chain, token: p.token, symbol: p.symbol, sold_usd: soldUsd, low_usd: soldUsd });
+  const s = await getSettings();
+  await log("watch", `👀 Re-buy watch: ${p.symbol} sold at 2x; buys back if it dumps ${s.rebuy_dump}% from $${soldUsd.toPrecision(4)} with heavy volume.`);
+}
+
+/**
+ * Every minute: for each watched coin (up to 48 hours after its sale), buy it back once it has dumped the re-buy
+ * amount (default 60%) below the sell price AND trading is heavy (last-hour volume at least half the pool, or 30+
+ * trades in 5 minutes) AND buyers are back (at least as many buys as sells in 5 minutes). Still honeypot-checked.
+ * It then sells on the bounce (default +40%) or the copy stop-loss.
+ */
+async function rebuyCheck(s: Settings) {
+  const { data } = await tq("ai_trader_rebuy").select("*").eq("status", "watching").eq("mode", s.mode).order("sold_at", { ascending: true }).limit(10);
+  const chains = s.mode === "live" ? ["bsc"] : s.chains;
+  for (const w of (data || []) as any[]) {
+    const set = (v: Record<string, unknown>) => tq("ai_trader_rebuy").update(v).eq("id", w.id);
+    if (Date.now() - Date.parse(w.sold_at) > 48 * 36e5) { await set({ status: "expired", note: "no deep dump within 48h" }); continue; }
+    const f = await resolve({ chain: w.chain, token: w.token }, [w.chain]).catch(() => null);
+    if (!f || !f.price) continue;
+    const low = Math.min(n(w.low_usd) || f.price, f.price);
+    if (low !== n(w.low_usd)) await set({ low_usd: low });
+    const drop = (1 - f.price / n(w.sold_usd)) * 100;
+    if (drop < s.rebuy_dump) continue;
+    const heavy = f.vol1h >= f.liquidity * 0.5 || f.buys5 + f.sells5 >= 30;
+    if (!heavy) { await set({ note: `down ${drop.toFixed(0)}%, waiting for heavy volume` }); continue; }
+    if (f.buys5 < f.sells5) { await set({ note: `down ${drop.toFixed(0)}% on heavy volume, waiting for buyers to step in` }); continue; }
+    if (!chains.includes(f.chain)) { await set({ status: "expired", note: `${f.chain} isn't switched on` }); continue; }
+    const room = await buyRoom(s);
+    if (typeof room === "string") { await set({ note: `ready, but ${room}` }); continue; }
+    if (room.held.has(f.token.toLowerCase())) { await set({ status: "expired", note: "already holding it" }); continue; }
+    const g = await copyGate(f.chain, f.token);
+    if (!g.ok) { await set({ status: "expired", note: g.reason }); continue; }
+    try {
+      const why = `🔁 Dump re-buy: down ${drop.toFixed(0)}% from the 2x sell with heavy volume (${f.buys5} buys / ${f.sells5} sells in 5m). Sells at +${s.rebuy_tp}% or -${s.copy_sl}%.`;
+      const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl: s.copy_sl, tp: s.rebuy_tp, why, strategy: "rebuy", trail: 0 });
+      await set({ status: "bought", note: r });
+      await tgNotify(`🔁 Bought back ${f.symbol} after a ${drop.toFixed(0)}% dump on heavy volume. Sells at +${s.rebuy_tp}% or -${s.copy_sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
+    } catch (e) { await set({ note: `buy failed: ${(e as Error).message.slice(0, 80)}` }); }
+  }
 }

@@ -65,6 +65,21 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
   async function go(fn: () => Promise<void>) { setWorking(true); setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } setWorking(false); }
   const done = async (name: string) => { setStep("qr"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Your groups, channels and chats are below: tick the ones to copy.`); await reload(); };
   const mine = sources.filter((x) => x.kind === "tg_chat");
+  // Ticks you haven't saved yet (chat ref → on / off). Nothing changes until you press Save.
+  const [draft, setDraft] = useState<Record<string, boolean>>({});
+  const isOn = (ref: string) => (ref in draft ? draft[ref] : !!mine.find((x) => x.ref === ref)?.enabled);
+  const changes = Object.entries(draft).filter(([ref, on]) => on !== !!mine.find((x) => x.ref === ref)?.enabled);
+  const save = () => go(async () => {
+    const byRef = new Map((chats || []).map((c) => [c.ref, c]));
+    const set: { id: number; enabled: boolean }[] = [], adds: { kind: string; ref: string; title: string; handle: string | null }[] = [];
+    for (const [ref, on] of changes) {
+      const have = mine.find((x) => x.ref === ref);
+      if (have) set.push({ id: have.id, enabled: on });
+      else if (on) { const c = byRef.get(ref); adds.push({ kind: "tg_chat", ref, title: c?.title || "Telegram chat", handle: c?.username || null }); }
+    }
+    const r = await call("source", { op: "batch", set, adds });
+    setDraft({}); await reload(); setMsg(r.note || "Saved.");
+  });
 
   if (!st.ready) return (
     <small className="muted">To log in with your own Telegram account, open <a href="https://my.telegram.org/apps" target="_blank" rel="noopener noreferrer">my.telegram.org/apps</a>, sign in with your number, create an app (any name), and copy its <b>App api_id</b> and <b>App api_hash</b> into Vercel as <code>TELEGRAM_API_ID</code> and <code>TELEGRAM_API_HASH</code>. Then redeploy. It&apos;s free.</small>
@@ -158,16 +173,20 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
               <input className="input" placeholder={`Search ${shown.length} ${tab === "all" ? "chats" : tab === "chat" ? "private chats" : tab + "s"}`} value={find} onChange={(e) => setFind(e.target.value)} aria-label="Search your Telegram chats" />
               <div className="aic-list aic-scroll">{shown.slice(0, 300).map((ch) => {
                 const have = mine.find((x) => x.ref === ch.ref);
+                const on = isOn(ch.ref), changed = ch.ref in draft && on !== !!have?.enabled;
                 return (
-                  <label key={ch.ref} className={"aic-row" + (have?.enabled ? " on" : "")}>
-                    <input type="checkbox" checked={!!have?.enabled} disabled={busy || working}
-                      onChange={(e) => have ? onAct(`src${have.id}`, "source", { op: "toggle", id: have.id, enabled: e.target.checked }, e.target.checked ? `Copying ${ch.title}.` : `Stopped copying ${ch.title}.`)
-                        : onAct("add", "source", { op: "add", kind: "tg_chat", ref: ch.ref, title: ch.title, handle: ch.username })} />
+                  <label key={ch.ref} className={"aic-row" + (on ? " on" : "") + (changed ? " changed" : "")}>
+                    <input type="checkbox" checked={on} disabled={busy || working} onChange={(e) => setDraft((d) => ({ ...d, [ch.ref]: e.target.checked }))} />
                     <span className="grow"><b>{ch.title}</b><small className="muted">{kindLabel[ch.kind]}{ch.username ? ` · @${ch.username}` : ""}{ch.members ? ` · ${ch.members.toLocaleString("en-US")} members` : ""}{have?.enabled ? ` · ${ago(have.last_post_at)}` : ""}</small></span>
                   </label>
                 );
               })}</div>
-              <small className="muted">Ticked chats are read every minute (up to 25). Only messages posted after you tick one are copied.</small>
+              <div className={"aic-save" + (changes.length ? " on" : "")}>
+                <span>{changes.length ? `${changes.length} change${changes.length === 1 ? "" : "s"} not saved` : `${mine.filter((x) => x.enabled).length} chat${mine.filter((x) => x.enabled).length === 1 ? "" : "s"} being copied`}</span>
+                {changes.length > 0 && <button type="button" className="btn small ghost" disabled={working} onClick={() => setDraft({})}>Undo</button>}
+                <button type="button" className="btn small" disabled={working || !changes.length} onClick={save}>{working ? "Saving…" : "Save"}</button>
+              </div>
+              <small className="muted">Tick the chats to copy, then press Save. Ticked chats are read every minute (25 at a time). Only messages posted after you save are copied.</small>
               <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={working} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Refreshing…" : "Refresh list"}</button>
               {st.chatsAt && <small className="muted">List saved {new Date(st.chatsAt).toLocaleString()}. It shows on every device you open this page on.</small>}
             </>

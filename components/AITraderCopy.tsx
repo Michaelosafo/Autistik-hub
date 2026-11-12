@@ -6,15 +6,16 @@
  */
 import { useEffect, useState } from "react";
 import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
+import { Callers, ModePicker, RebuyBox, type Caller, type Rebuy } from "@/components/AITraderCopyExtras";
 
 export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
 export type CopyData = {
-  sources: CopySource[]; maxTax: number;
+  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[];
   tg: { ready: boolean; linked: boolean; username: string | null };
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
 };
-type Settings = { enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number };
+type Settings = { enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
 
 async function call(action: string, body: unknown) {
@@ -70,6 +71,8 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
       </div>
       <p className="muted" style={{ margin: 0 }}>Any coin (contract address) posted in a group or account you follow is bought within seconds, then sold at the target or the stop-loss. The only check is for honeypots: it skips a coin that can&apos;t be sold or has a buy or sell tax of {c.maxTax}% or more.</p>
 
+      <ModePicker mode={s.trade_mode} busy={busy || !owner} onAct={onAct} />
+
       <div className="aic-rules">
         <label><small className="muted">Sell at profit</small>
           <span className="ait-in"><em>+</em><input inputMode="decimal" disabled={busy || !owner} value={tp || String(s.copy_tp)} onChange={(e) => setTp(e.target.value)} onBlur={() => { if (tp && Number(tp) !== s.copy_tp) onAct("tp", "settings", { copy_tp: Number(tp) }, `Copy trades now sell at +${Number(tp)}% (${(1 + Number(tp) / 100).toFixed(2).replace(/\.00$/, "")}x).`); setTp(""); }} /><em>%</em></span>
@@ -109,6 +112,9 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
           </div>
         </details>
       </div>
+
+      <Callers list={c.callers || []} normal={s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`} busy={busy || !owner} onAct={onAct} />
+      <RebuyBox on={s.rebuy_on} dump={s.rebuy_dump} tp={s.rebuy_tp} sl={s.copy_sl} list={c.rebuys || []} busy={busy || !owner} onAct={onAct} />
 
       {/* X */}
       <div className="aic-block">

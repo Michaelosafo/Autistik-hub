@@ -15,6 +15,7 @@ export type Flow = {
   chain: string; token: string; pool: string; symbol: string; name: string; image: string | null;
   price: number; liquidity: number; mcap: number; ageHours: number;
   ch: { m5: number; h1: number; h6: number; h24: number }; buys5: number; sells5: number; buys1h: number; sells1h: number;
+  vol5: number; vol1h: number;
   x: boolean; tg: boolean;
 };
 
@@ -33,6 +34,7 @@ export function toFlow(p: any): Flow {
     ageHours: p.pairCreatedAt ? (Date.now() - Number(p.pairCreatedAt)) / 36e5 : 999,
     ch: { m5: n(p.priceChange?.m5), h1: n(p.priceChange?.h1), h6: n(p.priceChange?.h6), h24: n(p.priceChange?.h24) },
     buys5: n(p.txns?.m5?.buys), sells5: n(p.txns?.m5?.sells), buys1h: n(p.txns?.h1?.buys), sells1h: n(p.txns?.h1?.sells),
+    vol5: n(p.volume?.m5), vol1h: n(p.volume?.h1),
     x: soc.some((s) => /twitter|^x$/i.test(String(s?.type)) || /x\.com|twitter\.com/i.test(String(s?.url))),
     tg: soc.some((s) => /telegram/i.test(String(s?.type)) || /t\.me\//i.test(String(s?.url))),
   };

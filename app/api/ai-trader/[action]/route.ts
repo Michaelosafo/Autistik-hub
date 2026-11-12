@@ -79,14 +79,18 @@ async function getMine(_req: Request, action: string) {
     tq("ai_trader_signals").select("id,at,source,who,body,url,chain,token,symbol,mcap,result").not("result", "is", null).order("at", { ascending: false }).limit(40),
     liveBalance().catch(() => null),
   ]);
-  const { data: srcs } = await tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true });
+  const [{ data: srcs }, { data: callers }, { data: rebuys }] = await Promise.all([
+    tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true }),
+    tq("ai_trader_callers").select("id,platform,who,usd").order("usd", { ascending: false }),
+    tq("ai_trader_rebuy").select("id,chain,token,symbol,sold_usd,low_usd,status,note,sold_at").order("sold_at", { ascending: false }).limit(15),
+  ]);
   const done = ((closed || []) as Position[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + (Number(p.pnl) || 0), 0);
   const wins = done.filter((p) => (Number(p.pnl) || 0) > 0).length;
   return json({
     signals: sigs || [], sources: { x: xReady(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     copy: {
-      sources: srcs || [], maxTax: COPY_MAX_TAX,
+      sources: srcs || [], maxTax: COPY_MAX_TAX, callers: callers || [], rebuys: rebuys || [],
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
       tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null, stage: null, hint: null, chats: null, chatsAt: null })),
       x: { loginReady: xLoginReady(), signedIn: !!s.x_username, username: s.x_username, canRead: await xReadReady().catch(() => false), communities: !!process.env.TWITTERAPI_IO_KEY },
@@ -104,7 +108,7 @@ const NUM: Record<string, [number, number]> = {
   per_trade: [0.001, 10], max_positions: [1, 20], min_liquidity: [1000, 10_000_000], max_tax: [0, 25], min_age_hours: [0, 720],
   mcap_min: [500, 10_000_000], mcap_max: [1000, 100_000_000], micro_min_liq: [500, 10_000_000], target_profit: [10, 1000], strat_stop: [5, 90],
   stop_loss: [1, 90], take_profit: [1, 2000], trail: [0, 90], max_hold_hours: [1, 720], daily_loss_limit: [0.001, 100],
-  copy_tp: [10, 2000], copy_sl: [1, 90],
+  copy_tp: [10, 2000], copy_sl: [1, 90], rebuy_dump: [10, 95], rebuy_tp: [5, 1000],
 };
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
@@ -129,6 +133,8 @@ async function postMine(action: string, b: any) {
       if (typeof b.hype_on === "boolean") up.hype_on = b.hype_on;
       if (typeof b.signals_on === "boolean") up.signals_on = b.signals_on;
       if (typeof b.copy_on === "boolean") up.copy_on = b.copy_on;
+      if (typeof b.rebuy_on === "boolean") up.rebuy_on = b.rebuy_on;
+      if (["telegram", "x", "general"].includes(b.trade_mode)) up.trade_mode = b.trade_mode;
       if (Array.isArray(b.callers)) up.callers = [...new Set(b.callers.map((h: unknown) => String(h).replace(/^@/, "").trim()).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
       if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
@@ -207,9 +213,37 @@ async function postMine(action: string, b: any) {
     case "x-lists": {
       try { return json({ ok: true, lists: await xMyLists() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
+    case "caller": {
+      // Callers whose posts buy a set $ amount: a Telegram @username or user id, or an X handle.
+      if (b.op === "remove") { await tq("ai_trader_callers").delete().eq("id", Number(b.id)); return json({ ok: true, note: "Caller removed." }); }
+      const platform = b.platform === "x" ? "x" : "tg";
+      const usd = Number(b.usd);
+      if (!isFinite(usd) || usd <= 0 || usd > 100_000) return json({ error: "Type a dollar amount, like 50." }, 400);
+      const list = String(b.who || "").split(/[\s,;]+/).map((w) => w.trim().replace(/^https?:\/\/(www\.)?(t\.me|x\.com|twitter\.com)\//i, "").replace(/^@/, "").split(/[/?]/)[0].toLowerCase()).filter(Boolean);
+      const ok = [...new Set(list.filter((w) => /^\d{3,20}$/.test(w) || /^[a-z0-9_]{3,32}$/.test(w)))].slice(0, 50);
+      if (!ok.length) return json({ error: "Paste @usernames or numeric user ids, separated by spaces or commas." }, 400);
+      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd })), { onConflict: "trader_id,platform,who" });
+      if (error) return json({ error: error.message }, 400);
+      await log("settings", `Caller size $${usd} for ${ok.map((w) => (/^\d+$/.test(w) ? w : `@${w}`)).join(", ")} (${platform === "x" ? "X" : "Telegram"}).`);
+      return json({ ok: true, note: `Saved: posts by ${ok.length === 1 ? (/^\d+$/.test(ok[0]) ? ok[0] : `@${ok[0]}`) : `${ok.length} callers`} buy $${usd}.` });
+    }
     case "source": {
       // Add, switch on / off, or remove something to copy. Live trading changes are owner only.
       const op = String(b.op || "");
+      if (op === "batch") {
+        // The Save button: several ticks / unticks at once. adds: [{kind, ref, title, handle}], set: [{id, enabled}].
+        const set = (Array.isArray(b.set) ? b.set : []).slice(0, 300);
+        for (const x of set) await tq("ai_trader_sources").update({ enabled: !!x.enabled }).eq("id", Number(x.id));
+        const adds = (Array.isArray(b.adds) ? b.adds : []).filter((a: any) => a?.kind === "tg_chat" && /^(c:\d+:-?\d+|g:\d+|u:\d+:-?\d+)$/.test(String(a.ref || ""))).slice(0, 100);
+        if (adds.length) {
+          const { error } = await tq("ai_trader_sources").upsert(adds.map((a: any) => ({ kind: "tg_chat", ref: String(a.ref), title: String(a.title || "Telegram chat").slice(0, 80), enabled: true, ...(/^[A-Za-z0-9_]{4,32}$/.test(String(a.handle || "")) ? { handle: String(a.handle) } : {}) })), { onConflict: "trader_id,kind,ref" });
+          if (error) return json({ error: error.message }, 400);
+        }
+        const { count } = await tq("ai_trader_sources").select("id", { count: "exact", head: true }).eq("kind", "tg_chat").eq("enabled", true);
+        if ((count || 0) > 25) await log("settings", `${count} Telegram chats ticked: only 25 are read each minute, taking turns.`);
+        await log("settings", `Saved Telegram chats: ${adds.length + set.filter((x: any) => x.enabled).length} on, ${set.filter((x: any) => !x.enabled).length} off.`);
+        return json({ ok: true, note: `Saved. Copying ${count || 0} Telegram chat${count === 1 ? "" : "s"}.` });
+      }
       if (op === "toggle" || op === "remove") {
         const id = Number(b.id);
         const q = op === "toggle" ? tq("ai_trader_sources").update({ enabled: !!b.enabled }).eq("id", id) : tq("ai_trader_sources").delete().eq("id", id);
