@@ -217,7 +217,14 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     closePc(key);
     const pc = new RTCPeerConnection(ICE);
     pcs.current.set(key, pc);
-    pc.onicecandidate = (e) => { if (e.candidate) send("ice", { to: remote, key, candidate: e.candidate.toJSON() }); };
+    // Connection details go out in small batches (one message instead of many), which keeps the room under the
+    // message server's rate limits when lots of people join at once.
+    let batch: RTCIceCandidateInit[] = [], bt: ReturnType<typeof setTimeout> | null = null;
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      batch.push(e.candidate.toJSON());
+      if (!bt) bt = setTimeout(() => { const c = batch; batch = []; bt = null; send("ice", { to: remote, key, candidates: c }); }, 150);
+    };
     pc.ontrack = (e) => {
       if (e.track.kind === "video") {
         const st = e.streams[0] || new MediaStream([e.track]);
@@ -344,8 +351,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const runners = () => [room.host_id, ...cohostsRef.current];
 
   async function join() {
-    if (chan.current || joining) return;
-    setMsg(""); setJoining(true);
+    if (chan.current) return;
+    if (!joinedRef.current) { if (joining) return; setMsg(""); setJoining(true); }
     unlockAudio();
     const sb = supabaseBrowser();
     const ch = sb.channel(`room:${room.id}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
@@ -355,12 +362,13 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       const next: Record<string, Peer> = {};
       for (const [id, metas] of Object.entries(st)) { const m = metas[metas.length - 1]; if (m) next[id] = { id, alias: m.alias, color: m.color, avatar_url: m.avatar_url, role: m.role, hand: !!m.hand, muted: !!m.muted, at: m.at || 0, ver: !!m.ver, vb: m.vb ?? null }; }
       setPeers(next);
-      // Presence can blink for a moment (a reconnect, a status update): only hang up on someone still gone 6s later.
+      // Presence can blink (a reconnect, a phone switching network): only hang up on someone still gone 15s later.
       const gone = [...pcs.current.keys()].filter((k) => { const [a, b] = k.split(">"); return !next[a] || !next[b]; });
       if (gone.length) setTimeout(() => {
+        if (!live.current) return; // reconnecting to the room: the voices keep playing meanwhile
         const now = (chan.current?.presenceState?.() || {}) as Record<string, unknown>;
         for (const k of gone) { const [a, b] = k.split(">"); if (!now[a] || !now[b]) closePc(k); }
-      }, 6000);
+      }, 15000);
       // The host's lists of speakers and co-hosts are the ones that count.
       const h = st[room.host_id]?.[st[room.host_id].length - 1];
       if (h && !isHost) {
@@ -398,14 +406,15 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     ch.on("broadcast", { event: "ice" }, async ({ payload }: any) => {
       if (payload.to !== me.id) return;
       const pc = pcs.current.get(payload.key);
-      // Not ready yet (no offer/answer applied, or the call hasn't started here): keep it for a moment.
+      const list: RTCIceCandidateInit[] = Array.isArray(payload.candidates) ? payload.candidates : payload.candidate ? [payload.candidate] : [];
+      // Not ready yet (no offer/answer applied, or the call hasn't started here): keep them for a moment.
       if (!pc || !pc.remoteDescription) {
         const q = pendingIce.current.get(payload.key) || [];
-        if (q.length < 60) q.push(payload.candidate);
+        for (const c of list) if (q.length < 80) q.push(c);
         pendingIce.current.set(payload.key, q);
         return;
       }
-      await pc.addIceCandidate(payload.candidate).catch(() => {});
+      for (const c of list) await pc.addIceCandidate(c).catch(() => {});
     });
     // The host and co-hosts run the stage.
     ch.on("broadcast", { event: "speakers" }, ({ payload }: any) => {
@@ -434,11 +443,23 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     ch.on("broadcast", { event: "react" }, ({ payload }: any) => { if (REACTIONS.includes(payload.e)) float(payload.e); });
     ch.on("broadcast", { event: "end" }, ({ payload }: any) => { if (payload.from === room.host_id) { setEnded(true); leave(); } });
     ch.subscribe(async (status: string) => {
+      if (chan.current !== ch) return; // an old connection (left, or replaced by a fresh one)
       if (status !== "SUBSCRIBED") {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setMsg("Couldn't connect to the room. Check your internet and try again."); setJoining(false); try { ch.unsubscribe(); } catch {} chan.current = null; }
+        live.current = false;
+        if (!joinedRef.current) {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") { setMsg("Couldn't connect to the room. Check your internet and try again."); setJoining(false); try { ch.unsubscribe(); } catch {} chan.current = null; }
+          return;
+        }
+        // Already in the live: a network blip. The voices keep playing (they go phone to phone); the room
+        // connection rejoins by itself, and if it hasn't in 12 seconds it's replaced with a fresh one.
+        setMsg("Reconnecting to the live…");
+        clearTimeout(watchdog.current);
+        watchdog.current = setTimeout(() => { if (!live.current && chan.current === ch && joinedRef.current) rejoin(); }, 12_000);
         return;
       }
-      if (joinedRef.current) { await track(myRoleRef.current, false, mutedRef.current); return; } // reconnected
+      live.current = true;
+      clearTimeout(watchdog.current);
+      if (joinedRef.current) { setMsg(""); await track(myRoleRef.current, false, mutedRef.current); return; } // reconnected
       if (isHost) await startMic();
       if (isHost) { try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {}); } catch {} }
       await track(isHost ? "host" : "listener", false, true);
@@ -448,6 +469,17 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     });
   }
 
+  // The room connection is up (presence and messages flowing); a watchdog replaces it if a blip lasts too long.
+  const live = useRef(false);
+  const watchdog = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  /** A fresh room connection without leaving: your mic and the voices you hear keep going. */
+  function rejoin() {
+    const old = chan.current;
+    chan.current = null;
+    try { old?.unsubscribe(); } catch {}
+    setJoining(false);
+    join();
+  }
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const myRoleRef = useRef(myRole);
@@ -507,6 +539,13 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     } else { try { ms.metadata = null; ms.playbackState = "none"; } catch {} }
   }, [joined, room.title]);
 
+  // Keep the screen on while you're in a live, so the phone doesn't sleep and drop you after a few minutes.
+  const wake = useRef<any>(null);
+  function keepAwake() {
+    try { if (!wake.current && (navigator as any).wakeLock) (navigator as any).wakeLock.request("screen").then((w: any) => { wake.current = w; w.addEventListener?.("release", () => { wake.current = null; }); }).catch(() => {}); } catch {}
+  }
+  useEffect(() => { if (joined) keepAwake(); }, [joined]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Coming back to the page after the phone was locked or the app was in the background: wake the sound up.
   useEffect(() => {
     if (!joined) return;
@@ -514,6 +553,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       if (document.visibilityState !== "visible") return;
       audios.current.forEach((a) => { if (a.paused) a.play().catch(() => setNeedTap(true)); });
       if (meter.current?.state === "suspended") meter.current.resume().catch(() => {});
+      if (!live.current && chan.current) { clearTimeout(watchdog.current); watchdog.current = setTimeout(() => { if (!live.current && joinedRef.current) rejoin(); }, 3_000); }
+      if (joinedRef.current) keepAwake();
     };
     document.addEventListener("visibilitychange", wake);
     window.addEventListener("pageshow", wake);
@@ -521,6 +562,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   }, [joined]);
 
   function leave(forget = true) {
+    clearTimeout(watchdog.current); live.current = false;
+    try { wake.current?.release(); } catch {} wake.current = null;
     stopMic();
     for (const k of [...pcs.current.keys()]) closePc(k);
     levels.current.forEach((f) => f()); levels.current.clear();
@@ -675,7 +718,9 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     setFloaters((f) => [...f.slice(-14), { k, e, x: 10 + Math.random() * 80 }]);
     setTimeout(() => setFloaters((f) => f.filter((x) => x.k !== k)), 2600);
   }
-  const react = (e: string) => { float(e); send("react", { e }); };
+  // Reactions show on your screen every tap, but go to the room at most ~4 a second (keeps it under rate limits).
+  const lastSend = useRef(0);
+  const react = (e: string) => { float(e); const t = Date.now(); if (t - lastSend.current > 250) { lastSend.current = t; send("react", { e }); } };
   const blazeT = useRef<any>(null);
   function fireBurst() {
     setFires((n) => n + 1);
@@ -688,7 +733,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     clearTimeout(blazeT.current);
     blazeT.current = setTimeout(() => setBlaze(false), 1400);
   }
-  const moreFire = () => { fireBurst(); send("fire", {}); try { navigator.vibrate?.(30); } catch {} };
+  const lastFire = useRef(0);
+  const moreFire = () => { fireBurst(); const t = Date.now(); if (t - lastFire.current > 350) { lastFire.current = t; send("fire", {}); } try { navigator.vibrate?.(30); } catch {} };
 
   const list = useMemo(() => Object.values(peers).sort((a, b) => a.at - b.at), [peers]);
   const onStage = list.filter((p) => roleOf(p.id) !== "listener").sort((a, b) => ["host", "cohost", "speaker"].indexOf(roleOf(a.id)) - ["host", "cohost", "speaker"].indexOf(roleOf(b.id)));
