@@ -21,6 +21,7 @@ import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, ty
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
+import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { SAFETY, safetyGate, type Gate } from "@/lib/ai-safety";
 import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
@@ -57,35 +58,40 @@ const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
  * The live trading wallet: AI_TRADER_KEY in Vercel if set, otherwise the wallet created from the Admin panel, whose
  * key is kept encrypted in the database Vault (only the server can read it; it's never shown or sent anywhere).
  */
-let cached: ReturnType<typeof privateKeyToAccount> | null = null;
+// Each admin's trader has its own wallet. AI_TRADER_KEY in Vercel, if set, is the owner's (trader 1) only.
+const wallets = new Map<number, ReturnType<typeof privateKeyToAccount>>();
+const envKey = () => (T() === 1 ? process.env.AI_TRADER_KEY?.trim() || "" : "");
 export async function traderAccount() {
-  if (cached) return cached;
-  let k = process.env.AI_TRADER_KEY?.trim() || "";
+  const have = wallets.get(T());
+  if (have) return have;
+  let k = envKey();
   if (!/^0x[0-9a-fA-F]{64}$/.test(k)) {
-    const { data } = await supabaseService().rpc("ai_trader_key_get");
+    const { data } = await supabaseService().rpc("ai_trader_key_get_for", { p_trader: T() });
     k = typeof data === "string" ? data : "";
   }
   if (!/^0x[0-9a-fA-F]{64}$/.test(k)) return null;
-  cached = privateKeyToAccount(k as `0x${string}`);
-  return cached;
+  const a = privateKeyToAccount(k as `0x${string}`);
+  wallets.set(T(), a);
+  return a;
 }
 
 /** Owner: makes the live trading wallet (once). Returns its address to send BNB to. */
 export async function createTraderWallet(): Promise<string> {
   if (await traderAccount()) throw new Error("The AI trader already has a wallet.");
   const key = generatePrivateKey();
-  const { error } = await supabaseService().rpc("ai_trader_key_set", { p_key: key });
+  const { error } = await supabaseService().rpc("ai_trader_key_set_for", { p_trader: T(), p_key: key, p_replace: false });
   if (error) throw new Error(error.message);
-  cached = privateKeyToAccount(key);
-  await log("settings", `Live trading wallet created: ${cached.address}`);
-  return cached.address;
+  const a = privateKeyToAccount(key);
+  wallets.set(T(), a);
+  await log("settings", `Live trading wallet created: ${a.address}`);
+  return a.address;
 }
 
 /** Owner: the wallet's private key, to import it into their own wallet app (MetaMask, Trust Wallet…). */
 export async function revealTraderKey(): Promise<string> {
-  const env = process.env.AI_TRADER_KEY?.trim();
+  const env = envKey();
   if (env && /^0x[0-9a-fA-F]{64}$/.test(env)) return env;
-  const { data } = await supabaseService().rpc("ai_trader_key_get");
+  const { data } = await supabaseService().rpc("ai_trader_key_get_for", { p_trader: T() });
   if (typeof data !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(data)) throw new Error("There's no trading wallet yet.");
   await log("settings", "The owner viewed the trading wallet's private key.");
   return data;
@@ -95,20 +101,21 @@ export async function revealTraderKey(): Promise<string> {
 export async function importTraderKey(raw: string): Promise<string> {
   const key = (raw.trim().startsWith("0x") ? raw.trim() : `0x${raw.trim()}`) as `0x${string}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("That isn't a private key (64 letters and numbers, from your wallet's Export private key).");
-  if (process.env.AI_TRADER_KEY?.trim()) throw new Error("AI_TRADER_KEY is set in Vercel and wins over this. Remove it there first.");
+  if (envKey()) throw new Error("AI_TRADER_KEY is set in Vercel and wins over this. Remove it there first.");
   const sb = supabaseService();
-  const { data: openLive } = await sb.from("ai_trader_positions").select("id").eq("mode", "live").in("status", ["open", "closing"]).limit(1);
+  const { data: openLive } = await tq("ai_trader_positions").select("id").eq("mode", "live").in("status", ["open", "closing"]).limit(1);
   if (openLive?.length) throw new Error("Sell the open live coins first.");
   const cur = await traderAccount();
   if (cur) {
     const bnb = Number(await (walletChainClient(C) as any).getBalance({ address: cur.address })) / 1e18;
     if (bnb > 0.0005) throw new Error(`The current trading wallet still holds ${bnb.toFixed(4)} BNB. Withdraw it first so nothing is left behind.`);
   }
-  const { error } = await sb.rpc("ai_trader_key_set", { p_key: key, p_replace: true });
+  const { error } = await sb.rpc("ai_trader_key_set_for", { p_trader: T(), p_key: key, p_replace: true });
   if (error) throw new Error(error.message);
-  cached = privateKeyToAccount(key);
-  await log("settings", `Live trading now uses the owner's own wallet: ${cached.address}`);
-  return cached.address;
+  const a = privateKeyToAccount(key);
+  wallets.set(T(), a);
+  await log("settings", `Live trading now uses your own wallet: ${a.address}`);
+  return a.address;
 }
 
 /** Owner: sends the wallet's BNB (all but the gas for this transfer) to an address the owner typed. */
@@ -130,11 +137,11 @@ export async function withdrawBnb(to: string): Promise<{ hash: string; bnb: numb
 }
 
 export async function log(kind: string, text: string) {
-  await supabaseService().from("ai_trader_log").insert({ kind, text: text.slice(0, 600) });
+  await tq("ai_trader_log").insert({ kind, text: text.slice(0, 600) });
 }
 
 export async function getSettings(): Promise<Settings> {
-  const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", 1).single();
+  const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", T()).single();
   const s = data as any;
   for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl"]) s[k] = n(s[k]);
   s.copy_on = s.copy_on !== false;
@@ -211,9 +218,9 @@ const WATCH = "honeypot-watch";
 /** Puts a honeypot / not-yet-sellable coin on the watch list (once per coin; kept in ai_trader_signals). */
 async function watch(chain: string, token: string, symbol: string | null, g: Extract<Gate, { ok: false }>) {
   if (g.mcap != null && g.mcap > SAFETY.MCAP_MAX) return;
-  const { data } = await supabaseService().from("ai_trader_signals").upsert(
+  const { data } = await tq("ai_trader_signals").upsert(
     { source: WATCH, who: "rug guard", body: g.reason, url: "watch", chain, token, symbol, mcap: g.mcap, result: `watching: ${g.reason}`.slice(0, 300) },
-    { onConflict: "source,chain,token,url", ignoreDuplicates: true },
+    { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true },
   ).select("id");
   if (data?.length) await log("watch", `👀 Watching ${symbol || token} on ${CHAIN_NAME[chain] || chain}: ${g.reason}. It's bought only once it can be sold and passes every rug check while under $${SAFETY.MCAP_MAX / 1000}K.`);
 }
@@ -224,10 +231,10 @@ async function watch(chain: string, token: string, symbol: string | null, g: Ext
  */
 async function recheckWatch(s: Settings) {
   const sb = supabaseService();
-  const { data } = await sb.from("ai_trader_signals").select("id,chain,token,symbol,at").eq("source", WATCH).like("result", "watching%").order("at", { ascending: true }).limit(8);
+  const { data } = await tq("ai_trader_signals").select("id,chain,token,symbol,at").eq("source", WATCH).like("result", "watching%").order("at", { ascending: true }).limit(8);
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   for (const w of (data || []) as { id: number; chain: string; token: string; symbol: string | null; at: string }[]) {
-    const set = (result: string, mcap?: number | null) => sb.from("ai_trader_signals").update({ result: result.slice(0, 300), ...(mcap != null ? { mcap } : {}) }).eq("id", w.id);
+    const set = (result: string, mcap?: number | null) => tq("ai_trader_signals").update({ result: result.slice(0, 300), ...(mcap != null ? { mcap } : {}) }).eq("id", w.id);
     const name = w.symbol || w.token;
     if (Date.now() - Date.parse(w.at) > SAFETY.WATCH_HOURS * 36e5) { await set(`dropped: still not safe after ${SAFETY.WATCH_HOURS}h`); continue; }
     if (!(chains as string[]).includes(w.chain)) continue;
@@ -314,7 +321,7 @@ async function liveSell(token: string, raw: bigint, tax: number) {
 /** Sells one position (paper or live) and records the result. */
 export async function closePosition(p: Position, reason: string, priceUsd?: number | null) {
   const sb = supabaseService();
-  const { data: claimed } = await sb.from("ai_trader_positions").update({ status: "closing", updated_at: new Date().toISOString() }).eq("id", p.id).in("status", ["open", "closing"]).select("id");
+  const { data: claimed } = await tq("ai_trader_positions").update({ status: "closing", updated_at: new Date().toISOString() }).eq("id", p.id).in("status", ["open", "closing"]).select("id");
   if (!claimed?.length) return;
   try {
     const risk = await riskFor(p.chain, p.token).catch(() => null);
@@ -325,21 +332,21 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       if (!price) throw new Error("No price to sell at.");
       received = (n(p.qty) * price * (1 - tax / 100 - (p.strategy ? 0.03 : PAPER_SLIP))) / (await bnbUsd());
       const s = await getSettings();
-      await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash + Math.max(0, received) }).eq("id", 1);
+      await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash + Math.max(0, received) }).eq("id", T());
     } else {
       if (!(await traderAccount())) throw new Error("There's no trading wallet, so live positions can't be sold here.");
       const r = await liveSell(getAddress(p.token), BigInt(p.amount_raw || "0"), tax);
       received = r.received; sellTx = r.hash;
     }
     const pnl = received - n(p.spent);
-    await sb.from("ai_trader_positions").update({
+    await tq("ai_trader_positions").update({
       status: "closed", received, pnl, pnl_pct: n(p.spent) ? (pnl / n(p.spent)) * 100 : null, close_reason: reason, sell_tx: sellTx,
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
     if (p.strategy === "copy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
     await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
-    await sb.from("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
+    await tq("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
     await log("error", `Couldn't sell ${p.symbol}: ${(e as Error).message}`);
   }
 }
@@ -371,7 +378,7 @@ async function manage(s: Settings) {
   // Hands-on: while an admin is around, they close trades themselves (only a pulled pool still sells automatically).
   // When nobody is around, the AI takes over: target, stop-loss, trailing stop, sellers taking over near the top.
   const handsOn = s.manual_active && adminActive(s);
-  const { data } = await sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]);
+  const { data } = await tq("ai_trader_positions").select("*").in("status", ["open", "closing"]);
   const ps = (data || []) as Position[];
   if (!ps.length) return;
   const flows = await flowsFor(ps).catch(() => new Map<string, Flow>());
@@ -382,7 +389,7 @@ async function manage(s: Settings) {
     if (p.status === "closing") { await closePosition(p, p.close_reason || "Closed by admin", price); continue; }
     if (!price) continue;
     const high = Math.max(n(p.high_usd), price);
-    await sb.from("ai_trader_positions").update({ last_usd: price, high_usd: high, updated_at: new Date().toISOString() }).eq("id", p.id);
+    await tq("ai_trader_positions").update({ last_usd: price, high_usd: high, updated_at: new Date().toISOString() }).eq("id", p.id);
     const ch = (price / n(p.entry_usd) - 1) * 100;
     const ageH = (Date.now() - Date.parse(p.opened_at)) / 36e5;
     // Small-coin trades judge a pulled pool against their own size, not the big-coin minimum.
@@ -427,7 +434,7 @@ function momentum(c: Omit<Cand, "score">) {
 
 async function candidates(s: Settings, held: Set<string>): Promise<Cand[]> {
   const sb = supabaseService();
-  const { data: recent } = await sb.from("ai_trader_positions").select("token").eq("status", "closed").gte("closed_at", new Date(Date.now() - 12 * 36e5).toISOString());
+  const { data: recent } = await tq("ai_trader_positions").select("token").eq("status", "closed").gte("closed_at", new Date(Date.now() - 12 * 36e5).toISOString());
   const skip = new Set([...held, ...(recent || []).map((r: any) => String(r.token).toLowerCase())]);
   // Live mode can only buy with the BNB in its wallet, so it shops on BNB Chain only.
   const chains = s.mode === "live" ? (["bsc"] as TradeChain[]) : s.chains;
@@ -491,7 +498,7 @@ async function pick(s: Settings, list: Cand[]): Promise<{ c: Cand; why: string }
 /** HYPE / DIP setups on small coins: scan, read the charts, safety checks, then the AI picks (or skips). */
 async function setupBuy(s: Settings, cash: number, held: Set<string>) {
   const sb = supabaseService();
-  const { data: recent } = await sb.from("ai_trader_positions").select("token").eq("status", "closed").gte("closed_at", new Date(Date.now() - 12 * 36e5).toISOString());
+  const { data: recent } = await tq("ai_trader_positions").select("token").eq("status", "closed").gte("closed_at", new Date(Date.now() - 12 * 36e5).toISOString());
   const skip = new Set([...held, ...(recent || []).map((r: any) => String(r.token).toLowerCase())]);
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const found = await scanSetups(chains, s, skip);
@@ -535,14 +542,14 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
     const slip = Math.min(0.15, 0.01 + ((spend * bnb) / Math.max(1, c.liquidity)) * 2); // small pools move a lot
     qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - slip)) / c.price;
     const fresh = await getSettings();
-    await sb.from("ai_trader_settings").update({ paper_cash: fresh.paper_cash - spend }).eq("id", 1);
+    await sb.from("ai_trader_settings").update({ paper_cash: fresh.paper_cash - spend }).eq("id", T());
   } else {
     const r = await liveBuy(getAddress(c.token), spend, c.buyTax ?? 0);
     const dec = await (walletChainClient(C) as any).readContract({ address: c.token, abi: erc20Abi, functionName: "decimals" }).catch(() => 18);
     decimals = Number(dec); raw = r.raw.toString(); tx = r.hash;
     qty = Number(r.raw) / 10 ** decimals;
   }
-  const { error } = await sb.from("ai_trader_positions").insert({
+  const { error } = await tq("ai_trader_positions").insert({
     mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
     strategy: o.strategy, pool: c.pool || null,
@@ -566,14 +573,14 @@ async function buyOne(s: Settings, cash: number, held: Set<string>) {
   const bnb = await bnbUsd();
   if (s.mode === "paper" || c.chain !== "bsc") {
     qty = (spend * bnb * (1 - (c.buyTax ?? 0) / 100 - PAPER_SLIP)) / c.price;
-    await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash - spend }).eq("id", 1);
+    await sb.from("ai_trader_settings").update({ paper_cash: s.paper_cash - spend }).eq("id", T());
   } else {
     const r = await liveBuy(getAddress(c.token), spend, c.buyTax ?? 0);
     const dec = await (walletChainClient(C) as any).readContract({ address: c.token, abi: erc20Abi, functionName: "decimals" }).catch(() => 18);
     decimals = Number(dec); raw = r.raw.toString(); tx = r.hash;
     qty = Number(r.raw) / 10 ** decimals;
   }
-  const { error } = await sb.from("ai_trader_positions").insert({
+  const { error } = await tq("ai_trader_positions").insert({
     mode: s.mode === "live" && c.chain !== "bsc" ? "paper" : s.mode, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: s.stop_loss, take_profit: s.take_profit, trail: s.trail, why: p.why, buy_tx: tx,
   });
@@ -587,26 +594,26 @@ async function buyOne(s: Settings, cash: number, held: Set<string>) {
 export async function runTrader({ force = false } = {}) {
   const sb = supabaseService();
   if (!force) {
-    const { data: go } = await sb.rpc("ai_trader_lease", { p_seconds: 240 });
+    const { data: go } = await sb.rpc("ai_trader_lease_for", { p_trader: T(), p_seconds: 240 });
     if (go !== true) return { skipped: "ran recently" };
   }
   const s = await getSettings();
   if (!s.enabled && !force) return { skipped: "paused" };
-  const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", 1); return { note: t }; };
+  const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", T()); return { note: t }; };
   if (s.mode === "live" && !(await traderAccount())) return note("Live mode needs a trading wallet (create one on the AI trader page). Nothing was traded.");
 
   // Exits are checked every minute by the fast loop (runFast), so this run only looks for new buys.
 
   // Daily loss limit: pause itself.
-  const { data: day } = await sb.from("ai_trader_positions").select("pnl").eq("status", "closed").eq("mode", s.mode).gte("closed_at", new Date(Date.now() - 864e5).toISOString());
+  const { data: day } = await tq("ai_trader_positions").select("pnl").eq("status", "closed").eq("mode", s.mode).gte("closed_at", new Date(Date.now() - 864e5).toISOString());
   const lost = -(day || []).reduce((a: number, r: any) => a + Math.min(0, n(r.pnl)), 0);
   if (lost >= s.daily_loss_limit) {
-    if (s.enabled) { await sb.from("ai_trader_settings").update({ enabled: false }).eq("id", 1); await log("pause", `Paused itself: lost ${lost.toFixed(4)} BNB in 24h (limit ${s.daily_loss_limit}).`); }
+    if (s.enabled) { await sb.from("ai_trader_settings").update({ enabled: false }).eq("id", T()); await log("pause", `Paused itself: lost ${lost.toFixed(4)} BNB in 24h (limit ${s.daily_loss_limit}).`); }
     return note(`Paused: daily loss limit reached (${lost.toFixed(4)} BNB).`);
   }
   if (!s.enabled) return note("Checked open positions (paused, so no new buys).");
 
-  const { data: open } = await sb.from("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
+  const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
   if (held.size >= s.max_positions) return note(`Holding ${held.size} of ${s.max_positions} coins; waiting for exits.`);
   const fresh = await getSettings();
@@ -621,7 +628,7 @@ export async function runTrader({ force = false } = {}) {
 /** Room and money for one more buy, or why not. */
 async function buyRoom(s: Settings): Promise<{ cash: number; held: Set<string> } | string> {
   const sb = supabaseService();
-  const { data: open } = await sb.from("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
+  const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
   if (held.size >= s.max_positions) return `Holding ${held.size} of ${s.max_positions} coins.`;
   const cash = s.mode === "paper" ? (await getSettings()).paper_cash : Math.max(0, ((await liveBalance())?.bnb ?? 0) - GAS_KEEP);
@@ -636,7 +643,7 @@ async function buyRoom(s: Settings): Promise<{ cash: number; held: Set<string> }
  */
 export async function actOnSignal(s: Settings, sig: Signal, flow: Flow | null): Promise<string> {
   const sb = supabaseService();
-  const save = (result: string, f?: Flow | null) => sb.from("ai_trader_signals").update({ result, symbol: f?.symbol ?? null, mcap: f?.mcap ?? null })
+  const save = (result: string, f?: Flow | null) => tq("ai_trader_signals").update({ result, symbol: f?.symbol ?? null, mcap: f?.mcap ?? null })
     .eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
   const done = async (r: string, f?: Flow | null) => { await save(r, f); return r; };
   if (!s.enabled) return done("skipped: trader stopped");
@@ -675,7 +682,7 @@ export async function actOnSignal(s: Settings, sig: Signal, flow: Flow | null): 
 async function unseen(sigs: Signal[]): Promise<Signal[]> {
   if (!sigs.length) return [];
   const rows = sigs.map((g) => ({ source: g.source, who: g.who, body: g.body, url: g.url, chain: g.chain, token: g.token, at: new Date(g.at).toISOString() }));
-  const { data } = await supabaseService().from("ai_trader_signals").upsert(rows, { onConflict: "source,chain,token,url", ignoreDuplicates: true }).select("source,chain,token,url");
+  const { data } = await tq("ai_trader_signals").upsert(rows, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("source,chain,token,url");
   const isNew = new Set((data || []).map((r: any) => `${r.source}|${r.chain}|${r.token}|${r.url}`));
   return sigs.filter((g) => isNew.has(`${g.source}|${g.chain}|${g.token}|${g.url}`));
 }
@@ -683,7 +690,7 @@ async function unseen(sigs: Signal[]): Promise<Signal[]> {
 /** Every minute: watch open coins for fast exits, then act on fresh signals (if the trader is started). */
 export async function runFast() {
   const sb = supabaseService();
-  const { data: go } = await sb.rpc("ai_trader_fast_lease", { p_seconds: 50 });
+  const { data: go } = await sb.rpc("ai_trader_fast_lease_for", { p_trader: T(), p_seconds: 50 });
   if (go !== true) return { skipped: "running" };
   const s = await getSettings();
   if (s.mode === "live" && !(await traderAccount())) return { skipped: "no wallet" };
@@ -695,7 +702,7 @@ export async function runFast() {
   // Followed X accounts, Lists and Communities: copy trades.
   if (s.copy_on) {
     const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
-    if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", 1);
+    if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", T());
     for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at }, "x", post.label).catch(() => [])));
   }
   // X callers first (they move fastest), then DexScreener.
@@ -755,7 +762,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   for (const r of refs) {
     const f = await resolve(r, chains).catch(() => null);
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
-    const { data } = await sb.from("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "source,chain,token,url", ignoreDuplicates: true }).select("id");
+    const { data } = await tq("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("id");
     if (!data?.length) continue; // already handled this post
     out.push(await actOnCopy(s, sig, f, label));
   }
@@ -765,7 +772,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
 async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string): Promise<string> {
   const sb = supabaseService();
   const done = async (r: string) => {
-    await sb.from("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
+    await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
     return r;
   };
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
@@ -786,3 +793,20 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`); }
 }
 const fmt = (x: number) => x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+
+// ---------------------------------------------------------------- Every admin's trader
+
+/**
+ * The schedules call this: runs the 5-minute scan or the 1-minute loop for every trader that's started or still has
+ * coins to watch, side by side. One trader failing doesn't stop the others.
+ */
+export async function runAll(kind: "scan" | "fast") {
+  const sb = supabaseService();
+  const [{ data: on }, { data: holding }] = await Promise.all([
+    sb.from("ai_trader_settings").select("id").eq("enabled", true),
+    sb.from("ai_trader_positions").select("trader_id").in("status", ["open", "closing"]),
+  ]);
+  const ids = [...new Set([...(on || []).map((r: any) => Number(r.id)), ...(holding || []).map((r: any) => Number(r.trader_id))])].filter((x) => x > 0);
+  const out = await Promise.all(ids.map((id) => withTrader(id, () => (kind === "scan" ? runTrader() : runFast())).then((r) => [id, r] as const).catch((e) => [id, { error: (e as Error).message }] as const)));
+  return Object.fromEntries(out);
+}

@@ -1,19 +1,21 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
-import { supabaseService } from "@/lib/supabase/server";
+import { supabaseServer, supabaseService } from "@/lib/supabase/server";
+import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { cronDenied } from "@/lib/cron-auth";
-import { runFast, tradeSize } from "@/lib/ai-trader";
+import { runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
 import { COPY_MAX_TAX } from "@/lib/ai-trader";
-import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
+import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xFollowing, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * AI trader (admin only while it's being tested).
+ * AI trader. Every admin (owner and the admins they add) has their own trader: settings, wallet, Telegram / X logins,
+ * followed sources and trades. Each request works on the signed-in admin's own trader only.
  * GET /api/ai-trader/cron: the schedule (every 5 minutes; runs at most every 4).
  * GET /api/ai-trader/status: settings, positions, log, wallet (admins).
  * POST settings | run | close | edit | reset (admins).
@@ -23,18 +25,41 @@ export async function GET(_req: Request, { params }: { params: { action: string 
     const denied = cronDenied(_req);
     if (denied) return denied;
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
-    return json(await runTrader().catch((e) => ({ error: (e as Error).message })));
+    return json(await runAll("scan").catch((e) => ({ error: (e as Error).message })));
   }
   if (params.action === "fast") {
     const denied = cronDenied(_req);
     if (denied) return denied;
-    return json(await runFast().catch((e) => ({ error: (e as Error).message })));
+    return json(await runAll("fast").catch((e) => ({ error: (e as Error).message })));
   }
+  const tid = await myTrader();
+  if (!tid) return json({ error: "Admins only." }, 403);
+  return withTrader(tid, () => getMine(_req, params.action));
+}
+
+/** The signed-in admin's trader (made the first time they open the page). The owner's is the original one. */
+async function myTrader(): Promise<number | null> {
+  const who = await adminState();
+  if (!who.staff) return null;
+  const { data: { user } } = await supabaseServer().auth.getUser();
+  if (!user) return null;
+  const sb = supabaseService();
+  const { data } = await sb.from("ai_trader_settings").select("id").eq("user_id", user.id).maybeSingle();
+  if (data?.id) return Number(data.id);
+  const { data: made, error } = await sb.from("ai_trader_settings").insert({ user_id: user.id, enabled: false, mode: "paper", paper_cash: 1, paper_start: 1 }).select("id").single();
+  if (error) {
+    const { data: again } = await sb.from("ai_trader_settings").select("id").eq("user_id", user.id).maybeSingle(); // opened twice at once
+    return again?.id ? Number(again.id) : null;
+  }
+  await sb.from("ai_trader_x_auth").upsert({ id: made.id }, { onConflict: "id", ignoreDuplicates: true });
+  return Number(made.id);
+}
+
+async function getMine(_req: Request, action: string) {
+  const params = { action };
   if (params.action === "x-callback") {
     // X sends the owner back here after they sign in.
     const back = (q: string) => Response.redirect(`${new URL(_req.url).origin}/admin/ai-trader?${q}`, 302);
-    const who = await adminState();
-    if (!who.admin) return back("x=owner-only");
     const u = new URL(_req.url);
     if (u.searchParams.get("error")) return back("x=cancelled");
     try { const name = await xFinish(u.searchParams.get("code") || "", u.searchParams.get("state") || ""); await log("settings", `Signed in with X as @${name}.`); return back(`x=ok&as=${encodeURIComponent(name)}`); }
@@ -42,19 +67,18 @@ export async function GET(_req: Request, { params }: { params: { action: string 
   }
   if (params.action !== "status") return json({ error: "Not found." }, 404);
   const who = await adminState();
-  if (!who.staff) return json({ error: "Admins only." }, 403);
   const sb = supabaseService();
   // Having this page open counts as being around (hands-on mode).
-  await sb.from("ai_trader_settings").update({ admin_seen_at: new Date().toISOString() }).eq("id", 1);
+  await sb.from("ai_trader_settings").update({ admin_seen_at: new Date().toISOString() }).eq("id", T());
   const [s, { data: open }, { data: closed }, { data: logs }, { data: sigs }, wallet] = await Promise.all([
     getSettings(),
-    sb.from("ai_trader_positions").select("*").in("status", ["open", "closing"]).order("opened_at", { ascending: false }),
-    sb.from("ai_trader_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(50),
-    sb.from("ai_trader_log").select("*").order("at", { ascending: false }).limit(60),
-    sb.from("ai_trader_signals").select("id,at,source,who,body,url,chain,token,symbol,mcap,result").not("result", "is", null).order("at", { ascending: false }).limit(40),
+    tq("ai_trader_positions").select("*").in("status", ["open", "closing"]).order("opened_at", { ascending: false }),
+    tq("ai_trader_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(50),
+    tq("ai_trader_log").select("*").order("at", { ascending: false }).limit(60),
+    tq("ai_trader_signals").select("id,at,source,who,body,url,chain,token,symbol,mcap,result").not("result", "is", null).order("at", { ascending: false }).limit(40),
     liveBalance().catch(() => null),
   ]);
-  const { data: srcs } = await sb.from("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true });
+  const { data: srcs } = await tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true });
   const done = ((closed || []) as Position[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + (Number(p.pnl) || 0), 0);
   const wins = done.filter((p) => (Number(p.pnl) || 0) > 0).length;
@@ -67,7 +91,7 @@ export async function GET(_req: Request, { params }: { params: { action: string 
     },
     perTradeBnb: await tradeSize(s).catch(() => s.per_trade),
     settings: s, open: open || [], closed: closed || [], log: logs || [],
-    wallet: wallet ?? { address: null, bnb: null }, liveReady: !!(await traderAccount()), owner: who.admin,
+    wallet: wallet ?? { address: null, bnb: null }, liveReady: !!(await traderAccount()), owner: true, isOwner: who.admin, traderId: T(),
     active: adminActive({ ...s, admin_seen_at: new Date().toISOString() }), activeMinutes: ACTIVE_MS / 60_000,
     stats: { trades: done.length, wins, winRate: done.length ? Math.round((wins / done.length) * 100) : null, pnl },
   });
@@ -82,16 +106,18 @@ const NUM: Record<string, [number, number]> = {
 };
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
-  const who = await adminState();
-  if (!who.staff) return json({ error: "Admins only." }, 403);
+  const tid = await myTrader();
+  if (!tid) return json({ error: "Admins only." }, 403);
   const b = await req.json().catch(() => ({}));
-  // Only the owner touches real money: the live wallet, withdrawals, switching to live, and rules while live.
-  const ownerOnly = (msg = "Only the owner can do this.") => json({ error: msg }, 403);
+  return withTrader(tid, () => postMine(params.action, b));
+}
+
+async function postMine(action: string, b: any) {
+  const params = { action };
   const sb = supabaseService();
   switch (params.action) {
     case "settings": {
       const cur = await getSettings();
-      if (!who.admin && (cur.mode === "live" || b.mode === "live")) return ownerOnly("Only the owner can change things while the AI trades real money.");
       const up: Record<string, unknown> = { updated_at: new Date().toISOString() };
       for (const [k, [lo, hi]] of Object.entries(NUM)) if (b[k] != null && isFinite(Number(b[k]))) up[k] = Math.min(hi, Math.max(lo, Number(b[k])));
       if (typeof b.enabled === "boolean") up.enabled = b.enabled;
@@ -111,52 +137,47 @@ export async function POST(req: Request, { params }: { params: { action: string 
         if (b.mode === "live" && !(await traderAccount())) return json({ error: "Create the trading wallet first (Live wallet, on this page) and send it some BNB." }, 400);
         up.mode = b.mode;
       }
-      const { error } = await sb.from("ai_trader_settings").update(up).eq("id", 1);
+      const { error } = await sb.from("ai_trader_settings").update(up).eq("id", T());
       if (error) return json({ error: error.message }, 400);
       const what = Object.keys(up).filter((k) => k !== "updated_at").map((k) => `${k}=${up[k]}`).join(", ");
       if (what) await log("settings", `Admin changed: ${what}`);
       return json({ ok: true });
     }
     case "wallet": {
-      if (!who.admin) return ownerOnly();
       try { const address = await createTraderWallet(); return json({ ok: true, address, note: "Wallet created. Send BNB (BNB Chain) to it, then switch to Live." }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "tg-hook": {
-      if (!who.admin) return ownerOnly();
       try { const me = await tgSetHook(); return json({ ok: true, note: `Connected @${me.username}. Add it to the groups you want copied.` }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "tg-link": {
-      if (!who.admin) return ownerOnly();
       try { return json({ ok: true, ...(await tgLinkStart()) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "tg-unlink": {
-      if (!who.admin) return ownerOnly();
-      await sb.from("ai_trader_settings").update({ tg_user_id: null, tg_username: null }).eq("id", 1);
+      await sb.from("ai_trader_settings").update({ tg_user_id: null, tg_username: null }).eq("id", T());
       await log("settings", "Telegram unlinked.");
       return json({ ok: true, note: "Telegram unlinked. Followed groups stay as they are." });
     }
     case "x-login": {
-      if (!who.admin) return ownerOnly();
       try { return json({ ok: true, url: await xAuthUrl() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "x-logout": {
-      if (!who.admin) return ownerOnly();
       await xSignOut();
       return json({ ok: true, note: "Signed out of X. Lists you follow stay saved but can't be read until you sign in again." });
     }
+    case "x-following": {
+      try { return json({ ok: true, accounts: await xFollowing() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
     case "x-lists": {
-      if (!who.admin) return ownerOnly();
       try { return json({ ok: true, lists: await xMyLists() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "source": {
       // Add, switch on / off, or remove something to copy. Live trading changes are owner only.
-      if (!who.admin) return ownerOnly();
       const op = String(b.op || "");
       if (op === "toggle" || op === "remove") {
         const id = Number(b.id);
-        const q = op === "toggle" ? sb.from("ai_trader_sources").update({ enabled: !!b.enabled }).eq("id", id) : sb.from("ai_trader_sources").delete().eq("id", id);
+        const q = op === "toggle" ? tq("ai_trader_sources").update({ enabled: !!b.enabled }).eq("id", id) : tq("ai_trader_sources").delete().eq("id", id);
         const { error } = await q;
         if (error) return json({ error: error.message }, 400);
         return json({ ok: true });
@@ -178,9 +199,9 @@ export async function POST(req: Request, { params }: { params: { action: string 
             ref = c.id; title = c.name;
           } else return json({ error: "Unknown source." }, 400);
         } catch (e) { return json({ error: (e as Error).message }, 400); }
-        const { count } = await sb.from("ai_trader_sources").select("id", { count: "exact", head: true }).eq("enabled", true).neq("kind", "tg");
+        const { count } = await tq("ai_trader_sources").select("id", { count: "exact", head: true }).eq("enabled", true).neq("kind", "tg");
         if ((count || 0) >= 30) return json({ error: "You're following 30 X sources already. Switch one off first." }, 400);
-        const { error } = await sb.from("ai_trader_sources").upsert({ kind, ref: kind === "x_account" ? ref.toLowerCase() : ref, title, enabled: true }, { onConflict: "kind,ref" });
+        const { error } = await tq("ai_trader_sources").upsert({ kind, ref: kind === "x_account" ? ref.toLowerCase() : ref, title, enabled: true }, { onConflict: "trader_id,kind,ref" });
         if (error) return json({ error: error.message }, 400);
         await log("settings", `Now copying ${title}.`);
         return json({ ok: true, note: `Now copying ${title}.` });
@@ -188,47 +209,39 @@ export async function POST(req: Request, { params }: { params: { action: string 
       return json({ error: "Unknown action." }, 400);
     }
     case "key-reveal": {
-      if (!who.admin) return ownerOnly();
       try { return json({ ok: true, key: await revealTraderKey() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "key-import": {
-      if (!who.admin) return ownerOnly();
       try { const address = await importTraderKey(String(b.key || "")); return json({ ok: true, address, note: `Now trading from your wallet ${address.slice(0, 6)}…${address.slice(-4)}.` }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "withdraw": {
-      if (!who.admin) return ownerOnly();
-      const { data: openLive } = await sb.from("ai_trader_positions").select("id").eq("mode", "live").in("status", ["open", "closing"]).limit(1);
+      const { data: openLive } = await tq("ai_trader_positions").select("id").eq("mode", "live").in("status", ["open", "closing"]).limit(1);
       if (openLive?.length) return json({ error: "Sell the open live coins first, then withdraw." }, 400);
       try { const r = await withdrawBnb(String(b.to || "")); return json({ ok: true, note: `Sent ${r.bnb.toFixed(5)} BNB. Transaction ${r.hash.slice(0, 10)}…` }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "run":
-      if ((await getSettings()).mode === "live" && !who.admin) return ownerOnly();
       return json(await runTrader({ force: true }).catch((e) => ({ error: (e as Error).message })));
     case "close": {
-      const { data: p0 } = await sb.from("ai_trader_positions").select("mode").eq("id", String(b.id || "")).maybeSingle();
-      if (p0?.mode === "live" && !who.admin) return ownerOnly("Only the owner can sell live coins.");
-      const { data: p } = await sb.from("ai_trader_positions").select("*").eq("id", String(b.id || "")).in("status", ["open", "closing"]).maybeSingle();
+      const { data: p } = await tq("ai_trader_positions").select("*").eq("id", String(b.id || "")).in("status", ["open", "closing"]).maybeSingle();
       if (!p) return json({ error: "That position isn't open." }, 404);
       await closePosition(p as Position, "Closed by admin");
       return json({ ok: true });
     }
     case "edit": {
-      if ((await getSettings()).mode === "live" && !who.admin) return ownerOnly();
       const up: Record<string, number> = {};
       for (const k of ["stop_loss", "take_profit", "trail"]) if (b[k] != null && isFinite(Number(b[k]))) up[k] = Math.min(NUM[k][1], Math.max(NUM[k][0], Number(b[k])));
-      const { data, error } = await sb.from("ai_trader_positions").update(up).eq("id", String(b.id || "")).in("status", ["open", "closing"]).select("symbol");
+      const { data, error } = await tq("ai_trader_positions").update(up).eq("id", String(b.id || "")).in("status", ["open", "closing"]).select("symbol");
       if (error || !data?.length) return json({ error: "That position isn't open." }, 400);
       await log("settings", `Admin set ${data[0].symbol}: stop-loss ${up.stop_loss ?? "same"}%, take profit ${up.take_profit ?? "same"}%, trailing ${up.trail ?? "same"}%`);
       return json({ ok: true });
     }
     case "reset": {
-      if ((await getSettings()).mode === "live" && !who.admin) return ownerOnly();
       // Practice mode only: clears practice positions and refills the practice balance.
       const start = Math.min(100, Math.max(0.01, Number(b.start) || 1));
-      await sb.from("ai_trader_positions").delete().eq("mode", "paper");
-      await sb.from("ai_trader_settings").update({ paper_cash: start, paper_start: start }).eq("id", 1);
+      await tq("ai_trader_positions").delete().eq("mode", "paper");
+      await sb.from("ai_trader_settings").update({ paper_cash: start, paper_start: start }).eq("id", T());
       await log("settings", `Practice account reset to ${start} BNB.`);
       return json({ ok: true });
     }

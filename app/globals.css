@@ -6089,3 +6089,6 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .aic-add .input{flex:1;min-width:0}
 .aic-note{font-weight:600}
 @media (max-width:520px){.aic-rules{grid-template-columns:1fr}}
+.aic-scroll{max-height:340px;overflow-y:auto;margin-top:6px}
+.aic-av{width:28px;height:28px;border-radius:50%;flex:none;background:var(--surface-2);object-fit:cover}
+.ait-mine{font-size:.85em}

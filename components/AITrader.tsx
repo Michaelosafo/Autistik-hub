@@ -23,7 +23,7 @@ type P = {
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
 };
 type Sig = { id: number; at: string; source: string; who: string | null; body: string | null; url: string; chain: string; token: string; symbol: string | null; mcap: number | null; result: string | null };
-type Data = { copy: CopyData; perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
+type Data = { isOwner: boolean; traderId: number; copy: CopyData; perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
 const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
@@ -83,8 +83,9 @@ export default function AITrader() {
     <div className="stack ait">
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
-        <div className="label">Admin · testing</div>
+        <div className="label">{d.isOwner ? "Owner" : "Admin"} · your own trader</div>
         <h1>🤖 AI trader</h1>
+        <p className="muted ait-mine">This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>
         <p className="muted">It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
       </div>
 

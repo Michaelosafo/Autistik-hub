@@ -28,6 +28,8 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
   const [tgLink, setTgLink] = useState<{ link: string; canReadGroups: boolean; username: string } | null>(null);
   const [lists, setLists] = useState<{ id: string; name: string; members: number | null; owned: boolean }[] | null>(null);
   const [handle, setHandle] = useState("");
+  const [follows, setFollows] = useState<{ handle: string; name: string; image: string | null }[] | null>(null);
+  const [find, setFind] = useState("");
   const [community, setCommunity] = useState("");
   const [tp, setTp] = useState(""), [sl, setSl] = useState("");
 
@@ -95,7 +97,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
             ) : <button type="button" className="btn" style={{ alignSelf: "flex-start" }} disabled={busy || !owner} onClick={() => run(async () => setTgLink(await call("tg-link", {})))}>Log in with Telegram</button>}
           </div>
         ) : (
-          <small className="muted">Add the bot to any group or channel to copy it: your groups are followed straight away. Groups someone else added it to appear here switched off. In channels the bot must be an admin.</small>
+          <small className="muted">Add the bot to any group or channel to copy it: it shows up here and is followed straight away. Telegram doesn&apos;t let bots see your other groups, so only groups the bot is in can be listed. In channels the bot must be an admin.</small>
         )}
         {tgLink && !tgLink.canReadGroups && <small className="aic-warn">⚠ The bot can&apos;t read normal group messages yet. In @BotFather send <code>/setprivacy</code>, pick the bot, choose <b>Disable</b>, then remove and re-add it to your groups (or make it a group admin).</small>}
         {tgSrc.length > 0 && <div className="aic-list">{tgSrc.map((x) => <Row key={x.id} x={x} />)}</div>}
@@ -117,12 +119,34 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
         {(c.x.signedIn || c.x.canRead) && (
           <div className="stack" style={{ gap: 10 }}>
             <div>
-              <small className="muted">Accounts</small>
+              <small className="muted">Add any account</small>
               <form className="aic-add" onSubmit={(e) => { e.preventDefault(); if (handle.trim()) { add("x_account", handle.trim()); setHandle(""); } }}>
                 <input className="input" placeholder="@handle or x.com/handle" value={handle} onChange={(e) => setHandle(e.target.value)} aria-label="X account to copy" disabled={!owner} />
                 <button type="submit" className="btn small" disabled={busy || !owner || !handle.trim()}>Add</button>
               </form>
             </div>
+            {c.x.signedIn && (
+              <div>
+                <small className="muted">Accounts you follow on X</small>
+                {follows === null ? <button type="button" className="btn small" style={{ display: "block", marginTop: 4 }} disabled={busy || !owner} onClick={() => run(async () => setFollows((await call("x-following", {})).accounts))}>Show accounts I follow</button>
+                  : !follows.length ? <small className="muted" style={{ display: "block" }}>You don&apos;t follow anyone on X yet.</small>
+                    : (
+                      <>
+                        <input className="input" style={{ marginTop: 4 }} placeholder={`Search ${follows.length} accounts`} value={find} onChange={(e) => setFind(e.target.value)} aria-label="Search accounts you follow" />
+                        <div className="aic-list aic-scroll">{follows.filter((f) => !find.trim() || (f.handle + " " + f.name).toLowerCase().includes(find.trim().toLowerCase().replace(/^@/, ""))).slice(0, 200).map((f) => {
+                          const have = xSrc.find((x) => x.kind === "x_account" && x.ref === f.handle.toLowerCase());
+                          return (
+                            <label key={f.handle} className={"aic-row" + (have?.enabled ? " on" : "")}>
+                              <input type="checkbox" checked={!!have?.enabled} disabled={busy || !owner} onChange={(e) => have ? toggle(have, e.target.checked) : add("x_account", f.handle)} />
+                              {f.image ? <img src={f.image} alt="" width={28} height={28} className="aic-av" /> : <span className="aic-av" aria-hidden="true" />}
+                              <span className="grow"><b>{f.name}</b><small className="muted">@{f.handle}{have?.last_post_at ? ` · ${ago(have.last_post_at)}` : ""}</small></span>
+                            </label>
+                          );
+                        })}</div>
+                      </>
+                    )}
+              </div>
+            )}
             {c.x.signedIn && (
               <div>
                 <small className="muted">Your Lists</small>
@@ -147,9 +171,10 @@ export default function AITraderCopy({ c, s, owner, busy, onAct }: { c: CopyData
               </form>
               <small className="muted">X doesn&apos;t let apps list your Communities, so paste each one&apos;s link.</small>
             </div>
-            {xSrc.filter((x) => x.kind !== "x_list" || !lists?.some((l) => l.id === x.ref)).length > 0 && (
-              <div className="aic-list">{xSrc.filter((x) => x.kind !== "x_list" || !lists?.some((l) => l.id === x.ref)).map((x) => <Row key={x.id} x={x} />)}</div>
-            )}
+            {(() => {
+              const rest = xSrc.filter((x) => !(x.kind === "x_list" && lists?.some((l) => l.id === x.ref)) && !(x.kind === "x_account" && follows?.some((f) => f.handle.toLowerCase() === x.ref)));
+              return rest.length > 0 && <div><small className="muted">Following</small><div className="aic-list">{rest.map((x) => <Row key={x.id} x={x} />)}</div></div>;
+            })()}
             <small className="muted">Accounts are checked every minute; up to 3 Lists or Communities are read each minute, taking turns, to stay inside X&apos;s limits.</small>
             {c.x.signedIn && owner && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => onAct("xo", "x-logout", {})}>Sign out of X</button>}
           </div>
