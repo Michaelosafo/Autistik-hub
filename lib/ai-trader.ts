@@ -27,12 +27,12 @@ import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
 import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
 import { tgaNewPosts } from "@/lib/tg-account";
-import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, walletAddress, type LiveChain, type Wallets } from "@/lib/ai-trader-chains";
+import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, relayBridge, relayBridgeQuote, walletAddress, type LiveChain, type Wallets } from "@/lib/ai-trader-chains";
 import { Keypair } from "@solana/web3.js";
 
-export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "solana"] as const;
+export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "elysium", "solana"] as const;
 export type TradeChain = (typeof TRADE_CHAINS)[number];
-const CHAIN_NAME: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", solana: "Solana" };
+const CHAIN_NAME: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", elysium: "Elysium", solana: "Solana" };
 
 export type Settings = {
   enabled: boolean; mode: "paper" | "live"; chains: TradeChain[]; need_socials: boolean; paper_cash: number; paper_start: number; per_trade: number; max_positions: number;
@@ -1015,4 +1015,21 @@ async function rebuyCheck(s: Settings) {
       await tgNotify(`🔁 Bought back ${f.symbol} after a ${drop.toFixed(0)}% dump on heavy volume. Sells at +${s.rebuy_tp}% or -${s.copy_sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
     } catch (e) { await set({ note: `buy failed: ${(e as Error).message.slice(0, 80)}` }); }
   }
+}
+
+// ---------------------------------------------------------------- Moving money between the trader's chains (Relay)
+
+export async function relayMoveQuote(from: string, to: string, amount: number) {
+  if (!isLiveChain(from) || !isLiveChain(to)) throw new Error("Pick two of the trader's chains.");
+  if (!(amount > 0)) throw new Error("Type an amount.");
+  const q = await relayBridgeQuote(from, to, amount, await myWallets());
+  return { receive: q.receive, receiveSymbol: q.receiveSymbol, feeUsd: q.feeUsd, seconds: q.seconds };
+}
+
+export async function relayMove(from: string, to: string, amount: number) {
+  if (!isLiveChain(from) || !isLiveChain(to)) throw new Error("Pick two of the trader's chains.");
+  if (!(amount > 0)) throw new Error("Type an amount.");
+  const r = await relayBridge(from, to, amount, await myWallets());
+  await log("settings", `Moved ${amount} ${NATIVE[from]} from ${CHAIN_NAME[from]} to ${CHAIN_NAME[to]} through Relay (about ${r.receive ?? "?"} ${NATIVE[to]}).`);
+  return { requestId: r.requestId, hashes: r.hashes, receive: r.receive };
 }

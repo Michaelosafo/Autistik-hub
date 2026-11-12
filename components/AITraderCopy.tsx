@@ -10,7 +10,7 @@ import { Callers, LiveChains, SourcePicker, RebuyBox, type Caller, type LiveWall
 
 export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
 export type CopyData = {
-  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[]; wallets: LiveWallet[];
+  sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[]; wallets: LiveWallet[]; relay: boolean;
   tg: { ready: boolean; linked: boolean; username: string | null };
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
@@ -76,7 +76,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
       </label>
 
       <SourcePicker tg={s.use_tg} x={s.use_x} general={s.use_general} busy={busy || !owner} onAct={onAct} />
-      <LiveChains list={c.wallets || []} live={s.mode === "live"} busy={busy || !owner} onAct={onAct} />
+      <LiveChains list={c.wallets || []} relay={!!c.relay} live={s.mode === "live"} busy={busy || !owner} onAct={onAct} />
 
       <div className="aic-rules">
         <label><small className="muted">Sell at profit</small>
