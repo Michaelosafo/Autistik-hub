@@ -108,13 +108,13 @@ export async function revealSolKey(): Promise<string> {
   await log("settings", "The Solana wallet's private key was viewed.");
   return JSON.stringify(Array.from(kp.secretKey));
 }
-const wallets = async (): Promise<Wallets> => ({ evm: await traderAccount(), sol: await solAccount() });
+const myWallets = async (): Promise<Wallets> => ({ evm: await traderAccount(), sol: await solAccount() });
 /** The chains this trader buys on: in live mode the ones switched on for live trading, in practice all its chains. */
 export const tradeChains = (s: Settings): string[] => (s.mode === "live" ? s.live_chains : s.chains);
 
 /** Each live chain: wallet address and balance in its own coin (for the page). */
 export async function liveWallets(s: Settings) {
-  const w = await wallets();
+  const w = await myWallets();
   return Promise.all(LIVE_CHAINS.map(async (chain) => ({
     chain, native: NATIVE[chain], on: s.live_chains.includes(chain), address: walletAddress(chain, w),
     balance: walletAddress(chain, w) ? await chainBalance(chain, w).catch(() => null) : null,
@@ -387,7 +387,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
     } else {
       // Live on any chain: sold for that chain's coin, counted in BNB terms like the buy.
       if (!isLiveChain(p.chain)) throw new Error(`Live selling isn't set up for ${p.chain}.`);
-      const r = await liveSellOn(p.chain, await wallets(), p.token, BigInt(p.amount_raw || "0"), tax);
+      const r = await liveSellOn(p.chain, await myWallets(), p.token, BigInt(p.amount_raw || "0"), tax);
       receivedNative = r.receivedNative; sellTx = r.hash;
       received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
     }
@@ -597,7 +597,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   if (live) {
     // Live on any chain: pays with that chain's own coin, worth the same dollars.
     const chain = c.chain as LiveChain;
-    const w = await wallets();
+    const w = await myWallets();
     const nUsd = await nativeUsd(chain);
     const wantUsd = spend * bnb;
     const avail = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
@@ -689,7 +689,7 @@ async function buyRoom(s: Settings, chain = "bsc"): Promise<{ cash: number; held
     return { cash, held };
   }
   if (!isLiveChain(chain) || !s.live_chains.includes(chain)) return `${CHAIN_NAME[chain] || chain} isn't switched on for live trading`;
-  const w = await wallets();
+  const w = await myWallets();
   if (!walletAddress(chain, w)) return chain === "solana" ? "there's no Solana wallet yet" : "there's no trading wallet yet";
   const have = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
   const needUsd = (s.per_trade_usd > 0 ? s.per_trade_usd : s.per_trade * (await bnbUsd())) * 0.5;
