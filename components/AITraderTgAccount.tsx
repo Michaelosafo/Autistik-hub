@@ -6,7 +6,7 @@
 import { useState } from "react";
 import type { CopySource } from "@/components/AITraderCopy";
 
-type Chat = { ref: string; title: string; kind: "group" | "channel"; members: number | null; username: string | null };
+type Chat = { ref: string; title: string; kind: "group" | "channel" | "chat" | "bot"; members: number | null; username: string | null };
 export type TgaState = { ready: boolean; signedIn: boolean; name: string | null };
 
 async function call(action: string, body: unknown) {
@@ -20,14 +20,15 @@ const ago = (iso: string | null) => { if (!iso) return "no posts yet"; const s =
 export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: { st: TgaState; sources: CopySource[]; busy: boolean; reload: () => Promise<void>; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
   const [step, setStep] = useState<"phone" | "code" | "password">("phone");
   const [phone, setPhone] = useState(""), [code, setCode] = useState(""), [pw, setPw] = useState("");
-  const [hint, setHint] = useState<string | null>(null), [sentTo, setSentTo] = useState("");
+  const [hint, setHint] = useState<string | null>(null), [sentTo, setSentTo] = useState(""), [resend, setResend] = useState<string | null>(null);
+  const [tab, setTab] = useState<"all" | "group" | "channel" | "chat">("all");
   const [chats, setChats] = useState<Chat[] | null>(null);
   const [find, setFind] = useState("");
   const [working, setWorking] = useState(false);
   const [msg, setMsg] = useState("");
 
   async function go(fn: () => Promise<void>) { setWorking(true); setMsg(""); try { await fn(); } catch (e) { setMsg((e as Error).message); } setWorking(false); }
-  const done = async (name: string) => { setStep("phone"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Tap "Show my groups" to pick what to copy.`); await reload(); };
+  const done = async (name: string) => { setStep("phone"); setCode(""); setPw(""); setMsg(`Logged in as ${name}. Tap "Show my groups, channels and chats" to pick what to copy.`); await reload(); };
   const mine = sources.filter((x) => x.kind === "tg_chat");
 
   if (!st.ready) return (
@@ -36,21 +37,27 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
 
   if (!st.signedIn) return (
     <div className="stack" style={{ gap: 8 }}>
-      <small className="muted">Log in with your own Telegram account: every group and channel you&apos;re in shows up here to tick. No bot needed. Telegram will tell you about the new login; you can end it any time in Telegram → Settings → Devices.</small>
+      <small className="muted">Log in with your own Telegram account: every group, channel and chat you have shows up here to tick. No bot needed. Telegram will tell you about the new login; you can end it any time in Telegram → Settings → Devices.</small>
       {step === "phone" && (
-        <form className="aic-add" onSubmit={(e) => { e.preventDefault(); go(async () => { const r = await call("tga-start", { phone }); setSentTo(r.sentTo); setStep("code"); }); }}>
+        <form className="aic-add" onSubmit={(e) => { e.preventDefault(); go(async () => { const r = await call("tga-start", { phone }); setSentTo(r.sentTo); setResend(r.resend); setStep("code"); }); }}>
           <input className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="+233 20 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} aria-label="Your Telegram phone number" />
           <button type="submit" className="btn small" disabled={working || busy || phone.replace(/\D/g, "").length < 7}>{working ? "Sending…" : "Send code"}</button>
         </form>
       )}
       {step === "code" && (
         <>
-          <small className="muted">Telegram sent a code to {sentTo || "your Telegram app"}. Type it here.</small>
+          <div className="aic-sent">
+            <b>Telegram sent your login code to {sentTo || "your Telegram app"}.</b>
+            <small className="muted">It&apos;s usually not an SMS: look for a message from <b>Telegram</b> (blue tick) at the top of your chats, in the Telegram app on your phone or computer. Type the code below.</small>
+          </div>
           <form className="aic-add" onSubmit={(e) => { e.preventDefault(); go(async () => { const r = await call("tga-code", { code }); if (r.needPassword) { setHint(r.hint || null); setStep("password"); } else await done(r.name); }); }}>
             <input className="input" inputMode="numeric" autoComplete="one-time-code" placeholder="12345" value={code} onChange={(e) => setCode(e.target.value)} aria-label="Login code from Telegram" />
             <button type="submit" className="btn small" disabled={working || code.replace(/\D/g, "").length < 4}>{working ? "Checking…" : "Log in"}</button>
           </form>
-          <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => { setStep("phone"); setCode(""); }}>Use a different number</button>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn small" disabled={working} onClick={() => go(async () => { const r = await call("tga-resend", {}); setSentTo(r.sentTo); setResend(r.resend); setMsg(`Sent again to ${r.sentTo}.`); })}>{resend ? `Didn't get it? Send ${resend}` : "Didn't get it? Send again"}</button>
+            <button type="button" className="btn small ghost" onClick={() => { setStep("phone"); setCode(""); setMsg(""); }}>Use a different number</button>
+          </div>
         </>
       )}
       {step === "password" && (
@@ -66,18 +73,26 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
     </div>
   );
 
-  const shown = (chats || []).filter((c) => !find.trim() || c.title.toLowerCase().includes(find.trim().toLowerCase()));
+  const inTab = (c: Chat) => tab === "all" || (tab === "chat" ? c.kind === "chat" || c.kind === "bot" : c.kind === tab);
+  const shown = (chats || []).filter((c) => inTab(c) && (!find.trim() || c.title.toLowerCase().includes(find.trim().toLowerCase())));
+  const count = (k: typeof tab) => (chats || []).filter((c) => k === "all" || (k === "chat" ? c.kind === "chat" || c.kind === "bot" : c.kind === k)).length;
+  const kindLabel = { group: "Group", channel: "Channel", chat: "Private chat", bot: "Bot" } as const;
   return (
     <div className="stack" style={{ gap: 8 }}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span className="aic-ok">✓ Logged in as {st.name}</span>
         <button type="button" className="btn small ghost" disabled={busy || working} onClick={() => { if (confirm("Log out of your Telegram account here? Your ticked groups stop being copied.")) onAct("tgao", "tga-logout", {}); }}>Log out</button>
       </div>
-      {chats === null ? <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={working || busy} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Loading your groups…" : "Show my groups"}</button>
-        : !chats.length ? <small className="muted">You&apos;re not in any groups or channels.</small>
+      {chats === null ? <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={working || busy} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Loading your chats…" : "Show my groups, channels and chats"}</button>
+        : !chats.length ? <small className="muted">No groups, channels or chats found.</small>
           : (
             <>
-              <input className="input" placeholder={`Search ${chats.length} groups and channels`} value={find} onChange={(e) => setFind(e.target.value)} aria-label="Search your Telegram groups" />
+              <div className="ait-seg aic-tabs" role="tablist" aria-label="Show">
+                {(["all", "group", "channel", "chat"] as const).map((k) => (
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{{ all: "All", group: "Groups", channel: "Channels", chat: "Chats" }[k]} <small>{count(k)}</small></button>
+                ))}
+              </div>
+              <input className="input" placeholder={`Search ${shown.length} ${tab === "all" ? "chats" : tab === "chat" ? "private chats" : tab + "s"}`} value={find} onChange={(e) => setFind(e.target.value)} aria-label="Search your Telegram chats" />
               <div className="aic-list aic-scroll">{shown.slice(0, 300).map((ch) => {
                 const have = mine.find((x) => x.ref === ch.ref);
                 return (
@@ -85,11 +100,12 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
                     <input type="checkbox" checked={!!have?.enabled} disabled={busy || working}
                       onChange={(e) => have ? onAct(`src${have.id}`, "source", { op: "toggle", id: have.id, enabled: e.target.checked }, e.target.checked ? `Copying ${ch.title}.` : `Stopped copying ${ch.title}.`)
                         : onAct("add", "source", { op: "add", kind: "tg_chat", ref: ch.ref, title: ch.title, handle: ch.username })} />
-                    <span className="grow"><b>{ch.title}</b><small className="muted">{ch.kind === "channel" ? "Channel" : "Group"}{ch.members ? ` · ${ch.members.toLocaleString("en-US")} members` : ""}{have?.enabled ? ` · ${ago(have.last_post_at)}` : ""}</small></span>
+                    <span className="grow"><b>{ch.title}</b><small className="muted">{kindLabel[ch.kind]}{ch.username ? ` · @${ch.username}` : ""}{ch.members ? ` · ${ch.members.toLocaleString("en-US")} members` : ""}{have?.enabled ? ` · ${ago(have.last_post_at)}` : ""}</small></span>
                   </label>
                 );
               })}</div>
-              <small className="muted">Ticked chats are read every minute (up to 25). Only messages posted after you tick a chat are copied.</small>
+              <small className="muted">Ticked chats are read every minute (up to 25). Only messages posted after you tick one are copied.</small>
+              <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={working} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>Refresh list</button>
             </>
           )}
       {chats === null && mine.some((x) => x.enabled) && (

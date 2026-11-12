@@ -36,6 +36,9 @@ function friendly(e: unknown): string {
   if (/PASSWORD_HASH_INVALID/.test(m)) return "That 2-step verification password is wrong.";
   if (/FLOOD_WAIT_(\d+)/.test(m)) return `Telegram asks to wait ${Math.ceil(Number(m.match(/FLOOD_WAIT_(\d+)/)![1]) / 60)} minutes before trying again.`;
   if (/PHONE_NUMBER_BANNED/.test(m)) return "Telegram says this number is banned.";
+  if (/SEND_CODE_UNAVAILABLE/.test(m)) return "Telegram has no other way to send the code right now. Check the \"Telegram\" chat in your app, or wait a few minutes and start again.";
+  if (/API_ID_INVALID/.test(m)) return "Telegram says TELEGRAM_API_ID / TELEGRAM_API_HASH don't match. Copy them again from my.telegram.org/apps into Vercel and redeploy.";
+  if (/PHONE_CODE_EMPTY|PHONE_CODE_HASH_EMPTY/.test(m)) return "That login has expired. Start again.";
   return m.slice(0, 160);
 }
 
@@ -46,18 +49,46 @@ const sessionGet = async (): Promise<string> => {
 const sessionSet = (s: string | null) => supabaseService().rpc("ai_trader_tg_session_set_for", { p_trader: T(), p_session: s });
 const auth = () => supabaseService().from("ai_trader_tg_auth");
 
-/** Step 1: Telegram sends a login code to the admin's Telegram app (or by SMS). */
-export async function tgaStart(phoneRaw: string): Promise<{ sentTo: string }> {
-  const phone = phoneRaw.replace(/[^\d+]/g, "");
-  if (!/^\+?\d{7,15}$/.test(phone)) throw new Error("Type your phone number with the country code, like +233…");
+/** Where Telegram sent the login code, in plain words (Telegram picks: in-app, SMS, email, a call…). */
+function where(r: any): string {
+  const t = r?.type, k = String(t?.className || "");
+  if (k === "auth.SentCodeTypeApp") return "your Telegram app: open the chat called \"Telegram\" (blue tick) in your chat list, on any phone or computer where you're logged in";
+  if (k === "auth.SentCodeTypeEmailCode") return `your login email${t?.emailPattern ? ` (${t.emailPattern})` : ""}`;
+  if (k === "auth.SentCodeTypeSetUpEmailRequired") return "nowhere yet: Telegram wants a login email set up first. Open Telegram → Settings → Privacy and Security → Login Email, add one, then tap Send code again";
+  if (k === "auth.SentCodeTypeFragmentSms") return `Fragment (fragment.com)${t?.url ? `: ${t.url}` : ""}`;
+  if (/Call|FlashCall|MissedCall/.test(k)) return "a phone call to your number: the code is the last digits of the calling number, or read out to you";
+  if (/Sms|Firebase/.test(k)) return "an SMS to your phone";
+  return "your Telegram app (the chat called \"Telegram\")";
+}
+const nextWay = (r: any): string | null => {
+  const k = String(r?.nextType?.className || "");
+  return !k ? null : /Sms/.test(k) ? "by SMS" : /Call/.test(k) ? "by phone call" : /Email/.test(k) ? "by email" : "another way";
+};
+
+/** Step 1: Telegram sends a login code (it decides where: usually in the Telegram app itself). */
+export async function tgaStart(phoneRaw: string): Promise<{ sentTo: string; resend: string | null }> {
+  const phone = phoneRaw.replace(/[^\d+]/g, "").replace(/^(?!\+)/, "+");
+  if (!/^\+\d{7,15}$/.test(phone)) throw new Error("Type your phone number with the country code, like +233…");
   let c: TelegramClient | null = null;
   try {
     c = await client();
     const r: any = await c.invoke(new Api.auth.SendCode({ phoneNumber: phone, apiId: apiId(), apiHash: apiHash(), settings: new Api.CodeSettings({}) }));
     // The half-finished session (same server key) has to be reused for the next step.
     await auth().upsert({ id: T(), phone, code_hash: String(r.phoneCodeHash), pending_session: String(c.session.save()), pending_at: new Date().toISOString() });
-    const how = r.type?.className === "auth.SentCodeTypeApp" ? "your Telegram app" : "SMS";
-    return { sentTo: how };
+    return { sentTo: where(r), resend: nextWay(r) };
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { await close(c); }
+}
+
+/** Asks Telegram to send the code again, the next way it offers (usually SMS). */
+export async function tgaResend(): Promise<{ sentTo: string; resend: string | null }> {
+  const p = await pending();
+  let c: TelegramClient | null = null;
+  try {
+    c = await client(p.pending_session);
+    const r: any = await c.invoke(new Api.auth.ResendCode({ phoneNumber: p.phone, phoneCodeHash: p.code_hash }));
+    await auth().update({ code_hash: String(r.phoneCodeHash || p.code_hash), pending_session: String(c.session.save()), pending_at: new Date().toISOString() }).eq("id", T());
+    return { sentTo: where(r), resend: nextWay(r) };
   } catch (e) { throw new Error(friendly(e)); }
   finally { await close(c); }
 }
@@ -135,12 +166,13 @@ function peerOf(ref: string): any {
   const [k, id, hash] = ref.split(":");
   if (k === "c") return new Api.InputPeerChannel({ channelId: bigInt(id), accessHash: bigInt(hash) });
   if (k === "g") return new Api.InputPeerChat({ chatId: bigInt(id) });
+  if (k === "u") return new Api.InputPeerUser({ userId: bigInt(id), accessHash: bigInt(hash) });
   throw new Error("Unknown chat.");
 }
 
-export type MyChat = { ref: string; title: string; kind: "group" | "channel"; members: number | null; username: string | null };
+export type MyChat = { ref: string; title: string; kind: "group" | "channel" | "chat" | "bot"; members: number | null; username: string | null };
 
-/** Every group and channel the signed-in account is in (most recent first), to tick which to copy. */
+/** Every group, channel and private chat (people and bots) of the signed-in account, most recent first. */
 export async function tgaChats(): Promise<MyChat[]> {
   const s = await sessionGet();
   if (!s) throw new Error("Log in with your Telegram account first.");
@@ -154,6 +186,10 @@ export async function tgaChats(): Promise<MyChat[]> {
       if (!e) continue;
       if (e.className === "Channel") out.push({ ref: `c:${e.id}:${e.accessHash}`, title: String(e.title || "Channel"), kind: e.broadcast ? "channel" : "group", members: e.participantsCount ?? null, username: e.username || null });
       else if (e.className === "Chat" && !e.deactivated) out.push({ ref: `g:${e.id}`, title: String(e.title || "Group"), kind: "group", members: e.participantsCount ?? null, username: null });
+      else if (e.className === "User" && !e.self && !e.deleted && e.accessHash != null && String(e.id) !== "777000") {
+        const name = [e.firstName, e.lastName].filter(Boolean).join(" ") || (e.username ? `@${e.username}` : "Chat");
+        out.push({ ref: `u:${e.id}:${e.accessHash}`, title: name, kind: e.bot ? "bot" : "chat", members: null, username: e.username || null });
+      }
     }
     return out;
   } catch (e) { throw new Error(friendly(e)); }
@@ -163,7 +199,7 @@ export async function tgaChats(): Promise<MyChat[]> {
 export type ChatPost = { text: string; chat: string; url: string; at: number };
 
 /**
- * Every minute: new messages in the trader's followed chats (up to 25 chats, 30 messages each), since the last one
+ * Every minute: new messages in the trader's followed chats (groups, channels, private chats) (up to 25 chats, 30 messages each), since the last one
  * read. The first read of a chat only marks where to start, so old posts are never bought.
  */
 export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string[] }> {
