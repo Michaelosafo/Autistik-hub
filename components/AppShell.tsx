@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import TrendingButton from "@/components/TrendingButton";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
 import { usePathname } from "next/navigation";
@@ -9,7 +8,7 @@ import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
 import Avatar from "@/components/Avatar";
-import LogoMark from "@/components/LogoMark";
+import { LogoBadge } from "@/components/LogoMark";
 import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
@@ -118,6 +117,17 @@ export default function AppShell({ admin, me, onMe, children }: {
   }, []);
   // Show the connected address (wallet picked anywhere on the site, in this tab).
   useEffect(() => { restoreWallet().catch(() => {}); restoreSol().catch(() => {}); }, []);
+  // Arrived inside a wallet app's own browser from "Direct connect": connect straight away with the built-in wallet.
+  useEffect(() => {
+    try {
+      const u = new URL(location.href);
+      if (u.searchParams.get("ax_connect") !== "1") return;
+      u.searchParams.delete("ax_connect");
+      history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
+      try { sessionStorage.setItem("ax-direct", "1"); } catch {}
+      setTimeout(() => { if (!getState().current && !getState().sol) pickWallet({ fresh: true }); }, 600);
+    } catch {}
+  }, []);
   useEffect(() => {
     const p = wallet?.provider;
     if (!p) { setAcct(null); return; }
@@ -149,7 +159,7 @@ export default function AppShell({ admin, me, onMe, children }: {
             {!!me.unread && <span className="bell-n">{me.unread > 9 ? "9+" : me.unread}</span>}
           </button>
         ) : null}
-        <Link href="/mood" className="ax-logo" aria-label="Open TIK" title="Open TIK"><LogoMark size={38} /></Link>
+        <Link href="/mood" className="ax-logo" aria-label="Open TIK" title="Open TIK"><LogoBadge size={28} /></Link>
         {/* Home switches sides: from the App it goes to the website's main page, whose Home button comes back here. */}
         <Link href="/" className="ax-home" aria-label="Home: the AUTISTIK main page"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         <nav className="ax-nav" aria-label="App">
@@ -177,7 +187,6 @@ export default function AppShell({ admin, me, onMe, children }: {
         <div className="ax-right">
           {/* The AI chat page keeps only the menu up here, so the chat gets the room. */}
           {!path.startsWith("/companions") && <>
-            <TrendingButton />
             <LangPicker />
             <ThemeToggle />
             <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>

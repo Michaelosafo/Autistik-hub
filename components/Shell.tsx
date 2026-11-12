@@ -1,5 +1,5 @@
 "use client";
-import LogoMark from "@/components/LogoMark";
+import { LogoBadge } from "@/components/LogoMark";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
@@ -13,7 +13,6 @@ import MePanel from "@/components/MePanel";
 import Avatar from "@/components/Avatar";
 import { LINKS } from "@/lib/site";
 import Link from "next/link";
-import TrendingButton from "@/components/TrendingButton";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Art from "@/components/Art";
@@ -229,7 +228,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
       <div className="app">
         <aside className="rail">
           <Link href="/mood" className="brand" style={{ textDecoration: "none" }} title="Open TIK">
-            <LogoMark size={46} title="AUTISTIK Hub" />
+            <LogoBadge size={30} title="AUTISTIK Hub" />
             <div><small>Different wavelength. Same channel.</small></div>
           </Link>
           {me && (
@@ -273,7 +272,6 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
 
         <main>
           <div className={"topbar mini" + (path.startsWith("/companions") ? " ai-hide" : "")}>
-            <TrendingButton />
             <LangPicker />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}

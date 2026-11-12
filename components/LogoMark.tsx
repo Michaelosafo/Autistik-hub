@@ -2,6 +2,16 @@
  * The AUTISTIK mark: an endless loop (the infinity sign of the autism community) in spectrum colours, inside a
  * rounded tile with a soft glow and a small spark. Used at the top of the website and the App instead of the name.
  */
+/** The mark with "AUTISTIK" written very small under it (top bars). */
+export function LogoBadge({ size = 28, title = "AUTISTIK" }: { size?: number; title?: string }) {
+  return (
+    <span className="logo-badge">
+      <LogoMark size={size} title={title} />
+      <small aria-hidden="true">AUTISTIK</small>
+    </span>
+  );
+}
+
 export default function LogoMark({ size = 40, title = "AUTISTIK" }: { size?: number; title?: string }) {
   return (
     <svg className="logo-mark" width={size} height={size} viewBox="0 0 64 64" role="img" aria-label={title}>

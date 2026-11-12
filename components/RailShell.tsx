@@ -6,9 +6,8 @@ import { fmtUsd } from "@/lib/num-format";
  * AUTISTIK news). The classic layouts (components/Shell.tsx for the website, components/AppShell.tsx for the App) are
  * kept as they are, and people can switch back any time. Phones always use the classic layouts.
  */
-import LogoMark from "@/components/LogoMark";
+import { LogoBadge } from "@/components/LogoMark";
 import Link from "next/link";
-import TrendingButton from "@/components/TrendingButton";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
 import { useRouter } from "next/navigation";
@@ -82,7 +81,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
     <div className={"nx" + (chatPage ? " chat-page" : "")}>
       <aside className="nx-rail" aria-label="Menu">
         <Link href="/mood" className="nx-brand" aria-label="Open TIK" title="Open TIK">
-          <LogoMark size={42} title="AUTISTIK Hub" />
+          <LogoBadge size={30} title="AUTISTIK Hub" />
         </Link>
         <nav className="nx-nav">
           {MAIN.filter((i) => !i.members || me).map(link)}
@@ -116,7 +115,6 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
         {path !== "/" && !chatPage && <header className="nx-top">
           <b>{section?.name ?? "AUTISTIK Hub"}</b>
           <div className="nx-top-r">
-            <TrendingButton />
             <LangPicker />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
