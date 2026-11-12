@@ -36,7 +36,7 @@ export function SourcePicker({ tg, x, general, busy, onAct }: { tg: boolean; x: 
 /** A Telegram chat's id in one form ("c:123:hash" / "g:123" from the account login, -100123 / -123 from the bot). */
 const chatKey = (ref: string) => (/^[cgu]:/.test(ref) ? ref.split(":")[1] || "" : ref.replace(/^-100/, "").replace(/^-/, ""));
 
-export function Callers({ list, normal, groups, busy, onAct }: { list: Caller[]; normal: string; groups: { ref: string; title: string }[]; busy: boolean; onAct: Act }) {
+export function Callers({ list, normal, groups, channels, busy, onAct }: { list: Caller[]; normal: string; groups: { ref: string; title: string }[]; channels: string[]; busy: boolean; onAct: Act }) {
   const [platform, setPlatform] = useState<"tg" | "x">("tg");
   const [chat, setChat] = useState("");
   const [who, setWho] = useState("");
@@ -50,7 +50,7 @@ export function Callers({ list, normal, groups, busy, onAct }: { list: Caller[];
   return (
     <div className="aic-block">
       <b>⭐ Callers</b>
-      <small className="muted">Pick a group and add the people whose calls the bot should buy there. <b>A group with callers picked buys only their calls.</b> A group with nobody picked buys every call. Each caller has their own dollar amount per call (normal size is {normal}).</small>
+      <small className="muted"><b>Channels always buy every call.</b> For group chats, pick a group and add the good callers there: <b>a group with callers picked buys only their calls</b>; a group with nobody picked buys every call. Each caller has their own dollar amount per call (normal size is {normal}).</small>
       <form className="aic-caller" onSubmit={(e) => { e.preventDefault(); if (who.trim() && Number(usd) > 0) { const t = opts.find((o) => o.key === chat)?.title; onAct("caller", "caller", { op: "add", platform, who, usd: Number(usd), chat: platform === "tg" ? chat : "", chatTitle: t }).then(() => setWho("")); } }}>
         <select className="input" value={platform} onChange={(e) => setPlatform(e.target.value as "tg" | "x")} aria-label="Where they post">
           <option value="tg">Telegram</option>
@@ -81,9 +81,10 @@ export function Callers({ list, normal, groups, busy, onAct }: { list: Caller[];
         ))}</div>
       ) : <small className="muted">No callers yet: every call in your ticked groups is bought.</small>}
       {opts.length > 0 && (
-        <small className="muted">{strict.length ? `Only picked callers: ${strict.map((o) => o.title).join(", ")}. ` : ""}{opts.filter((o) => !byGroup.has(o.key)).length ? `Every call: ${opts.filter((o) => !byGroup.has(o.key)).map((o) => o.title).join(", ")}.` : ""}</small>
+        <small className="muted">{strict.length ? `Only picked callers: ${strict.map((o) => o.title).join(", ")}. ` : ""}{opts.filter((o) => !byGroup.has(o.key)).length ? `Every call (no callers picked yet): ${opts.filter((o) => !byGroup.has(o.key)).map((o) => o.title).join(", ")}.` : ""}</small>
       )}
-      <small className="muted">To find a Telegram user id, forward one of their messages to @userinfobot. In a channel, posts come from the channel itself, so add the channel&apos;s @username.</small>
+      {channels.length > 0 && <small className="muted">Channels, every call bought: {channels.join(", ")}.</small>}
+      <small className="muted">To find a Telegram user id, forward one of their messages to @userinfobot.</small>
     </div>
   );
 }

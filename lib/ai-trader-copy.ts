@@ -69,7 +69,7 @@ async function tgTo(traderId: number, text: string) {
  * trader), and the bot being added to or removed from a chat (it's followed by whichever admins added it). Returns a
  * post and the traders that follow its chat, or null if nobody should copy it. One bot serves every admin.
  */
-export async function tgHandle(u: any): Promise<{ text: string; chat: string; chatId: string; url: string; at: number; traders: number[]; from: { id: string | null; username: string | null } } | null> {
+export async function tgHandle(u: any): Promise<{ text: string; chat: string; chatId: string; isChannel: boolean; url: string; at: number; traders: number[]; from: { id: string | null; username: string | null } } | null> {
   const sb = supabaseService();
   // Linking: /start <code> in a private chat with the bot.
   const pm = u?.message;
@@ -123,7 +123,7 @@ export async function tgHandle(u: any): Promise<{ text: string; chat: string; ch
   const url = m.chat.username ? `https://t.me/${m.chat.username}/${m.message_id}` : `tg:${m.chat.id}:${m.message_id}`;
   const by = m.from || m.sender_chat || null;
   const from = { id: by?.id != null ? String(by.id) : null, username: by?.username ? String(by.username).toLowerCase() : null };
-  return { text, chat, chatId: String(m.chat.id), url, at: (Number(m.edit_date || m.date) || Date.now() / 1000) * 1000, traders: [...new Set(on.map((x: any) => Number(x.trader_id)))], from };
+  return { text, chat, chatId: String(m.chat.id), isChannel: m.chat.type === "channel" || !!u?.channel_post || !!u?.edited_channel_post, url, at: (Number(m.edit_date || m.date) || Date.now() / 1000) * 1000, traders: [...new Set(on.map((x: any) => Number(x.trader_id)))], from };
 }
 
 // ---------------------------------------------------------------- X sign-in

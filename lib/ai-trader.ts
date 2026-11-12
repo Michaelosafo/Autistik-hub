@@ -813,7 +813,7 @@ export async function runFast() {
       // Groups, channels and chats read through the admin's own Telegram account.
       const tga = await tgaNewPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
       if (tga.errors.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${tga.errors[0]}`.slice(0, 300) }).eq("id", T());
-      for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => [])));
+      for (const post of tga.posts.slice(0, 20)) out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => [])));
     }
   }
   // General mode only: X callers and DexScreener signals.
@@ -903,12 +903,13 @@ async function callerFor(platform: "tg" | "x", from: From, chat: string): Promis
   return { skip: false, caller: g ? { usd: n(g.usd), who: String(g.who) } : null };
 }
 
-export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string }, source: "x" | "telegram", label: string): Promise<string[]> {
+export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string; isChannel?: boolean }, source: "x" | "telegram", label: string): Promise<string[]> {
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
   // Telegram only mode ignores X, X only mode ignores Telegram.
   if ((source === "x" && !s.use_x) || (source === "telegram" && !s.use_tg)) return [];
-  const who = await callerFor(source === "x" ? "x" : "tg", post.from, source === "telegram" ? chatKey(post.chat) : "").catch(() => ({ skip: false as const, caller: null }));
+  // Channels always buy every call (their posts come from the channel, not a person). Groups follow their picked callers.
+  const who = post.isChannel ? { skip: false as const, caller: null } : await callerFor(source === "x" ? "x" : "tg", post.from, source === "telegram" ? chatKey(post.chat) : "").catch(() => ({ skip: false as const, caller: null }));
   // This group has its own callers and the poster isn't one of them: not bought.
   if (who.skip) return [];
   const caller = who.caller;
