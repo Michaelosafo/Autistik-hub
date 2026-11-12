@@ -6108,3 +6108,48 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .aic-caller > .input{flex:1;min-width:140px}
 .aic-addr{all:unset;cursor:pointer;text-decoration:underline dotted}
 .aic-chain .btn{flex:none}
+
+/* Swap: compact, modern network picker (the "All networks" sheet and the network count pill) */
+.sx-sheet{gap:10px}
+.sx-sheet > input{position:sticky;top:0;z-index:2;height:42px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:inherit;font:inherit}
+.sx-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.sx-grid-item{border:0;background:transparent;padding:8px 2px;gap:5px;font-size:.7em;font-weight:600;color:var(--muted);border-radius:12px;transition:background .15s,color .15s}
+.sx-grid-item:hover,.sx-grid-item:focus-visible{background:var(--surface-2);color:var(--ink)}
+.sx-grid-item.on{background:rgba(245,201,53,.12);color:#F5C935}
+.sx-grid-item.on span{font-weight:800}
+@media (min-width:640px){.sx-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.sx-grid-item{font-size:.76em}}
+.sc-mode{font-size:.68em;padding:3px 8px;gap:4px;font-weight:700;letter-spacing:.01em;background:rgba(123,85,224,.12);border:0}
+.sc-chip{height:38px;min-width:38px;border-width:1px;border-color:transparent;background:var(--surface-2)}
+.sc-chip.on{border-color:rgba(245,201,53,.7)}
+
+/* Live room: optional wallet link for drops, inside the room */
+.lv-dropgate{border-radius:14px;background:rgba(245,201,53,.08);border:1px solid rgba(245,201,53,.25);padding:8px 12px}
+.lv-dropgate summary{cursor:pointer;font-weight:700;font-size:.88em}
+.lv-dropgate[open] summary{margin-bottom:8px}
+
+/* Live room polish: compact controls with more fire */
+.lv-rec{gap:6px;padding:4px 10px 4px 8px;font-size:.74em;letter-spacing:.12em;border-radius:99px;color:#fff;
+  background:linear-gradient(180deg,rgba(26,10,16,.92),rgba(14,6,10,.92));border:1px solid rgba(255,77,109,.55);
+  box-shadow:0 0 0 1px rgba(255,77,109,.12),0 6px 22px -8px rgba(255,64,96,.9),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(8px)}
+.lv-rec b{font-weight:900}
+.lv-rec i{width:8px;height:8px;background:#FF3B5C;box-shadow:0 0 0 3px rgba(255,59,92,.22),0 0 12px 2px rgba(255,59,92,.9)}
+.lv-rec-t{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;letter-spacing:.02em;padding-left:6px;margin-left:2px;border-left:1px solid rgba(255,255,255,.18)}
+/* Record control: a clean ring; recording turns it into a burning ring */
+.ctl.red .ctl-ic{position:relative;color:#FF4D6D}
+.ctl.red.on .ctl-ic{color:#fff;background:radial-gradient(circle at 50% 40%,#FF5A5F,#C81E3C 70%);box-shadow:0 0 0 2px rgba(255,90,95,.25),0 0 18px 2px rgba(255,64,96,.75)}
+.ctl.red.on .ctl-ic::before{content:"";position:absolute;inset:-3px;border-radius:50%;padding:2px;
+  background:conic-gradient(from 0deg,#FF3D00,#FFC400,#FF3D6E,#FF3D00);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:lvspin 1.6s linear infinite}
+@keyframes lvspin{to{transform:rotate(360deg)}}
+/* MORE FIRE: smaller pill, hotter glow */
+.lv-fire{gap:8px;padding:6px 16px 6px 8px;font-size:.9em;
+  background:linear-gradient(100deg,#FF2E00,#FF6A00 45%,#FFB300 80%,#FFD54A);background-size:200% 100%;animation:lvfirebg 3.2s ease-in-out infinite;
+  box-shadow:0 0 0 1px rgba(255,190,80,.35),0 8px 28px -6px rgba(255,80,0,.85),0 0 22px -4px rgba(255,140,0,.7),inset 0 1px 0 rgba(255,255,255,.45)}
+.lv-fire:hover{box-shadow:0 0 0 1px rgba(255,210,120,.5),0 10px 34px -6px rgba(255,80,0,.95),0 0 30px -2px rgba(255,160,0,.85),inset 0 1px 0 rgba(255,255,255,.5)}
+.lv-fire-ic{font-size:1.4em;filter:drop-shadow(0 0 6px rgba(255,210,0,.95)) drop-shadow(0 0 14px rgba(255,90,0,.7))}
+.lv-fire-t b{font-size:1em;letter-spacing:.1em;text-shadow:0 1px 0 rgba(120,30,0,.45)}
+.lv-fire-t small{font-size:.78em}
+@keyframes lvfirebg{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+/* Join screen: a glowing orb instead of an emoji */
+.lv-gate-orb{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;color:#fff;
+  background:radial-gradient(circle at 35% 30%,#C084FC,#7C3AED 55%,#4C1D95);box-shadow:0 0 0 6px rgba(168,85,247,.12),0 12px 30px -8px rgba(124,58,237,.8),inset 0 1px 0 rgba(255,255,255,.35)}
+@media (prefers-reduced-motion:reduce){.ctl.red.on .ctl-ic::before,.lv-fire{animation:none}}

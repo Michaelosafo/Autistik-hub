@@ -10,7 +10,8 @@
 import { Api, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { computeCheck } from "telegram/Password";
-import bigInt from "big-integer";
+// The library's own big-number helper: chat ids must be ITS big-integer type, or it refuses them (CastError).
+import { returnBigInt as bigInt } from "telegram/Helpers";
 import QRCode from "qrcode";
 import { supabaseService } from "@/lib/supabase/server";
 import { T, tq } from "@/lib/ai-trader-ctx";

@@ -429,6 +429,9 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
 
   // Back to the site after leaving it: go straight back into the live you were in.
   useEffect(() => { if (autoJoin && ready && !joined && !ended && !chan.current) join(); }, [autoJoin, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Listeners are in the room the moment they open it: they show in the list and hear the voices straight away.
+  // (Linking a wallet is only needed for drops, offered inside the room, never a wall in front of it.)
+  useEffect(() => { if (!isHost && !mini && !joined && !ended && !chan.current) join(); }, [isHost, mini]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // My role changed (invited up or moved down): start or stop sending my voice.
   const wasSpeaker = useRef(false);
@@ -696,19 +699,29 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
         </div>
       )}
 
-      {!mini && !ready ? (
+      {!mini && !ready && isHost ? (
         <WalletGate roomId={room.id} meId={me.id} isHost={isHost} onReady={(s, a) => { setReady(s); setMyAddr(a); }} />
       ) : !mini && !joined ? (
         <div className="lv-gate">
-          <div className="lv-gate-ic" aria-hidden="true">{isHost ? "🎙️" : "🎧"}</div>
+          <div className="lv-gate-orb" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+              {isHost ? <><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></> : <><path d="M4 14v-2a8 8 0 0 1 16 0v2" /><rect x="3" y="14" width="4.5" height="6" rx="1.6" /><rect x="16.5" y="14" width="4.5" height="6" rx="1.6" /></>}
+            </svg>
+          </div>
           <b>{isHost ? "You're the host" : "You're in"}</b>
-          <p>{isHost ? "Your microphone starts muted." : "Listen, comment, react, and raise your hand to speak."} <small className="muted">🔒 Drops go to your wallet {ready}, only you see this.</small></p>
+          <p>{isHost ? "Your microphone starts muted." : "Listen, comment, react, and raise your hand to speak."} {ready && <small className="muted">🔒 Drops go to your wallet {ready}, only you see this.</small>}</p>
           <button type="button" className="btn primary" disabled={joining} onClick={join}>{joining ? "Joining…" : isHost ? "Start the live" : "Join the live"}</button>
         </div>
       ) : !mini ? (
         <>
           {needTap && <button type="button" className="lv-tap" onClick={unlockAudio}>🔊 Tap here to hear the room</button>}
-          {recOn && <div className="lv-rec" role="status"><i />REC{rec ? ` ${Math.floor(recSecs / 60)}:${String(recSecs % 60).padStart(2, "0")}` : ""} <small>This live is being recorded</small></div>}
+          {!ready && !isHost && (
+            <details className="lv-dropgate">
+              <summary>🎁 Link a wallet to get the host&apos;s drops</summary>
+              <WalletGate roomId={room.id} meId={me.id} isHost={false} onReady={(s, a) => { setReady(s); setMyAddr(a); }} />
+            </details>
+          )}
+          {recOn && <div className="lv-rec" role="status" title="This live is being recorded"><i /><b>REC</b>{rec && <span className="lv-rec-t">{Math.floor(recSecs / 60)}:{String(recSecs % 60).padStart(2, "0")}</span>}</div>}
           {(saving || saved || local) && isHost && (
             <div className="lv-saved" role="status">
               <span>{saving || (saved?.pinned ? "📌 Saved and pinned to your profile." : saved ? "✅ Recording saved to this live's page and your profile." : "")}</span>
@@ -791,7 +804,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
           <div className="lv-floats" aria-hidden="true">{floaters.map((f) => <span key={f.k} className={f.big ? "big" : undefined} style={{ left: `${f.x}%` }}><Emo e={f.e} size={f.big ? 64 : 42} /></span>)}</div>
 
           <button type="button" className="lv-fire" onClick={moreFire} aria-label="More fire">
-            <span className="lv-fire-ic" aria-hidden="true"><Emo e="🔥" size={46} /></span>
+            <span className="lv-fire-ic" aria-hidden="true"><Emo e="🔥" size={30} /></span>
             <span className="lv-fire-t"><b>MORE FIRE</b><small>{fires ? `${fmt(fires)} 🔥 in this live` : "Tap to light it up"}</small></span>
           </button>
 

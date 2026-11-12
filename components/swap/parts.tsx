@@ -51,7 +51,7 @@ export function NetGrid({ label, value, onPick, logos, allow, onClose }: {
           {list.map((c) => { const why = allow?.(c) ?? null; return (
             <button key={c.id} type="button" className={"sx-grid-item" + (c.id === value?.id ? " on" : "")} disabled={!!why} title={why || c.name}
               onClick={() => { onPick(c); onClose(); }}>
-              <ChainBadge c={c} logo={logos[c.id]} size={30} /><span>{c.name}</span>
+              <ChainBadge c={c} logo={logos[c.id]} size={26} /><span>{c.name}</span>
             </button>
           ); })}
         </div>
