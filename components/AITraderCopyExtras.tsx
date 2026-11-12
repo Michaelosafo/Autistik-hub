@@ -235,3 +235,68 @@ function MoveFunds({ list, relay, busy, onAct }: { list: LiveWallet[]; relay: bo
     </div>
   );
 }
+
+export type Squad = { id: number; name: string; usd: number; enabled: boolean; members: { id: number; kind: "person" | "chat" | "x" | "wallet"; value: string; label: string | null }[] };
+const KIND_ICON: Record<string, string> = { person: "👤", chat: "📢", x: "𝕏", wallet: "👛" };
+
+/**
+ * Squads: your own named groups of the people, chats, X accounts and wallets the bot buys from, filled from one box.
+ * A squad member's call is always bought (even in a group with its own picked callers), at the squad's size.
+ */
+export function Squads({ list, chats, normal, busy, onAct }: { list: Squad[]; chats: { ref: string; title: string; kind: string }[]; normal: string; busy: boolean; onAct: Act }) {
+  const [name, setName] = useState("");
+  const [usd, setUsd] = useState("");
+  return (
+    <div className="aic-block sq">
+      <div className="sq-head">
+        <b>👥 Squads</b>
+        <small className="muted">Group the people, channels, X accounts and wallets you trust. Their calls are always bought, at the squad&apos;s size (blank = normal size, {normal}).</small>
+      </div>
+      {list.map((q) => <SquadCard key={q.id} q={q} chats={chats} normal={normal} busy={busy} onAct={onAct} />)}
+      <form className="sq-new" onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return; onAct("squad-new", "squad", { op: "create", name, usd: Number(usd) || 0 }).then(() => { setName(""); setUsd(""); }); }}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New squad name, like Top callers" maxLength={40} aria-label="Squad name" />
+        <span className="ait-in"><em>$</em><input inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="Size" aria-label="Buy size in dollars" /></span>
+        <button type="submit" className="btn small primary" disabled={busy || !name.trim()}>+ Make squad</button>
+      </form>
+    </div>
+  );
+}
+
+function SquadCard({ q, chats, normal, busy, onAct }: { q: Squad; chats: { ref: string; title: string; kind: string }[]; normal: string; busy: boolean; onAct: Act }) {
+  const [text, setText] = useState("");
+  const [usd, setUsd] = useState(q.usd ? String(q.usd) : "");
+  const add = (t: string) => { if (!t.trim()) return; onAct(`squad-add-${q.id}`, "squad", { op: "add", id: q.id, text: t }).then(() => setText("")); };
+  const pickable = chats.filter((c) => c.kind === "group" || c.kind === "channel");
+  return (
+    <div className={"sq-card" + (q.enabled ? "" : " off")}>
+      <div className="sq-card-h">
+        <label className="sq-switch" title={q.enabled ? "On: buying their calls" : "Off"}>
+          <input type="checkbox" checked={q.enabled} disabled={busy} onChange={(e) => onAct(`squad-on-${q.id}`, "squad", { op: "update", id: q.id, enabled: e.target.checked }, e.target.checked ? `${q.name} on.` : `${q.name} off.`)} />
+          <i aria-hidden="true" />
+        </label>
+        <b className="grow">{q.name}</b>
+        <span className="ait-in sq-usd"><em>$</em><input inputMode="decimal" value={usd} placeholder={normal} onChange={(e) => setUsd(e.target.value)}
+          onBlur={() => { if ((Number(usd) || 0) !== Number(q.usd)) onAct(`squad-usd-${q.id}`, "squad", { op: "update", id: q.id, usd: Number(usd) || 0 }, `${q.name}: ${Number(usd) ? `$${Number(usd)} a buy` : "normal size"}.`); }} aria-label={`${q.name} buy size`} /></span>
+        <button type="button" className="sq-x" disabled={busy} onClick={() => { if (confirm(`Delete the squad "${q.name}"?`)) onAct(`squad-del-${q.id}`, "squad", { op: "delete", id: q.id }); }} aria-label={`Delete ${q.name}`}>🗑</button>
+      </div>
+      <div className="sq-chips">
+        {q.members.length ? q.members.map((m) => (
+          <span key={m.id} className={"sq-chip " + m.kind} title={m.value}>
+            <i aria-hidden="true">{KIND_ICON[m.kind]}</i>{m.label || m.value}
+            <button type="button" disabled={busy} onClick={() => onAct(`squad-rm-${m.id}`, "squad", { op: "unmember", id: q.id, member: m.id })} aria-label={`Remove ${m.label || m.value}`}>×</button>
+          </span>
+        )) : <small className="muted">Empty. Add people, channels or wallets below.</small>}
+      </div>
+      <form className="sq-box" onSubmit={(e) => { e.preventDefault(); add(text); }}>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="@username, user id, t.me/… link, x.com/… link, or a wallet" aria-label={`Add to ${q.name}`} />
+        <button type="submit" className="btn small primary" disabled={busy || !text.trim()}>Add</button>
+      </form>
+      {pickable.length > 0 && (
+        <select className="sq-pick" value="" disabled={busy} onChange={(e) => e.target.value && add(e.target.value)} aria-label="Add one of your Telegram groups or channels">
+          <option value="">＋ Add one of your groups or channels…</option>
+          {pickable.map((c) => <option key={c.ref} value={c.ref}>{c.kind === "channel" ? "📢" : "👥"} {c.title}</option>)}
+        </select>
+      )}
+    </div>
+  );
+}

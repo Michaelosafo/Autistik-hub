@@ -5,7 +5,7 @@ import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
 import { cronDenied } from "@/lib/cron-auth";
-import { runAll, tradeSize } from "@/lib/ai-trader";
+import { chatKey, runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
 import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, revealSolKey, relayMove, relayMoveQuote } from "@/lib/ai-trader";
 import { relayReady, relayStatus } from "@/lib/ai-trader-chains";
@@ -80,10 +80,12 @@ async function getMine(_req: Request, action: string) {
     tq("ai_trader_signals").select("id,at,source,who,body,url,chain,token,symbol,mcap,result").not("result", "is", null).order("at", { ascending: false }).limit(40),
     liveBalance().catch(() => null),
   ]);
-  const [{ data: srcs }, { data: callers }, { data: rebuys }] = await Promise.all([
+  const [{ data: srcs }, { data: callers }, { data: rebuys }, { data: squads }, { data: squadMembers }] = await Promise.all([
     tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true }),
     tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title").order("usd", { ascending: false }),
     tq("ai_trader_rebuy").select("id,chain,token,symbol,sold_usd,low_usd,status,note,sold_at").order("sold_at", { ascending: false }).limit(15),
+    tq("ai_trader_squads").select("id,name,usd,enabled").order("created_at", { ascending: true }),
+    tq("ai_trader_squad_members").select("id,squad_id,kind,value,label").order("added_at", { ascending: true }),
   ]);
   const done = ((closed || []) as Position[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + (Number(p.pnl) || 0), 0);
@@ -92,6 +94,7 @@ async function getMine(_req: Request, action: string) {
     signals: sigs || [], sources: { x: xReady(), telegram: !!process.env.TELEGRAM_BOT_TOKEN },
     copy: {
       sources: srcs || [], maxTax: COPY_MAX_TAX, callers: callers || [], rebuys: rebuys || [],
+      squads: (squads || []).map((q: any) => ({ ...q, members: (squadMembers || []).filter((m: any) => m.squad_id === q.id) })),
       wallets: await liveWallets(s).catch(() => []),
       relay: relayReady(),
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
@@ -229,6 +232,86 @@ async function postMine(action: string, b: any) {
     }
     case "x-lists": {
       try { return json({ ok: true, lists: await xMyLists() }); } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "squad": {
+      // Squads: create / rename / size / on-off / delete, and add or remove members from one box.
+      const op = String(b.op || "");
+      const sid = Number(b.id) || 0;
+      const mine = async () => (await tq("ai_trader_squads").select("id,name").eq("id", sid).maybeSingle()).data as { id: number; name: string } | null;
+      if (op === "create") {
+        const name = String(b.name || "").trim().slice(0, 40);
+        const usd = Math.max(0, Math.min(100_000, Number(b.usd) || 0));
+        if (!name) return json({ error: "Give the squad a name, like Top callers." }, 400);
+        const { count } = await tq("ai_trader_squads").select("id", { count: "exact", head: true });
+        if ((count || 0) >= 20) return json({ error: "20 squads is the most." }, 400);
+        const { error } = await tq("ai_trader_squads").insert({ name, usd });
+        if (error) return json({ error: error.message }, 400);
+        return json({ ok: true, note: `Squad "${name}" made. Now add people, channels or wallets to it.` });
+      }
+      const sq = await mine();
+      if (!sq) return json({ error: "That squad isn't there any more." }, 404);
+      if (op === "delete") { await tq("ai_trader_squads").delete().eq("id", sid); return json({ ok: true, note: `Squad "${sq.name}" deleted.` }); }
+      if (op === "update") {
+        const up: Record<string, unknown> = {};
+        if (b.name != null) up.name = String(b.name).trim().slice(0, 40) || sq.name;
+        if (b.usd != null) up.usd = Math.max(0, Math.min(100_000, Number(b.usd) || 0));
+        if (b.enabled != null) up.enabled = !!b.enabled;
+        await tq("ai_trader_squads").update(up).eq("id", sid);
+        return json({ ok: true });
+      }
+      if (op === "unmember") { await tq("ai_trader_squad_members").delete().eq("id", Number(b.member)).eq("squad_id", sid); return json({ ok: true }); }
+      if (op === "add") {
+        // One box: @username, user id, t.me link, x.com link, "x @handle", a wallet, or the name of one of your chats.
+        const chats = ((await tgaStatus().catch(() => null))?.chats || []) as { ref: string; title: string; kind: string; username: string | null }[];
+        const { data: srcs } = await tq("ai_trader_sources").select("ref,title,handle,enabled").eq("kind", "tg_chat");
+        // Split on new lines / commas; "@a @b 0x…" with single spaces splits too (a chat name with spaces stays whole).
+        const looks = (w: string) => /^(@|https?:|t\.me|telegram\.me|x\.com|twitter\.com|0x|\d{4,})/i.test(w) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w);
+        const items = String(b.text || "").split(/[\n,;]+/).flatMap((x) => { const w = x.trim().split(/\s+/); return w.length > 1 && w.every(looks) ? w : [x.trim()]; }).filter(Boolean).slice(0, 40);
+        const rows: { kind: string; value: string; label: string }[] = [];
+        const tick: { ref: string; title: string; handle: string | null }[] = [];
+        const bad: string[] = [];
+        const chatBy = (pred: (c: (typeof chats)[number]) => boolean) => chats.find(pred);
+        for (const raw of items) {
+          let t = raw.replace(/^https?:\/\/(www\.)?/i, "");
+          if (/^0x[a-fA-F0-9]{40}$/.test(t)) { rows.push({ kind: "wallet", value: t.toLowerCase(), label: `${t.slice(0, 6)}…${t.slice(-4)}` }); continue; }
+          if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t)) { rows.push({ kind: "wallet", value: t, label: `${t.slice(0, 4)}…${t.slice(-4)}` }); continue; }
+          const xm = /^(?:x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})/i.exec(t) || /^x\s*[:@]\s*@?([A-Za-z0-9_]{1,15})$/i.exec(t);
+          if (xm) { rows.push({ kind: "x", value: xm[1].toLowerCase(), label: `X @${xm[1]}` }); continue; }
+          const tm = /^(?:t\.me|telegram\.me)\/(?:s\/)?([A-Za-z0-9_]{4,32})/i.exec(t);
+          if (tm) {
+            const h = tm[1].toLowerCase();
+            const c = chatBy((x) => (x.username || "").toLowerCase() === h);
+            if (c) { rows.push({ kind: "chat", value: chatKey(c.ref), label: c.title }); tick.push({ ref: c.ref, title: c.title, handle: c.username }); }
+            else rows.push({ kind: "person", value: h, label: `@${h}` }); // a person's t.me link
+            continue;
+          }
+          if (/^\d{4,20}$/.test(t)) { rows.push({ kind: "person", value: t, label: `ID ${t}` }); continue; }
+          const at = /^@([A-Za-z0-9_]{3,32})$/.exec(t);
+          if (at) {
+            const h = at[1].toLowerCase();
+            const c = chatBy((x) => (x.username || "").toLowerCase() === h && x.kind !== "chat" && x.kind !== "bot");
+            if (c) { rows.push({ kind: "chat", value: chatKey(c.ref), label: c.title }); tick.push({ ref: c.ref, title: c.title, handle: c.username }); }
+            else rows.push({ kind: "person", value: h, label: `@${h}` });
+            continue;
+          }
+          // A chat's name, or its ref from the picker.
+          const c = chatBy((x) => x.ref === t) || chatBy((x) => x.title.toLowerCase() === t.toLowerCase()) || chatBy((x) => x.title.toLowerCase().includes(t.toLowerCase()) && t.length >= 4);
+          if (c && c.kind !== "chat" && c.kind !== "bot") { rows.push({ kind: "chat", value: chatKey(c.ref), label: c.title }); tick.push({ ref: c.ref, title: c.title, handle: c.username }); continue; }
+          bad.push(raw.slice(0, 30));
+        }
+        if (!rows.length) return json({ error: `Couldn't read ${bad.length ? `"${bad.join('", "')}"` : "that"}. Paste @usernames, user ids, t.me / x.com links, wallet addresses, or pick one of your chats.` }, 400);
+        const { error } = await tq("ai_trader_squad_members").upsert(rows.map((r) => ({ ...r, squad_id: sid })), { onConflict: "squad_id,kind,value" });
+        if (error) return json({ error: error.message }, 400);
+        // A chat put in a squad is read by the bot: tick it if it wasn't.
+        for (const t of tick) {
+          const have = (srcs || []).find((x: any) => x.ref === t.ref);
+          if (have && !have.enabled) await tq("ai_trader_sources").update({ enabled: true }).eq("kind", "tg_chat").eq("ref", t.ref);
+          if (!have) await tq("ai_trader_sources").upsert({ kind: "tg_chat", ref: t.ref, title: t.title.slice(0, 80), enabled: true, ...(t.handle && /^[A-Za-z0-9_]{4,32}$/.test(t.handle) ? { handle: t.handle } : {}) }, { onConflict: "trader_id,kind,ref" });
+        }
+        await log("settings", `Squad "${sq.name}": added ${rows.map((r) => r.label).join(", ")}.`);
+        return json({ ok: true, note: `Added ${rows.length} to "${sq.name}"${bad.length ? `. Couldn't read: ${bad.join(", ")}` : ""}${tick.length ? `. ${tick.length} chat(s) switched on for reading.` : ""}` });
+      }
+      return json({ error: "Unknown squad action." }, 400);
     }
     case "caller": {
       // Callers whose posts buy a set $ amount: a Telegram @username or user id, or an X handle.

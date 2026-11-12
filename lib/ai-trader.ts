@@ -908,19 +908,49 @@ async function callerFor(platform: "tg" | "x", from: From, chat: string): Promis
   return { skip: false, caller: g ? { usd: n(g.usd), who: String(g.who) } : null };
 }
 
+/**
+ * Squads: named groups of people (Telegram), chats (groups/channels), X accounts and wallets. A post from (or in, or
+ * mentioning) a member of a squad that's switched on is always bought, even in a group with its own picked callers,
+ * at the squad's size ($0 = the normal size). The biggest matching squad wins.
+ */
+export async function squadFor(post: { text: string; user: string; from?: From; chat?: string }, source: "x" | "telegram"): Promise<{ usd: number; name: string; member: string } | null> {
+  const { data } = await tq("ai_trader_squad_members").select("kind,value,label,squad:ai_trader_squads!inner(name,usd,enabled)").eq("squad.enabled", true);
+  const rows = (data || []) as any[];
+  if (!rows.length) return null;
+  const uname = post.from?.username?.replace(/^@/, "").toLowerCase() || null;
+  const uid = post.from?.id ? String(post.from.id) : null;
+  const ck = source === "telegram" ? chatKey(post.chat) : "";
+  const text = post.text.toLowerCase();
+  const hits = rows.filter((m) => {
+    const v = String(m.value);
+    if (m.kind === "person") return source === "telegram" && (v === uname || v === uid);
+    if (m.kind === "x") return source === "x" && (v === uname || v === String(post.user || "").replace(/^@/, "").toLowerCase());
+    if (m.kind === "chat") return source === "telegram" && !!ck && v === ck;
+    if (m.kind === "wallet") return text.includes(v.toLowerCase());
+    return false;
+  });
+  if (!hits.length) return null;
+  const best = hits.sort((a, b) => n(b.squad.usd) - n(a.squad.usd))[0];
+  return { usd: n(best.squad.usd), name: String(best.squad.name), member: String(best.label || best.value) };
+}
+
 /** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
 const claimed = new Set<string>();
 
 export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string; isChannel?: boolean }, source: "x" | "telegram", label: string): Promise<string[]> {
+  // (label gets the squad's name added when a squad member posted)
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
   // Telegram only mode ignores X, X only mode ignores Telegram.
   if ((source === "x" && !s.use_x) || (source === "telegram" && !s.use_tg)) return [];
   // Channels always buy every call (their posts come from the channel, not a person). Groups follow their picked callers.
   const who = post.isChannel ? { skip: false as const, caller: null } : await callerFor(source === "x" ? "x" : "tg", post.from, source === "telegram" ? chatKey(post.chat) : "").catch(() => ({ skip: false as const, caller: null }));
-  // This group has its own callers and the poster isn't one of them: not bought.
-  if (who.skip) return [];
-  const caller = who.caller;
+  // A squad member always buys (at the squad's size), even in a group that has its own picked callers.
+  const squad = await squadFor(post, source).catch(() => null);
+  // This group has its own callers and the poster isn't one of them (and isn't in a squad): not bought.
+  if (who.skip && !squad) return [];
+  const caller = squad ? (squad.usd > 0 ? { usd: squad.usd, who: `${squad.member} (squad ${squad.name})` } : who.skip ? null : who.caller) : who.skip ? null : who.caller;
+  if (squad) label = `${label} · squad "${squad.name}"`;
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
