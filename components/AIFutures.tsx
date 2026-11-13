@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import TraderTabs from "@/components/TraderTabs";
 
 type S = {
-  enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; risk_pct: number;
+  enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; max_loss_pct: number; risk_pct: number;
   max_positions: number; daily_loss_pct: number; max_hold_hours: number; use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[];
   last_run: string | null; last_note: string | null;
 };
@@ -76,7 +76,7 @@ export default function AIFutures() {
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
         <h1>📊 AI Futures</h1>
-        <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Never above {s.max_lev}x. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>
+        <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>
       </div>
 
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
@@ -88,7 +88,7 @@ export default function AIFutures() {
         <div className="ait-seg" role="radiogroup" aria-label="Mode">
           <button type="button" role="radio" aria-checked={!live} className={!live ? "on" : ""} disabled={!!busy || !live} onClick={() => set({ mode: "paper" })}>Practice</button>
           <button type="button" role="radio" aria-checked={live} className={live ? "on" : ""} disabled={!!busy || live}
-            onClick={() => { if (confirm("Go LIVE? The AI will trade real money from its wallet on Hyperliquid (up to 3x leverage). You can lose money. Only use money you can afford to lose.")) set({ mode: "live" }); }}>Live</button>
+            onClick={() => { if (confirm(`Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
         </div>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
         {msg && <small className="aic-note" role="status">{msg}</small>}
@@ -121,7 +121,10 @@ export default function AIFutures() {
         {!d.wallet ? (
           <>
             <small className="muted">Its own wallet, separate from the copy bot. Only this futures trader uses it. Practice mode doesn&apos;t need it.</small>
-            <button type="button" className="btn" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("w", "wallet", {})}>Create AI Futures wallet</button>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn" disabled={!!busy} onClick={() => act("w", "wallet", {})}>Create AI Futures wallet</button>
+              <button type="button" className="btn ghost" disabled={!!busy} onClick={() => { const k = prompt("Paste the private key of your own wallet (MetaMask / Rabby: Account details → Show private key). Use a wallet just for this, never your main one. It's stored encrypted."); if (k?.trim()) act("imp", "key-import", { key: k.trim() }); }}>Import my own wallet</button>
+            </div>
           </>
         ) : (
           <>
@@ -133,10 +136,12 @@ export default function AIFutures() {
                 <li><b>Easiest:</b> on Hyperliquid (app.hyperliquid.xyz), open your own account → <b>Send</b> → paste the address above → send USDC. It arrives at once, no gas.</li>
                 <li><b>Or from any wallet / exchange:</b> send <b>USDC on Arbitrum</b> (at least 5) plus a little <b>ETH on Arbitrum</b> for gas to the address above, then tap <b>Deposit to Hyperliquid</b>.</li>
                 <li>Aster runs in practice only for now; live trades go to Hyperliquid.</li>
+                <li>Or use your own wallet: <b>Import my own wallet</b> below.</li>
               </ol>
             </details>
             <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
               {(d.wallet.arbUsdc ?? 0) >= 5 && <button type="button" className="btn small primary" disabled={!!busy} onClick={() => act("dep", "deposit", {})}>Deposit {d.wallet.arbUsdc!.toFixed(2)} USDC to Hyperliquid</button>}
+              <button type="button" className="btn small" disabled={!!busy} onClick={() => { const k = prompt("Paste the private key of your own wallet (MetaMask / Rabby: Account details → Show private key). Use a wallet just for this, never your main one. It's stored encrypted."); if (k?.trim()) act("imp", "key-import", { key: k.trim() }); }}>Import my own wallet</button>
               <button type="button" className="btn small ghost" disabled={!!busy} onClick={async () => { if (!confirm("Show the wallet's private key? Anyone who sees it can take the money. Use it to open the wallet in Rabby or MetaMask and withdraw from Hyperliquid.")) return; try { const r = await call("key-reveal", {}); prompt("AI Futures private key (keep it secret):", r.key); } catch (e) { alert((e as Error).message); } }}>Show private key</button>
             </div>
           </>
@@ -156,7 +161,8 @@ export default function AIFutures() {
           <label className="ait-check"><input type="checkbox" checked={s.use_x} disabled={!!busy} onChange={(e) => set({ use_x: e.target.checked })} /> <span>X accounts</span></label>
         </div>
         {[
-          ["max_lev", "Max leverage", "x", "1 to 3. Never higher."],
+          ["max_lev", "Leverage", "x", `1 to 50 (each coin's own maximum applies). At ${s.max_lev}x, liquidation is ~${(100 / s.max_lev).toFixed(1)}% away.`],
+          ["max_loss_pct", "Auto-sell every trade at", "% loss", `of its margin (the P&L % Hyperliquid shows). At ${s.max_lev}x that's a ${(s.max_loss_pct / s.max_lev).toFixed(2)}% price move.`],
           ["risk_pct", "Risk per trade", "% of the account", "What one stop-loss costs. 1% means 10 losses in a row lose about 10%."],
           ["max_positions", "Positions at once", "", ""],
           ["daily_loss_pct", "Daily loss limit", "%", "Down this much today: no new trades until tomorrow (UTC)."],
@@ -192,7 +198,7 @@ export default function AIFutures() {
         {d.log.map((l) => <small key={l.id}><span className="muted">{ago(l.at)} ·</span> {l.text}</small>)}
       </section>
 
-      <small className="muted">Futures with leverage can lose money fast. Nothing here is guaranteed: news can be wrong or already priced in, and big trading firms react in milliseconds. This trader checks every minute, keeps leverage at {s.max_lev}x or less, and always uses a stop-loss.</small>
+      <small className="muted">Futures with leverage can lose money fast. Nothing here is guaranteed: news can be wrong or already priced in, and big trading firms react in milliseconds. This trader checks every minute, uses {s.max_lev}x leverage, and auto-sells any trade at -{s.max_loss_pct}%.</small>
     </div>
   );
 }
