@@ -76,14 +76,14 @@ export default function WalletPicker() {
         continue;
       }
       const viaWc = !!WALLETCONNECT_ID;
-      // Phones: Direct connect first. autistik.io opens inside the wallet app's own browser, where the wallet is built
-      // in: one tap to connect, nothing in between (no WalletConnect relay), and you sign in the wallet itself.
-      // WalletConnect is only for wallets that can't open a site.
-      const phoneDapp = mobile && !!w.dapp, phoneWc = mobile && !phoneDapp && viaWc && !!(w.wc || w.native);
+      // Phones: tap a wallet, its app opens with the request, approve, and come back here connected (you stay in
+      // this browser). Only wallets with no WalletConnect app link (Coinbase, Phantom) open autistik.io inside the
+      // wallet app instead. "Open autistik.io inside your wallet" stays below the list as the backup.
+      const phoneWc = mobile && viaWc && !!(w.wc || w.native), phoneDapp = mobile && !phoneWc && !!w.dapp;
       out.push({
         key: w.id, name: w.name, logo: `/wallets/${w.id}.svg`, color: w.color,
-        badge: w.name === last ? "Last used" : phoneDapp ? "⚡ Direct" : undefined,
-        sub: phoneDapp ? `Direct: opens autistik.io inside ${w.name}, connects in one tap` : phoneWc ? `Opens ${w.name}` : mobile ? (viaWc ? "Pick it in the WalletConnect list" : "Get the app")
+        badge: w.name === last ? "Last used" : undefined,
+        sub: phoneWc ? `Opens ${w.name} to approve, then back here` : phoneDapp ? `Opens autistik.io inside ${w.name}` : mobile ? (viaWc ? "Pick it in the WalletConnect list" : "Get the app")
           : viaWc ? `Scan with ${w.name} on your phone` : "Get the app",
         go: () => {
           if (phoneWc) { chooseWalletConnect(w.id); return; }
@@ -184,7 +184,7 @@ export default function WalletPicker() {
           )}
           {s.qr && (
             <div className="wp-qr">
-              <div className="wp-qr-h"><img src={s.qr.logo} alt="" width={28} height={28} /><b>Scan with {s.qr.name}</b></div>
+              <div className="wp-qr-h"><img src={s.qr.logo} alt="" width={28} height={28} /><b>{s.qr.href ? `Approve in ${s.qr.name}` : `Scan with ${s.qr.name}`}</b></div>
               {s.qr.href ? <>
                 <a className="btn primary wp-open" href={s.qr.href}>Open {s.qr.name}</a>
                 <small>Approve the connection in {s.qr.name}, then come back here. Network: {netOf(s.network).name}. If nothing opened, tap the button.</small>
@@ -204,7 +204,7 @@ export default function WalletPicker() {
           <div className="wp-list">
             {installed.length > 0 && <div className="wp-label">On this device</div>}
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
-            {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : mobile ? "⚡ Direct connect: open autistik.io in your wallet" : "Popular"}</div>}
+            {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : mobile ? "Tap your wallet: it opens, you approve, you come back" : "Popular"}</div>}
             {others.map((r) => <RowBtn key={r.key} r={r} />)}
             {!solMode && <>
             <div className="wp-label">Other wallets</div>
@@ -243,11 +243,11 @@ export default function WalletPicker() {
           </div>
           </>}
           {s.error && <div className="wp-err" role="alert">{s.error}</div>}
-          {!solMode && mobile && (s.error || last) && (
-            <div className="wp-label" style={{ marginTop: 8 }}>Still not connecting? Open this site inside your wallet app</div>
+          {!solMode && mobile && !s.qr && (
+            <div className="wp-label" style={{ marginTop: 8 }}>{s.error ? "Still not connecting? Open this site inside your wallet app" : "Or open autistik.io inside your wallet app"}</div>
           )}
-          {!solMode && mobile && (s.error || last) && TOP_WALLETS.filter((w) => w.dapp).slice(0, 5).map((w) => (
-            <a key={w.id} className="wp-row" href={w.dapp!(location.href)}>
+          {!solMode && mobile && !s.qr && TOP_WALLETS.filter((w) => w.dapp).slice(0, 5).map((w) => (
+            <a key={w.id} className="wp-row" href={w.dapp!(directUrl())}>
               <img src={`/wallets/${w.id}.svg`} alt="" width={40} height={40} loading="lazy" decoding="async" />
               <span className="wp-row-t"><b>{w.name}</b><small>Opens autistik.io in the app&apos;s browser</small></span>
               <i className="wp-chev" aria-hidden="true" />
