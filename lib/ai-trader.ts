@@ -744,8 +744,25 @@ export type Holding = { chain: LiveChain; token: string; symbol: string | null; 
  * was called in the last 3 days), with today's value and whether a trade is watching it. Coins that are there but not
  * tracked (a buy that landed after it was reported as failed, or one bought by hand) can then get a stop-loss or be sold.
  */
+/**
+ * The coins this trader bought or tried to buy (trades, buys reported as failed, recoveries) in the last 30 days.
+ * Only these are ever shown or sellable from the wallet card: anything else in the wallet (often spam airdropped to
+ * wallets to lure people into approving a scam) is left alone.
+ */
+async function ownCoins(): Promise<Set<string>> {
+  const since = new Date(Date.now() - 30 * 864e5).toISOString();
+  const [{ data: pos }, { data: pend }, { data: sig }] = await Promise.all([
+    tq("ai_trader_positions").select("chain,token").gte("opened_at", since).limit(2000),
+    tq("ai_trader_pending").select("chain,token").limit(200),
+    tq("ai_trader_signals").select("chain,token").gte("at", since).or(`result.like.bought*,result.like."skipped: buy failed*"`).limit(2000),
+  ]);
+  return new Set(([...(pos || []), ...(pend || []), ...(sig || [])] as any[]).map((r) => `${r.chain}:${String(r.token).toLowerCase()}`));
+}
+export const isOwnCoin = async (chain: string, token: string) => (await ownCoins()).has(`${chain}:${token.toLowerCase()}`);
+
 export async function walletHoldings(): Promise<Holding[]> {
   const out: Holding[] = [];
+  const own = await ownCoins();
   const { data: open } = await tq("ai_trader_positions").select("chain,token,wallet").in("status", ["open", "closing"]);
   const watched = new Set(((open || []) as any[]).map((p) => `${p.chain}:${String(p.token).toLowerCase()}:${n(p.wallet) === 2 ? 2 : 1}`));
   for (const slot of [1, 2]) {
@@ -757,7 +774,7 @@ export async function walletHoldings(): Promise<Holding[]> {
       const h = await fetch(`https://lite-api.jup.ag/ultra/v1/holdings/${sol}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => null);
       for (const [mint, accs] of Object.entries((h?.tokens || {}) as Record<string, any[]>)) {
         const amount = (accs || []).reduce((a, x) => a + (Number(x?.uiAmount) || 0), 0);
-        if (amount > 0) out.push({ chain: "solana", token: mint, symbol: null, logo: null, slot, amount, usd: null, price: null, tracked: watched.has(`solana:${mint.toLowerCase()}:${slot}`) });
+        if (amount > 0 && own.has(`solana:${mint.toLowerCase()}`)) out.push({ chain: "solana", token: mint, symbol: null, logo: null, slot, amount, usd: null, price: null, tracked: watched.has(`solana:${mint.toLowerCase()}:${slot}`) });
       }
     }
     // EVM chains: the coins it traded or was called recently.
@@ -770,7 +787,7 @@ export async function walletHoldings(): Promise<Holding[]> {
       const seen = new Set<string>();
       for (const r of [...(sigs || []), ...(pos || [])] as any[]) {
         const k = `${r.chain}:${String(r.token).toLowerCase()}`;
-        if (seen.has(k) || !isLiveChain(r.chain) || r.chain === "solana") continue;
+        if (seen.has(k) || !isLiveChain(r.chain) || r.chain === "solana" || !own.has(k)) continue;
         seen.add(k);
         const b = await tokenBalanceOn(r.chain as LiveChain, w, r.token).catch(() => null);
         if (b && b.raw > 0n) out.push({ chain: r.chain, token: r.token, symbol: null, logo: null, slot, amount: Number(b.raw) / 10 ** b.decimals, usd: null, price: null, tracked: watched.has(`${k}:${slot}`) });
