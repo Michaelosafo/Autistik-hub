@@ -6621,3 +6621,20 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .lv-sum-drops{display:flex;flex-direction:column;gap:6px}
 .lv-sum-drop{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
 .lv-gate-t{font-family:var(--f-display);font-size:1.3em}
+
+/* Live rooms: no boxes. Speakers and listeners sit on the page as just their round picture and name, and listeners
+   get the same picture frame and size as the host (the talking ring still shows who's speaking). */
+.lv-stage{background:none;border:0;box-shadow:none;padding:6px 0}
+.lv-box,.lv-box.sm,.lv-stage .lv-box,.lv-crowd .lv-box.sm{background:none;border:0;box-shadow:none;padding:4px 2px}
+.lv-box.talking,.lv-box.me{border:0;box-shadow:none}
+.lv-box.me .lv-name{color:var(--gold,#F0B90B)}
+.lv-crowd,.lv-crowd.dense,.lv-crowd.packed{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;backdrop-filter:none;-webkit-backdrop-filter:none}
+.lv-crowd .lv-av,.lv-crowd.dense .lv-av,.lv-crowd.packed .lv-av{width:56px !important;height:56px !important;font-size:1.15em}
+.lv-crowd .lv-name.sm,.lv-crowd.packed .lv-name.sm{font-size:.78em}
+.lv-crowd .lv-ring{padding:3px}
+.lv-stage.dense .lv-face.big .lv-av,.lv-crowd.dense .lv-av,.lv-crowd.packed .lv-av{width:48px !important;height:48px !important}
+@media (max-width:520px){
+  .lv-crowd,.lv-crowd.dense,.lv-crowd.packed{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+  .lv-crowd .lv-av,.lv-crowd.dense .lv-av,.lv-crowd.packed .lv-av{width:44px !important;height:44px !important}
+  .lv-crowd .lv-name.sm{font-size:.68em}
+}
