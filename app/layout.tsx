@@ -49,7 +49,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Wallet connections start faster with these already open. */}
         <link rel="preconnect" href="https://relay.walletconnect.org" crossOrigin="" />
         <link rel="dns-prefetch" href="https://explorer-api.walletconnect.com" />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Unbounded:wght@500;700;800&family=JetBrains+Mono:wght@400;600&display=swap" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Unbounded:wght@500;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,800&family=JetBrains+Mono:wght@400;600&display=swap" />
       </head>
       <body>
         {/* Without JavaScript the welcome can't close, so it isn't shown at all. */}

@@ -6589,3 +6589,11 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .lp-hero h1 .lp-loop{display:block;min-height:1.15em}
 .tl{white-space:nowrap}
 @media (max-width:420px){ .tl{white-space:normal} .lp-hero h1 .lp-loop{min-height:2.3em} }
+
+/* Front page hero: "Autism is not a disease." in a bold, condensed display face, deep ink on a gold marker band
+   (dark text that still reads on the dark page). */
+.lp-hero h1 .lp-punch,.lp-hero h1 .lp-punch span{color:#12101F}
+:root[data-theme="light"] .lp-hero h1 .lp-punch,:root[data-theme="light"] .lp-hero h1 .lp-punch span{color:#12101F !important}
+.lp-hero h1 .lp-punch{display:inline;font-family:"Bricolage Grotesque",var(--f-display);font-weight:800;font-optical-sizing:auto;letter-spacing:-.035em;line-height:1.18;padding:.02em .22em .06em;border-radius:.14em;background:linear-gradient(100deg,#FFD84A 0%,#F5C518 55%,#F0A90B 100%);-webkit-box-decoration-break:clone;box-decoration-break:clone;box-shadow:0 .12em 0 rgba(18,16,31,.9),0 10px 30px rgba(245,197,24,.18)}
+.lp-hero h1 .lp-punch .tt-caret{background:#12101F}
+.lp-hero h1 .lp-loop{margin-top:.18em}
