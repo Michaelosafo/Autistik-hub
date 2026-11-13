@@ -6556,3 +6556,14 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .lp-bar .lp-nav{margin-right:0}
 a.me-pic.labelled{text-decoration:none;color:inherit}
 @media (max-width:380px){ .lp-id{gap:8px} }
+
+/* AI trader: the yellow look (after-buy card, wallet card, action buttons). */
+.aitx-new.quiet{padding:12px 16px}
+.aitx-new.quiet p{font-size:.92em}
+.aitx-wallet{background:var(--sun-bright,#F5C518);border-color:transparent;color:#141830}
+.aitx-wallet .aitx-wallet-h small,.aitx-wallet .aitx-chev,.aitx-wallet .muted{color:#3d3a2a}
+.aitx-wallet .aitx-wallet-pl.up{color:#0b5e35} .aitx-wallet .aitx-wallet-pl.down{color:#9b1c14}
+.aitx-wallet .aitx-tile,.aitx-wallet .aitx-li{background:rgba(255,255,255,.55);color:#141830}
+.aitx-wallet .aitx-li .up{color:#0b5e35} .aitx-wallet .aitx-li .down{color:#9b1c14}
+.aitx-panel .btn.primary,.aitx-hours .btn.primary{background:var(--sun-bright,#F5C518);border-color:var(--sun-bright,#F5C518);color:#141830}
+.aitx-b.buy.on,.aitx-b.sell.on{outline-color:#F5C518}

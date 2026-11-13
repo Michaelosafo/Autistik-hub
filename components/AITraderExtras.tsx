@@ -106,14 +106,23 @@ export function TradeActions({ p, busy, onAct, start = null, freeUsd = null }: {
   );
 }
 
-/** Right after a buy: top up, change take profit / stop-loss, or keep it as is. Shown once per new coin. */
+/**
+ * The yellow card at the top: the AI's newest coin, with Top up / Change TP-SL / Keep as is. "Keep as is" hides it
+ * until the next buy. With nothing bought yet it says so, so the card is always there to find.
+ */
 export function JustBought({ open, busy, onAct, freeUsd }: { open: Pos[]; busy: boolean; onAct: Act; freeUsd: number | null }) {
   const [seen, setSeen] = useState<string[]>([]);
   const [start, setStart] = useState<"buy" | "tpsl" | null>(null);
   useEffect(() => { try { setSeen(JSON.parse(localStorage.getItem("ait-seen-buys") || "[]")); } catch { /* storage off: show it anyway */ } }, []);
-  const p = open.filter((x) => x.status === "open" && Date.now() - Date.parse(x.opened_at) < 60 * 60_000 && !seen.includes(x.id))
-    .sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at))[0];
-  if (!p) return null;
+  const newest = open.filter((x) => x.status === "open").sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at))[0];
+  const p = newest && !seen.includes(newest.id) ? newest : null;
+  if (!p) return (
+    <section className="aitx-new quiet" aria-live="polite">
+      <small className="aitx-new-k">{newest ? "LATEST BUY" : "AI BUYS"}</small>
+      <p>{newest ? <>Nothing new since <b>{newest.symbol}</b>. When the AI buys again, it shows here so you can top up or change take profit / stop-loss.</> : <>No open coins right now. The moment the AI buys, it shows here so you can top up or change take profit / stop-loss.</>}</p>
+    </section>
+  );
+  const fresh = Date.now() - Date.parse(p.opened_at) < 60 * 60_000;
   const keep = () => {
     const next = [...seen, p.id].slice(-50);
     setSeen(next); setStart(null);
@@ -122,7 +131,7 @@ export function JustBought({ open, busy, onAct, freeUsd }: { open: Pos[]; busy: 
   const src = from(p);
   return (
     <section className="aitx-new" aria-live="polite">
-      <small className="aitx-new-k">AI JUST BOUGHT · {ago(p.opened_at)}{p.mode === "paper" ? " · practice" : ""}</small>
+      <small className="aitx-new-k">{fresh ? "AI JUST BOUGHT" : "LATEST BUY"} · {ago(p.opened_at)}{p.mode === "paper" ? " · practice" : ""}</small>
       <p><b>{p.symbol}</b> at <b>{fmtUsd(Number(p.entry_usd))}</b>{src ? <> from <b>{src}</b></> : null}. Top up, or change take profit (+{Number(p.take_profit)}%) / stop-loss (-{Number(p.stop_loss)}%)?</p>
       {!start ? (
         <div className="aitx-act-row">
@@ -204,7 +213,7 @@ export function BuyHours({ s, busy, onAct }: { s: HoursSettings; busy: boolean; 
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch { return "UTC"; } })();
   const changed = on !== !!s.buy_hours_on || a !== s.buy_from || b !== s.buy_to || (on && tz !== s.buy_tz);
   return (
-    <section className="card stack">
+    <section className="card stack aitx-hours">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <b>⏰ Buy hours</b>
         <small className="muted">{s.buy_hours_on ? `Saved: buys only ${s.buy_from} to ${s.buy_to}` : "Saved: buys any time"}</small>
