@@ -28,11 +28,11 @@ export const VENUES = ["hyperliquid", "aster"] as const;
 export const LIVE_VENUES = ["hyperliquid"];
 export const VENUE_NAME: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster" };
 const FEE = { hyperliquid: 0.00045, aster: 0.00035 } as Record<string, number>; // taker fee per side
-const MAX_LEV = 3; // hard cap, also enforced by the database
+const MAX_LEV = 50; // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
-  max_lev: number; risk_pct: number; max_positions: number; daily_loss_pct: number; max_hold_hours: number;
+  max_lev: number; max_loss_pct: number; risk_pct: number; max_positions: number; daily_loss_pct: number; max_hold_hours: number;
   use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[]; last_run: string | null; last_note: string | null;
   day_start_usd: number | null; day: string | null;
 };
@@ -57,8 +57,9 @@ export async function getF(): Promise<FSettings> {
   await sb().from("ai_futures_settings").upsert({ id: T() }, { onConflict: "id", ignoreDuplicates: true });
   const { data } = await sb().from("ai_futures_settings").select("*").eq("id", T()).single();
   const s = data as any;
-  for (const k of ["paper_usd", "paper_start", "max_lev", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
+  for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
+  s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   return s as FSettings;
 }
 
@@ -81,6 +82,24 @@ export async function createFutWallet(): Promise<string> {
   if (error) throw new Error(error.message);
   const a = privateKeyToAccount(key);
   await flog("settings", `AI Futures wallet created: ${a.address}`);
+  return a.address;
+}
+/** Use your own wallet for futures: paste its private key. Only when nothing live is open and the current wallet is empty. */
+export async function importFutKey(raw: string): Promise<string> {
+  const key = (raw.trim().startsWith("0x") ? raw.trim() : `0x${raw.trim()}`) as `0x${string}`;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("That isn't a private key (64 letters and numbers, from your wallet's Export private key).");
+  const a = privateKeyToAccount(key);
+  const { data: openLive } = await fq("ai_futures_positions").select("id").eq("mode", "live").in("status", ["open", "closing"]).limit(1);
+  if (openLive?.length) throw new Error("Close the open live futures positions first.");
+  const cur = await futWallet().catch(() => null);
+  if (cur && cur.address.toLowerCase() !== a.address.toLowerCase() && ((cur.hlValue ?? 0) > 1 || (cur.arbUsdc ?? 0) > 1)) {
+    throw new Error(`The current futures wallet still holds money (${(cur.hlValue ?? 0).toFixed(2)} on Hyperliquid, ${(cur.arbUsdc ?? 0).toFixed(2)} USDC on Arbitrum). Move it out first (Show private key → open it in Rabby / MetaMask), so nothing is left behind.`);
+  }
+  await getF();
+  const { error } = await sb().rpc("ai_futures_key_replace", { p_id: T(), p_key: key });
+  if (error) throw new Error(error.message);
+  keyCache.delete(T());
+  await flog("settings", `AI Futures now uses your own wallet: ${a.address}`);
   return a.address;
 }
 export async function revealFutKey(): Promise<string> {
@@ -319,6 +338,9 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
     const ns = news.get(p.coin)?.score ?? 0;
     const old = Date.now() - Date.parse(p.opened_at) > s.max_hold_hours * 3600e3;
     if (liqHit && p.mode === "paper") { await closePos(s, m, p, "Liquidated", p.liq!); continue; }
+    // Auto-sell: the trade is down the set % of its margin (like the P&L % the exchange shows).
+    const roe = (pnlOf(p, price) / n(p.margin_usd)) * 100;
+    if (roe <= -s.max_loss_pct) { await closePos(s, m, p, `Auto-sell at -${s.max_loss_pct}%`, price); continue; }
     const lockedIn = long ? stop >= p.entry : stop <= p.entry; // the stop had moved to break-even or better
     if (hit) { await closePos(s, m, p, hit === "Stop-loss" && lockedIn ? (gainR >= 1.5 ? "Trailing stop" : "Break-even stop") : hit, price); continue; }
     if ((long ? ns <= -0.6 : ns >= 0.6)) { await closePos(s, m, p, `News turned against it (${news.get(p.coin)?.why || ""})`, price); continue; }
@@ -347,8 +369,10 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   if (long ? f > 0.0005 : f < -0.0005) return `funding too costly on ${VENUE_NAME[venue]}`;
   const price = priceOn(m, venue, coin);
   // Stop: 3× the 5-minute ATR, between 0.6% and 4% away. At 3x, liquidation is ~32% away, far past any stop.
-  const stopPct = Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3));
   const lev = Math.min(MAX_LEV, s.max_lev, m.hl.get(coin)?.maxLev ?? MAX_LEV);
+  // Stop: 3× the 5-minute ATR (0.6%–4% away), but never more than the auto-sell loss (e.g. -5% of the margin = 5% ÷
+  // leverage of price). Liquidation is about 1 ÷ leverage away, so the stop always comes first.
+  const stopPct = Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev);
   // Size: a stop-loss costs risk_pct of the account; margin never more than a third of the account or 90% of free cash.
   let notional = (eq.total * (s.risk_pct / 100)) / stopPct;
   notional = Math.min(notional, eq.total * 0.33 * lev, eq.free * 0.9 * lev);
