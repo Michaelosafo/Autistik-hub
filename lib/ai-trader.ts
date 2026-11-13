@@ -517,6 +517,8 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
         if (!r) throw last instanceof Error ? last : new Error("The sell didn't go through.");
         receivedNative = r.receivedNative; sellTx = r.hash;
         received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
+        // Sold, but the amount back wasn't reported: work it out from the price.
+        if (!(received > 0) && price) { received = (n(p.qty) * price * (1 - tax / 100)) / (await bnbUsd()); receivedNative = null; reason = `${reason} (amount back estimated)`; }
       }
     }
     const pnl = received - n(p.spent);
@@ -722,6 +724,12 @@ async function adoptPending() {
       });
       if (error) { await log("error", `Found ${q.symbol || q.token} in the wallet but couldn't record it: ${error.message}`); continue; }
       await tq("ai_trader_pending").delete().eq("id", q.id);
+      // You pressed "Sell all now" on it: sell it as soon as it's recorded.
+      if (/sold by admin/i.test(String(q.why || ""))) {
+        const { data: got } = await tq("ai_trader_positions").select("*").eq("chain", q.chain).eq("token", q.token).eq("status", "open").limit(1);
+        if (got?.[0]) await closePosition(got[0] as Position, "Closed by admin", now);
+        continue;
+      }
       const ch = (now / entry - 1) * 100;
       await log("buy", `🛟 Found ${q.symbol || pair?.baseToken?.symbol || "a coin"} in the wallet: that buy went through after all. It's now a normal trade (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}% since the buy), with stop-loss -${n(q.sl)}% and take profit +${n(q.tp)}%.`);
       await tgNotify(`🛟 ${q.symbol || "A coin"}: the buy went through after all (it was marked failed). Now watched: sells at -${n(q.sl)}% or +${n(q.tp)}%.`).catch(() => {});
@@ -793,8 +801,20 @@ export async function adoptCoin(chain: LiveChain, token: string, slot: number, s
   await adoptPending();
   const { data } = await tq("ai_trader_positions").select("*").eq("chain", chain).eq("token", token).in("status", ["open", "closing"]).limit(1);
   const p = (data || [])[0] as Position | undefined;
+  if (!p && sellNow) {
+    const { data: sold } = await tq("ai_trader_positions").select("symbol,status,close_reason").eq("chain", chain).eq("token", token).eq("status", "closed").gte("closed_at", new Date(Date.now() - 5 * 60_000).toISOString()).limit(1);
+    if (sold?.[0]) return `Sold ${(sold[0] as any).symbol || "it"}.`;
+    const { data: err } = await tq("ai_trader_log").select("text").eq("kind", "error").gte("at", new Date(Date.now() - 2 * 60_000).toISOString()).order("at", { ascending: false }).limit(1);
+    throw new Error((err?.[0] as any)?.text || "Couldn't sell it yet. The bot keeps trying every minute.");
+  }
   if (!p) throw new Error("Couldn't read that coin in the wallet (no price yet?). Try again in a minute.");
-  if (sellNow) { await closePosition(p, "Closed by admin"); return `Selling ${p.symbol || "it"} now.`; }
+  if (sellNow) {
+    await closePosition(p, "Closed by admin");
+    const { data: after } = await tq("ai_trader_positions").select("status").eq("id", p.id).maybeSingle();
+    if ((after as any)?.status === "closed") return `Sold ${p.symbol || "it"}.`;
+    const { data: err } = await tq("ai_trader_log").select("text").eq("kind", "error").gte("at", new Date(Date.now() - 2 * 60_000).toISOString()).order("at", { ascending: false }).limit(1);
+    throw new Error(`${(err?.[0] as any)?.text || "The sell didn't go through."} It's now watched with a stop-loss, and you can press Sell again.`);
+  }
   return `${p.symbol || "It"} is now watched: sells at -${sl}% or +${tp}%.`;
 }
 
