@@ -116,7 +116,7 @@ export default async function Home() {
       <section className="lp-hero">
         <div className="lp-hero-copy">
           <div className="lp-eyebrow"><TypeText text="The autism community, powered by crypto" speed={16} /></div>
-          <h1><TypeText text="Autism is not a disease. " delay={1309} /><span className="lp-loop"><TypeLoop intro delay={2534} words={HERO_LOOP} /></span></h1>
+          <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={1309} /></span><span className="lp-loop"><TypeLoop intro delay={2534} words={HERO_LOOP} /></span></h1>
           <p><Words delay={3874} text="AUTISTIK is a global community for autistic people, their families and supporters, paired with simple, secure crypto tools. A share of all trading activity funds real support for autistic people." /></p>
           <p className="lp-why"><b>How it works:</b> <Words delay={4574} text="every swap, stake and launch on AUTISTIK contributes to the AUTISTIK Fund, which pays for therapy, equipment, education and everyday essentials. Clear language, no pressure." /></p>
           <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "5474ms" }}>
