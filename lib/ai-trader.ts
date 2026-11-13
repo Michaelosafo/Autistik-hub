@@ -1064,25 +1064,23 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const out: string[] = [];
   const sb = supabaseService();
   for (const r of refs) {
+    // First call only, decided BEFORE anything slow: the first post of a CA claims it (one database insert wins, even
+    // when two chats post it at the same second on different servers). Any later post of it, from any chat, group,
+    // channel or X account, is a repeat and isn't bought. CAs called or traded before count as seen.
+    const key = r.chain === "solana" ? r.token : r.token.toLowerCase();
+    const { data: claim } = await tq("ai_trader_ca_seen").upsert({ token: key, first_from: label.slice(0, 120) }, { onConflict: "trader_id,token", ignoreDuplicates: true }).select("token");
+    if (!claim?.length || claimed.has(`${T()}:${key}`)) {
+      await tq("ai_trader_signals").upsert({ source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: r.chain || "bsc", token: key, at: new Date(post.at).toISOString(), result: "skipped: repeat call (this CA was posted before; only the first call is bought)" }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true });
+      out.push("skipped: repeat call");
+      continue;
+    }
+    claimed.add(`${T()}:${key}`);
     // A brand-new coin can take a few seconds to show up on the price feeds: look again a couple of times.
     let f = await resolve(r, chains).catch(() => null);
     for (let i = 0; !f && i < 3; i++) { await new Promise((ok) => setTimeout(ok, 3000)); f = await resolve(r, chains).catch(() => null); }
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
-    // First call only: a CA that came through any of your groups or accounts before (or was ever traded) isn't bought again.
-    const key = sig.chain === "solana" ? sig.token : sig.token.toLowerCase();
-    const [{ data: seenSig }, { data: seenPos }] = await Promise.all([
-      tq("ai_trader_signals").select("id").eq("token", key).in("source", ["x", "telegram"]).limit(1),
-      tq("ai_trader_positions").select("id").eq("token", key).limit(1),
-    ]);
-    const sharedBefore = !!(seenSig?.length || seenPos?.length) || claimed.has(`${T()}:${key}`);
-    claimed.add(`${T()}:${key}`);
     const { data } = await tq("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("id");
     if (!data?.length) continue; // already handled this post
-    if (sharedBefore) {
-      await tq("ai_trader_signals").update({ result: "skipped: CA was shared before (only the first call is bought)", symbol: f?.symbol ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
-      out.push("skipped: shared before");
-      continue;
-    }
     out.push(await actOnCopy(s, sig, f, label, caller, {
       group: source === "telegram" ? post.user : `X · ${post.user}`,
       who: post.from?.username ? `@${post.from.username}` : source === "x" ? null : null,
