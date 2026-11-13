@@ -6459,3 +6459,37 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .ait-tabs a { flex: 1; text-align: center; padding: 10px 8px; border-radius: 12px; line-height: 1.25; color: inherit; text-decoration: none; }
 .ait-tabs a.on { background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.2); outline: 2px solid #F0B90B; }
 .ait-tabs a:focus-visible { outline: 3px solid #F0B90B; }
+
+/* Live room: speakers are just their picture with a small Unmute / mic word under it (no ring around it). */
+.lv-box.flat { background: none; border: 0; box-shadow: none; padding: 2px; gap: 3px; }
+.lv-box.flat .lv-face { gap: 3px; }
+.lv-box.flat .lv-av { transition: transform .18s ease, filter .18s ease; }
+.lv-box.flat.talking .lv-av { transform: scale(1.07); filter: drop-shadow(0 0 10px rgba(34,197,94,.75)); }
+.lv-name.xs { font-size: .7em; max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-box.flat .lv-box-ctl { gap: 4px; }
+.lv-box.flat .lv-mic, .lv-box.flat .lv-mic-st { padding: 2px 7px; font-size: .62em; gap: 3px; }
+.lv-box.flat .lv-mic svg, .lv-box.flat .lv-mic-st svg { width: 11px; height: 11px; }
+.lv-box.flat .lv-mini-btn { font-size: .6em; padding: 2px 6px; }
+/* Head of the room: how many are in it, speaking and listening; See all; hand requests; Hide me. */
+.lv-count { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.lv-count b { font-size: .95em; }
+.lv-mini-btn.hand { background: rgba(240,185,11,.18); color: #F0B90B; font-weight: 800; animation: lvpulse 1.4s ease-in-out infinite; }
+/* Reactions: smaller, each with the name of who sent it. */
+.lv-floats span { display: inline-flex; flex-direction: column; align-items: center; font-size: 1.2em; }
+.lv-floats span.big { font-size: 1.6em; }
+.lv-float-n { font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 99px; background: rgba(0,0,0,.55); color: #fff; margin-top: 2px; white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.lv-reacts { display: flex; flex-wrap: wrap; gap: 5px; }
+.lv-react-chip { display: inline-flex; align-items: center; gap: 4px; font-size: .72em; font-weight: 700; padding: 3px 8px; border-radius: 99px; background: var(--surface-2); animation: lvchip .25s ease-out; }
+@keyframes lvchip { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.lv-hype .lv-emo { padding: 6px 8px; }
+.lv-hype .lv-fire.sm { padding: 6px 10px; }
+/* Everyone in the room, in one list. */
+.lv-all-bg { position: fixed; inset: 0; z-index: 1000; background: rgba(8,6,16,.6); display: flex; align-items: flex-end; justify-content: center; }
+.lv-all { width: min(560px, 100%); max-height: 82dvh; display: flex; flex-direction: column; gap: 10px; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -20px 60px rgba(0,0,0,.5); }
+@media (min-width: 700px) { .lv-all-bg { align-items: center; } .lv-all { border-radius: 22px; } }
+.lv-all-h { display: flex; justify-content: space-between; align-items: center; }
+.lv-all-list { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.lv-all-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.lv-all-who { all: unset; cursor: pointer; flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.lv-all-who span { display: flex; flex-direction: column; min-width: 0; }
+.lv-all-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
