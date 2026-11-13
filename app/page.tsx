@@ -109,7 +109,7 @@ export default async function Home() {
           <p>AUTISTIK is an online community for autistic people, their families and supporters. We also offer simple, safe tools for using crypto (digital money), and a portion of the activity on them goes to a fund that supports autistic people.</p>
           <p className="lp-why"><b>In short:</b> people use our tools, and that activity helps pay for real support for autistic people: therapy, equipment, education and everyday essentials. No jargon, no pressure.</p>
           <div className="lp-ctas">
-            <Link href="/app" className="lp-btn gold xl">Enter the App <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
+            <Link href="/app?menu=1" className="lp-btn gold xl">Open menu <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
           </div>
           {!user && <p className="lp-member">Part of the community? <Link href="/login?next=/">Sign in</Link> or <Link href="/login?mode=join&amp;next=/">join free</Link> to chat in the groups and save your settings.</p>}
@@ -233,7 +233,7 @@ export default async function Home() {
       <section className="lp-sec">
         <div className="lp-band">
           <div><h2>Ready to start?</h2><p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p></div>
-          <div className="lp-ctas"><Link href="/app" className="lp-btn gold xl">Enter the App <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
+          <div className="lp-ctas"><Link href="/app?menu=1" className="lp-btn gold xl">Open menu <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
         </div>
       </section>
 

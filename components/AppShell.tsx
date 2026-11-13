@@ -109,6 +109,16 @@ export default function AppShell({ admin, me, onMe, children }: {
   const [netQ, setNetQ] = useState("");
 
   useEffect(() => { setOpen(null); setMore(false); setAcctMenu(false); setNetMenu(false); }, [path]);
+  // From the home page's "Open menu" button: arrive with the menu open.
+  useEffect(() => {
+    try {
+      const u = new URL(location.href);
+      if (u.searchParams.get("menu") !== "1") return;
+      u.searchParams.delete("menu");
+      history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
+      setTimeout(() => setMore(true), 50);
+    } catch {}
+  }, []);
   useEffect(() => {
     const close = (e: MouseEvent) => { if (!bar.current?.contains(e.target as Node)) { setOpen(null); setAcctMenu(false); setNetMenu(false); } };
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(null); setAcctMenu(false); setMore(false); setNetMenu(false); } };
