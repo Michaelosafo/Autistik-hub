@@ -6638,3 +6638,7 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
   .lv-crowd .lv-av,.lv-crowd.dense .lv-av,.lv-crowd.packed .lv-av{width:44px !important;height:44px !important}
   .lv-crowd .lv-name.sm{font-size:.68em}
 }
+.aitx-li.wrap{flex-wrap:wrap}
+.aitx-buys{font-weight:700;color:var(--ink)}
+.aitx-edit{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:6px}
+.aitx-edit .ait-in{max-width:150px}

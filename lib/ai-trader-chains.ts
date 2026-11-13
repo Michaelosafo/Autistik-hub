@@ -298,9 +298,13 @@ async function solBuy(kp: Keypair, mint: string, amountSol: number, tax: number)
   try { sig = await jupSwap(kp, WSOL, mint, BigInt(Math.floor(amountSol * 1e9)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100))); }
   catch (e) {
     // Not confirmed in time: if the coins arrived anyway, it's a buy (so it's tracked and sold at TP/SL, never lost).
-    await new Promise((r) => setTimeout(r, 3000));
-    const got = await solTokenRaw(kp.publicKey, mint).catch(() => before);
-    if (got.raw > before.raw) return { hash: "unconfirmed", raw: got.raw - before.raw, decimals: got.decimals || before.decimals || 6 };
+    // A busy network can land it 10-30s later, so keep looking for a while (before, one look after 3s missed them).
+    if (/failed on-chain|No Solana route|Couldn't build/.test((e as Error).message)) throw e;
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const got = await solTokenRaw(kp.publicKey, mint).catch(() => before);
+      if (got.raw > before.raw) return { hash: "unconfirmed", raw: got.raw - before.raw, decimals: got.decimals || before.decimals || 6 };
+    }
     throw e;
   }
   const after = await solTokenRaw(kp.publicKey, mint);
@@ -316,6 +320,18 @@ async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extr
   const sig = await jupSwap(kp, mint, WSOL, amount, sellSlip(tax, extra));
   const after = await conn.getBalance(kp.publicKey);
   return { hash: sig, receivedNative: Math.max(0, after - before) / 1e9 };
+}
+
+/** How much of a coin a trading wallet holds right now (raw units and decimals). */
+export async function tokenBalanceOn(chain: LiveChain, w: Wallets, token: string): Promise<{ raw: bigint; decimals: number }> {
+  if (chain === "solana") { if (!w.sol) return { raw: 0n, decimals: 6 }; return solTokenRaw(w.sol.publicKey, token); }
+  if (!w.evm) return { raw: 0n, decimals: 18 };
+  const pc = pub(chain), tok = getAddress(token);
+  const [raw, decimals] = await Promise.all([
+    pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [w.evm.address] }) as Promise<bigint>,
+    pc.readContract({ address: tok, abi: erc20Abi, functionName: "decimals" }).then(Number).catch(() => 18),
+  ]);
+  return { raw, decimals };
 }
 
 // ---------------------------------------------------------------- One entry point per action

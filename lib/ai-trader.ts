@@ -27,7 +27,7 @@ import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
 import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
 import { tgaWatch } from "@/lib/tg-account";
-import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, relayBridge, relayBridgeQuote, walletAddress, type LiveChain, type Wallets } from "@/lib/ai-trader-chains";
+import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, relayBridge, relayBridgeQuote, walletAddress, type LiveChain, type Wallets, tokenBalanceOn } from "@/lib/ai-trader-chains";
 import { Keypair } from "@solana/web3.js";
 
 export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "elysium", "solana"] as const;
@@ -508,9 +508,16 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
         try { r = await liveSellOn(p.chain, w, p.token, BigInt(p.amount_raw || "0"), tax, extra); break; }
         catch (e) { last = e; if (/holds none/i.test(String((e as Error)?.message))) break; }
       }
-      if (!r) throw last instanceof Error ? last : new Error("The sell didn't go through.");
-      receivedNative = r.receivedNative; sellTx = r.hash;
-      received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
+      if (!r && /holds none/i.test(String((last as Error)?.message)) && price) {
+        // The coins are already gone: an earlier sell went through after it was reported as failed (busy network).
+        // Close the trade (amount back worked out from the price) instead of retrying a sell of nothing forever.
+        received = (n(p.qty) * price * (1 - tax / 100)) / (await bnbUsd());
+        reason = `${reason} (the sell went through earlier; amount back estimated)`;
+      } else {
+        if (!r) throw last instanceof Error ? last : new Error("The sell didn't go through.");
+        receivedNative = r.receivedNative; sellTx = r.hash;
+        received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
+      }
     }
     const pnl = received - n(p.spent);
     await tq("ai_trader_positions").update({
@@ -682,7 +689,48 @@ async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
   return out;
 }
 
+/**
+ * Buys that weren't confirmed in time: if the coins are in the wallet after all, record the trade (at the price it was
+ * bought at) so the stop-loss / take profit manage it straight away. Nothing found after 6 hours: forget it.
+ */
+async function adoptPending() {
+  const { data } = await tq("ai_trader_pending").select("*").order("created_at").limit(20);
+  for (const q of (data || []) as any[]) {
+    const old = Date.now() - Date.parse(q.created_at) > 6 * 36e5;
+    try {
+      if (!isLiveChain(q.chain)) { await tq("ai_trader_pending").delete().eq("id", q.id); continue; }
+      const { data: have } = await tq("ai_trader_positions").select("id").eq("chain", q.chain).eq("token", q.token).in("status", ["open", "closing"]).limit(1);
+      if (have?.length) { await tq("ai_trader_pending").delete().eq("id", q.id); continue; }
+      const w = await myWallets(q.wallet === 2 ? 2 : 1);
+      const bal = await tokenBalanceOn(q.chain as LiveChain, w, q.token);
+      if (bal.raw <= 0n) { if (old) await tq("ai_trader_pending").delete().eq("id", q.id); continue; }
+      // Today's price and market cap: the buy price is the one it was bought at, or worked out from the market cap then.
+      const d = await fetch(`https://api.dexscreener.com/tokens/v1/${q.chain}/${q.token}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => []);
+      const pair = (Array.isArray(d) ? d : []).sort((a: any, b: any) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd))[0];
+      const now = n(pair?.priceUsd), capNow = n(pair?.marketCap) || n(pair?.fdv);
+      if (!now) continue;
+      const entry = n(q.entry_usd) || (n(q.entry_mcap) && capNow ? (now * n(q.entry_mcap)) / capNow : now);
+      const qty = Number(bal.raw) / 10 ** bal.decimals;
+      const bnb = await bnbUsd();
+      const spent = q.spent_native ? (n(q.spent_native) * (await nativeUsd(q.chain as LiveChain))) / bnb : (qty * entry) / bnb;
+      const { error } = await tq("ai_trader_positions").insert({
+        mode: "live", native: q.native || NATIVE[q.chain as LiveChain], spent_native: q.spent_native ?? null, chain: q.chain, token: q.token, symbol: q.symbol, name: q.name, logo: q.logo || pair?.info?.imageUrl || null,
+        spent: +spent.toFixed(6), qty, amount_raw: bal.raw.toString(), decimals: bal.decimals,
+        entry_usd: entry, high_usd: Math.max(entry, now), last_usd: now, low_usd: Math.min(entry, now), stop_loss: n(q.sl), take_profit: n(q.tp), trail: 0,
+        why: `Recovered: the buy went through after it was marked failed. ${q.why || ""}`.slice(0, 500), buy_tx: "unconfirmed", strategy: q.strategy || "copy", wallet: q.wallet === 2 ? 2 : 1,
+        source_group: q.source_group, source_who: q.source_who,
+      });
+      if (error) { await log("error", `Found ${q.symbol || q.token} in the wallet but couldn't record it: ${error.message}`); continue; }
+      await tq("ai_trader_pending").delete().eq("id", q.id);
+      const ch = (now / entry - 1) * 100;
+      await log("buy", `🛟 Found ${q.symbol || "a coin"} in the wallet: that buy went through after all. It's now a normal trade (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}% since the buy), with stop-loss -${n(q.sl)}% and take profit +${n(q.tp)}%.`);
+      await tgNotify(`🛟 ${q.symbol || "A coin"}: the buy went through after all (it was marked failed). Now watched: sells at -${n(q.sl)}% or +${n(q.tp)}%.`).catch(() => {});
+    } catch (e) { await log("error", `Couldn't check the wallet for ${q.symbol || q.token}: ${(e as Error).message.slice(0, 120)}`); }
+  }
+}
+
 async function manage(s: Settings) {
+  await adoptPending().catch(() => {});
   const sb = supabaseService();
   // Hands-on: while an admin is around, they close trades themselves (only a pulled pool still sells automatically).
   // When nobody is around, the AI takes over: target, stop-loss, trailing stop, sellers taking over near the top.
@@ -860,7 +908,20 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
     const avail = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
     const amount = +Math.min(wantUsd / nUsd, avail).toFixed(chain === "solana" ? 6 : 8);
     if (amount * nUsd < wantUsd * 0.5) throw new Error(`Not enough ${NATIVE[chain]} on ${CHAIN_NAME[chain]}.`);
-    const r = await liveBuyOn(chain, w, c.token, amount, c.buyTax ?? 0);
+    let r: Awaited<ReturnType<typeof liveBuyOn>>;
+    try { r = await liveBuyOn(chain, w, c.token, amount, c.buyTax ?? 0); }
+    catch (e) {
+      // The swap may still land after we stop waiting (busy network). Note it: the trader checks the wallet every
+      // minute and, if the coins show up, records the trade so its stop-loss / take profit protect it.
+      if (!/failed on-chain|No Solana route|Couldn't build|Not enough|Create the|no answer|didn't answer/i.test((e as Error).message)) {
+        await tq("ai_trader_pending").upsert({
+          chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, wallet: slot, entry_usd: c.price, entry_mcap: c.mcap || null,
+          spent_native: amount, native: NATIVE[chain], sl: o.sl, tp: o.tp, why: o.why, strategy: o.strategy,
+          source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null, created_at: new Date().toISOString(),
+        }, { onConflict: "trader_id,chain,token,wallet" }).then(() => {}, () => {});
+      }
+      throw e;
+    }
     if (r.raw <= 0n) throw new Error("The swap went through but no tokens arrived.");
     decimals = r.decimals; raw = r.raw.toString(); tx = r.hash; native = NATIVE[chain]; spentNative = amount;
     qty = Number(r.raw) / 10 ** decimals;
@@ -1228,13 +1289,18 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const squad = await squadFor(post, source).catch(() => null);
   // This group has its own callers and the poster isn't one of them (and isn't in a squad): not bought.
   if (who.skip && !squad) return [];
+  // "Only my callers" (on): in a Telegram group, only your picked callers' (and squads') calls are bought, never other
+  // people's. Channels still buy every call, since their posts come from the channel itself.
+  if (source === "telegram" && !post.isChannel && s.callers_only && !squad && !who.caller) return [];
   const base = who.skip ? null : who.caller;
   // The channel's / group's own buy size (set next to it in the Telegram list), used when the caller or squad has none.
   const chatUsd = source === "telegram" && post.chat ? await chatSize(post.chat).catch(() => 0) : 0;
   let caller: CallerRule | null = squad
     ? { usd: squad.usd > 0 ? squad.usd : base?.usd ?? 0, who: `${squad.member} (squad ${squad.name})`, sl: squad.sl ?? base?.sl ?? null, tp: squad.tp ?? base?.tp ?? null }
     : base;
-  if (chatUsd > 0 && !(caller && caller.usd > 0)) caller = { usd: chatUsd, who: caller?.who || "channel size", sl: caller?.sl ?? null, tp: caller?.tp ?? null };
+  // A channel's own amount is exactly what each of its calls buys. In a group, a picked caller's own amount comes
+  // first (set and edited per person); the group's amount is used for anyone without one.
+  if (chatUsd > 0 && (post.isChannel || !(caller && caller.usd > 0))) caller = { usd: chatUsd, who: caller?.who || "channel size", sl: caller?.sl ?? null, tp: caller?.tp ?? null };
   if (squad) label = `${label} · squad "${squad.name}"`;
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
