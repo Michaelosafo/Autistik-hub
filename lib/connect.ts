@@ -22,7 +22,9 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
   // Bitget and Trust first: both handle every network and switch between them easily.
-  { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkapp.vip", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  // Bitget: only its https://bkcode.vip link (Bitget's own docs: Android only supports that one; bitkeep:// and the
+  // old bkapp.vip link were slow to hand the connection over).
+  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
@@ -670,7 +672,7 @@ const browse = (base: string) => (u: string) => `${base}/${encodeURIComponent(u)
  * the others open this page inside their app on a phone, or their download page on a computer.
  */
 export const SOL_APPS: { id: string; name: string; logo: string; install: string; dapp: (url: string) => string; native?: string; wc?: string }[] = [
-  { id: "bitget", native: "bitkeep://", wc: "https://bkapp.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  { id: "bitget", wc: "https://bkcode.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
   { id: "trust", native: "trust://", wc: "https://link.trustwallet.com", name: "Trust Wallet", logo: "/wallets/trust.svg", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=501&url=${encodeURIComponent(u)}` },
   { id: "phantom", name: "Phantom", logo: "/wallets/phantom.svg", install: "https://phantom.com/download", dapp: browse("https://phantom.app/ul/browse") },
   { id: "solflare", name: "Solflare", logo: wcLogo("34c0e38d-66c4-470e-1aed-a6fabe2d1e00"), install: "https://solflare.com/download", dapp: browse("https://solflare.com/ul/v1/browse") },

@@ -211,6 +211,14 @@ export default function WalletPicker() {
                 <i className="wp-chev" aria-hidden="true" />
               </button>
             )}
+            {/* OKX doesn't show in the phone's own list on some phones: always one tap away here. */}
+            {!solMode && mobile && isAndroid() && WALLETCONNECT_ID && !q && (
+              <button type="button" className="wp-row" disabled={!!s.busy} onClick={() => { chooseWalletConnect("okx"); }}>
+                <img src="/wallets/okx.svg" alt="" width={40} height={40} />
+                <span className="wp-row-t"><b>OKX Wallet</b><small>{s.busy === "OKX Wallet" ? "Opening…" : "Opens OKX Wallet to approve, then back here"}</small></span>
+                <i className="wp-chev" aria-hidden="true" />
+              </button>
+            )}
             {installed.length > 0 && <div className="wp-label">On this device</div>}
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
             {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : mobile ? "Tap your wallet: it opens, you approve, you come back" : "Popular"}</div>}
