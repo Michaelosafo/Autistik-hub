@@ -403,38 +403,50 @@ export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean
 }
 
 /**
- * Trade in stablecoins: buys with USDC and sells back into USDC (Solana), so money between trades sits in dollars
- * instead of moving with SOL's price. SOL is still needed in small amounts for network fees. Converts SOL ↔ USDC here.
+ * Trade in stablecoins: on Solana, BNB Chain and Ethereum, buys with USDT or USDC (whichever the wallet holds more of on
+ * that network) and sells back into the same one, so money between trades stays in dollars. Each network still needs a
+ * little of its own coin for fees. SOL ↔ USDT / USDC can be converted here.
  */
-export function StableMode({ on, live, sol, busy, onAct }: { on: boolean; live: boolean; sol: LiveWallet | null; busy: boolean; onAct: Act }) {
+export function StableMode({ on, live, wallets, busy, onAct }: { on: boolean; live: boolean; wallets: LiveWallet[]; busy: boolean; onAct: Act }) {
   const [amt, setAmt] = useState("");
   const [dir, setDir] = useState<"usdc" | "sol">("usdc");
-  const usdc = sol?.stable?.balance ?? null;
+  const [sym, setSym] = useState<"USDT" | "USDC">("USDT");
+  const nets = wallets.filter((w) => w.address && (w.stables || []).length);
+  const sol = wallets.find((w) => w.chain === "solana" && w.address) || null;
+  const NAME: Record<string, string> = { solana: "Solana", bsc: "BNB Chain", ethereum: "Ethereum" };
   return (
     <section className={"card stack" + (on ? " aitx-hours" : "")}>
       <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <b>💵 Trade in stablecoins</b>
-        <small className="muted">{on ? "On: buys with USDC, sells into USDC" : "Off: buys with SOL, sells into SOL"}</small>
+        <small className="muted">{on ? "On: buys with USDT / USDC, sells back into it" : "Off: buys with each network's own coin"}</small>
       </div>
       <label className={"aic-row" + (on ? " on" : "")}>
-        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => onAct("stable", "settings", { stable_on: e.target.checked }, e.target.checked ? "Stablecoins on: Solana coins are bought with USDC and sold back into USDC." : "Stablecoins off: Solana coins are bought with SOL and sold into SOL.")} />
-        <span className="grow"><b>Buy with USDC and sell into USDC</b><small className="muted">Your money between trades stays in dollars instead of rising and falling with SOL. Applies on Solana. Keep a little SOL (about 0.02) for network fees.</small></span>
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => onAct("stable", "settings", { stable_on: e.target.checked }, e.target.checked ? "Stablecoins on: coins are bought with USDT / USDC on their own network and sold back into it." : "Stablecoins off: coins are bought with each network's own coin.")} />
+        <span className="grow"><b>Buy with USDT / USDC and sell back into it</b><small className="muted">On Solana, BNB Chain and Ethereum: a coin on Solana is bought with Solana USDT / USDC, a BNB Chain coin with BNB Chain USDT / USDC, and so on. It uses whichever of the two you hold more of there (USDT if you mostly keep USDT). Keep a little SOL / BNB / ETH on each network for fees.</small></span>
       </label>
-      {live && sol?.address && (
-        <>
-          <div className="aitx-two">
-            <div className="aitx-tile"><small>USDC</small><b>{usdc == null ? "–" : `$${usdc.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}</b></div>
-            <div className="aitx-tile"><small>SOL (fees{on ? "" : " and trading"})</small><b>{sol.balance == null ? "–" : sol.balance.toLocaleString("en-US", { maximumFractionDigits: 4 })}</b></div>
-          </div>
-          <div className="aitx-act-row">
-            <span className="ait-seg" role="group" aria-label="Convert direction">
-              <button type="button" className={dir === "usdc" ? "on" : ""} onClick={() => setDir("usdc")}>SOL → USDC</button>
-              <button type="button" className={dir === "sol" ? "on" : ""} onClick={() => setDir("sol")}>USDC → SOL</button>
-            </span>
-            <span className="ait-in" style={{ maxWidth: 160 }}><input inputMode="decimal" value={amt} placeholder={dir === "usdc" ? "SOL amount" : "USDC amount"} onChange={(e) => setAmt(e.target.value)} aria-label="Amount to convert" /><em>{dir === "usdc" ? "SOL" : "USDC"}</em></span>
-            <button type="button" className="btn primary small" disabled={busy || !(Number(amt) > 0)} onClick={() => { if (confirm(`Convert ${amt} ${dir === "usdc" ? "SOL into USDC" : "USDC into SOL"}?`)) onAct("convert", "convert", { to: dir, amount: Number(amt) }).then(() => setAmt("")); }}>Convert</button>
-          </div>
-        </>
+      {live && nets.length > 0 && (
+        <div className="aitx-list">
+          {nets.map((w) => (
+            <div key={w.chain} className="aitx-li">
+              <span className="grow"><b>{NAME[w.chain] || w.chain}</b><br /><small className="muted">fees: {w.balance == null ? "–" : w.balance.toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.native}</small></span>
+              <span className="n">{(w.stables || []).map((x) => <span key={x.symbol} style={{ display: "block" }}><b>${x.balance.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b> <small className="muted">{x.symbol}</small></span>)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {live && sol && (
+        <div className="aitx-act-row">
+          <small className="muted" style={{ flexBasis: "100%" }}>Solana: convert SOL and stablecoins</small>
+          <span className="ait-seg" role="group" aria-label="Convert direction">
+            <button type="button" className={dir === "usdc" ? "on" : ""} onClick={() => setDir("usdc")}>SOL → {sym}</button>
+            <button type="button" className={dir === "sol" ? "on" : ""} onClick={() => setDir("sol")}>{sym} → SOL</button>
+          </span>
+          <span className="ait-seg" role="group" aria-label="Stablecoin">
+            {(["USDT", "USDC"] as const).map((x) => <button key={x} type="button" className={sym === x ? "on" : ""} onClick={() => setSym(x)}>{x}</button>)}
+          </span>
+          <span className="ait-in" style={{ maxWidth: 160 }}><input inputMode="decimal" value={amt} placeholder="Amount" onChange={(e) => setAmt(e.target.value)} aria-label="Amount to convert" /><em>{dir === "usdc" ? "SOL" : sym}</em></span>
+          <button type="button" className="btn primary small" disabled={busy || !(Number(amt) > 0)} onClick={() => { if (confirm(`Convert ${amt} ${dir === "usdc" ? `SOL into ${sym}` : `${sym} into SOL`}?`)) onAct("convert", "convert", { to: dir, symbol: sym, amount: Number(amt) }).then(() => setAmt("")); }}>Convert</button>
+        </div>
       )}
     </section>
   );
