@@ -132,7 +132,7 @@ export default function AITrader() {
   return (
     <div className="stack ait">
       <div className="page-head">
-        <Link href="/admin" className="muted">← Admin</Link>
+        <Link href="/admin" className="muted">← Admin</Link> · <Link href="/admin/ai-futures" className="muted">📊 AI Futures</Link>
         <div className="label">{d.isOwner ? "Owner" : "Admin"} · your own trader</div>
         <h1>🤖 AI trader</h1>
         <p className="muted ait-mine">This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>
