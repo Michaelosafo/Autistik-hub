@@ -178,6 +178,7 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
                   <label key={ch.ref} className={"aic-row" + (on ? " on" : "") + (changed ? " changed" : "")}>
                     <input type="checkbox" checked={on} disabled={busy || working} onChange={(e) => setDraft((d) => ({ ...d, [ch.ref]: e.target.checked }))} />
                     <span className="grow"><b>{ch.title}</b><small className="muted">{kindLabel[ch.kind]}{ch.username ? ` · @${ch.username}` : ""}{ch.members ? ` · ${ch.members.toLocaleString("en-US")} members` : ""}{have?.enabled ? ` · ${ago(have.last_post_at)}` : ""}</small></span>
+                    {have?.enabled && <SizeBox src={have} busy={busy || working} onAct={onAct} />}
                   </label>
                 );
               })}</div>
@@ -186,6 +187,7 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
                 {changes.length > 0 && <button type="button" className="btn small ghost" disabled={working} onClick={() => setDraft({})}>Undo</button>}
                 <button type="button" className="btn small" disabled={working || !changes.length} onClick={save}>{working ? "Saving…" : "Save"}</button>
               </div>
+              <small className="muted"><b>$ per buy</b> next to a ticked chat: how much to buy on each call shared there (empty = your normal trade size). A caller&apos;s or squad&apos;s own size still comes first.</small>
               <small className="muted">Tick the chats to copy, then press Save. Ticked chats are read every minute (25 at a time). Only messages posted after you save are copied.</small>
               <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={working} onClick={() => go(async () => setChats((await call("tga-chats", {})).chats))}>{working ? "Refreshing…" : "Refresh list"}</button>
               {st.chatsAt && <small className="muted">List saved {new Date(st.chatsAt).toLocaleString()}. It shows on every device you open this page on.</small>}
@@ -196,10 +198,32 @@ export default function AITraderTgAccount({ st, sources, busy, reload, onAct }: 
           <label key={x.id} className="aic-row on">
             <input type="checkbox" checked disabled={busy} onChange={() => onAct(`src${x.id}`, "source", { op: "toggle", id: x.id, enabled: false }, `Stopped copying ${x.title}.`)} />
             <span className="grow"><b>{x.title}</b><small className="muted">Telegram · {ago(x.last_post_at)}</small></span>
+            <SizeBox src={x} busy={busy} onAct={onAct} />
           </label>
         ))}</div>
       )}
       {msg && <small className="aic-note" role="status">{msg}</small>}
     </div>
+  );
+}
+
+/** "$ per buy" for one ticked channel / group: saved when you leave the box or press Enter. */
+function SizeBox({ src, busy, onAct }: { src: CopySource; busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
+  const [v, setV] = useState(src.usd ? String(src.usd) : "");
+  useEffect(() => { setV(src.usd ? String(src.usd) : ""); }, [src.usd]);
+  const save = () => {
+    const now = v.trim() === "" ? 0 : Number(v);
+    if (!Number.isFinite(now) || now < 0) { setV(src.usd ? String(src.usd) : ""); return; }
+    if (now === (Number(src.usd) || 0)) return;
+    onAct(`size${src.id}`, "source", { op: "size", id: src.id, usd: now || null });
+  };
+  return (
+    <span className="aic-size" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+      <small className="muted">$</small>
+      <input className="input" type="number" inputMode="decimal" min={0} step="any" placeholder="per buy" value={v} disabled={busy}
+        onChange={(e) => setV(e.target.value)} onBlur={save} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
+        onClick={(e) => { e.stopPropagation(); (e.target as HTMLInputElement).focus(); }}
+        aria-label={`Dollars to buy per call from ${src.title || "this chat"}`} style={{ width: 84, padding: "6px 8px" }} />
+    </span>
   );
 }

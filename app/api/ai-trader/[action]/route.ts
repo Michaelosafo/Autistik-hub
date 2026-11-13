@@ -81,7 +81,7 @@ async function getMine(_req: Request, action: string) {
     liveBalance().catch(() => null),
   ]);
   const [{ data: srcs }, { data: callers }, { data: rebuys }, { data: squads }, { data: squadMembers }] = await Promise.all([
-    tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at").order("added_at", { ascending: true }),
+    tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at,usd").order("added_at", { ascending: true }),
     tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title,sl,tp").order("usd", { ascending: false }),
     tq("ai_trader_rebuy").select("id,chain,token,symbol,sold_usd,low_usd,status,note,sold_at").order("sold_at", { ascending: false }).limit(15),
     tq("ai_trader_squads").select("id,name,usd,enabled,sl,tp").order("created_at", { ascending: true }),
@@ -365,6 +365,16 @@ async function postMine(action: string, b: any) {
         if ((count || 0) > 25) await log("settings", `${count} Telegram chats ticked: only 25 are read each minute, taking turns.`);
         await log("settings", `Saved Telegram chats: ${adds.length + set.filter((x: any) => x.enabled).length} on, ${set.filter((x: any) => !x.enabled).length} off.`);
         return json({ ok: true, note: `Saved. Copying ${count || 0} Telegram chat${count === 1 ? "" : "s"}.` });
+      }
+      if (op === "size") {
+        // How much to buy (in $) on each call from this channel / group. 0 or empty = the normal trade size.
+        const usd = b.usd === "" || b.usd == null ? null : Number(b.usd);
+        if (usd != null && (!Number.isFinite(usd) || usd < 0 || usd > 100000)) return json({ error: "Type a dollar amount between 0 and 100,000." }, 400);
+        const { data, error } = await tq("ai_trader_sources").update({ usd: usd && usd > 0 ? usd : null }).eq("id", Number(b.id)).select("title");
+        if (error) return json({ error: error.message }, 400);
+        const t = (data as any)?.[0]?.title || "this chat";
+        await log("settings", usd && usd > 0 ? `Buy size for ${t}: $${usd} per call.` : `Buy size for ${t}: the normal size.`);
+        return json({ ok: true, note: usd && usd > 0 ? `Each call from ${t} now buys $${usd}.` : `${t} now buys the normal size.` });
       }
       if (op === "toggle" || op === "remove") {
         const id = Number(b.id);

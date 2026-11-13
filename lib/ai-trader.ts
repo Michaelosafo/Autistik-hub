@@ -960,6 +960,12 @@ export async function squadFor(post: { text: string; user: string; from?: From; 
   return { usd: e.usd, sl: e.sl, tp: e.tp, name: String(best.squad.name), member: String(best.label || best.value) };
 }
 
+/** The $ buy size set for one Telegram channel / group (0 = none set). */
+async function chatSize(ref: string): Promise<number> {
+  const { data } = await tq("ai_trader_sources").select("usd").eq("kind", "tg_chat").eq("ref", ref).limit(1);
+  return n((data as any)?.[0]?.usd);
+}
+
 /** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
 const claimed = new Set<string>();
 
@@ -976,9 +982,12 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   // This group has its own callers and the poster isn't one of them (and isn't in a squad): not bought.
   if (who.skip && !squad) return [];
   const base = who.skip ? null : who.caller;
-  const caller: CallerRule | null = squad
+  // The channel's / group's own buy size (set next to it in the Telegram list), used when the caller or squad has none.
+  const chatUsd = source === "telegram" && post.chat ? await chatSize(post.chat).catch(() => 0) : 0;
+  let caller: CallerRule | null = squad
     ? { usd: squad.usd > 0 ? squad.usd : base?.usd ?? 0, who: `${squad.member} (squad ${squad.name})`, sl: squad.sl ?? base?.sl ?? null, tp: squad.tp ?? base?.tp ?? null }
     : base;
+  if (chatUsd > 0 && !(caller && caller.usd > 0)) caller = { usd: chatUsd, who: caller?.who || "channel size", sl: caller?.sl ?? null, tp: caller?.tp ?? null };
   if (squad) label = `${label} · squad "${squad.name}"`;
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
@@ -1032,7 +1041,7 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
   if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
   const newProject = f.ageHours < 24;
-  const why = `📡 Copy: ${label}.${usdSize ? ` Caller size $${usdSize}.` : ""} Sells at +${tp}% or -${sl}%${caller && (caller.sl || caller.tp) ? " (this caller's own)" : ""}.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
+  const why = `📡 Copy: ${label}.${usdSize ? ` Buy size $${usdSize}.` : ""} Sells at +${tp}% or -${sl}%${caller && (caller.sl || caller.tp) ? " (this caller's own)" : ""}.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
   try {
     const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl, tp, why, strategy: "copy", trail: 0, usd: usdSize, newProject, src });
     const spend = usdSize ? usdSize / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
