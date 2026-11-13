@@ -6604,3 +6604,20 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .pv.mine{padding:3px 10px;border-radius:999px;background:#F5C518;color:#141830}
 .pv.mine.zero{background:var(--surface-2);color:var(--muted)}
 .hf-foot{display:flex;justify-content:flex-end;margin-top:6px}
+
+/* Live rooms: Public / Private choice, the private invite link, and the after-live summary. */
+.lv-vis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.lv-vis button{display:flex;flex-direction:column;gap:4px;text-align:left;padding:12px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);cursor:pointer}
+.lv-vis button.on{border-color:#F5C518;background:color-mix(in srgb,#F5C518 14%,var(--surface-2))}
+.lv-vis small{color:var(--muted);font-size:.8em;line-height:1.35}
+@media (max-width:420px){ .lv-vis{grid-template-columns:1fr} }
+.lv-invite{margin-bottom:12px;border:1.5px solid #F5C518}
+.lv-invite-url{display:block;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:.8em;overflow-wrap:anywhere}
+.lv-sum-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.lv-sum-grid>div{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:12px;border-radius:12px;background:var(--surface-2)}
+.lv-sum-grid b{font-family:var(--f-display);font-size:1.4em}
+.lv-sum-grid small{color:var(--muted);font-size:.8em}
+@media (max-width:560px){ .lv-sum-grid{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.lv-sum-drops{display:flex;flex-direction:column;gap:6px}
+.lv-sum-drop{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
+.lv-gate-t{font-family:var(--f-display);font-size:1.3em}
