@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { ACTIVE_MS, TRADE_CHAINS, adminActive, adoptCoin, bnbUsd, closePosition, sellPart, topUpPosition, walletHoldings, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
+import { ACTIVE_MS, TRADE_CHAINS, adminActive, adoptCoin, isOwnCoin, bnbUsd, closePosition, sellPart, topUpPosition, walletHoldings, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
@@ -484,6 +484,8 @@ async function postMine(action: string, b: any) {
       // A coin in the wallet that isn't tracked: watch it with a stop-loss / take profit, or sell it now.
       const chain = String(b.chain || ""), token = String(b.token || "");
       if (!["solana", "bsc", "ethereum", "robinhood", "elysium"].includes(chain) || token.length < 30 || token.length > 64) return json({ error: "Unknown coin." }, 400);
+      // Only coins this trader bought (or tried to): never a coin someone else put in the wallet.
+      if (!(await isOwnCoin(chain, token))) return json({ error: "That coin wasn't bought by the AI trader, so it can't be sold from here." }, 403);
       const s = await getSettings();
       const sl = Number(b.sl) > 0 && Number(b.sl) < 95 ? Number(b.sl) : n0((s as any).copy_sl) || 5;
       const tp = Number(b.tp) > 0 && Number(b.tp) < 10000 ? Number(b.tp) : n0((s as any).copy_tp) || 100;

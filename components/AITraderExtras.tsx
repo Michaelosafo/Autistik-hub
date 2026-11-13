@@ -370,7 +370,8 @@ export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean
         <button type="button" className="btn small" disabled={loading} onClick={load}>{loading ? "Checking…" : "Check again"}</button>
       </div>
       {err && <small className="down">{err}</small>}
-      {list && !list.length && <small className="muted">No coins in the wallet right now, only the trading balance.</small>}
+      {list && !list.length && <small className="muted">None of the coins the AI bought are in the wallet right now.</small>}
+      <small className="muted">Only coins the AI trader bought are shown. Other tokens that turn up in the wallet (often spam sent to lure you) are hidden and can&apos;t be sold from here.</small>
       {loose.length > 0 && (
         <>
           <p style={{ margin: 0 }}><b>{loose.length} coin{loose.length === 1 ? " is" : "s are"} in the wallet with no stop-loss watching {loose.length === 1 ? "it" : "them"}.</b> Watch {loose.length === 1 ? "it" : "them"} with a stop-loss, or sell.</p>
