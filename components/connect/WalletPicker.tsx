@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
 import ApproveBar from "./ApproveBar";
-import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
+import { choosePhoneWallets, chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, isAndroid, warmUp } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -202,6 +202,15 @@ export default function WalletPicker() {
           {!s.qr && <>
           <input className="wp-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search wallets" aria-label="Search wallets" autoComplete="off" spellCheck={false} />
           <div className="wp-list">
+            {/* Android: the phone shows its own list of the wallet apps installed; pick one there. */}
+            {!solMode && mobile && isAndroid() && WALLETCONNECT_ID && !q && (
+              <button type="button" className="wp-row" disabled={!!s.busy} onClick={() => { choosePhoneWallets(); }} style={{ border: "2px solid #F0B90B" }}>
+                <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
+                <span className="wp-row-t"><b>Choose a wallet on my phone</b><small>{s.busy === "your wallet" ? "Getting ready…" : "Your phone lists the wallet apps you have. Pick one, approve, come back."}</small></span>
+                <span className="wp-badge gold">Easiest</span>
+                <i className="wp-chev" aria-hidden="true" />
+              </button>
+            )}
             {installed.length > 0 && <div className="wp-label">On this device</div>}
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
             {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : mobile ? "Tap your wallet: it opens, you approve, you come back" : "Popular"}</div>}

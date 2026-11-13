@@ -429,6 +429,30 @@ export async function prepareMobileWc() {
   } catch { pre = null; } finally { preparing = false; }
 }
 
+export const isAndroid = () => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+
+/**
+ * Android: hands the WalletConnect link to the phone itself, which shows its own list of the wallet apps installed
+ * (Trust, MetaMask, Bitget, Binance, OKX…). The member picks one, approves, and comes back here connected.
+ * Must run inside the tap, so it uses the link made in the background when the Connect window opened.
+ */
+export async function choosePhoneWallets() {
+  if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
+  const go = () => {
+    const uri = pre!.uri;
+    try { localStorage.removeItem("WALLETCONNECT_DEEPLINK_CHOICE"); } catch { /* private mode */ }
+    flagWc(true);
+    set({ open: true, busy: "", error: "", qr: { uri, name: "your wallet", logo: "/wallets/walletconnect.svg", href: uri } });
+    try { location.href = uri; } catch { /* the "Open" button is there */ }
+  };
+  if (preReady()) { go(); return; }
+  set({ busy: "your wallet", error: "" });
+  if (!preparing) prepareMobileWc().catch(() => {});
+  for (let i = 0; i < 60 && !preReady(); i++) await new Promise((r) => setTimeout(r, 150));
+  if (preReady()) go();
+  else set({ busy: "", error: "Couldn't get the wallet link. Check your internet and try again, or tap your wallet below." });
+}
+
 export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
   const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
