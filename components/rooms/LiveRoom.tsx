@@ -930,8 +930,9 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     <div className="room card stack">
       <b>This live has ended.</b>
       {local && isHost && <a className="btn" href={local.url} download={local.name}>⬇️ Save the recording on this device</a>}
+      <a className="btn primary" href={`/spaces/${room.id}`}>📊 See the summary: who joined, comments and tokens sent</a>
       {saved && <a className="btn" href={`/spaces/${room.id}`}>🎧 Listen back on the live&apos;s page</a>}
-      <Link className="btn primary" href="/spaces">See other lives</Link>
+      <Link className="btn" href="/spaces">See other lives</Link>
     </div>
   );
 

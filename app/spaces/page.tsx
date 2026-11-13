@@ -27,14 +27,18 @@ export default async function SpacesPage({ searchParams }: { searchParams: { hos
       <header className="bd-top ln-top">
         <div>
           <h1>Live rooms</h1>
-          <p className="muted">Talk live with the community. Host one, or join, comment, and raise your hand to speak.</p>
+          <p className="muted">Talk live with the community. Host a public live anyone signed in can join, or a private one for people with your invite link.</p>
         </div>
         <div className="ln-top-r"><Link href="/mood" className="ln-ghost">TIK</Link></div>
       </header>
       {!user ? (
         <div className="card stack" style={{ alignItems: "flex-start" }}>
-          <p style={{ margin: 0 }}>Sign in to host or join a live room.</p>
-          <Link className="btn primary" href="/login?next=/spaces">Sign in / Join</Link>
+          <p style={{ margin: 0 }}><b>Please sign in or log in before you can join or host a live.</b></p>
+          <p className="muted" style={{ margin: 0 }}>Once you&apos;re in, every public live shows here and you can join any of them.</p>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <Link className="btn primary" href="/login?next=/spaces">Log in</Link>
+            <Link className="btn" href="/login?mode=join&next=/spaces">Create a free account</Link>
+          </div>
         </div>
       ) : (
         <>
