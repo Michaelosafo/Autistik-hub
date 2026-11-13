@@ -297,7 +297,7 @@ function watchRequests(name: string, provider: any) {
     // Phones: bring the wallet app to the front now (works while the tap is still fresh; otherwise the bar's button does it).
     let shown = false;
     const show = () => { shown = true; set({ pending: mine }); };
-    if (mobileWc) { show(); if (href) setTimeout(() => { try { location.href = href; } catch { /* blocked: the button is there */ } }, 300); }
+    if (mobileWc) { show(); if (href) setTimeout(() => openWalletApp(href), 300); }
     // Extensions and wallet browsers usually pop up at once: only show the bar if nothing's been answered after a moment.
     const t = mobileWc ? null : setTimeout(show, 2500);
     try { return await orig(args); }
@@ -429,17 +429,41 @@ export async function prepareMobileWc() {
   } catch { pre = null; } finally { preparing = false; }
 }
 
+export const isAndroid = () => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+
+/**
+ * Android: hands the WalletConnect link to the phone itself, which shows its own list of the wallet apps installed
+ * (Trust, MetaMask, Bitget, Binance, OKX…). The member picks one, approves, and comes back here connected.
+ * Must run inside the tap, so it uses the link made in the background when the Connect window opened.
+ */
+export async function choosePhoneWallets() {
+  if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
+  const go = () => {
+    const uri = pre!.uri;
+    try { localStorage.removeItem("WALLETCONNECT_DEEPLINK_CHOICE"); } catch { /* private mode */ }
+    flagWc(true);
+    set({ open: true, busy: "", error: "", qr: { uri, name: "your wallet", logo: "/wallets/walletconnect.svg", href: uri } });
+    try { location.href = uri; } catch { /* the "Open" button is there */ }
+  };
+  if (preReady()) { go(); return; }
+  set({ busy: "your wallet", error: "" });
+  if (!preparing) prepareMobileWc().catch(() => {});
+  for (let i = 0; i < 60 && !preReady(); i++) await new Promise((r) => setTimeout(r, 150));
+  if (preReady()) go();
+  else set({ busy: "", error: "Couldn't get the wallet link. Check your internet and try again, or tap your wallet below." });
+}
+
 export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
   const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
   const top: WcTarget | undefined = !t ? undefined : "id" in t ? { name: t.name, logo: `/wallets/${(t as any).id}.svg`, wc: (t as any).wc, native: (t as any).native, install: (t as any).install } : t;
   // Phone + a wallet with its own link + the link already made: open the wallet NOW, inside the tap (no waiting).
   if (isMobile() && top && (top.native || top.wc) && preReady()) {
-    const base = top.native || top.wc!, href = wcHref(base, pre!.uri);
+    const base = walletBase(top)!, href = wcHref(base, pre!.uri);
     try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: top.name })); } catch { /* private mode */ }
     flagWc(true);
     set({ open: true, busy: "", error: "", qr: { uri: pre!.uri, name: top.name, logo: top.logo, install: top.install, href } });
-    location.href = href;
+    openWalletApp(href);
     return; // prepareMobileWc's connect() finishes the connection when the wallet approves
   }
   // Tapped while the link is still being made: wait for it (a second or two), then show a big "Open" button
@@ -448,11 +472,11 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
     set({ busy: top.name, error: "" });
     for (let i = 0; i < 40 && preparing; i++) await new Promise((r) => setTimeout(r, 150));
     if (preReady()) {
-      const base = top.native || top.wc!, href = wcHref(base, pre!.uri);
+      const base = walletBase(top)!, href = wcHref(base, pre!.uri);
       try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: top.name })); } catch { /* private mode */ }
       flagWc(true);
       set({ open: true, busy: "", qr: { uri: pre!.uri, name: top.name, logo: top.logo, install: top.install, href } });
-      location.href = href;
+      openWalletApp(href);
       return;
     }
   }
@@ -476,11 +500,11 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
       wc.rpc.showQrModal = false;
       wc.once("display_uri", (uri: string) => {
         if (direct) {
-          const base = direct.native || direct.wc!, href = wcHref(base, uri);
+          const base = walletBase(direct)!, href = wcHref(base, uri);
           try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: base, name: direct.name })); } catch { /* private mode */ }
           // Also an "Open <wallet>" button, in case the phone blocks opening the app without a fresh tap.
           set({ open: true, qr: { uri, name: direct.name, logo: direct.logo, install: direct.install, href }, busy: "" });
-          location.href = href;
+          openWalletApp(href);
         } else set({ qr: { uri, name: top!.name, logo: top!.logo, install: top!.install }, busy: "" });
       });
     } else {
@@ -546,6 +570,38 @@ export async function restoreWallet(): Promise<any | null> {
 }
 
 export const isMobile = () => typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const isIOS = () => typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+/**
+ * A browser built into another app (Telegram, Instagram, X, Facebook, TikTok…). These often refuse to open other
+ * apps through their own link names (trust://, metamask://), but do pass on normal https wallet links.
+ */
+export const inAppBrowser = () => {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return !!(window as any).TelegramWebviewProxy || !!(window as any).Telegram?.WebApp?.initData
+    || /Telegram|FBAN|FBAV|Instagram|Twitter|TikTok|musical_ly|Line\/|MicroMessenger|Snapchat/i.test(ua);
+};
+
+/**
+ * The best link to open a wallet app on this phone.
+ * - iPhone and in-app browsers: the wallet's https link first (opens the app with no "Open in…?" question, and never
+ *   shows "Safari can't open the page" when the app isn't installed).
+ * - Android: the app's own link name first (opens only the wallet, never "Chrome or the wallet?").
+ */
+export function walletBase(t: { wc?: string; native?: string }): string | undefined {
+  const https = t.wc && /^https:/.test(t.wc) ? t.wc : undefined;
+  if (isIOS() || inAppBrowser()) return https || t.native || t.wc;
+  return t.native || t.wc;
+}
+
+/** Opens the wallet app. Must run inside the tap. Telegram's mini apps need their own way to open links. */
+export function openWalletApp(href: string) {
+  try {
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg?.initData && typeof tg.openLink === "function" && /^https:/.test(href)) { tg.openLink(href); return; }
+  } catch { /* not a Telegram mini app */ }
+  try { location.href = href; } catch { /* blocked: the "Open" button is there */ }
+}
 
 /** The wallet used last time on this device (for a "Last used" badge). */
 export const lastWalletName = () => { try { return localStorage.getItem("aw-last-wallet") || ""; } catch { return ""; } };
@@ -692,7 +748,7 @@ function wcSolWallet(name: string, icon: string, up: any, address: string, base?
           const href = mobile && base ? (base.includes("://") && !/^https?:/.test(base) ? `${base.endsWith("/") || base.endsWith("://") ? base : base + "/"}wc${topic}` : `${base.replace(/\/$/, "")}/wc${topic}`) : undefined;
           const mine = { name, what: "the transaction", href, since: Date.now(), mobileWc: mobile };
           set({ pending: mine });
-          if (href) setTimeout(() => { try { location.href = href; } catch { /* the bar's button does it */ } }, 300);
+          if (href) setTimeout(() => openWalletApp(href), 300);
           let r: any;
           try { r = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, SOL_MAINNET); }
           finally { if (state.pending === mine) set({ pending: null }); }
@@ -720,8 +776,8 @@ export async function chooseSolWalletConnect(t: WcTarget) {
     const up = await initSolWc();
     if (up.session?.namespaces?.solana?.accounts?.[0]) { await finishSolWc(t, up); return; }
     up.once?.("display_uri", (uri: string) => {
-      const base = t.native || t.wc;
-      if (mobile && base) { const href = wcHref(base, uri); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); location.href = href; }
+      const base = walletBase(t);
+      if (mobile && base) { const href = wcHref(base, uri); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); openWalletApp(href); }
       else set({ qr: { uri, name: t.name, logo: t.logo, install: t.install }, busy: "" });
     });
     await up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
@@ -736,7 +792,7 @@ async function finishSolWc(t: WcTarget, up: any) {
   const acct = String(up.session?.namespaces?.solana?.accounts?.[0] || "");
   const address = acct.split(":")[2];
   if (!address) throw new Error("The wallet didn't share a Solana account.");
-  await chooseSol(wcSolWallet(t.name, t.logo, up, address, t.native || t.wc));
+  await chooseSol(wcSolWallet(t.name, t.logo, up, address, walletBase(t)));
   try { localStorage.setItem("aw-sol-wc", JSON.stringify(t)); } catch { /* private mode */ }
 }
 /** A Solana WalletConnect session from before a reload (or the trip to the wallet app). */
