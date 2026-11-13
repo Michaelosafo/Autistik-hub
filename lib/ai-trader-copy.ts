@@ -263,7 +263,7 @@ async function communityPosts(id: string): Promise<Post[]> {
 }
 
 /** New posts from followed X accounts: TwitterAPI.io if set, else the official recent search. */
-async function accountPosts(handles: string[]): Promise<Post[]> {
+export async function accountPosts(handles: string[]): Promise<Post[]> {
   if (!handles.length) return [];
   const q = handles.slice(0, 20).map((h) => `from:${h}`).join(" OR ");
   const key = process.env.TWITTERAPI_IO_KEY;

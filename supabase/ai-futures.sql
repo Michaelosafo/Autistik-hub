@@ -1,0 +1,4 @@
+-- AI Futures (already applied as migrations ai_futures and ai_futures_live_cols). See lib/ai-futures.ts.
+-- Tables: ai_futures_settings (one per AI trader id, max_lev capped at 3), ai_futures_positions, ai_futures_log,
+-- ai_futures_news. Functions: ai_futures_lease, ai_futures_key_get / ai_futures_key_set (wallet key in Vault).
+-- Schedule: select cron.schedule('autistik-ai-futures', '* * * * *', $$ select private.cron_call('https://autistik.io/api/ai-futures/cron', 58000) $$);

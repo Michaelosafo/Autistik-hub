@@ -6453,3 +6453,9 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
   .lv-mini .lv-ctl.mini .ctl,.lv-mini .lv-ctl.mini .mic{width:38px}
   .lv-mini .lv-ctl.mini .ctl-ic{width:32px;height:32px}
 }
+
+/* AI pages: Bot | Futures switch */
+.ait-tabs { display: flex; gap: 6px; padding: 4px; border-radius: 16px; background: var(--surface-2); }
+.ait-tabs a { flex: 1; text-align: center; padding: 10px 8px; border-radius: 12px; line-height: 1.25; color: inherit; text-decoration: none; }
+.ait-tabs a.on { background: var(--surface); box-shadow: 0 1px 4px rgba(0,0,0,.2); outline: 2px solid #F0B90B; }
+.ait-tabs a:focus-visible { outline: 3px solid #F0B90B; }

@@ -27,6 +27,7 @@ export default async function AdminPage() {
         <div className="page-head"><div className="label">Admin · helper</div><h1>Build the Hub</h1><p className="muted">The owner made you a helper admin. You can build and moderate (TIK news, hiding posts, sessions, Launch Pad tools) and use the AI trader. Money tools and the live trading wallet stay with the owner, who can remove helper access any time.</p></div>
         {staff ? <>
           <Link href="/admin/ai-trader" className="notice" style={{ display: "block", fontWeight: 800 }}>🤖 AI trader →</Link>
+          <Link href="/admin/ai-futures" className="notice" style={{ display: "block", fontWeight: 800 }}>📊 AI Futures →</Link>
           <div className="notice">Launch Pad tools (deploy on a new chain, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom. Post AUTISTIK news from <Link href="/app">TIK Home</Link>.</div>
         </> : <AdminMfa />}
       </div>
@@ -36,7 +37,7 @@ export default async function AdminPage() {
     <div className="stack">
       <div className="page-head"><div className="label">Admin</div><h1>Run the Hub</h1><p className="muted">Only the Hub owner can open this page.</p></div>
       <AdminWalletBackfill />
-      {admin ? <><Link href="/admin/ai-trader" className="notice" style={{ display: "block", fontWeight: 800 }}>🤖 AI trader (testing): give it funds, it finds coins and trades with stop-loss and take profit →</Link><div className="notice">Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><AdminHelpers /><AdminFees /><AdminSolCollect /><AdminActivity /><AdminAirdrop /><AdminBadges /><AdminTeam /><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
+      {admin ? <><Link href="/admin/ai-trader" className="notice" style={{ display: "block", fontWeight: 800 }}>🤖 AI trader (testing): give it funds, it finds coins and trades with stop-loss and take profit →</Link><Link href="/admin/ai-futures" className="notice" style={{ display: "block", fontWeight: 800 }}>📊 AI Futures: news, X and chart-driven futures on Hyperliquid and Aster, own wallet, max 3x →</Link><div className="notice">Launch Pad tools (deploy on Ethereum, Robinhood Chain and other chains, list tokens) are on <Link href="/launchpad/new">the Launch page</Link>, at the bottom.</div><AdminHelpers /><AdminFees /><AdminSolCollect /><AdminActivity /><AdminAirdrop /><AdminBadges /><AdminTeam /><SiteActivity /><AIBudget /><Admin /></> : <AdminMfa />}
     </div>
   );
 }
