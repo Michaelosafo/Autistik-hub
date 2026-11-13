@@ -235,14 +235,38 @@ export function BuyHours({ s, busy, onAct }: { s: HoursSettings; busy: boolean; 
 const norm = (v: string | null | undefined) => String(v || "").replace(/^@/, "").trim().toLowerCase();
 const KIND: Record<string, string> = { tg: "Telegram channel", tg_chat: "Telegram group", x_account: "X account", x_list: "X list", x_community: "X community" };
 
-/** Everyone being followed, as one list, and every call they sent, as one feed. */
-export function TrackedBoard({ copy, xCallers, signals, positions }: { copy: CopyData; xCallers: string[]; signals: Sig[]; positions: Pos[] }) {
+/** Edit how much one channel / group / caller buys (and a caller's own stop-loss / take profit), in place. */
+function BuyEdit({ kind, id, usd, sl, tp, dsl, dtp, busy, onAct, onDone }: { kind: "source" | "caller"; id: number; usd: number | null; sl?: number | null; tp?: number | null; dsl: number; dtp: number; busy: boolean; onAct: Act; onDone: () => void }) {
+  const [u, setU] = useState(usd ? String(usd) : ""), [a, setA] = useState(sl ? String(sl) : ""), [b, setB] = useState(tp ? String(tp) : "");
+  const save = async () => {
+    if (kind === "source") await onAct(`sz${id}`, "source", { op: "size", id, usd: u === "" ? "" : Number(u) });
+    else await onAct(`cle${id}`, "caller", { op: "edit", id, usd: Number(u), sl: a, tp: b });
+    onDone();
+  };
+  return (
+    <form className="aitx-edit" onSubmit={(e) => { e.preventDefault(); save(); }}>
+      <span className="ait-in"><em>$</em><input inputMode="decimal" value={u} placeholder={kind === "source" ? "normal" : ""} onChange={(e) => setU(e.target.value)} aria-label="Dollars per buy" autoFocus /></span>
+      {kind === "caller" && <>
+        <span className="ait-in"><em>SL −</em><input inputMode="decimal" value={a} placeholder={String(dsl)} onChange={(e) => setA(e.target.value)} aria-label="Stop-loss %" /><em>%</em></span>
+        <span className="ait-in"><em>TP +</em><input inputMode="decimal" value={b} placeholder={String(dtp)} onChange={(e) => setB(e.target.value)} aria-label="Take profit %" /><em>%</em></span>
+      </>}
+      <button type="submit" className="btn small primary" disabled={busy || (kind === "caller" && !(Number(u) > 0))}>Save</button>
+      <button type="button" className="btn small" onClick={onDone}>Cancel</button>
+    </form>
+  );
+}
+
+/** Everyone being followed, as one list (with what each one buys, editable), and every call they sent, as one feed. */
+export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly = true, normalUsd = 0, dsl = 5, dtp = 100, busy = false, onAct }: { copy: CopyData; xCallers: string[]; signals: Sig[]; positions: Pos[]; callersOnly?: boolean; normalUsd?: number; dsl?: number; dtp?: number; busy?: boolean; onAct?: Act }) {
   const [tab, setTab] = useState<"who" | "calls">("who");
+  const [editing, setEditing] = useState<string | null>(null);
   const [kind, setKind] = useState<"all" | "channels" | "callers">("all");
   const rows = [
-    ...copy.sources.map((x) => ({ key: `s${x.id}`, name: x.title || x.ref, alt: x.ref, type: KIND[x.kind] || x.kind, group: "channels" as const, platform: x.kind.startsWith("x") ? "X" : "TG", on: x.enabled, last: x.last_post_at })),
-    ...copy.callers.map((c) => ({ key: `c${c.id}`, name: c.who, alt: c.chat_title || c.chat, type: c.platform === "x" ? "X caller" : `Caller${c.chat_title ? ` in ${c.chat_title}` : ""}`, group: "callers" as const, platform: c.platform === "x" ? "X" : "TG", on: true, last: null as string | null })),
-    ...xCallers.filter((h) => !copy.callers.some((c) => norm(c.who) === norm(h))).map((h) => ({ key: `x${h}`, name: `@${h}`, alt: h, type: "X caller (fresh signals)", group: "callers" as const, platform: "X", on: true, last: null as string | null })),
+    ...copy.sources.map((x) => ({ key: `s${x.id}`, name: x.title || x.ref, alt: x.ref, type: KIND[x.kind] || x.kind, group: "channels" as const, platform: x.kind.startsWith("x") ? "X" : "TG", on: x.enabled, last: x.last_post_at,
+      edit: x.kind === "tg_chat" ? { kind: "source" as const, id: x.id, usd: x.usd ?? null, sl: null, tp: null } : null })),
+    ...copy.callers.map((c) => ({ key: `c${c.id}`, name: `@${c.who}`, alt: c.who, type: c.platform === "x" ? "X caller" : `Caller · ${c.chat_title ? `only in ${c.chat_title}` : "all groups"}`, group: "callers" as const, platform: c.platform === "x" ? "X" : "TG", on: true, last: null as string | null,
+      edit: { kind: "caller" as const, id: c.id, usd: Number(c.usd) || null, sl: c.sl ?? null, tp: c.tp ?? null } })),
+    ...xCallers.filter((h) => !copy.callers.some((c) => norm(c.who) === norm(h))).map((h) => ({ key: `x${h}`, name: `@${h}`, alt: h, type: "X caller (fresh signals)", group: "callers" as const, platform: "X", on: true, last: null as string | null, edit: null })),
   ];
   const stats = (r: (typeof rows)[number]) => {
     const names = [norm(r.name), norm(r.alt)].filter(Boolean);
@@ -267,6 +291,12 @@ export function TrackedBoard({ copy, xCallers, signals, positions }: { copy: Cop
       </div>
       {tab === "who" ? (
         <>
+          {onAct && (
+            <label className={"aic-row" + (callersOnly ? " on" : "")}>
+              <input type="checkbox" checked={callersOnly} disabled={busy} onChange={(e) => onAct("callersonly", "settings", { callers_only: e.target.checked }, e.target.checked ? "Groups now buy only your callers' calls. Channels still buy every call." : "Groups now buy everyone's calls.")} />
+              <span className="grow"><b>In groups, buy only my callers</b><small className="muted">A coin posted in a group is bought only when one of your callers below posted it. Channels buy every call, at the channel&apos;s own amount.</small></span>
+            </label>
+          )}
           <div className="aitx-chips" role="group" aria-label="Filter">
             {([["all", "All"], ["channels", "Channels & groups"], ["callers", "Callers"]] as const).map(([k, l]) => <button key={k} type="button" aria-pressed={kind === k} className={kind === k ? "on" : ""} onClick={() => setKind(k)}>{l}</button>)}
           </div>
@@ -274,11 +304,15 @@ export function TrackedBoard({ copy, xCallers, signals, positions }: { copy: Cop
             <div className="aitx-list">
               {shown.map((r) => {
                 const st = stats(r);
+                const e = r.edit;
+                const buys = e ? (e.usd ? `buys $${Number(e.usd).toLocaleString("en-US")}` : e.kind === "source" ? `buys the normal size${normalUsd ? ` ($${normalUsd})` : ""}` : "") + (e.kind === "caller" ? ` · SL −${e.sl || dsl}% · TP +${e.tp || dtp}%` : "") : "";
                 return (
-                  <div key={r.key} className={"aitx-li" + (r.on ? "" : " off")}>
+                  <div key={r.key} className={"aitx-li wrap" + (r.on ? "" : " off")}>
                     <span className={"aitx-plat " + r.platform.toLowerCase()}>{r.platform}</span>
-                    <span className="grow"><b>{r.name}</b><br /><small className="muted">{r.type}{r.on ? "" : " · paused"}{st.last ? ` · last call ${ago(st.last)}` : ""}</small></span>
+                    <span className="grow"><b>{r.name}</b><br /><small className="muted">{r.type}{r.on ? "" : " · paused"}{st.last ? ` · last call ${ago(st.last)}` : ""}</small>{buys && <><br /><small className="aitx-buys">{buys}</small></>}</span>
                     <span className="n"><b>{st.calls}</b> <small className="muted">calls</small><br /><small className={st.bought ? "up" : "muted"}>{st.bought} bought</small></span>
+                    {e && onAct && editing !== r.key && <button type="button" className="aic-x" disabled={busy} onClick={() => setEditing(r.key)} aria-label={`Edit what ${r.name} buys`}>✏️</button>}
+                    {e && onAct && editing === r.key && <BuyEdit kind={e.kind} id={e.id} usd={e.usd} sl={e.sl} tp={e.tp} dsl={dsl} dtp={dtp} busy={busy} onAct={onAct} onDone={() => setEditing(null)} />}
                   </div>
                 );
               })}

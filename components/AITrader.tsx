@@ -239,7 +239,7 @@ export default function AITrader() {
         {!live && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how much pretend BNB?", "1"); if (v) act("reset", "reset", { start: Number(v) }, "Practice account reset."); }}>Reset practice account</button>}
       </section>
 
-      <TrackedBoard copy={d.copy} xCallers={s.callers || []} signals={d.signals} positions={[...d.open, ...d.closed]} />
+      <TrackedBoard copy={d.copy} xCallers={s.callers || []} signals={d.signals} positions={[...d.open, ...d.closed]} callersOnly={s.callers_only} normalUsd={Number((s as any).per_trade_usd) || 0} dsl={Number((s as any).copy_sl) || 5} dtp={Number((s as any).copy_tp) || 100} busy={!!busy} onAct={act} />
 
       <Strategy s={s} busy={!!busy} onAct={act} />
       <Signals d={d} busy={!!busy} onAct={act} />
