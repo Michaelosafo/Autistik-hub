@@ -7,7 +7,7 @@ import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaR
 import { cronDenied } from "@/lib/cron-auth";
 import { chatKey, runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
-import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, revealSolKey, relayMove, relayMoveQuote } from "@/lib/ai-trader";
+import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, liveWallets2, removeWallet2, revealSolKey, relayMove, relayMoveQuote, setWallet2 } from "@/lib/ai-trader";
 import { relayReady, relayStatus } from "@/lib/ai-trader-chains";
 import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xFollowing, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
 
@@ -96,6 +96,7 @@ async function getMine(_req: Request, action: string) {
       sources: srcs || [], maxTax: COPY_MAX_TAX, callers: callers || [], rebuys: rebuys || [],
       squads: (squads || []).map((q: any) => ({ ...q, members: (squadMembers || []).filter((m: any) => m.squad_id === q.id) })),
       wallets: await liveWallets(s).catch(() => []),
+      wallets2: await liveWallets2(s).catch(() => []),
       relay: relayReady(),
       tg: { ready: tgReady(), linked: !!s.tg_user_id, username: s.tg_username },
       tga: await tgaStatus().catch(() => ({ ready: false, signedIn: false, name: null, stage: null, hint: null, chats: null, chatsAt: null })),
@@ -428,6 +429,16 @@ async function postMine(action: string, b: any) {
     }
     case "relay-status": {
       return json({ ok: true, ...(await relayStatus(String(b.requestId || ""))) });
+    }
+    case "wallet2-set": {
+      // Wallet 2: paste a private key (BNB-family "evm" or "sol"). Both wallets then buy every copy call.
+      const kind = b.kind === "sol" ? "sol" : "evm";
+      try { const address = await setWallet2(kind, String(b.key || "")); return json({ ok: true, address, note: `Wallet 2 added: ${address.slice(0, 6)}…${address.slice(-4)}. Fund it and it buys every call too.` }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "wallet2-remove": {
+      try { await removeWallet2(b.kind === "sol" ? "sol" : "evm"); return json({ ok: true, note: "Wallet 2 removed. The wallet and its money are still yours in your own wallet app." }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "sol-key-import": {
       try { const address = await importSolKey(String(b.key || "")); return json({ ok: true, address, note: `Now trading Solana from your wallet ${address.slice(0, 4)}…${address.slice(-4)}.` }); }

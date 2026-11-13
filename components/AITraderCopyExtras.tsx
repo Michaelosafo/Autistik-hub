@@ -174,6 +174,61 @@ export function LiveChains({ list, live, relay, busy, onAct }: { list: LiveWalle
   );
 }
 
+/**
+ * Wallet 2: a second wallet per network, funded separately. Both wallets buy every copy call (each its own coins,
+ * its own stop-loss and target). Always a wallet you own: paste its private key; it's kept encrypted on the server.
+ */
+export function Wallet2({ list, busy, onAct }: { list: LiveWallet[]; busy: boolean; onAct: Act }) {
+  const [copied, setCopied] = useState("");
+  const evm = list.filter((w) => w.chain !== "solana"), sol = list.find((w) => w.chain === "solana");
+  const evmAddr = evm.find((w) => w.address)?.address || null;
+  const copy = (a: string) => { navigator.clipboard?.writeText(a).then(() => { setCopied(a); setTimeout(() => setCopied(""), 1500); }).catch(() => {}); };
+  const Addr = ({ a }: { a: string }) => <button type="button" className="aic-addr" onClick={() => copy(a)}>{copied === a ? "Copied ✓" : `${a.slice(0, 6)}…${a.slice(-4)} (copy)`}</button>;
+  return (
+    <div className="aic-block">
+      <b>👛 Wallet 2</b>
+      <small className="muted">A second wallet, funded separately. When it&apos;s added, <b>both wallets buy every call</b> (same coin, same $ per buy, each with its own money) and each sells on its own stop-loss and target. Use a separate wallet just for this, never your main one.</small>
+      <div className="aic-list">
+        <div className={"aic-row aic-chain" + (evmAddr ? " on" : "")}>
+          <span className="grow">
+            <b>BNB Chain &amp; other EVM networks</b>
+            <small className="muted">{evmAddr ? <>{evm.filter((w) => w.address).map((w) => w.balance == null ? null : `${w.balance.toFixed(5)} ${w.native} on ${CHAIN_LABEL[w.chain] || w.chain}`).filter(Boolean).join(" · ") || "balance unavailable"} · <Addr a={evmAddr} /></> : "Not added"}</small>
+          </span>
+          {evmAddr && <button type="button" className="btn small ghost" disabled={busy} onClick={() => { if (confirm("Stop using Wallet 2 on BNB Chain and the other EVM networks? Its money stays in the wallet.")) onAct("w2re", "wallet2-remove", { kind: "evm" }); }}>Remove</button>}
+        </div>
+        <W2Key kind="evm" has={!!evmAddr} busy={busy} onAct={onAct} />
+        <div className={"aic-row aic-chain" + (sol?.address ? " on" : "")}>
+          <span className="grow">
+            <b>Solana</b>
+            <small className="muted">{sol?.address ? <>{sol.balance == null ? "balance unavailable" : `${sol.balance.toFixed(4)} SOL`} · <Addr a={sol.address} /></> : "Not added"}</small>
+          </span>
+          {sol?.address && <button type="button" className="btn small ghost" disabled={busy} onClick={() => { if (confirm("Stop using Wallet 2 on Solana? Its money stays in the wallet.")) onAct("w2rs", "wallet2-remove", { kind: "sol" }); }}>Remove</button>}
+        </div>
+        <W2Key kind="sol" has={!!sol?.address} busy={busy} onAct={onAct} />
+      </div>
+      <small className="muted">The networks switched on under Live chains apply to both wallets. Wallet 2 needs gas money on each network too (a little BNB / SOL).</small>
+    </div>
+  );
+}
+
+function W2Key({ kind, has, busy, onAct }: { kind: "evm" | "sol"; has: boolean; busy: boolean; onAct: Act }) {
+  const [open, setOpen] = useState(false), [key, setKey] = useState("");
+  const name = kind === "sol" ? "Solana" : "BNB Chain";
+  if (!open) return <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => setOpen(true)}>{has ? `Change ${name} Wallet 2` : `Add ${name} Wallet 2`}</button>;
+  return (
+    <div className="ait-key">
+      <small>{kind === "sol"
+        ? "Paste the private key of a Solana wallet you own (Phantom: Settings → Manage accounts → your account → Show private key; Solflare: Settings → Export private key)."
+        : "Paste the private key of a wallet you own (MetaMask: account menu → Account details → Show private key; Trust / Bitget: Settings → Wallets → Show private key)."} It&apos;s stored encrypted and only used by your AI Trader.</small>
+      <input className="input" type="password" autoComplete="off" spellCheck={false} placeholder={`${name} private key`} value={key} onChange={(e) => setKey(e.target.value)} aria-label={`${name} Wallet 2 private key`} />
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn small primary" disabled={busy || key.trim().length < 40} onClick={() => onAct(`w2${kind}`, "wallet2-set", { kind, key: key.trim() }).then(() => { setKey(""); setOpen(false); })}>Use as Wallet 2</button>
+        <button type="button" className="btn small" onClick={() => { setKey(""); setOpen(false); }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 /** Use your own Solana wallet: paste the private key Phantom / Solflare shows. */
 function SolImport({ has, busy, onAct }: { has: boolean; busy: boolean; onAct: Act }) {
   const [open, setOpen] = useState(false), [key, setKey] = useState("");

@@ -145,7 +145,74 @@ export async function revealSolKey(): Promise<string> {
   await log("settings", "The Solana wallet's private key was viewed.");
   return JSON.stringify(Array.from(kp.secretKey));
 }
-const myWallets = async (): Promise<Wallets> => ({ evm: await traderAccount(), sol: await solAccount() });
+// ---- Wallet 2: a second wallet per network, funded separately. On every copy call both wallets buy.
+// Always your own wallet (you paste its private key); kept encrypted in Vault like wallet 1.
+const w2Cache = new Map<string, { key: string; evm?: ReturnType<typeof privateKeyToAccount>; sol?: Keypair }>();
+async function wallet2(): Promise<Wallets> {
+  const sb = supabaseService();
+  const [{ data: ek }, { data: sk }] = await Promise.all([
+    sb.rpc("ai_trader_w2_get", { p_trader: T(), p_kind: "evm" }),
+    sb.rpc("ai_trader_w2_get", { p_trader: T(), p_kind: "sol" }),
+  ]);
+  let evm: ReturnType<typeof privateKeyToAccount> | null = null, sol: Keypair | null = null;
+  if (typeof ek === "string" && /^0x[0-9a-fA-F]{64}$/.test(ek)) {
+    const c = w2Cache.get(`e${T()}`);
+    evm = c?.key === ek && c.evm ? c.evm : privateKeyToAccount(ek as `0x${string}`);
+    w2Cache.set(`e${T()}`, { key: ek, evm });
+  }
+  if (typeof sk === "string" && sk.startsWith("[")) {
+    const c = w2Cache.get(`s${T()}`);
+    sol = c?.key === sk && c.sol ? c.sol : Keypair.fromSecretKey(Uint8Array.from(JSON.parse(sk)));
+    w2Cache.set(`s${T()}`, { key: sk, sol });
+  }
+  return { evm, sol };
+}
+const myWallets = async (slot = 1): Promise<Wallets> => (slot === 2 ? wallet2() : { evm: await traderAccount(), sol: await solAccount() });
+
+/** Add (or replace) wallet 2 for BNB-family networks ("evm") or Solana ("sol") from its private key. */
+export async function setWallet2(kind: "evm" | "sol", raw: string): Promise<string> {
+  const t = raw.trim();
+  let key: string, address: string;
+  if (kind === "evm") {
+    key = t.startsWith("0x") ? t : `0x${t}`;
+    if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("That isn't a private key (64 letters and numbers, from your wallet's Export private key).");
+    address = privateKeyToAccount(key as `0x${string}`).address;
+  } else {
+    let bytes: Uint8Array;
+    try { bytes = t.startsWith("[") ? Uint8Array.from(JSON.parse(t)) : b58(t); } catch { throw new Error("That isn't a Solana private key. Copy it from Phantom or Solflare: Settings → Show private key."); }
+    if (bytes.length !== 64) throw new Error("That isn't a full Solana private key.");
+    let kp: Keypair;
+    try { kp = Keypair.fromSecretKey(bytes); } catch { throw new Error("That private key isn't valid."); }
+    key = JSON.stringify(Array.from(kp.secretKey)); address = kp.publicKey.toBase58();
+  }
+  const w1 = await myWallets(1);
+  if ((kind === "evm" ? w1.evm?.address : w1.sol?.publicKey.toBase58()) === address) throw new Error("That's already Wallet 1. Use a different wallet for Wallet 2.");
+  await removeWallet2Check(kind);
+  const { error } = await supabaseService().rpc("ai_trader_w2_set", { p_trader: T(), p_kind: kind, p_key: key });
+  if (error) throw new Error(error.message);
+  await log("settings", `Wallet 2 (${kind === "sol" ? "Solana" : "BNB Chain & other EVM"}) set: ${address}`);
+  return address;
+}
+async function removeWallet2Check(kind: "evm" | "sol") {
+  const q = tq("ai_trader_positions").select("id").eq("mode", "live").eq("wallet", 2).in("status", ["open", "closing"]);
+  const { data } = await (kind === "sol" ? q.eq("chain", "solana") : q.neq("chain", "solana")).limit(1);
+  if (data?.length) throw new Error("Wallet 2 still has open live coins on this network. Let them sell (or close them) first.");
+}
+/** Stop using wallet 2 for a network (the wallet itself and its money stay yours, untouched). */
+export async function removeWallet2(kind: "evm" | "sol") {
+  await removeWallet2Check(kind);
+  const { error } = await supabaseService().rpc("ai_trader_w2_set", { p_trader: T(), p_kind: kind, p_key: null });
+  if (error) throw new Error(error.message);
+  await log("settings", `Wallet 2 (${kind === "sol" ? "Solana" : "BNB Chain & other EVM"}) removed.`);
+}
+/** Wallet 2 on each live chain: address and balance (for the page). */
+export async function liveWallets2(s: Settings) {
+  const w = await wallet2();
+  return Promise.all(LIVE_CHAINS.map(async (chain) => ({
+    chain, native: NATIVE[chain], on: s.live_chains.includes(chain), address: walletAddress(chain, w),
+    balance: walletAddress(chain, w) ? await chainBalance(chain, w).catch(() => null) : null,
+  })));
+}
 /** The chains this trader buys on: in live mode the ones switched on for live trading, in practice all its chains. */
 export const tradeChains = (s: Settings): string[] => (s.mode === "live" ? s.live_chains : s.chains);
 
@@ -430,7 +497,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       // A stop-loss or rug exit in a crashing coin: if the normal sell is refused (price moved too fast), try again at
       // once allowing 15%, then 35%, then 49% slippage. Getting out beats waiting a minute while it falls further.
       const urgent = /^(Stop-loss|Liquidity|Trailing|Closed by admin|Cancelled)/.test(reason);
-      const w = await myWallets();
+      const w = await myWallets(n((p as any).wallet) === 2 ? 2 : 1);
       let r: Awaited<ReturnType<typeof liveSellOn>> | null = null, last: unknown = null;
       for (const extra of urgent ? [0, 1200, 3200, 4600] : [0]) {
         try { r = await liveSellOn(p.chain, w, p.token, BigInt(p.amount_raw || "0"), tax, extra); break; }
@@ -446,7 +513,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
     if (p.strategy === "copy" && p.new_project && reason.startsWith("Take profit") && price) await startRebuyWatch(p, price).catch(() => {});
-    if (p.strategy === "copy" || p.strategy === "rebuy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
+    if (p.strategy === "copy" || p.strategy === "rebuy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol}${n((p as any).wallet) === 2 ? " (Wallet 2)" : ""} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
     await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
     await tq("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
@@ -637,7 +704,8 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 
 /** Buys one coin (practice or live) and records it with its own stop and target. */
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
-  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null } }) {
+  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null }; slot?: number }) {
+  const slot = o.slot === 2 ? 2 : 1;
   const sb = supabaseService();
   const bnb = await bnbUsd();
   const live = s.mode === "live" && isLiveChain(c.chain) && s.live_chains.includes(c.chain);
@@ -647,7 +715,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   if (live) {
     // Live on any chain: pays with that chain's own coin, worth the same dollars.
     const chain = c.chain as LiveChain;
-    const w = await myWallets();
+    const w = await myWallets(slot);
     const nUsd = await nativeUsd(chain);
     const wantUsd = spend * bnb;
     const avail = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
@@ -667,12 +735,12 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   const { error } = await tq("ai_trader_positions").insert({
     mode: live ? "live" : "paper", native, spent_native: spentNative, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
-    strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject,
+    strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject, wallet: slot,
     low_usd: c.price, source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
   const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : o.strategy === "copy" ? "📡" : "⚡";
-  await log("buy", `${icon} Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spentNative != null ? `${spentNative} ${native}` : `${spend} BNB`}${live ? "" : " (practice)"}. Target +${o.tp}%, stop -${o.sl}%. ${o.why}`);
+  await log("buy", `${icon}${slot === 2 ? " Wallet 2:" : ""} Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain} at $${Math.round(c.mcap).toLocaleString("en-US")} market cap for ${spentNative != null ? `${spentNative} ${native}` : `${spend} BNB`}${live ? "" : " (practice)"}. Target +${o.tp}%, stop -${o.sl}%. ${o.why}`);
   return `Bought ${c.symbol} on ${CHAIN_NAME[c.chain] || c.chain}.`;
 }
 
@@ -730,8 +798,9 @@ export async function runTrader({ force = false } = {}) {
  * Room and money for one more buy on a chain. Practice: pretend BNB. Live: that chain's own coin in the wallet
  * (BNB, ETH or SOL), less what's kept for fees, must cover at least half a normal trade.
  */
-async function buyRoom(s: Settings, chain = "bsc"): Promise<{ cash: number; held: Set<string> } | string> {
-  const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode);
+async function buyRoom(s: Settings, chain = "bsc", slot = 1): Promise<{ cash: number; held: Set<string> } | string> {
+  // Each wallet counts its own coins (both buy every call, so each has its own max).
+  const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode).eq("wallet", slot);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));
   if (held.size >= s.max_positions) return `Holding ${held.size} of ${s.max_positions} coins.`;
   if (s.mode === "paper") {
@@ -740,8 +809,8 @@ async function buyRoom(s: Settings, chain = "bsc"): Promise<{ cash: number; held
     return { cash, held };
   }
   if (!isLiveChain(chain) || !s.live_chains.includes(chain)) return `${CHAIN_NAME[chain] || chain} isn't switched on for live trading`;
-  const w = await myWallets();
-  if (!walletAddress(chain, w)) return chain === "solana" ? "there's no Solana wallet yet" : "there's no trading wallet yet";
+  const w = await myWallets(slot);
+  if (!walletAddress(chain, w)) return slot === 2 ? "no Wallet 2 on this network" : chain === "solana" ? "there's no Solana wallet yet" : "there's no trading wallet yet";
   const have = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
   const needUsd = (s.per_trade_usd > 0 ? s.per_trade_usd : s.per_trade * (await bnbUsd())) * 0.5;
   if (have * (await nativeUsd(chain)) < needUsd) return `not enough ${NATIVE[chain]} on ${CHAIN_NAME[chain]} (${have.toFixed(4)} ${NATIVE[chain]})`;
@@ -1035,19 +1104,34 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (!f || !f.price) return done(`skipped: no trading pool found for it yet (too new to trade, or not on your ticked chains: ${tradeChains(s).join(", ")})`);
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
   if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
-  // Money check and coin check side by side: every second counts on a fresh call.
-  const [room, g] = await Promise.all([buyRoom(s, f.chain), copyCheckFor(s, f.chain, f.token)]);
-  if (typeof room === "string") return done(`skipped: ${room}`);
-  if (room.held.has(f.token.toLowerCase())) return done("skipped: already holding it");
+  // Money check (both wallets) and coin check side by side: every second counts on a fresh call.
+  const [room, room2, g] = await Promise.all([
+    buyRoom(s, f.chain),
+    s.mode === "live" ? buyRoom(s, f.chain, 2) : Promise.resolve("no Wallet 2"),
+    copyCheckFor(s, f.chain, f.token),
+  ]);
+  const key = f.token.toLowerCase();
+  // Why each wallet can't buy ("" = it can). Wallet 2 not added for this network = nothing to report.
+  const why1 = typeof room === "string" ? room : room.held.has(key) ? "already holding it" : "";
+  const why2 = typeof room2 === "string" ? (room2.startsWith("no Wallet 2") ? "none" : room2) : room2.held.has(key) ? "already holding it" : "";
+  if (why1 && (why2 === "none" || why2)) return done(`skipped: ${why1}${why2 && why2 !== "none" ? ` · Wallet 2: ${why2}` : ""}`);
   if (!g.ok) { await tgNotify(`⛔ Skipped ${f.symbol} (${label}): ${g.reason}.`); return done(`skipped: ${g.reason}`); }
   const newProject = f.ageHours < 24;
   const why = `📡 Copy: ${label}.${usdSize ? ` Buy size $${usdSize}.` : ""} Sells at +${tp}% or -${sl}%${caller && (caller.sl || caller.tp) ? " (this caller's own)" : ""}.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
-  try {
-    const r = await executeBuy(s, room.cash, { ...f, mcap: f.mcap, buyTax: g.buyTax }, { sl, tp, why, strategy: "copy", trail: 0, usd: usdSize, newProject, src });
-    const spend = usdSize ? usdSize / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
-    await tgNotify(`📡 Bought ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(Math.min(spend, room.cash))} BNB${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${tp}% or -${sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
-    return done(`bought: ${r}`);
-  } catch (e) { return done(`skipped: buy failed (${(e as Error).message.slice(0, 80)})`); }
+  const coin = { ...f, mcap: f.mcap, buyTax: g.buyTax };
+  const tryBuy = (cash: number, slot: number) => executeBuy(s, cash, coin, { sl, tp, why: slot === 2 ? `${why} (Wallet 2)` : why, strategy: "copy", trail: 0, usd: usdSize, newProject, src, slot })
+    .then((r) => ({ ok: true as const, r }), (e) => ({ ok: false as const, r: (e as Error).message.slice(0, 80) }));
+  // Both wallets buy at the same moment, each with its own money.
+  const [one, two] = await Promise.all([
+    why1 ? Promise.resolve({ ok: false as const, r: why1 }) : tryBuy((room as { cash: number }).cash, 1),
+    why2 ? Promise.resolve({ ok: false as const, r: why2 }) : tryBuy((room2 as { cash: number }).cash, 2),
+  ]);
+  const w2txt = why2 === "none" ? "" : two.ok ? "Wallet 2 bought too" : `Wallet 2: ${two.r}`;
+  if (!one.ok && !two.ok) return done(`skipped: buy failed (${one.r})${w2txt ? ` · ${w2txt}` : ""}`);
+  const spend = usdSize ? usdSize / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
+  const who = one.ok && two.ok ? " (both wallets)" : two.ok ? " (Wallet 2)" : "";
+  await tgNotify(`📡 Bought ${f.symbol}${who} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(spend)} BNB each${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${tp}% or -${sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
+  return done(`bought: ${one.ok ? one.r : `Wallet 1: ${one.r}`}${w2txt ? ` · ${w2txt}` : ""}`);
 }
 const fmt = (x: number) => x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
 
