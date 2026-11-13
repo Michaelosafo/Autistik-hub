@@ -88,8 +88,9 @@ export default async function Home() {
   return (
     <div className="lp">
       <header className="lp-bar">
-        {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} />}
+        {/* The AUTISTIK logo first, then your profile picture with "My Profile" under it. */}
         <Link href="/mood" className="lp-logo" aria-label="Open TIK" title="Open TIK"><LogoBadge size={30} /></Link>
+        {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} label="My Profile" />}
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
@@ -99,7 +100,7 @@ export default async function Home() {
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         {user && owner && <Link href="/admin" className="lp-signin lp-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
         {!user && <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
-        <Link href="/app" className="lp-openapp" aria-label="Open the AUTISTIK App"><i aria-hidden="true"><svg><use href="#i-grid" /></svg></i><span>Open App</span><svg className="lp-oa-go" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
+        <Link href="/app" className="lp-openapp" aria-label="Open the AUTISTIK App"><i aria-hidden="true"><svg><use href="#i-grid" /></svg></i><span>Open App</span></Link>
       </header>
 
       <section className="lp-hero">
