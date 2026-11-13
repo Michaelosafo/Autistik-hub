@@ -146,6 +146,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const [needTap, setNeedTap] = useState(false);
   // 🔥 MORE FIRE: the room's signature reaction. Everyone sees a burst of flames and the counter climbs.
   const [fires, setFires] = useState(0);
+  // Who just sent fire: a flame shows on their picture for a moment, so you can see where it came from.
+  const [fireOn, setFireOn] = useState<Record<string, number>>({});
   const [blaze, setBlaze] = useState(false);
   // Recording (host only): everyone's voice mixed into one audio file, saved when stopped.
   const [rec, setRec] = useState(false); // I'm recording (host)
@@ -474,7 +476,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       if (payload.on === false) setVideos((v) => { const n = { ...v }; delete n[payload.from]; return n; });
     });
     ch.on("broadcast", { event: "drop" }, ({ payload }: any) => { if (peersRef.current[payload.from]) setDrop(String(payload.text || "").slice(0, 160)); });
-    ch.on("broadcast", { event: "fire" }, ({ payload }: any) => fireBurst(String(payload?.n || "").slice(0, 24)));
+    ch.on("broadcast", { event: "fire" }, ({ payload }: any) => { const n = String(payload?.n || "").slice(0, 24); fireBurst(n, n && n !== "Someone" ? String(payload?.from || "") : ""); });
     // A listener isn't getting my voice (a lost connection message): call them again.
     ch.on("broadcast", { event: "need" }, ({ payload }: any) => {
       if (payload.to !== me.id || !mic.current || !canSpeakRef.current) return;
@@ -853,12 +855,17 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const lastSend = useRef(0);
   const react = (e: string) => { float(e, "You"); const t = Date.now(); if (t - lastSend.current > 250) { lastSend.current = t; send("react", { e, n: myName() }); } };
   const blazeT = useRef<any>(null);
-  function fireBurst(who?: string) {
+  function fireBurst(who?: string, fromId?: string) {
     setFires((n) => n + 1);
+    if (fromId) {
+      const at = Date.now();
+      setFireOn((m) => ({ ...m, [fromId]: at }));
+      setTimeout(() => setFireOn((m) => { if (m[fromId] !== at) return m; const { [fromId]: _gone, ...rest } = m; return rest; }), 2500);
+    }
     if (who) { const k = ++fk.current; setReacts((r) => [{ k, e: "🔥", n: who }, ...r.filter((x) => !(x.n === who && x.e === "🔥"))].slice(0, 6)); setTimeout(() => setReacts((r) => r.filter((x) => x.k !== k)), 6000); }
     for (let i = 0; i < 4; i++) setTimeout(() => {
       const k = ++fk.current;
-      setFloaters((f) => [...f.slice(-16), { k, e: "🔥", x: 4 + Math.random() * 92, big: true }]);
+      setFloaters((f) => [...f.slice(-16), { k, e: "🔥", x: 4 + Math.random() * 92, big: true, n: i === 0 ? who : undefined }]);
       setTimeout(() => setFloaters((f) => f.filter((x) => x.k !== k)), 2800);
     }, i * 70);
     setBlaze(true);
@@ -866,7 +873,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     blazeT.current = setTimeout(() => setBlaze(false), 1400);
   }
   const lastFire = useRef(0);
-  const moreFire = () => { fireBurst("You"); const t = Date.now(); if (t - lastFire.current > 350) { lastFire.current = t; send("fire", { n: myName() }); } try { navigator.vibrate?.(30); } catch {} };
+  const moreFire = () => { fireBurst("You", hiddenRef.current && !canSpeakRef.current ? "" : me.id); const t = Date.now(); if (t - lastFire.current > 350) { lastFire.current = t; send("fire", { n: myName() }); } try { navigator.vibrate?.(30); } catch {} };
 
   const list = useMemo(() => Object.values(peers).sort((a, b) => a.at - b.at), [peers]);
   const onStage = list.filter((p) => roleOf(p.id) !== "listener").sort((a, b) => ["host", "cohost", "speaker"].indexOf(roleOf(a.id)) - ["host", "cohost", "speaker"].indexOf(roleOf(b.id)));
@@ -1008,6 +1015,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
                 <div key={p.id} className={"lv-box flat" + (isTalking ? " talking" : "") + (mine ? " me" : "")}>
                   <button type="button" className={"lv-face big" + (isTalking ? " talking" : "")} onClick={() => setSheet(p)} aria-label={`${p.alias}, ${badge[role]}`}>
                     <Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} />
+                    {fireOn[p.id] && <i className="lv-firedot" aria-label={`${mine ? "You" : p.alias} sent fire`}><Emo e="🔥" size={16} /></i>}
                     <span className="lv-name xs">{mine ? "You" : p.alias}{p.ver && <VerifiedBadge n={p.vb} size={12} className="vbadge-name" />}{role === "host" ? " · Host" : role === "cohost" ? " · Co-host" : ""}</span>
                   </button>
                   {/* The mic for this person, right under their name. */}
@@ -1047,7 +1055,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             {[...audience.filter((p) => myTile(p)), ...audience.filter((p) => !myTile(p))].slice(0, 30).map((p) => (
               <div key={p.id} className={"lv-box sm" + (myTile(p) ? " me" : "")}>
                 <button type="button" className="lv-face" onClick={() => setSheet(p)} title={p.alias} aria-label={`${p.alias}, ${followers[p.id] ?? 0} followers`}>
-                  <span className="lv-ring">{p.hand && <i className="lv-handdot" aria-hidden="true">✋</i>}<Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
+                  <span className="lv-ring">{p.hand && <i className="lv-handdot" aria-hidden="true">✋</i>}{fireOn[p.id] && <i className="lv-firedot sm" aria-label={`${myTile(p) ? "You" : p.alias} sent fire`}><Emo e="🔥" size={12} /></i>}<Avatar className="avatar lv-av" alias={p.alias} color={p.color} url={p.avatar_url} /></span>
                   <span className="lv-name sm">{myTile(p) ? "You" : p.alias}</span>
                 </button>
                 {myTile(p) ? (

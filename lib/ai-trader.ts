@@ -44,6 +44,7 @@ export type Settings = {
   copy_on: boolean; copy_tp: number; copy_sl: number; copy_fresh_min: number; copy_max_age_h: number; copy_max_pump: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
   live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; callers_only: boolean;
+  buy_hours_on: boolean; buy_from: string; buy_to: string; buy_tz: string;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -306,10 +307,14 @@ export async function getSettings(): Promise<Settings> {
   s.chains = (Array.isArray(s.chains) ? s.chains : ["bsc"]).filter((c: string) => (TRADE_CHAINS as readonly string[]).includes(c));
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
   s.need_socials = s.need_socials !== false;
+  s.buy_hours_on = s.buy_hours_on === true;
+  s.buy_from = /^\d{2}:\d{2}$/.test(String(s.buy_from || "")) ? s.buy_from : "00:00";
+  s.buy_to = /^\d{2}:\d{2}$/.test(String(s.buy_to || "")) ? s.buy_to : "23:59";
+  s.buy_tz = typeof s.buy_tz === "string" && s.buy_tz ? s.buy_tz : "UTC";
   return s as Settings;
 }
 
-async function bnbUsd() {
+export async function bnbUsd() {
   const m = await market(C, C.native.address);
   if (!m.priceUsd) throw new Error("No BNB price right now.");
   return m.priceUsd;
@@ -518,6 +523,140 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
   } catch (e) {
     await tq("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
     await log("error", `Couldn't sell ${p.symbol}: ${(e as Error).message}`);
+  }
+}
+
+// ---------------------------------------------------------------- Buy hours, buy more, sell part
+
+const hm = (t: string) => { const m = /^(\d{2}):(\d{2})$/.exec(t || ""); return m ? Math.min(23, +m[1]) * 60 + Math.min(59, +m[2]) : null; };
+/**
+ * Inside the hours you let it buy (always true when Buy hours is off). The times are in your own time zone, and a
+ * window like 22:00 to 06:00 runs past midnight. Selling is never limited: stop-loss and take profit work all day.
+ */
+export function inBuyHours(s: Settings, at = new Date()): boolean {
+  if (!s.buy_hours_on) return true;
+  const from = hm(s.buy_from), to = hm(s.buy_to);
+  if (from == null || to == null || from === to) return true;
+  let local: string;
+  try { local = new Intl.DateTimeFormat("en-GB", { timeZone: s.buy_tz || "UTC", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at); }
+  catch { local = at.toISOString().slice(11, 16); }
+  const now = hm(local) ?? 0;
+  return from < to ? now >= from && now < to : now >= from || now < to;
+}
+export const buyHoursText = (s: Settings) => `${s.buy_from} to ${s.buy_to}`;
+
+const nowIso = () => new Date().toISOString();
+
+/**
+ * Buys more of a coin it already holds (practice or live, from the wallet that bought it). The extra coins join the
+ * same trade: amount, cost and average buy price are updated, and its stop-loss / take profit now count from that
+ * average.
+ */
+export async function topUpPosition(p: Position, usd: number): Promise<string> {
+  if (!(usd > 0)) throw new Error("Enter how many dollars to add.");
+  const { data: claimed } = await tq("ai_trader_positions").update({ status: "closing", updated_at: nowIso() }).eq("id", p.id).eq("status", "open").select("id");
+  if (!claimed?.length) throw new Error(`${p.symbol} is being sold right now, so it can't be topped up.`);
+  const slot = n((p as any).wallet) === 2 ? 2 : 1;
+  let bought = false;
+  try {
+    const bnb = await bnbUsd();
+    const { price } = await priceOf(p.chain, p.token);
+    if (!price) throw new Error("No price for this coin right now.");
+    const tax = (await riskFor(p.chain, p.token).catch(() => null))?.buyTax ?? 0;
+    let addQty: number, addRaw = 0n, addSpent: number, addNative: number | null = null, tx: string | null = null;
+    if (p.mode === "live") {
+      if (!isLiveChain(p.chain)) throw new Error(`Live buying isn't set up for ${CHAIN_NAME[p.chain] || p.chain}.`);
+      const chain = p.chain as LiveChain;
+      const w = await myWallets(slot);
+      const nUsd = await nativeUsd(chain);
+      const free = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
+      const amount = +(usd / nUsd).toFixed(chain === "solana" ? 6 : 8);
+      if (amount > free) throw new Error(`Not enough ${NATIVE[chain]}: ${free.toFixed(4)} free (about $${(free * nUsd).toFixed(2)}).`);
+      const r = await liveBuyOn(chain, w, p.token, amount, tax);
+      if (r.raw <= 0n) throw new Error("The swap went through but no tokens arrived.");
+      bought = true;
+      addRaw = r.raw; addQty = Number(r.raw) / 10 ** (r.decimals ?? p.decimals); tx = r.hash; addNative = amount;
+      addSpent = +((amount * nUsd) / bnb).toFixed(6);
+    } else {
+      addSpent = +(usd / bnb).toFixed(6);
+      const fresh = await getSettings();
+      if (fresh.paper_cash < addSpent) throw new Error(`Not enough practice BNB (${fresh.paper_cash.toFixed(4)} free).`);
+      addQty = (usd * (1 - tax / 100 - PAPER_SLIP)) / price;
+      await supabaseService().from("ai_trader_settings").update({ paper_cash: fresh.paper_cash - addSpent }).eq("id", T());
+      bought = true;
+    }
+    const oldQty = n(p.qty), qty = oldQty + addQty;
+    const entry = qty > 0 ? (oldQty * n(p.entry_usd) + addQty * price) / qty : price;
+    const sn = (p as any).spent_native;
+    const { data: saved } = await tq("ai_trader_positions").update({
+      status: "open", qty, spent: n(p.spent) + addSpent, entry_usd: entry, last_usd: price, updated_at: nowIso(),
+      amount_raw: p.mode === "live" ? (BigInt(p.amount_raw || "0") + addRaw).toString() : p.amount_raw,
+      spent_native: sn != null || addNative != null ? n(sn) + (addNative ?? 0) : null,
+    }).eq("id", p.id).eq("status", "closing").select("id");
+    if (!saved?.length) {
+      await log("error", `Bought more ${p.symbol}${tx ? ` (tx ${tx.slice(0, 10)}…)` : ""} but the trade was sold meanwhile: the extra coins are in the wallet, not managed by the bot.`);
+      throw new Error(`${p.symbol} was sold while buying more. The extra coins are in the wallet.`);
+    }
+    await log("buy", `➕ Bought more ${p.symbol}: $${usd.toFixed(2)}${addNative != null ? ` (${addNative} ${NATIVE[p.chain as LiveChain] || ""})` : " (practice)"}. Average buy price now $${entry.toPrecision(4)}.`);
+    return `Bought $${usd.toFixed(2)} more ${p.symbol}.`;
+  } catch (e) {
+    if (!bought) await tq("ai_trader_positions").update({ status: "open", updated_at: nowIso() }).eq("id", p.id).eq("status", "closing");
+    throw e;
+  }
+}
+
+/**
+ * Sells part of a coin (1–99%; 100% is a normal sell). The sold part is saved as its own closed trade, so the profit
+ * and history add up; the rest stays open with the same stop-loss and take profit.
+ */
+export async function sellPart(p: Position, pct: number): Promise<string> {
+  const f = Math.min(100, Math.max(1, Math.round(pct))) / 100;
+  if (f >= 1) { await closePosition(p, "Closed by admin"); return `${p.symbol}: selling all of it.`; }
+  const { data: claimed } = await tq("ai_trader_positions").update({ status: "closing", updated_at: nowIso() }).eq("id", p.id).eq("status", "open").select("id");
+  if (!claimed?.length) throw new Error(`${p.symbol} is already being sold.`);
+  const slot = n((p as any).wallet) === 2 ? 2 : 1;
+  let sold = false;
+  try {
+    const tax = (await riskFor(p.chain, p.token).catch(() => null))?.sellTax ?? 0;
+    const price = (await priceOf(p.chain, p.token)).price;
+    const bnb = await bnbUsd();
+    let received: number, receivedNative: number | null = null, sellTx: string | null = null, soldRaw = 0n;
+    if (p.mode === "paper") {
+      if (!price) throw new Error("No price to sell at.");
+      received = (n(p.qty) * f * price * (1 - tax / 100 - PAPER_SLIP)) / bnb;
+      const s = await getSettings();
+      await supabaseService().from("ai_trader_settings").update({ paper_cash: s.paper_cash + Math.max(0, received) }).eq("id", T());
+    } else {
+      if (!isLiveChain(p.chain)) throw new Error(`Live selling isn't set up for ${CHAIN_NAME[p.chain] || p.chain}.`);
+      soldRaw = (BigInt(p.amount_raw || "0") * BigInt(Math.round(f * 10_000))) / 10_000n;
+      if (soldRaw <= 0n) throw new Error("Nothing to sell.");
+      const r = await liveSellOn(p.chain, await myWallets(slot), p.token, soldRaw, tax, 0);
+      receivedNative = r.receivedNative; sellTx = r.hash;
+      received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / bnb;
+    }
+    sold = true;
+    const keep = 1 - f, sn = (p as any).spent_native;
+    // The part still held first: this is what the bot keeps managing.
+    await tq("ai_trader_positions").update({
+      status: "open", qty: n(p.qty) * keep, spent: n(p.spent) * keep, spent_native: sn != null ? n(sn) * keep : null,
+      amount_raw: p.mode === "live" ? (BigInt(p.amount_raw || "0") - soldRaw).toString() : p.amount_raw,
+      last_usd: price ?? p.last_usd, updated_at: nowIso(),
+    }).eq("id", p.id).eq("status", "closing");
+    const partSpent = n(p.spent) * f, pnl = received - partSpent;
+    const { id: _id, ...rest } = p as any;
+    const { error } = await tq("ai_trader_positions").insert({
+      ...rest, status: "closed", spent: partSpent, qty: n(p.qty) * f, spent_native: sn != null ? n(sn) * f : null,
+      amount_raw: p.mode === "live" ? soldRaw.toString() : null, received, received_native: receivedNative, pnl,
+      pnl_pct: partSpent ? (pnl / partSpent) * 100 : null, close_reason: `Sold ${Math.round(f * 100)}% by admin`, sell_tx: sellTx,
+      last_usd: price, closed_at: nowIso(), updated_at: nowIso(),
+    });
+    if (error) await log("error", `Sold part of ${p.symbol} but couldn't save the record: ${error.message}`);
+    await log(pnl >= 0 ? "win" : "loss", `Sold ${Math.round(f * 100)}% of ${p.symbol}: ${received.toFixed(4)} BNB back for ${partSpent.toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB. The rest stays open.`);
+    return `Sold ${Math.round(f * 100)}% of ${p.symbol}.`;
+  } catch (e) {
+    if (!sold) await tq("ai_trader_positions").update({ status: "open", updated_at: nowIso() }).eq("id", p.id).eq("status", "closing");
+    else await log("error", `Sold part of ${p.symbol} but couldn't update the trade: ${(e as Error).message}`);
+    throw e;
   }
 }
 
@@ -779,6 +918,7 @@ export async function runTrader({ force = false } = {}) {
     return note(`Paused: daily loss limit reached (${lost.toFixed(4)} BNB).`);
   }
   if (!s.enabled) return note("Checked open positions (paused, so no new buys).");
+  if (!inBuyHours(s)) return note(`Outside your buy hours (${buyHoursText(s)}): not buying now. Open coins still sell on their stop-loss and target.`);
   // Telegram only / X only: the trader buys only coins called in what you follow, never from its own scanning.
   if (!s.use_general) return note(`${[s.use_tg && "Telegram", s.use_x && "X"].filter(Boolean).join(" + ") || "Nothing"} ticked: buying only called coins (General is off, so no scanning).`);
 
@@ -800,6 +940,7 @@ export async function runTrader({ force = false } = {}) {
  * (BNB, ETH or SOL), less what's kept for fees, must cover at least half a normal trade.
  */
 async function buyRoom(s: Settings, chain = "bsc", slot = 1): Promise<{ cash: number; held: Set<string> } | string> {
+  if (!inBuyHours(s)) return `outside your buy hours (${buyHoursText(s)})`;
   // Each wallet counts its own coins (both buy every call, so each has its own max).
   const { data: open } = await tq("ai_trader_positions").select("token").in("status", ["open", "closing"]).eq("mode", s.mode).eq("wallet", slot);
   const held = new Set((open || []).map((r: any) => String(r.token).toLowerCase()));

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
 import AITraderCopy, { type CopyData } from "@/components/AITraderCopy";
 import TraderTabs from "@/components/TraderTabs";
+import { BuyHours, JustBought, TrackedBoard, TradeActions, WalletPanel } from "@/components/AITraderExtras";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
@@ -18,6 +19,7 @@ type S = {
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   copy_on: boolean; copy_tp: number; copy_sl: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
   use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean; callers_only: boolean;
+  buy_hours_on?: boolean; buy_from?: string; buy_to?: string; buy_tz?: string;
 };
 type P = {
   id: string; mode: string; chain: string; strategy?: string | null; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
@@ -84,7 +86,7 @@ function TradeFacts({ p, closed = false }: { p: P; closed?: boolean }) {
   );
 }
 type Sig = { id: number; at: string; source: string; who: string | null; body: string | null; url: string; chain: string; token: string; symbol: string | null; mcap: number | null; result: string | null };
-type Data = { isOwner: boolean; traderId: number; copy: CopyData; perTradeBnb: number; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
+type Data = { isOwner: boolean; traderId: number; copy: CopyData; perTradeBnb: number; bnbUsd?: number | null; signals: Sig[]; sources: { x: boolean; telegram: boolean }; settings: S; open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[]; wallet: { address: string | null; bnb: number | null }; liveReady: boolean; owner: boolean; active: boolean; activeMinutes: number; stats: { trades: number; wins: number; winRate: number | null; pnl: number } };
 
 const CHAINS = [
   { k: "bsc", name: "BNB Chain", note: "Always on: the AI trades with BNB" },
@@ -140,6 +142,8 @@ export default function AITrader() {
   const cash = live ? d.wallet.bnb : s.paper_cash;
   const invested = d.open.filter((p) => p.mode === s.mode).reduce((a, p) => a + Number(p.spent), 0);
   const value = d.open.filter((p) => p.mode === s.mode).reduce((a, p) => a + Number(p.spent) * ((Number(p.last_usd) || Number(p.entry_usd)) / Number(p.entry_usd)), 0);
+  const openNow = d.open.filter((p) => p.mode === s.mode);
+  const freeUsd = cash != null && d.bnbUsd ? cash * d.bnbUsd : null;
 
   return (
     <div className="stack ait">
@@ -151,6 +155,9 @@ export default function AITrader() {
         <p className="muted ait-mine">This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>
         <p className="muted">It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
       </div>
+
+      <JustBought open={openNow} busy={!!busy} onAct={act} freeUsd={freeUsd} />
+      <WalletPanel live={live} cash={cash} open={openNow} bnbUsd={d.bnbUsd ?? null} wallets={d.copy.wallets || []} wallets2={d.copy.wallets2} />
 
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
         <div className="ait-state">
@@ -166,6 +173,8 @@ export default function AITrader() {
         <small className="muted">{s.enabled ? "Stop halts all buying until you press Start again." : "Start makes it look for trades and buy."} Open coins are always protected by their stop-loss and target.</small>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>
+
+      <BuyHours s={s} busy={!!busy} onAct={act} />
 
       <AITraderCopy c={d.copy} s={s} owner={d.owner} busy={!!busy} onAct={act} reload={load} />
 
@@ -197,7 +206,7 @@ export default function AITrader() {
         )}
       </section>
 
-      <Bought open={d.open.filter((p) => p.mode === s.mode)} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onSell={(p) => { if (confirm(`Cancel ${p.symbol}: sell all of it now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }}
+      <Bought open={openNow} closed={d.closed.filter((p) => p.mode === s.mode)} busy={!!busy} onAct={act} freeUsd={freeUsd} onSell={(p) => { if (confirm(`Cancel ${p.symbol}: sell all of it now?`)) act("close", "close", { id: p.id }, `${p.symbol} sold.`); }}
         onForget={(p) => { if (confirm(`Stop the bot managing ${p.symbol}? Nothing is sold: the coins stay in your wallet and you sell them yourself.`)) act("forget", "forget", { id: p.id }, `${p.symbol}: the bot stopped managing it.`); }} />
 
       <section className="card stack">
@@ -229,6 +238,8 @@ export default function AITrader() {
         ) : <small className="muted">Live trading is set up by the owner.</small>}
         {!live && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how much pretend BNB?", "1"); if (v) act("reset", "reset", { start: Number(v) }, "Practice account reset."); }}>Reset practice account</button>}
       </section>
+
+      <TrackedBoard copy={d.copy} xCallers={s.callers || []} signals={d.signals} positions={[...d.open, ...d.closed]} />
 
       <Strategy s={s} busy={!!busy} onAct={act} />
       <Signals d={d} busy={!!busy} onAct={act} />
@@ -265,8 +276,6 @@ export default function AITrader() {
         <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={!!busy || !Object.keys(form).length} onClick={() => act("save", "settings", Object.fromEntries(Object.entries(form).map(([k, v]) => [k, Number(v)])), "Rules saved. New coins use the new stop-loss and take profit.").then(() => setForm({}))}>Save rules</button>
       </section>
 
-      {msg && <div className="notice" role="status">{msg}</div>}
-
       <section className="card stack">
         <b>Open coins ({d.open.length})</b>
         {!d.open.length ? <small className="muted">Nothing open. It buys when a coin passes every check.</small> : d.open.map((p) => <Open key={p.id} p={p} busy={!!busy} onAct={act} />)}
@@ -291,6 +300,7 @@ export default function AITrader() {
         <b>What it did</b>
         <div className="ait-log">{d.log.map((l) => <div key={l.id} className={"ait-l " + l.kind}><small>{ago(l.at)}</small><span>{l.text}</span></div>)}</div>
       </section>
+      {msg && <div className="notice aitx-toast" role="status">{msg}<button type="button" aria-label="Close message" onClick={() => setMsg("")}>✕</button></div>}
       <p className="fin-note">This is an experiment. Automated trading can lose money fast, especially with new coins. Test in practice mode first and only fund the live wallet with what you can afford to lose.</p>
     </div>
   );
@@ -312,6 +322,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
       </div>
       <TradeFacts p={p} />
       {p.why && <small className="ait-why">{p.why}</small>}
+      <TradeActions p={p} busy={busy} onAct={onAct} />
       <div className="ait-pos-f">
         <label>Stop-loss <span className="ait-in"><input inputMode="decimal" value={sl} onChange={(e) => setSl(e.target.value)} /><em>%</em></span></label>
         <label>Take profit <span className="ait-in"><input inputMode="decimal" value={tp} onChange={(e) => setTp(e.target.value)} /><em>%</em></span></label>
@@ -325,7 +336,7 @@ function Open({ p, busy, onAct }: { p: P; busy: boolean; onAct: (n: string, a: s
 }
 
 /** Every coin the AI bought: what it paid, what it's worth now, and the % up or down. */
-function Bought({ open, closed, busy, onSell, onForget }: { open: P[]; closed: P[]; busy: boolean; onSell: (p: P) => void; onForget: (p: P) => void }) {
+function Bought({ open, closed, busy, onAct, freeUsd, onSell, onForget }: { open: P[]; closed: P[]; busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void>; freeUsd: number | null; onSell: (p: P) => void; onForget: (p: P) => void }) {
   const [tab, setTab] = useState<"open" | "closed">("open");
   const rows = tab === "open"
     ? open.map((p) => { const now = Number(p.last_usd) || Number(p.entry_usd); const pct = (now / Number(p.entry_usd) - 1) * 100; return { p, pct, worth: Number(p.spent) * (1 + pct / 100), price: now as number | null }; })
@@ -358,6 +369,7 @@ function Bought({ open, closed, busy, onSell, onForget }: { open: P[]; closed: P
                   <small className="muted">{chainName(p.chain)} · {tab === "open" ? `bought ${ago(p.opened_at)}` : `sold ${p.closed_at ? ago(p.closed_at) : ""}`}</small>
                   <small className="muted">{fmtAmount(Number(p.spent))} → {fmtAmount(w)} BNB · {fmtUsd(Number(p.entry_usd))} → {price ? fmtUsd(price) : "–"}</small>
                   <TradeFacts p={p} closed={tab === "closed"} />
+                  {tab === "open" && p.status === "open" && <TradeActions p={p} busy={busy} onAct={onAct} freeUsd={freeUsd} />}
                 </div>
                 <div className={"ait-b-pct " + (pct >= 0 ? "up" : "down")}>
                   <b>{pct >= 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(2)}%</b>

@@ -6493,3 +6493,66 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .lv-all-who { all: unset; cursor: pointer; flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
 .lv-all-who span { display: flex; flex-direction: column; min-width: 0; }
 .lv-all-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* AI trader extras: buy more / sell part / TP-SL, just-bought prompt, wallet panel, tracked callers & channels. */
+.aitx-act{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.aitx-act-row{display:flex;flex-wrap:wrap;gap:8px}
+.aitx-b{min-height:40px;padding:0 14px;border-radius:20px;border:1px solid var(--line);background:var(--surface-2);font-weight:700;font-size:.88em;cursor:pointer;color:var(--ink)}
+.aitx-b:disabled{opacity:.5;cursor:not-allowed}
+.aitx-b.buy{background:var(--teal-soft);border-color:transparent;color:var(--teal)}
+.aitx-b.sell{background:var(--alert-soft);border-color:transparent;color:var(--alert)}
+.aitx-b.on{outline:2px solid currentColor;outline-offset:1px}
+.aitx-b.dark{background:#141830;border-color:#141830;color:var(--sun-bright)}
+.aitx-b.line{background:transparent;border:1.5px solid currentColor}
+.aitx-panel{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--surface-2)}
+.aitx-panel .btn.primary{align-self:flex-start}
+.aitx-l{display:flex;flex-direction:column;gap:4px;font-size:.85em;font-weight:700;flex:1;min-width:0}
+.aitx-two{display:flex;gap:10px;flex-wrap:wrap}
+.aitx-two>*{flex:1 1 140px}
+.aitx-chips{display:flex;flex-wrap:wrap;gap:6px}
+.aitx-chips button{min-height:36px;padding:0 12px;border-radius:18px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:.82em;cursor:pointer;color:var(--ink)}
+.aitx-chips button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.aitx-new{display:flex;flex-direction:column;gap:10px;padding:16px;border-radius:var(--r);background:var(--sun-bright);color:#141830}
+.aitx-new .muted{color:#3d3a2a}
+.aitx-new .aitx-panel{background:rgba(255,255,255,.55)}
+.aitx-new-k{font-weight:800;letter-spacing:.04em;font-size:.75em}
+.aitx-wallet{border-radius:var(--r);background:var(--surface);border:1px solid var(--line)}
+.aitx-wallet-h{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:none;border:none;cursor:pointer;text-align:left;color:inherit;font-size:1.3em}
+.aitx-wallet-h small{display:block;font-size:.55em;color:var(--muted);font-weight:700}
+.aitx-wallet-h b{font-family:var(--f-display);font-size:.95em}
+.aitx-wallet-pl{font-size:.6em;font-weight:700}
+.aitx-chev{font-size:.7em;color:var(--muted)}
+.aitx-wallet-b{display:flex;flex-direction:column;gap:12px;padding:0 16px 16px}
+.aitx-tile{display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:12px;background:var(--surface-2)}
+.aitx-tile b{font-size:1.15em}
+.aitx-list{display:flex;flex-direction:column;gap:6px}
+.aitx-li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
+.aitx-li.off{opacity:.6}
+.aitx-li img{border-radius:50%}
+.aitx-li .n{text-align:right;white-space:nowrap}
+.aitx-li .grow{min-width:0;overflow-wrap:anywhere}
+.aitx-addr{font-size:.75em;opacity:.8}
+.aitx-plat{flex-shrink:0;min-width:38px;text-align:center;padding:4px 6px;border-radius:8px;font-weight:800;font-size:.72em;background:var(--violet-soft);color:var(--violet)}
+.aitx-plat.x{background:var(--ink);color:var(--bg)}
+.aitx-plat.dex{background:var(--sun-soft);color:var(--sun)}
+.aitx-toast{position:sticky;bottom:12px;z-index:20;display:flex;align-items:center;gap:10px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+.aitx-toast button{margin-left:auto;background:none;border:none;cursor:pointer;min-width:32px;min-height:32px;color:inherit}
+
+/* Front page: the profile picture with "My Profile" under it (after the logo); Open App always shows its words. */
+.me-pic-img{position:relative;display:grid;place-items:center}
+.me-pic.labelled{display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:12px}
+.me-pic.labelled .me-av{width:34px;height:34px}
+.me-pic-l{font-size:.68em;font-weight:800;line-height:1.1;white-space:nowrap}
+@media (max-width:520px){ .lp-bar .lp-openapp span{display:inline} .lp-bar .lp-openapp{padding:0 14px} .lp-bar .lp-openapp>i{display:none} }
+
+/* Live rooms: a flame on the picture of whoever just sent fire, so you can see where it came from. */
+.lv-face.big{position:relative}
+.lv-firedot{position:absolute;top:-6px;right:calc(50% - 44px);z-index:2;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#FFE7D6;box-shadow:0 2px 10px rgba(255,120,40,.45);font-style:normal;animation:lvFirePop .35s ease-out}
+.lv-firedot.sm{top:-6px;left:-6px;right:auto;width:22px;height:22px}
+@keyframes lvFirePop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion: reduce){ .lv-firedot{animation:none} }
+/* Front page top left: logo and My Profile stay side by side; everything else goes to the right. */
+.lp-id{display:flex;align-items:center;gap:12px;flex:none;margin-right:auto}
+.lp-bar .lp-nav{margin-right:0}
+a.me-pic.labelled{text-decoration:none;color:inherit}
+@media (max-width:380px){ .lp-id{gap:8px} }

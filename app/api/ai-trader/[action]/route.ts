@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { ACTIVE_MS, TRADE_CHAINS, adminActive, closePosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
+import { ACTIVE_MS, TRADE_CHAINS, adminActive, bnbUsd, closePosition, sellPart, topUpPosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
@@ -20,7 +20,7 @@ export const maxDuration = 60;
  * followed sources and trades. Each request works on the signed-in admin's own trader only.
  * GET /api/ai-trader/cron: the schedule (every 5 minutes; runs at most every 4).
  * GET /api/ai-trader/status: settings, positions, log, wallet (admins).
- * POST settings | run | close | edit | reset (admins).
+ * POST settings | run | close | sell-part | topup | edit | reset (admins).
  */
 export async function GET(_req: Request, { params }: { params: { action: string } }) {
   if (params.action === "cron") {
@@ -103,6 +103,7 @@ async function getMine(_req: Request, action: string) {
       x: { loginReady: xLoginReady(), signedIn: !!s.x_username, username: s.x_username, canRead: await xReadReady().catch(() => false), communities: !!process.env.TWITTERAPI_IO_KEY },
     },
     perTradeBnb: await tradeSize(s).catch(() => s.per_trade),
+    bnbUsd: await bnbUsd().catch(() => null),
     settings: s, open: open || [], closed: closed || [], log: logs || [],
     wallet: wallet ?? { address: null, bnb: null }, liveReady: !!(await traderAccount()), owner: true, isOwner: who.admin, traderId: T(),
     active: adminActive({ ...s, admin_seen_at: new Date().toISOString() }), activeMinutes: ACTIVE_MS / 60_000,
@@ -160,6 +161,15 @@ async function postMine(action: string, b: any) {
       if (Array.isArray(b.callers)) up.callers = [...new Set(b.callers.map((h: unknown) => String(h).replace(/^@/, "").trim()).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
       if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
+      // Buy hours: the times of day it may buy, in the admin's own time zone ("22:00" to "06:00" runs past midnight).
+      if (typeof b.buy_hours_on === "boolean") up.buy_hours_on = b.buy_hours_on;
+      for (const k of ["buy_from", "buy_to"]) if (typeof b[k] === "string") {
+        if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b[k])) return json({ error: "Times look like 09:00 or 23:30." }, 400);
+        up[k] = b[k];
+      }
+      if (typeof b.buy_tz === "string" && b.buy_tz.length < 64) {
+        try { new Intl.DateTimeFormat("en-GB", { timeZone: b.buy_tz }); up.buy_tz = b.buy_tz; } catch { /* unknown zone: keep the old one */ }
+      }
       if (b.away_take_profit != null && isFinite(Number(b.away_take_profit))) up.away_take_profit = Math.min(2000, Math.max(1, Number(b.away_take_profit)));
       // BNB Chain is always on; Ethereum, Robinhood Chain and Solana are optional.
       if (Array.isArray(b.chains)) up.chains = ["bsc", ...TRADE_CHAINS.filter((c) => c !== "bsc" && b.chains.includes(c))];
@@ -468,6 +478,24 @@ async function postMine(action: string, b: any) {
       if (!p) return json({ error: "That position isn't open." }, 404);
       await closePosition(p as Position, "Closed by admin");
       return json({ ok: true });
+    }
+    case "topup": {
+      // Buy more of an open coin, in dollars, from the wallet that bought it.
+      const usd = Number(b.usd);
+      if (!isFinite(usd) || usd < 1 || usd > 100_000) return json({ error: "Enter between $1 and $100,000." }, 400);
+      const { data: p } = await tq("ai_trader_positions").select("*").eq("id", String(b.id || "")).eq("status", "open").maybeSingle();
+      if (!p) return json({ error: "That coin isn't open." }, 404);
+      try { return json({ ok: true, note: await topUpPosition(p as Position, usd) }); }
+      catch (e) { await log("error", `Couldn't buy more ${(p as Position).symbol}: ${(e as Error).message}`); return json({ error: (e as Error).message }, 400); }
+    }
+    case "sell-part": {
+      // Sell 1–100% of an open coin.
+      const pct = Number(b.pct);
+      if (!isFinite(pct) || pct < 1 || pct > 100) return json({ error: "Choose between 1% and 100%." }, 400);
+      const { data: p } = await tq("ai_trader_positions").select("*").eq("id", String(b.id || "")).eq("status", "open").maybeSingle();
+      if (!p) return json({ error: "That coin isn't open." }, 404);
+      try { return json({ ok: true, note: await sellPart(p as Position, pct) }); }
+      catch (e) { await log("error", `Couldn't sell part of ${(p as Position).symbol}: ${(e as Error).message}`); return json({ error: (e as Error).message }, 400); }
     }
     case "forget": {
       // Stop managing a trade without selling: the coins stay in the wallet, the bot won't touch them.
