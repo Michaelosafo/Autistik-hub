@@ -6,6 +6,7 @@ import Art from "@/components/Art";
 import CopyAddress from "@/components/CopyAddress";
 import MeButton from "@/components/MeButton";
 import Avatar from "@/components/Avatar";
+import TypeText from "@/components/TypeText";
 import { LogoBadge } from "@/components/LogoMark";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
@@ -109,8 +110,8 @@ export default async function Home() {
 
       <section className="lp-hero">
         <div className="lp-hero-copy">
-          <div className="lp-eyebrow">A community for autistic people, powered by crypto</div>
-          <h1>Autism is not a disease. <span>It&apos;s a community.</span></h1>
+          <div className="lp-eyebrow"><TypeText text="A community for autistic people, powered by crypto" speed={16} /></div>
+          <h1><TypeText text="Autism is not a disease. " delay={900} /><span><TypeText text="It's a community." delay={2300} /></span></h1>
           <p>AUTISTIK is an online community for autistic people, their families and supporters. We also offer simple, safe tools for using crypto (digital money), and a portion of the activity on them goes to a fund that supports autistic people.</p>
           <p className="lp-why"><b>In short:</b> people use our tools, and that activity helps pay for real support for autistic people: therapy, equipment, education and everyday essentials. No jargon, no pressure.</p>
           <div className="lp-ctas">
@@ -133,7 +134,7 @@ export default async function Home() {
 
       <section id="why" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow">Why AUTISTIK</div><h2>Our vision, in plain words</h2><p>What AUTISTIK is, who it is for, and how it helps autistic people. No crypto knowledge needed.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={350} text="Our vision, in plain words" /></h2><p>What AUTISTIK is, who it is for, and how it helps autistic people. No crypto knowledge needed.</p></div>
           <Link href="/start" className="lp-more">New here? Start here <Arrow /></Link>
         </div>
         <div className="lp-why-grid">
@@ -152,7 +153,7 @@ export default async function Home() {
 
       <section id="products" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow">The App</div><h2>Everything in one place</h2><p>Trade, earn, launch and stay safe. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or make one with your email.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={350} text="Everything in one place" /></h2><p>Trade, earn, launch and stay safe. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or make one with your email.</p></div>
           <Link href="/app" className="lp-more">Open the App <Arrow /></Link>
         </div>
         <div className="lp-tools">
@@ -170,7 +171,7 @@ export default async function Home() {
 
       <section id="markets" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow">Markets</div><h2>Coins on AUTISTIK</h2><p>Live prices for every coin listed or launched here. Tap a row for its chart, holders and safety checks.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={350} text="Coins on AUTISTIK" /></h2><p>Live prices for every coin listed or launched here. Tap a row for its chart, holders and safety checks.</p></div>
           <Link href="/launchpad" className="lp-more">All tokens <Arrow /></Link>
         </div>
         <div className="lp-mkts">
@@ -183,8 +184,8 @@ export default async function Home() {
       <section id="token" className="lp-sec">
         <div className="lp-token">
           <div className="lp-token-copy">
-            <div className="lp-eyebrow">The token</div>
-            <h2>$AUTISTIK on BNB Chain</h2>
+            <div className="lp-eyebrow"><TypeText text="The token" /></div>
+            <h2><TypeText delay={350} text="$AUTISTIK on BNB Chain" /></h2>
             <p>Holders support the Hub and get a say in what we build. Stake it to earn a share of the platform&apos;s trading fees.</p>
             <CopyAddress address={TOKEN_ADDRESS} />
             <div className="lp-ctas">
@@ -206,7 +207,7 @@ export default async function Home() {
 
       <section id="community" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow">Community</div><h2>Built with autistic people</h2><p>Nothing about us without us. Autistic people lead here; supporters, families and practitioners join in.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeText delay={350} text="Built with autistic people" /></h2><p>Nothing about us without us. Autistic people lead here; supporters, families and practitioners join in.</p></div>
           <Link href="/community" className="lp-more">Join the groups <Arrow /></Link>
         </div>
         <div className="lp-tools four">
@@ -224,8 +225,8 @@ export default async function Home() {
       <section className="lp-sec">
         <div className="lp-fund">
           <div>
-            <div className="lp-eyebrow">AUTISTIK Fund</div>
-            <h2>Funded by the community, built for individuals</h2>
+            <div className="lp-eyebrow"><TypeText text="AUTISTIK Fund" /></div>
+            <h2><TypeText delay={350} text="Funded by the community, built for individuals" /></h2>
             <p>A portion of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon: register your interest now (you can do it for someone you care for).</p>
             <div className="lp-ctas"><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
           </div>
@@ -237,7 +238,7 @@ export default async function Home() {
 
       <section className="lp-sec">
         <div className="lp-band">
-          <div><h2>Ready to start?</h2><p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p></div>
+          <div><h2><TypeText delay={350} text="Ready to start?" /></h2><p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p></div>
           <div className="lp-ctas"><Link href="/app?menu=1" className="lp-btn gold xl">Open menu <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
         </div>
       </section>
