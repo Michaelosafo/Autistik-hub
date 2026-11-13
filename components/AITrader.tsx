@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
 import AITraderCopy, { type CopyData } from "@/components/AITraderCopy";
+import TraderTabs from "@/components/TraderTabs";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
@@ -131,8 +132,9 @@ export default function AITrader() {
 
   return (
     <div className="stack ait">
+      <TraderTabs />
       <div className="page-head">
-        <Link href="/admin" className="muted">← Admin</Link> · <Link href="/admin/ai-futures" className="muted">📊 AI Futures</Link>
+        <Link href="/admin" className="muted">← Admin</Link>
         <div className="label">{d.isOwner ? "Owner" : "Admin"} · your own trader</div>
         <h1>🤖 AI trader</h1>
         <p className="muted ait-mine">This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>

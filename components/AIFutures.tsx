@@ -5,6 +5,7 @@
  */
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import TraderTabs from "@/components/TraderTabs";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; risk_pct: number;
@@ -71,8 +72,9 @@ export default function AIFutures() {
 
   return (
     <div className="stack ait">
+      <TraderTabs />
       <div className="page-head">
-        <Link href="/admin" className="muted">← Admin</Link> · <Link href="/admin/ai-trader" className="muted">AI trader (copy bot)</Link>
+        <Link href="/admin" className="muted">← Admin</Link>
         <h1>📊 AI Futures</h1>
         <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Never above {s.max_lev}x. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>
       </div>
