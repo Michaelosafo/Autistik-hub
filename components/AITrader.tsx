@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
 import AITraderCopy, { type CopyData } from "@/components/AITraderCopy";
 import TraderTabs from "@/components/TraderTabs";
-import { BuyHours, JustBought, TrackedBoard, TradeActions, WalletPanel } from "@/components/AITraderExtras";
+import { BuyHours, JustBought, TrackedBoard, TradeActions, WalletCoins, WalletPanel } from "@/components/AITraderExtras";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
@@ -158,6 +158,7 @@ export default function AITrader() {
 
       <JustBought open={openNow} busy={!!busy} onAct={act} freeUsd={freeUsd} />
       <WalletPanel live={live} cash={cash} open={openNow} bnbUsd={d.bnbUsd ?? null} wallets={d.copy.wallets || []} wallets2={d.copy.wallets2} />
+      {live && <WalletCoins busy={!!busy} onAct={act} dsl={Number((s as any).copy_sl) || 5} dtp={Number((s as any).copy_tp) || 100} />}
 
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
         <div className="ait-state">
