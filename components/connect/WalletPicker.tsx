@@ -76,6 +76,7 @@ export default function WalletPicker() {
         continue;
       }
       const viaWc = !!WALLETCONNECT_ID;
+      if (w.id === "okx" && mobile && isAndroid() && viaWc) continue; // pinned at the top on Android
       // Phones: tap a wallet, its app opens with the request, approve, and come back here connected (you stay in
       // this browser). Only wallets with no WalletConnect app link (Coinbase, Phantom) open autistik.io inside the
       // wallet app instead. "Open autistik.io inside your wallet" stays below the list as the backup.
@@ -208,6 +209,14 @@ export default function WalletPicker() {
                 <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
                 <span className="wp-row-t"><b>Choose a wallet on my phone</b><small>{s.busy === "your wallet" ? "Getting ready…" : "Your phone lists the wallet apps you have. Pick one, approve, come back."}</small></span>
                 <span className="wp-badge gold">Easiest</span>
+                <i className="wp-chev" aria-hidden="true" />
+              </button>
+            )}
+            {/* OKX doesn't show in the phone's own list on some phones: always one tap away here. */}
+            {!solMode && mobile && isAndroid() && WALLETCONNECT_ID && !q && (
+              <button type="button" className="wp-row" disabled={!!s.busy} onClick={() => { chooseWalletConnect("okx"); }}>
+                <img src="/wallets/okx.svg" alt="" width={40} height={40} />
+                <span className="wp-row-t"><b>OKX Wallet</b><small>{s.busy === "OKX Wallet" ? "Opening…" : "Opens OKX Wallet to approve, then back here"}</small></span>
                 <i className="wp-chev" aria-hidden="true" />
               </button>
             )}

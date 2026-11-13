@@ -15,6 +15,20 @@ import type { Wallet, WalletAccount } from "@wallet-standard/base";
 export type WalletInfo = { uuid: string; name: string; icon: string; rdns: string };
 type Detected = { info: WalletInfo; provider: any };
 
+/**
+ * Android: wallet web links whose app hasn't claimed them make the phone ask "Chrome or <wallet>?". Pointing the
+ * link at the wallet's own app (an Android intent with its package) opens ONLY the wallet; if it isn't installed,
+ * the phone goes to its Play Store page.
+ */
+const ANDROID_APP: Record<string, string> = { "bkcode.vip": "com.bitkeep.wallet" };
+export function pinAndroid(href: string): string {
+  if (typeof navigator === "undefined" || !/Android/i.test(navigator.userAgent)) return href;
+  const m = /^https:\/\/([^/?#]+)(.*)$/.exec(href);
+  const pkg = m && ANDROID_APP[m[1]];
+  if (!pkg) return href;
+  return `intent://${m![1]}${m![2]}#Intent;scheme=https;package=${pkg};end`;
+}
+
 /** Top wallets, in the order shown. `rdns` matches what the wallet announces when installed. */
 export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: string; install: string; dapp?: (url: string) => string; wc?: string; native?: string }[] = [
   // `native`: the app's own link scheme. Phones use it first, so only the wallet opens (an https link can make
@@ -22,7 +36,9 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
   // Bitget and Trust first: both handle every network and switch between them easily.
-  { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkapp.vip", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  // Bitget: only its https://bkcode.vip link (Bitget's own docs: Android only supports that one; bitkeep:// and the
+  // old bkapp.vip link were slow to hand the connection over).
+  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => pinAndroid(`https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}`) },
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
@@ -277,7 +293,7 @@ function wcRequestHref(id?: number): string | undefined {
     const topic = wc?.session?.topic ? `sessionTopic=${encodeURIComponent(wc.session.topic)}` : "";
     const q = [id ? `requestId=${id}` : "", topic].filter(Boolean).join("&");
     if (base.includes("://") && !/^https?:/.test(base)) return `${base.endsWith("/") || base.endsWith("://") ? base : base + "/"}wc${q ? "?" + q : ""}`;
-    return `${base.replace(/\/$/, "")}/wc${q ? "?" + q : ""}`;
+    return pinAndroid(`${base.replace(/\/$/, "")}/wc${q ? "?" + q : ""}`);
   } catch { return undefined; }
 }
 const wcWalletName = () => { try { return String(JSON.parse(localStorage.getItem("WALLETCONNECT_DEEPLINK_CHOICE") || "null")?.name || "") || "your wallet"; } catch { return "your wallet"; } };
@@ -394,7 +410,7 @@ export function wcHref(base: string, uri: string) {
     const b = base.endsWith("://") ? base : base.endsWith("/") ? base : base + "/";
     return `${b}wc?uri=${u}`;
   }
-  return `${base.replace(/\/$/, "")}/wc?uri=${u}`;
+  return pinAndroid(`${base.replace(/\/$/, "")}/wc?uri=${u}`);
 }
 
 // ---- Phones: the WalletConnect link is made BEFORE the tap.
@@ -670,7 +686,7 @@ const browse = (base: string) => (u: string) => `${base}/${encodeURIComponent(u)
  * the others open this page inside their app on a phone, or their download page on a computer.
  */
 export const SOL_APPS: { id: string; name: string; logo: string; install: string; dapp: (url: string) => string; native?: string; wc?: string }[] = [
-  { id: "bitget", native: "bitkeep://", wc: "https://bkapp.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}` },
+  { id: "bitget", wc: "https://bkcode.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => pinAndroid(`https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}`) },
   { id: "trust", native: "trust://", wc: "https://link.trustwallet.com", name: "Trust Wallet", logo: "/wallets/trust.svg", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=501&url=${encodeURIComponent(u)}` },
   { id: "phantom", name: "Phantom", logo: "/wallets/phantom.svg", install: "https://phantom.com/download", dapp: browse("https://phantom.app/ul/browse") },
   { id: "solflare", name: "Solflare", logo: wcLogo("34c0e38d-66c4-470e-1aed-a6fabe2d1e00"), install: "https://solflare.com/download", dapp: browse("https://solflare.com/ul/v1/browse") },
@@ -745,7 +761,7 @@ function wcSolWallet(name: string, icon: string, up: any, address: string, base?
           // Bring the wallet app forward on phones, with an "Open <wallet>" bar until it's answered.
           const mobile = isMobile();
           const topic = up.session?.topic ? `?sessionTopic=${encodeURIComponent(up.session.topic)}` : "";
-          const href = mobile && base ? (base.includes("://") && !/^https?:/.test(base) ? `${base.endsWith("/") || base.endsWith("://") ? base : base + "/"}wc${topic}` : `${base.replace(/\/$/, "")}/wc${topic}`) : undefined;
+          const href = mobile && base ? (base.includes("://") && !/^https?:/.test(base) ? `${base.endsWith("/") || base.endsWith("://") ? base : base + "/"}wc${topic}` : pinAndroid(`${base.replace(/\/$/, "")}/wc${topic}`)) : undefined;
           const mine = { name, what: "the transaction", href, since: Date.now(), mobileWc: mobile };
           set({ pending: mine });
           if (href) setTimeout(() => openWalletApp(href), 300);
