@@ -76,6 +76,7 @@ export default function WalletPicker() {
         continue;
       }
       const viaWc = !!WALLETCONNECT_ID;
+      if (w.id === "okx" && mobile && isAndroid() && viaWc) continue; // pinned at the top on Android
       // Phones: tap a wallet, its app opens with the request, approve, and come back here connected (you stay in
       // this browser). Only wallets with no WalletConnect app link (Coinbase, Phantom) open autistik.io inside the
       // wallet app instead. "Open autistik.io inside your wallet" stays below the list as the backup.
