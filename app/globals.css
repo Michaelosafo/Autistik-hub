@@ -6642,3 +6642,5 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .aitx-buys{font-weight:700;color:var(--ink)}
 .aitx-edit{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding-top:6px}
 .aitx-edit .ait-in{max-width:150px}
+.aitx-coins.alert{border:2px solid #F5C518}
+.aitx-li.loose{background:color-mix(in srgb,#F5C518 14%,var(--surface-2))}

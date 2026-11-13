@@ -714,7 +714,7 @@ async function adoptPending() {
       const bnb = await bnbUsd();
       const spent = q.spent_native ? (n(q.spent_native) * (await nativeUsd(q.chain as LiveChain))) / bnb : (qty * entry) / bnb;
       const { error } = await tq("ai_trader_positions").insert({
-        mode: "live", native: q.native || NATIVE[q.chain as LiveChain], spent_native: q.spent_native ?? null, chain: q.chain, token: q.token, symbol: q.symbol, name: q.name, logo: q.logo || pair?.info?.imageUrl || null,
+        mode: "live", native: q.native || NATIVE[q.chain as LiveChain], spent_native: q.spent_native ?? null, chain: q.chain, token: q.token, symbol: q.symbol || pair?.baseToken?.symbol || null, name: q.name || pair?.baseToken?.name || null, logo: q.logo || pair?.info?.imageUrl || null,
         spent: +spent.toFixed(6), qty, amount_raw: bal.raw.toString(), decimals: bal.decimals,
         entry_usd: entry, high_usd: Math.max(entry, now), last_usd: now, low_usd: Math.min(entry, now), stop_loss: n(q.sl), take_profit: n(q.tp), trail: 0,
         why: `Recovered: the buy went through after it was marked failed. ${q.why || ""}`.slice(0, 500), buy_tx: "unconfirmed", strategy: q.strategy || "copy", wallet: q.wallet === 2 ? 2 : 1,
@@ -723,10 +723,79 @@ async function adoptPending() {
       if (error) { await log("error", `Found ${q.symbol || q.token} in the wallet but couldn't record it: ${error.message}`); continue; }
       await tq("ai_trader_pending").delete().eq("id", q.id);
       const ch = (now / entry - 1) * 100;
-      await log("buy", `🛟 Found ${q.symbol || "a coin"} in the wallet: that buy went through after all. It's now a normal trade (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}% since the buy), with stop-loss -${n(q.sl)}% and take profit +${n(q.tp)}%.`);
+      await log("buy", `🛟 Found ${q.symbol || pair?.baseToken?.symbol || "a coin"} in the wallet: that buy went through after all. It's now a normal trade (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}% since the buy), with stop-loss -${n(q.sl)}% and take profit +${n(q.tp)}%.`);
       await tgNotify(`🛟 ${q.symbol || "A coin"}: the buy went through after all (it was marked failed). Now watched: sells at -${n(q.sl)}% or +${n(q.tp)}%.`).catch(() => {});
     } catch (e) { await log("error", `Couldn't check the wallet for ${q.symbol || q.token}: ${(e as Error).message.slice(0, 120)}`); }
   }
+}
+
+export type Holding = { chain: LiveChain; token: string; symbol: string | null; logo: string | null; slot: number; amount: number; usd: number | null; price: number | null; tracked: boolean };
+
+/**
+ * Every coin actually in the trading wallets right now (Solana: the whole wallet; other chains: any coin it traded or
+ * was called in the last 3 days), with today's value and whether a trade is watching it. Coins that are there but not
+ * tracked (a buy that landed after it was reported as failed, or one bought by hand) can then get a stop-loss or be sold.
+ */
+export async function walletHoldings(): Promise<Holding[]> {
+  const out: Holding[] = [];
+  const { data: open } = await tq("ai_trader_positions").select("chain,token,wallet").in("status", ["open", "closing"]);
+  const watched = new Set(((open || []) as any[]).map((p) => `${p.chain}:${String(p.token).toLowerCase()}:${n(p.wallet) === 2 ? 2 : 1}`));
+  for (const slot of [1, 2]) {
+    const w = await myWallets(slot).catch(() => null);
+    if (!w) continue;
+    // Solana: Jupiter lists every coin the wallet holds (the free Solana RPC refuses that lookup).
+    const sol = w.sol ? w.sol.publicKey.toBase58() : null;
+    if (sol) {
+      const h = await fetch(`https://lite-api.jup.ag/ultra/v1/holdings/${sol}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => null);
+      for (const [mint, accs] of Object.entries((h?.tokens || {}) as Record<string, any[]>)) {
+        const amount = (accs || []).reduce((a, x) => a + (Number(x?.uiAmount) || 0), 0);
+        if (amount > 0) out.push({ chain: "solana", token: mint, symbol: null, logo: null, slot, amount, usd: null, price: null, tracked: watched.has(`solana:${mint.toLowerCase()}:${slot}`) });
+      }
+    }
+    // EVM chains: the coins it traded or was called recently.
+    if (w.evm) {
+      const since = new Date(Date.now() - 3 * 864e5).toISOString();
+      const [{ data: sigs }, { data: pos }] = await Promise.all([
+        tq("ai_trader_signals").select("chain,token").neq("chain", "solana").gte("at", since).limit(200),
+        tq("ai_trader_positions").select("chain,token").neq("chain", "solana").gte("opened_at", since).limit(200),
+      ]);
+      const seen = new Set<string>();
+      for (const r of [...(sigs || []), ...(pos || [])] as any[]) {
+        const k = `${r.chain}:${String(r.token).toLowerCase()}`;
+        if (seen.has(k) || !isLiveChain(r.chain) || r.chain === "solana") continue;
+        seen.add(k);
+        const b = await tokenBalanceOn(r.chain as LiveChain, w, r.token).catch(() => null);
+        if (b && b.raw > 0n) out.push({ chain: r.chain, token: r.token, symbol: null, logo: null, slot, amount: Number(b.raw) / 10 ** b.decimals, usd: null, price: null, tracked: watched.has(`${k}:${slot}`) });
+      }
+    }
+  }
+  // Names, logos and values from DexScreener.
+  const byChain = new Map<string, Holding[]>();
+  for (const h of out) byChain.set(h.chain, [...(byChain.get(h.chain) || []), h]);
+  for (const [chain, list] of byChain) {
+    for (let i = 0; i < list.length; i += 30) {
+      const part = list.slice(i, i + 30);
+      const d = await fetch(`https://api.dexscreener.com/tokens/v1/${chain}/${part.map((h) => h.token).join(",")}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => []);
+      for (const h of part) {
+        const pair = (Array.isArray(d) ? d : []).filter((x: any) => String(x?.baseToken?.address || "").toLowerCase() === h.token.toLowerCase()).sort((a: any, b: any) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd))[0];
+        if (!pair) continue;
+        h.symbol = pair.baseToken?.symbol || null; h.logo = pair.info?.imageUrl || null; h.price = n(pair.priceUsd) || null;
+        h.usd = h.price ? h.price * h.amount : null;
+      }
+    }
+  }
+  return out.filter((h) => h.usd == null || h.usd >= 0.05).sort((a, b) => Number(a.tracked) - Number(b.tracked) || (b.usd || 0) - (a.usd || 0));
+}
+
+/** Start watching a coin that's in the wallet but not tracked: a trade from today's price, with this stop-loss / take profit. */
+export async function adoptCoin(chain: LiveChain, token: string, slot: number, sl: number, tp: number, sellNow = false): Promise<string> {
+  await tq("ai_trader_pending").upsert({ chain, token, wallet: slot === 2 ? 2 : 1, sl, tp, why: sellNow ? "Found in the wallet; sold by admin." : "Found in the wallet; watched from here.", strategy: "copy", created_at: new Date().toISOString() }, { onConflict: "trader_id,chain,token,wallet" });
+  await adoptPending();
+  const { data } = await tq("ai_trader_positions").select("*").eq("chain", chain).eq("token", token).in("status", ["open", "closing"]).limit(1);
+  const p = (data || [])[0] as Position | undefined;
+  if (!p) throw new Error("Couldn't read that coin in the wallet (no price yet?). Try again in a minute.");
+  if (sellNow) { await closePosition(p, "Closed by admin"); return `Selling ${p.symbol || "it"} now.`; }
+  return `${p.symbol || "It"} is now watched: sells at -${sl}% or +${tp}%.`;
 }
 
 async function manage(s: Settings) {

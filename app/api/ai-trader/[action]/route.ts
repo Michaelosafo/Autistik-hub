@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { ACTIVE_MS, TRADE_CHAINS, adminActive, bnbUsd, closePosition, sellPart, topUpPosition, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
+import { ACTIVE_MS, TRADE_CHAINS, adminActive, adoptCoin, bnbUsd, closePosition, sellPart, topUpPosition, walletHoldings, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
@@ -119,6 +119,8 @@ const NUM: Record<string, [number, number]> = {
   copy_tp: [10, 2000], copy_sl: [1, 90], rebuy_dump: [10, 95], rebuy_tp: [5, 1000],
   copy_fresh_min: [0.5, 60], copy_max_age_h: [0.1, 720], copy_max_pump: [10, 5000],
 };
+
+const n0 = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
   const tid = await myTrader();
@@ -473,6 +475,21 @@ async function postMine(action: string, b: any) {
     }
     case "run":
       return json(await runTrader({ force: true }).catch((e) => ({ error: (e as Error).message })));
+    case "holdings": {
+      // What's really in the trading wallets, and which coins no trade is watching.
+      try { return json({ ok: true, holdings: await walletHoldings() }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "adopt": {
+      // A coin in the wallet that isn't tracked: watch it with a stop-loss / take profit, or sell it now.
+      const chain = String(b.chain || ""), token = String(b.token || "");
+      if (!["solana", "bsc", "ethereum", "robinhood", "elysium"].includes(chain) || token.length < 30 || token.length > 64) return json({ error: "Unknown coin." }, 400);
+      const s = await getSettings();
+      const sl = Number(b.sl) > 0 && Number(b.sl) < 95 ? Number(b.sl) : n0((s as any).copy_sl) || 5;
+      const tp = Number(b.tp) > 0 && Number(b.tp) < 10000 ? Number(b.tp) : n0((s as any).copy_tp) || 100;
+      try { return json({ ok: true, note: await adoptCoin(chain as any, token, Number(b.slot) === 2 ? 2 : 1, sl, tp, b.sell === true) }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
     case "close": {
       const { data: p } = await tq("ai_trader_positions").select("*").eq("id", String(b.id || "")).in("status", ["open", "closing"]).maybeSingle();
       if (!p) return json({ error: "That position isn't open." }, 404);

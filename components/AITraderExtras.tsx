@@ -337,3 +337,66 @@ export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly =
     </section>
   );
 }
+
+type Holding = { chain: string; token: string; symbol: string | null; logo: string | null; slot: number; amount: number; usd: number | null; price: number | null; tracked: boolean };
+
+/**
+ * What's really in the trading wallets. A coin that's there but that no trade is watching (a buy that landed after it
+ * was reported as failed, or bought another way) is flagged, and can be watched with a stop-loss or sold at once.
+ */
+export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean; onAct: Act; dsl?: number; dtp?: number }) {
+  const [list, setList] = useState<Holding[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [sl, setSl] = useState(String(dsl));
+  async function load() {
+    setLoading(true); setErr("");
+    const r = await fetch("/api/ai-trader/holdings", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((x) => x.json()).catch(() => null);
+    setLoading(false);
+    if (!r?.ok) { setErr(r?.error || "Couldn't read the wallet. Try again."); return; }
+    setList(r.holdings);
+  }
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const loose = (list || []).filter((h) => !h.tracked);
+  const act = async (h: Holding, sell: boolean) => {
+    if (sell && !confirm(`Sell all ${h.symbol || "of this coin"} now?`)) return;
+    await onAct(`adopt${h.token}`, "adopt", { chain: h.chain, token: h.token, slot: h.slot, sl: Number(sl), tp: dtp, sell });
+    load();
+  };
+  return (
+    <section className={"card stack aitx-coins" + (loose.length ? " alert" : "")}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <b>🪙 Coins in the trading wallet</b>
+        <button type="button" className="btn small" disabled={loading} onClick={load}>{loading ? "Checking…" : "Check again"}</button>
+      </div>
+      {err && <small className="down">{err}</small>}
+      {list && !list.length && <small className="muted">No coins in the wallet right now, only the trading balance.</small>}
+      {loose.length > 0 && (
+        <>
+          <p style={{ margin: 0 }}><b>{loose.length} coin{loose.length === 1 ? " is" : "s are"} in the wallet with no stop-loss watching {loose.length === 1 ? "it" : "them"}.</b> Watch {loose.length === 1 ? "it" : "them"} with a stop-loss, or sell.</p>
+          <label className="aitx-l" style={{ maxWidth: 220 }}>Stop-loss for these
+            <span className="ait-in"><em>−</em><input inputMode="decimal" value={sl} onChange={(e) => setSl(e.target.value)} aria-label="Stop-loss percent" /><em>%</em></span>
+          </label>
+        </>
+      )}
+      {list && list.length > 0 && (
+        <div className="aitx-list">
+          {list.map((h) => (
+            <div key={`${h.slot}:${h.chain}:${h.token}`} className={"aitx-li wrap" + (h.tracked ? "" : " loose")}>
+              {h.logo ? <img src={h.logo} alt="" width={28} height={28} /> : <span className="ait-ph">{(h.symbol || "?").slice(0, 2)}</span>}
+              <span className="grow"><b>{h.symbol || `${h.token.slice(0, 6)}…`}</b> <small className="muted">{h.chain}{h.slot === 2 ? " · Wallet 2" : ""}</small><br />
+                <small className={h.tracked ? "up" : "down"}>{h.tracked ? "✓ Watched by a trade (stop-loss on)" : "⚠ Not tracked: no stop-loss"}</small></span>
+              <span className="n"><b>{h.usd == null ? "–" : fmtUsd(h.usd)}</b><br /><small className="muted">{h.amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}</small></span>
+              {!h.tracked && (
+                <span className="aitx-act-row" style={{ flexBasis: "100%" }}>
+                  <button type="button" className="aitx-b buy" disabled={busy || !(Number(sl) > 0)} onClick={() => act(h, false)}>🎯 Watch with stop-loss −{Number(sl) || dsl}%</button>
+                  <button type="button" className="aitx-b sell" disabled={busy} onClick={() => act(h, true)}>💸 Sell all now</button>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
