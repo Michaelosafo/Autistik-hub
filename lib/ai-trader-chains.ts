@@ -10,7 +10,7 @@
  * Relay (relayBridge), which needs RELAY_API_KEY. Each buy reports exactly how many tokens arrived
  * and each sell exactly how much of the chain's coin came back.
  */
-import { createPublicClient, createWalletClient, defineChain, erc20Abi, getAddress, http, type PrivateKeyAccount } from "viem";
+import { createPublicClient, createWalletClient, defineChain, erc20Abi, getAddress, http, parseUnits, type PrivateKeyAccount } from "viem";
 import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { WCHAINS, WSOL } from "@/lib/wallet-chains";
@@ -76,17 +76,33 @@ async function hypeUsd(): Promise<number> {
 
 export type Wallets = { evm: PrivateKeyAccount | null; sol: Keypair | null };
 
-/** USDC on Solana: what the trader buys with and sells into when "Trade in stablecoins" is on. */
+/**
+ * Stablecoins the trader can buy with and sell into ("Trade in stablecoins"), per network: USDT first (it's what most
+ * funds are in), then USDC. Each buy uses whichever of the two the wallet holds more of on that network.
+ */
+export type Stable = { symbol: "USDT" | "USDC"; token: string; decimals: number };
 export const USDC_SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-/** Chains where trading in stablecoins is supported (the stable's mint/address and decimals). */
-export const STABLE: Partial<Record<LiveChain, { token: string; symbol: string; decimals: number }>> = { solana: { token: USDC_SOL, symbol: "USDC", decimals: 6 } };
+export const STABLES: Partial<Record<LiveChain, Stable[]>> = {
+  solana: [{ symbol: "USDT", token: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", decimals: 6 }, { symbol: "USDC", token: USDC_SOL, decimals: 6 }],
+  bsc: [{ symbol: "USDT", token: "0x55d398326f99059fF775485246999027B3197955", decimals: 18 }, { symbol: "USDC", token: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d", decimals: 18 }],
+  ethereum: [{ symbol: "USDT", token: "0xdAC17F958D2ee523a2206206994597C13D831ec7", decimals: 6 }, { symbol: "USDC", token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", decimals: 6 }],
+};
+export const stableBySymbol = (chain: string, symbol: string | null | undefined) => (STABLES[chain as LiveChain] || []).find((x) => x.symbol === symbol) || null;
 
-/** How many stablecoins (in dollars) the wallet holds on this chain. */
-export async function stableBalance(chain: LiveChain, w: Wallets): Promise<number> {
-  const st = STABLE[chain];
-  if (!st || chain !== "solana" || !w.sol) return 0;
-  const b = await solTokenRaw(w.sol.publicKey, st.token);
-  return Number(b.raw) / 10 ** st.decimals;
+/** Dollars of each stablecoin in the wallet on this network. */
+export async function stableBalances(chain: LiveChain, w: Wallets): Promise<(Stable & { balance: number })[]> {
+  const list = STABLES[chain] || [];
+  return Promise.all(list.map(async (st) => {
+    let raw = 0n;
+    if (chain === "solana") raw = w.sol ? (await solTokenRaw(w.sol.publicKey, st.token).catch(() => ({ raw: 0n }))).raw : 0n;
+    else if (w.evm) raw = await pub(chain).readContract({ address: getAddress(st.token), abi: erc20Abi, functionName: "balanceOf", args: [w.evm.address] }).catch(() => 0n);
+    return { ...st, balance: Number(raw) / 10 ** st.decimals };
+  }));
+}
+/** The stablecoin to pay with on this network: the one the wallet holds most of (USDT on a tie). */
+export async function bestStable(chain: LiveChain, w: Wallets) {
+  const list = await stableBalances(chain, w);
+  return list.sort((a, b) => b.balance - a.balance)[0] || null;
 }
 
 /** How much of the chain's own coin the wallet holds. */
@@ -108,6 +124,11 @@ async function sendEvm(chain: Exclude<LiveChain, "solana">, account: PrivateKeyA
   if (approve) {
     const have: bigint = await pc.readContract({ address: approve.token, abi: erc20Abi, functionName: "allowance", args: [account.address, approve.spender] });
     if (have < approve.amount) {
+      // USDT on Ethereum refuses to change an allowance that isn't 0: reset it first.
+      if (have > 0n && chain === "ethereum") {
+        const z = await wc.writeContract({ address: approve.token, abi: erc20Abi, functionName: "approve", args: [approve.spender, 0n] });
+        await pc.waitForTransactionReceipt({ hash: z, timeout: 90_000 });
+      }
       const h = await wc.writeContract({ address: approve.token, abi: erc20Abi, functionName: "approve", args: [approve.spender, approve.amount] });
       await pc.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
     }
@@ -339,9 +360,9 @@ async function jupSwap(kp: Keypair, inputMint: string, outputMint: string, amoun
   throw new Error(`Solana swap not confirmed (${sig.slice(0, 12)}…)`);
 }
 
-async function solBuy(kp: Keypair, mint: string, amountIn: number, tax: number, stable = false) {
+async function solBuy(kp: Keypair, mint: string, amountIn: number, tax: number, stable: Stable | null = null) {
   const before = await solTokenRaw(kp.publicKey, mint);
-  const input = stable ? USDC_SOL : WSOL, inDec = stable ? 6 : 9;
+  const input = stable ? stable.token : WSOL, inDec = stable ? stable.decimals : 9;
   let sig: string;
   try { sig = await jupSwap(kp, input, mint, BigInt(Math.floor(amountIn * 10 ** inDec)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100))); }
   catch (e) {
@@ -359,8 +380,8 @@ async function solBuy(kp: Keypair, mint: string, amountIn: number, tax: number, 
   return { hash: sig, raw: after.raw - before.raw, decimals: after.decimals || before.decimals || 6 };
 }
 
-async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0, stable = false) {
-  if (stable) return solSellStable(kp, mint, raw, tax, extra);
+async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0, stable: Stable | null = null) {
+  if (stable) return solSellStable(kp, mint, raw, tax, extra, stable);
   const have = (await solTokenRaw(kp.publicKey, mint)).raw;
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
@@ -395,45 +416,87 @@ export async function tokenBalanceOn(chain: LiveChain, w: Wallets, token: string
   return { raw, decimals };
 }
 
-/** Sells a coin into USDC (Jupiter Ultra first, then the normal route). Returns the dollars received. */
-async function solSellStable(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0) {
+/** Sells a coin into USDT / USDC (Jupiter Ultra first, then the normal route). Returns the dollars received. */
+async function solSellStable(kp: Keypair, mint: string, raw: bigint, tax: number, extra: number, st: Stable) {
+  const USDC_SOL_ = st.token; // the stablecoin it sells into
   const have = (await solTokenRaw(kp.publicKey, mint)).raw;
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
-  const before = (await solTokenRaw(kp.publicKey, USDC_SOL).catch(() => ({ raw: 0n }))).raw;
+  const before = (await solTokenRaw(kp.publicKey, USDC_SOL_).catch(() => ({ raw: 0n }))).raw;
   let sig: string, out: bigint | null = null, ultraErr = "";
-  try { ({ sig, out } = await ultraSwap(kp, mint, USDC_SOL, amount)); }
+  try { ({ sig, out } = await ultraSwap(kp, mint, USDC_SOL_, amount)); }
   catch (e) {
     ultraErr = (e as Error).message;
     await new Promise((r) => setTimeout(r, 2500));
     const left = (await solTokenRaw(kp.publicKey, mint).catch(() => ({ raw: have }))).raw;
     if (left < have - amount / 2n) return { hash: "ultra", receivedNative: 0 };
-    try { sig = await jupSwap(kp, mint, USDC_SOL, amount, sellSlip(tax, extra)); }
+    try { sig = await jupSwap(kp, mint, USDC_SOL_, amount, sellSlip(tax, extra)); }
     catch (e2) { throw new Error(`${(e2 as Error).message}${ultraErr ? ` · ${ultraErr}` : ""}`); }
   }
-  if (out == null) { const after = (await solTokenRaw(kp.publicKey, USDC_SOL).catch(() => ({ raw: before }))).raw; out = after > before ? after - before : 0n; }
-  return { hash: sig, receivedNative: Number(out) / 1e6 };
+  if (out == null) { const after = (await solTokenRaw(kp.publicKey, USDC_SOL_).catch(() => ({ raw: before }))).raw; out = after > before ? after - before : 0n; }
+  return { hash: sig, receivedNative: Number(out) / 10 ** st.decimals };
 }
 
-/** Turns some SOL into USDC (or USDC back into SOL) so the trader has stablecoins to buy with. */
-export async function solConvert(w: Wallets, toStable: boolean, amount: number) {
+/** Turns some SOL into USDT / USDC (or back into SOL) so the trader has stablecoins to buy with. */
+export async function solConvert(w: Wallets, toStable: boolean, amount: number, symbol: "USDT" | "USDC" = "USDT") {
   if (!w.sol) throw new Error("Create the Solana wallet first.");
   if (!(amount > 0)) throw new Error("Enter an amount.");
-  const raw = BigInt(Math.floor(amount * (toStable ? 1e9 : 1e6)));
-  const r = await ultraSwap(w.sol, toStable ? WSOL : USDC_SOL, toStable ? USDC_SOL : WSOL, raw).catch(async () => ({ sig: await jupSwap(w.sol!, toStable ? WSOL : USDC_SOL, toStable ? USDC_SOL : WSOL, raw, 100), out: null }));
+  const st = stableBySymbol("solana", symbol)!;
+  const raw = BigInt(Math.floor(amount * (toStable ? 1e9 : 10 ** st.decimals)));
+  const [a, b] = toStable ? [WSOL, st.token] : [st.token, WSOL];
+  const r = await ultraSwap(w.sol, a, b, raw).catch(async () => ({ sig: await jupSwap(w.sol!, a, b, raw, 100), out: null }));
   return r.sig;
+}
+
+// ---------------------------------------------------------------- EVM with stablecoins (BNB Chain, Ethereum)
+
+async function evmStableBal(chain: Exclude<LiveChain, "solana">, owner: string, st: Stable): Promise<bigint> {
+  return pub(chain).readContract({ address: getAddress(st.token), abi: erc20Abi, functionName: "balanceOf", args: [owner] });
+}
+/** Buys a coin paying with USDT / USDC (approves the router for exactly this amount first). */
+async function evmBuyStable(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount, token: string, usd: number, tax: number, st: Stable) {
+  if (chain === "elysium" || chain === "robinhood") throw new Error("Trading in stablecoins isn't set up on this network.");
+  const pc = pub(chain), tok = getAddress(token);
+  const amt = parseUnits(usd.toFixed(Math.min(6, st.decimals)), st.decimals);
+  const before: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
+  const c = evmChain(chain);
+  const q = await quote(c, getAddress(st.token), tok, amt, 0);
+  const tx = (await build(c, q, account.address, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)), true)) as EvmTx;
+  const hash = (await sendEvm(chain, account, { to: tx.to, data: tx.data, value: BigInt(tx.value || 0) }, { token: getAddress(st.token), spender: tx.spender || tx.to, amount: amt })).hash;
+  const after: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
+  const decimals = Number(await pc.readContract({ address: tok, abi: erc20Abi, functionName: "decimals" }).catch(() => 18));
+  return { hash, raw: after - before, decimals };
+}
+/** Sells a coin into USDT / USDC. Returns the dollars received. */
+async function evmSellStable(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount, token: string, raw: bigint, tax: number, extra: number, st: Stable) {
+  if (chain === "elysium" || chain === "robinhood") throw new Error("Trading in stablecoins isn't set up on this network.");
+  const pc = pub(chain), tok = getAddress(token);
+  const have: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
+  const amount = raw > have ? have : raw;
+  if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
+  const before = await evmStableBal(chain, account.address, st);
+  const c = evmChain(chain);
+  const q = await quote(c, tok, getAddress(st.token), amount, 0);
+  const tx = (await build(c, q, account.address, sellSlip(tax, extra), true)) as EvmTx;
+  const res = await sendEvm(chain, account, { to: tx.to, data: tx.data, value: BigInt(tx.value || 0) }, { token: tok, spender: tx.spender || tx.to, amount });
+  const after = await evmStableBal(chain, account.address, st);
+  return { hash: res.hash, receivedNative: Number(after > before ? after - before : 0n) / 10 ** st.decimals };
 }
 
 // ---------------------------------------------------------------- One entry point per action
 
-export async function liveBuyOn(chain: LiveChain, w: Wallets, token: string, amountNative: number, tax: number, stable = false) {
+/** amountNative is in the chain's own coin, or in dollars of the stablecoin when `stable` is given. */
+export async function liveBuyOn(chain: LiveChain, w: Wallets, token: string, amountNative: number, tax: number, stable: Stable | null = null) {
   if (chain === "solana") { if (!w.sol) throw new Error("Create the Solana wallet first."); return solBuy(w.sol, token, amountNative, tax, stable); }
   if (!w.evm) throw new Error("Create the trading wallet first.");
+  if (stable) return evmBuyStable(chain, w.evm, token, amountNative, tax, stable);
   return evmBuy(chain, w.evm, token, amountNative, tax);
 }
 
-export async function liveSellOn(chain: LiveChain, w: Wallets, token: string, raw: bigint, tax: number, extra = 0, stable = false) {
+/** Sells for the chain's own coin, or into the stablecoin when `stable` is given (receivedNative = dollars then). */
+export async function liveSellOn(chain: LiveChain, w: Wallets, token: string, raw: bigint, tax: number, extra = 0, stable: Stable | null = null) {
   if (chain === "solana") { if (!w.sol) throw new Error("There's no Solana wallet, so this can't be sold here."); return solSell(w.sol, token, raw, tax, extra, stable); }
   if (!w.evm) throw new Error("There's no trading wallet, so this can't be sold here.");
+  if (stable) return evmSellStable(chain, w.evm, token, raw, tax, extra, stable);
   return evmSell(chain, w.evm, token, raw, tax, extra);
 }

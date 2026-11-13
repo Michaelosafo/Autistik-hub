@@ -175,7 +175,7 @@ export default function AITrader() {
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>
 
-      <StableMode on={!!(s as any).stable_on} live={live} sol={(d.copy.wallets || []).find((w) => w.chain === "solana") ?? null} busy={!!busy} onAct={act} />
+      <StableMode on={!!(s as any).stable_on} live={live} wallets={d.copy.wallets || []} busy={!!busy} onAct={act} />
       <BuyHours s={s} busy={!!busy} onAct={act} />
 
       <AITraderCopy c={d.copy} s={s} owner={d.owner} busy={!!busy} onAct={act} reload={load} />
