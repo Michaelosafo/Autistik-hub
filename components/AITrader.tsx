@@ -23,8 +23,11 @@ type P = {
   id: string; mode: string; chain: string; strategy?: string | null; token: string; symbol: string | null; name: string | null; logo: string | null; status: string; spent: number; qty: number;
   entry_usd: number; high_usd: number; last_usd: number | null; stop_loss: number; take_profit: number; trail: number; why: string | null;
   buy_tx: string | null; sell_tx: string | null; received: number | null; pnl: number | null; pnl_pct: number | null; close_reason: string | null; opened_at: string; closed_at: string | null;
-  low_usd?: number | null; source_group?: string | null; source_who?: string | null; native?: string | null; spent_native?: number | null; received_native?: number | null;
+  low_usd?: number | null; source_group?: string | null; source_who?: string | null; shared_at?: string | null; coin_age_hours?: number | null; pump_1h?: number | null; wallet?: number | null; native?: string | null; spent_native?: number | null; received_native?: number | null;
 };
+
+/** Seconds → "42s", "10m", "2.5h", "8d". */
+const secs = (x: number) => (!isFinite(x) || x < 0 ? "0s" : x < 60 ? `${Math.round(x)}s` : x < 3600 ? `${Math.round(x / 60)}m` : x < 86400 ? `${(x / 3600).toFixed(x < 36000 ? 1 : 0)}h` : `${Math.round(x / 86400)}d`);
 
 /** 1234567 → 1.23M (token amounts). */
 function qtyFmt(n: number) {
@@ -51,7 +54,15 @@ function TradeFacts({ p, closed = false }: { p: P; closed?: boolean }) {
     <div className="ait-facts">
       <span className="ait-fact"><i aria-hidden="true">🪙</i>Bought <b>{qtyFmt(Number(p.qty))} {p.symbol}</b> for <b>{fmtAmount(paid)} {native}</b>{closed && p.received_native != null ? <> · got back <b>{fmtAmount(Number(p.received_native))} {native}</b></> : null}</span>
       {p.source_group && (
-        <span className="ait-fact"><i aria-hidden="true">📡</i>Shared in <b>{p.source_group}</b>{p.source_who ? <> by <b>{p.source_who}</b></> : null}</span>
+        <span className="ait-fact"><i aria-hidden="true">📣</i>Caller: <b>{p.source_who || p.source_group}</b>{p.source_who ? <> in <b>{p.source_group}</b></> : null}</span>
+      )}
+      {(p.shared_at || p.coin_age_hours != null) && (
+        <span className="ait-fact"><i aria-hidden="true">⏱</i>
+          {p.shared_at ? <>Shared <b>{secs((Date.parse(p.opened_at) - Date.parse(p.shared_at)) / 1000)}</b> before the buy</> : null}
+          {p.coin_age_hours != null ? <>{p.shared_at ? " · " : ""}coin was <b>{secs(Number(p.coin_age_hours) * 3600)}</b> old</> : null}
+          {p.pump_1h != null ? <> · <b>{Number(p.pump_1h) >= 0 ? "+" : ""}{Math.round(Number(p.pump_1h))}%</b> in the hour before</> : null}
+          {Number(p.wallet) === 2 ? <> · <b>Wallet 2</b></> : null}
+        </span>
       )}
       {entry > 0 && (
         <div className="ait-range" aria-label={`Price range ${fmtUsd(lo)} to ${fmtUsd(hi)}`}>
@@ -343,7 +354,7 @@ function Bought({ open, closed, busy, onSell, onForget }: { open: P[]; closed: P
               <div key={p.id} className="ait-b">
                 {p.logo ? <img src={p.logo} alt="" width={36} height={36} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
                 <div className="ait-b-name">
-                  <b>{p.symbol} {p.strategy && <span className={"ait-tag " + p.strategy}>{({ hype: "🔥 Hype", dip: "📉 Dip", signal: "⚡ Signal", caller: "📣 Caller" } as Record<string, string>)[p.strategy] || p.strategy}</span>}</b>
+                  <b>{p.symbol} {p.strategy && <span className={"ait-tag " + p.strategy}>{({ hype: "🔥 Hype", dip: "📉 Dip", signal: "⚡ Signal", caller: "📣 Caller", copy: "📡 Copy", rebuy: "🔁 Re-buy" } as Record<string, string>)[p.strategy] || p.strategy}</span>}</b>
                   <small className="muted">{chainName(p.chain)} · {tab === "open" ? `bought ${ago(p.opened_at)}` : `sold ${p.closed_at ? ago(p.closed_at) : ""}`}</small>
                   <small className="muted">{fmtAmount(Number(p.spent))} → {fmtAmount(w)} BNB · {fmtUsd(Number(p.entry_usd))} → {price ? fmtUsd(price) : "–"}</small>
                   <TradeFacts p={p} closed={tab === "closed"} />

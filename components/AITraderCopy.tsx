@@ -15,7 +15,7 @@ export type CopyData = {
   tga: TgaState;
   x: { loginReady: boolean; signedIn: boolean; username: string | null; canRead: boolean; communities: boolean };
 };
-type Settings = { callers_only: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean; enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
+type Settings = { callers_only: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; copy_check: boolean; enabled: boolean; mode: "paper" | "live"; copy_on: boolean; copy_tp: number; copy_sl: number; copy_fresh_min?: number; copy_max_age_h?: number; copy_max_pump?: number; per_trade_usd: number; per_trade: number; trade_mode: string; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number };
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
 
 async function call(action: string, body: unknown) {
@@ -87,6 +87,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
           <span className="ait-in"><em>−</em><input inputMode="decimal" disabled={busy || !owner} value={sl || String(s.copy_sl)} onChange={(e) => setSl(e.target.value)} onBlur={() => { if (sl && Number(sl) !== s.copy_sl) onAct("sl", "settings", { copy_sl: Number(sl) }, `Copy trades now sell at −${Number(sl)}%.`); setSl(""); }} /><em>%</em></span>
           <small className="muted">sells if it falls this much</small></label>
       </div>
+      <FreshRules s={s} busy={busy || !owner} onAct={onAct} />
       <small className="muted">Each copy buy uses the trade size above ({s.per_trade_usd > 0 ? `$${s.per_trade_usd}` : `${s.per_trade} BNB`}) and counts toward &ldquo;Coins at once&rdquo;. {s.mode === "live" ? "Live: buys on the chains switched on under Live chains." : "Practice mode: pretend BNB, real prices."} {!s.enabled && <b>The trader is stopped, so nothing is copied until you press Start.</b>}</small>
 
       {/* Telegram */}
@@ -202,5 +203,27 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
       </div>
       {note && <small className="aic-note" role="status">{note}</small>}
     </section>
+  );
+}
+
+/** Only brand-new calls: how fresh the post must be, how young the coin, and how much it may already have pumped. */
+function FreshRules({ s, busy, onAct }: { s: Settings; busy: boolean; onAct: Act }) {
+  const rows: [keyof Settings, string, string, number, string][] = [
+    ["copy_fresh_min", "Call must be newer than", "min", s.copy_fresh_min ?? 3, "Posts older than this when the AI sees them are skipped."],
+    ["copy_max_age_h", "Coin must be younger than", "hours", s.copy_max_age_h ?? 3, "Older coins being shared again (reshares) are skipped."],
+    ["copy_max_pump", "Skip if already up", "% in 1h", s.copy_max_pump ?? 150, "Coins that already pumped this much are skipped."],
+  ];
+  return (
+    <div className="aic-block">
+      <b>🆕 Only new calls</b>
+      <small className="muted">Buys a coin only the first time it&apos;s shared, only while the call is fresh, only if the coin is new, and never after it already pumped.</small>
+      {rows.map(([k, label, unit, v, hint]) => (
+        <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <small><b>{label}:</b> {v} {unit}</small>
+          <button type="button" className="btn small" disabled={busy} onClick={() => { const x = prompt(`${label} (${unit}):`, String(v)); if (x != null && x.trim() !== "" && Number(x) > 0) onAct(`f${k}`, "settings", { [k]: Number(x) }, `${label}: ${Number(x)} ${unit}.`); }}>Change</button>
+          <small className="muted">{hint}</small>
+        </div>
+      ))}
+    </div>
   );
 }

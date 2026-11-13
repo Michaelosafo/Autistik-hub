@@ -41,7 +41,7 @@ export type Settings = {
   manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
-  copy_on: boolean; copy_tp: number; copy_sl: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
+  copy_on: boolean; copy_tp: number; copy_sl: number; copy_fresh_min: number; copy_max_age_h: number; copy_max_pump: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
   live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; callers_only: boolean;
 };
@@ -293,7 +293,7 @@ export async function log(kind: string, text: string) {
 export async function getSettings(): Promise<Settings> {
   const { data } = await supabaseService().from("ai_trader_settings").select("*").eq("id", T()).single();
   const s = data as any;
-  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl", "rebuy_dump", "rebuy_tp"]) s[k] = n(s[k]);
+  for (const k of ["paper_cash", "paper_start", "per_trade", "min_liquidity", "max_tax", "min_age_hours", "stop_loss", "take_profit", "trail", "max_hold_hours", "daily_loss_limit", "away_take_profit", "mcap_min", "mcap_max", "micro_min_liq", "target_profit", "strat_stop", "caller_mcap_max", "per_trade_usd", "copy_tp", "copy_sl", "rebuy_dump", "rebuy_tp", "copy_fresh_min", "copy_max_age_h", "copy_max_pump"]) s[k] = n(s[k]);
   if (!["telegram", "both", "x", "general"].includes(s.trade_mode)) s.trade_mode = "telegram";
   s.rebuy_on = s.rebuy_on !== false;
   s.copy_check = s.copy_check === true;
@@ -704,7 +704,7 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 
 /** Buys one coin (practice or live) and records it with its own stop and target. */
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
-  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null }; slot?: number }) {
+  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null; sharedAt?: number }; slot?: number }) {
   const slot = o.slot === 2 ? 2 : 1;
   const sb = supabaseService();
   const bnb = await bnbUsd();
@@ -737,6 +737,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
     strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject, wallet: slot,
     low_usd: c.price, source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null,
+    shared_at: o.src?.sharedAt ? new Date(o.src.sharedAt).toISOString() : null, coin_age_hours: (c as any).ageHours ?? null, pump_1h: (c as any).ch?.h1 ?? null,
   });
   if (error) { await log("error", `Bought ${c.symbol} but couldn't save it: ${error.message}`); throw new Error("Save failed."); }
   const icon = o.strategy === "hype" ? "🔥" : o.strategy === "dip" ? "📉" : o.strategy === "caller" ? "📣" : o.strategy === "copy" ? "📡" : "⚡";
@@ -1089,7 +1090,8 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   return out;
 }
 
-async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, src?: { group: string; who: string | null }): Promise<string> {
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, src0?: { group: string; who: string | null }): Promise<string> {
+  const src = src0 ? { ...src0, sharedAt: sig.at } : undefined;
   // This caller's own stop-loss / take profit (set on Callers or Squads), else the copy-trading ones.
   const sl = caller?.sl && caller.sl > 0 ? caller.sl : s.copy_sl, tp = caller?.tp && caller.tp > 0 ? caller.tp : s.copy_tp;
   const usdSize = caller && caller.usd > 0 ? caller.usd : null;
@@ -1101,7 +1103,15 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const chains = tradeChains(s);
   if (!f || !f.price) return done(`skipped: no trading pool found for it yet (too new to trade, or not on your ticked chains: ${tradeChains(s).join(", ")})`);
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
-  if (Date.now() - sig.at > 10 * 60_000) return done("skipped: post over 10 minutes old");
+  // Only brand-new calls: the post itself must be fresh (seconds / a few minutes), the coin must be new (not one that's
+  // been around for hours or days and is being shared again), and it mustn't have already pumped.
+  const postMin = (Date.now() - sig.at) / 60_000;
+  const freshMin = s.copy_fresh_min > 0 ? s.copy_fresh_min : 3;
+  if (postMin > freshMin) return done(`skipped: shared ${ageTxt(postMin * 60)} ago (only calls newer than ${freshMin} min are bought)`);
+  const maxAge = s.copy_max_age_h > 0 ? s.copy_max_age_h : 3;
+  if (f.ageHours > maxAge) return done(`skipped: old coin (launched ${ageTxt(f.ageHours * 3600)} ago, limit ${maxAge}h): a reshare, not a new call`);
+  const maxPump = s.copy_max_pump > 0 ? s.copy_max_pump : 150;
+  if (f.ch.h1 >= maxPump || f.ch.h6 >= maxPump * 1.5) return done(`skipped: already pumped (+${Math.round(Math.max(f.ch.h1, 0))}% in 1h, +${Math.round(Math.max(f.ch.h6, 0))}% in 6h)`);
   // Money check (both wallets) and coin check side by side: every second counts on a fresh call.
   const [room, room2, g] = await Promise.all([
     buyRoom(s, f.chain),
@@ -1128,9 +1138,12 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (!one.ok && !two.ok) return done(`skipped: buy failed (${one.r})${w2txt ? ` · ${w2txt}` : ""}`);
   const spend = usdSize ? usdSize / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
   const who = one.ok && two.ok ? " (both wallets)" : two.ok ? " (Wallet 2)" : "";
+  label = `${label} · shared ${ageTxt(postMin * 60)} ago · coin ${ageTxt(f.ageHours * 3600)} old`;
   await tgNotify(`📡 Bought ${f.symbol}${who} on ${CHAIN_NAME[f.chain] || f.chain} for ~${fmt(spend)} BNB each${s.mode === "paper" ? " (practice)" : ""}.\n${label}\nMarket cap $${Math.round(f.mcap).toLocaleString("en-US")} · sells at +${tp}% or -${sl}%.\nhttps://dexscreener.com/${f.chain}/${f.token}`);
   return done(`bought: ${one.ok ? one.r : `Wallet 1: ${one.r}`}${w2txt ? ` · ${w2txt}` : ""}`);
 }
+/** 42 → "42s", 600 → "10m", 7200 → "2h", 691200 → "8d". */
+export const ageTxt = (sec: number) => (sec < 60 ? `${Math.max(0, Math.round(sec))}s` : sec < 3600 ? `${Math.round(sec / 60)}m` : sec < 86400 ? `${(sec / 3600).toFixed(sec < 36000 ? 1 : 0)}h` : `${Math.round(sec / 86400)}d`);
 const fmt = (x: number) => x.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
 
 // ---------------------------------------------------------------- Every admin's trader

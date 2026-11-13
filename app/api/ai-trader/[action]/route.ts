@@ -116,6 +116,7 @@ const NUM: Record<string, [number, number]> = {
   mcap_min: [500, 10_000_000], mcap_max: [1000, 100_000_000], micro_min_liq: [500, 10_000_000], target_profit: [10, 1000], strat_stop: [5, 90],
   stop_loss: [1, 90], take_profit: [1, 2000], trail: [0, 90], max_hold_hours: [1, 720], daily_loss_limit: [0.001, 100],
   copy_tp: [10, 2000], copy_sl: [1, 90], rebuy_dump: [10, 95], rebuy_tp: [5, 1000],
+  copy_fresh_min: [0.5, 60], copy_max_age_h: [0.1, 720], copy_max_pump: [10, 5000],
 };
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
