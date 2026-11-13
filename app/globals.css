@@ -6583,3 +6583,9 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .sq-on [data-sq="up"].sq-in>*{animation:sqUp .7s cubic-bezier(.2,.7,.2,1) backwards;animation-delay:calc(var(--sd,0ms) + var(--k,0) * 110ms)}
 @keyframes sqUp{from{opacity:0;transform:translateY(22px)}}
 @media (prefers-reduced-motion: reduce){ .wd .w{opacity:1;filter:none;transform:none;transition:none} .sq-on [data-sq="up"]>*{opacity:1;animation:none} }
+
+/* Front page: key lines that keep typing, deleting and retyping (components/TypeLoop.tsx). The hero's line keeps
+   one line's height so the page below doesn't move as the words change. */
+.lp-hero h1 .lp-loop{display:block;min-height:1.15em}
+.tl{white-space:nowrap}
+@media (max-width:420px){ .tl{white-space:normal} .lp-hero h1 .lp-loop{min-height:2.3em} }
