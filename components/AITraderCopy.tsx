@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
 import { Callers, LiveChains, SourcePicker, RebuyBox, Squads, type Caller, type LiveWallet, type Rebuy, type Squad } from "@/components/AITraderCopyExtras";
 
-export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null };
+export type CopySource = { id: number; kind: "tg" | "tg_chat" | "x_account" | "x_list" | "x_community"; ref: string; title: string | null; enabled: boolean; last_post_at: string | null; usd?: number | null };
 export type CopyData = {
   sources: CopySource[]; maxTax: number; callers: Caller[]; rebuys: Rebuy[]; wallets: LiveWallet[]; relay: boolean; squads?: Squad[];
   tg: { ready: boolean; linked: boolean; username: string | null };
