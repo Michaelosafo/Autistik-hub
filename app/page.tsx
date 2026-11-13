@@ -5,6 +5,7 @@ import LangPicker from "@/components/LangPicker";
 import Art from "@/components/Art";
 import CopyAddress from "@/components/CopyAddress";
 import MeButton from "@/components/MeButton";
+import Avatar from "@/components/Avatar";
 import { LogoBadge } from "@/components/LogoMark";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
@@ -88,9 +89,13 @@ export default async function Home() {
   return (
     <div className="lp">
       <header className="lp-bar">
-        {/* The AUTISTIK logo first, then your profile picture with "My Profile" under it. */}
-        <Link href="/mood" className="lp-logo" aria-label="Open TIK" title="Open TIK"><LogoBadge size={30} /></Link>
-        {user && <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} label="My Profile" />}
+        {/* Top left, kept together: the AUTISTIK logo first, then your picture with "My Profile" under it
+            (signed out, the same spot opens sign-in). */}
+        <div className="lp-id">
+          <Link href="/mood" className="lp-logo" aria-label="Open TIK" title="Open TIK"><LogoBadge size={30} /></Link>
+          {user ? <MeButton alias={mine?.alias || "Member"} avatarUrl={mine?.avatar_url ?? null} label="My Profile" />
+            : <Link href="/login?next=/" className="me-pic labelled" aria-label="My Profile: sign in"><span className="me-pic-img"><Avatar className="me-av" alias="Me" url={null} logo /></span><span className="me-pic-l" aria-hidden="true">My Profile</span></Link>}
+        </div>
         <nav className="lp-nav" aria-label="Website">
           <a href="#products">Products</a><a href="#token">Token</a><a href="#community">Community</a><Link href="/fund">Fund</Link><Link href="/autism">About autism</Link>
         </nav>
@@ -99,7 +104,6 @@ export default async function Home() {
         {/* Home switches sides: from the main page it opens the App, whose Home button comes back here. */}
         <Link href="/app" className="lp-signin lp-home" aria-label="Home: open the AUTISTIK App"><svg aria-hidden="true"><use href="#i-home" /></svg><span>Home</span></Link>
         {user && owner && <Link href="/admin" className="lp-signin lp-admin" aria-label="Admin: everything happening on the site"><svg aria-hidden="true"><use href="#i-adm" /></svg><span>Admin</span></Link>}
-        {!user && <Link href="/login?next=/" className="lp-signin"><svg aria-hidden="true"><use href="#i-user" /></svg><span>Sign in</span></Link>}
         <Link href="/app" className="lp-openapp" aria-label="Open the AUTISTIK App"><i aria-hidden="true"><svg><use href="#i-grid" /></svg></i><span>Open App</span></Link>
       </header>
 

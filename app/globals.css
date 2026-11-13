@@ -6551,3 +6551,8 @@ body :is(.tik-pro,.mad,.ptik,.mp-mood) .tik-new:not(.reply){background:var(--sur
 .lv-firedot.sm{top:-6px;left:-6px;right:auto;width:22px;height:22px}
 @keyframes lvFirePop{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 @media (prefers-reduced-motion: reduce){ .lv-firedot{animation:none} }
+/* Front page top left: logo and My Profile stay side by side; everything else goes to the right. */
+.lp-id{display:flex;align-items:center;gap:12px;flex:none;margin-right:auto}
+.lp-bar .lp-nav{margin-right:0}
+a.me-pic.labelled{text-decoration:none;color:inherit}
+@media (max-width:380px){ .lp-id{gap:8px} }
