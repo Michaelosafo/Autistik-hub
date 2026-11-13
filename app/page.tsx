@@ -7,6 +7,7 @@ import CopyAddress from "@/components/CopyAddress";
 import MeButton from "@/components/MeButton";
 import Avatar from "@/components/Avatar";
 import TypeText from "@/components/TypeText";
+import { SeqReveal, Words } from "@/components/Sequence";
 import { LogoBadge } from "@/components/LogoMark";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
@@ -111,19 +112,19 @@ export default async function Home() {
       <section className="lp-hero">
         <div className="lp-hero-copy">
           <div className="lp-eyebrow"><TypeText text="A community for autistic people, powered by crypto" speed={16} /></div>
-          <h1><TypeText text="Autism is not a disease. " delay={900} /><span><TypeText text="It's a community." delay={2300} /></span></h1>
-          <p>AUTISTIK is an online community for autistic people, their families and supporters. We also offer simple, safe tools for using crypto (digital money), and a portion of the activity on them goes to a fund that supports autistic people.</p>
-          <p className="lp-why"><b>In short:</b> people use our tools, and that activity helps pay for real support for autistic people: therapy, equipment, education and everyday essentials. No jargon, no pressure.</p>
-          <div className="lp-ctas">
+          <h1><TypeText text="Autism is not a disease. " delay={1650} /><span><TypeText text="It's a community." delay={2875} /></span></h1>
+          <p><Words delay={3808} text="AUTISTIK is an online community for autistic people, their families and supporters. We also offer simple, safe tools for using crypto (digital money), and a portion of the activity on them goes to a fund that supports autistic people." /></p>
+          <p className="lp-why"><b>In short:</b> <Words delay={4300} text="people use our tools, and that activity helps pay for real support for autistic people: therapy, equipment, education and everyday essentials. No jargon, no pressure." /></p>
+          <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "4900ms" }}>
             <Link href="/app?menu=1" className="lp-btn gold xl">Open menu <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
           </div>
           {!user && <p className="lp-member">Part of the community? <Link href="/login?next=/">Sign in</Link> or <Link href="/login?mode=join&amp;next=/">join free</Link> to chat in the groups and save your settings.</p>}
         </div>
-        <div className="lp-hero-art"><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
+        <div className="lp-hero-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
       </section>
 
-      <section className="lp-stats" aria-label="AUTISTIK in numbers">
+      <section data-sq="up" style={{ ["--sd" as string]: "150ms" }} className="lp-stats" aria-label="AUTISTIK in numbers">
         <div><b>{usd(m?.priceUsd)}</b><span>$AUTISTIK price</span></div>
         <div><b>{usd(m?.marketCap)}</b><span>Market cap</span></div>
         <div><b>{usd(m?.liquidityUsd)}</b><span>Liquidity</span></div>
@@ -134,10 +135,10 @@ export default async function Home() {
 
       <section id="why" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={350} text="Our vision, in plain words" /></h2><p>What AUTISTIK is, who it is for, and how it helps autistic people. No crypto knowledge needed.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={738} text="Our vision, in plain words" /></h2><p><Words delay={2012} text="What AUTISTIK is, who it is for, and how it helps autistic people. No crypto knowledge needed." /></p></div>
           <Link href="/start" className="lp-more">New here? Start here <Arrow /></Link>
         </div>
-        <div className="lp-why-grid">
+        <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-why-grid">
           {WHY.map((w) => (
             <div key={w.q} className="lp-why-card">
               <span className="lp-ico"><ToolIcon name={w.icon} /></span>
@@ -146,17 +147,17 @@ export default async function Home() {
             </div>
           ))}
         </div>
-        <ol className="lp-steps" aria-label="How it works">
+        <ol data-sq="up" style={{ ["--sd" as string]: "200ms" }} className="lp-steps" aria-label="How it works">
           {STEPS.map(([t, x], i) => <li key={t}><span>{i + 1}</span><div><b>{t}</b><small>{x}</small></div></li>)}
         </ol>
       </section>
 
       <section id="products" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={350} text="Everything in one place" /></h2><p>Trade, earn, launch and stay safe. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or make one with your email.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={493} text="Everything in one place" /></h2><p><Words delay={1620} text="Trade, earn, launch and stay safe. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or make one with your email." /></p></div>
           <Link href="/app" className="lp-more">Open the App <Arrow /></Link>
         </div>
-        <div className="lp-tools">
+        <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-tools">
           {PRODUCTS.map((p) => (
             <Link key={p.href} href={p.href} className="lp-tool">
               <div className="lp-tool-top"><span className="lp-ico"><ToolIcon name={p.icon} /></span><span className="lp-tag">{p.tag}</span></div>
@@ -171,10 +172,10 @@ export default async function Home() {
 
       <section id="markets" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={350} text="Coins on AUTISTIK" /></h2><p>Live prices for every coin listed or launched here. Tap a row for its chart, holders and safety checks.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={493} text="Coins on AUTISTIK" /></h2><p><Words delay={1326} text="Live prices for every coin listed or launched here. Tap a row for its chart, holders and safety checks." /></p></div>
           <Link href="/launchpad" className="lp-more">All tokens <Arrow /></Link>
         </div>
-        <div className="lp-mkts">
+        <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-mkts">
           <MarketTable title="New listings" rows={listed} buy />
           <MarketTable title="Trending" rows={hot} empty="Nothing trending yet. Launch the first coin, or pay to list yours." />
         </div>
@@ -185,17 +186,17 @@ export default async function Home() {
         <div className="lp-token">
           <div className="lp-token-copy">
             <div className="lp-eyebrow"><TypeText text="The token" /></div>
-            <h2><TypeText delay={350} text="$AUTISTIK on BNB Chain" /></h2>
-            <p>Holders support the Hub and get a say in what we build. Stake it to earn a share of the platform&apos;s trading fees.</p>
+            <h2><TypeText delay={591} text="$AUTISTIK on BNB Chain" /></h2>
+            <p><Words delay={1669} text="Holders support the Hub and get a say in what we build. Stake it to earn a share of the platform's trading fees." /></p>
             <CopyAddress address={TOKEN_ADDRESS} />
-            <div className="lp-ctas">
+            <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}>
               <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn gold">Buy $AUTISTIK</Link>
               <Link href="/stake" className="lp-btn">Stake</Link>
               <Link href={`/analytics/bsc/${TOKEN_ADDRESS}`} className="lp-btn ghost">Chart &amp; holders</Link>
             </div>
             <small className="lp-fine">Use the official contract only. Never share your seed phrase or private key.</small>
           </div>
-          <dl className="lp-token-stats">
+          <dl data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-token-stats">
             <div className="wide"><dt>Price</dt><dd>{usd(m?.priceUsd)} <span className={tone(m?.change24h)}>{pct(m?.change24h)}</span></dd></div>
             <div><dt>Market cap</dt><dd>{usd(m?.marketCap)}</dd></div>
             <div><dt>Liquidity</dt><dd>{usd(m?.liquidityUsd)}</dd></div>
@@ -207,10 +208,10 @@ export default async function Home() {
 
       <section id="community" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeText delay={350} text="Built with autistic people" /></h2><p>Nothing about us without us. Autistic people lead here; supporters, families and practitioners join in.</p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeText delay={591} text="Built with autistic people" /></h2><p><Words delay={1865} text="Nothing about us without us. Autistic people lead here; supporters, families and practitioners join in." /></p></div>
           <Link href="/community" className="lp-more">Join the groups <Arrow /></Link>
         </div>
-        <div className="lp-tools four">
+        <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-tools four">
           {COMMUNITY.map((c) => (
             <Link key={c.href} href={c.href} className="lp-tool soft">
               <div className="lp-tool-top"><span className="lp-ico violet"><ToolIcon name={c.icon} /></span></div>
@@ -226,11 +227,11 @@ export default async function Home() {
         <div className="lp-fund">
           <div>
             <div className="lp-eyebrow"><TypeText text="AUTISTIK Fund" /></div>
-            <h2><TypeText delay={350} text="Funded by the community, built for individuals" /></h2>
-            <p>A portion of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon: register your interest now (you can do it for someone you care for).</p>
-            <div className="lp-ctas"><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
+            <h2><TypeText delay={787} text="Funded by the community, built for individuals" /></h2>
+            <p><Words delay={3041} text="A portion of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon: register your interest now (you can do it for someone you care for)." /></p>
+            <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
           </div>
-          <ul className="lp-fund-list">
+          <ul data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-fund-list">
             {FUND.map(([icon, title, text]) => <li key={title}><span className="lp-ico teal"><ToolIcon name={icon} /></span><span><b>{title}</b><small>{text}</small></span></li>)}
           </ul>
         </div>
@@ -238,11 +239,12 @@ export default async function Home() {
 
       <section className="lp-sec">
         <div className="lp-band">
-          <div><h2><TypeText delay={350} text="Ready to start?" /></h2><p>Swap, stake and scan in a few taps. New to crypto? We&apos;ll walk you through it.</p></div>
-          <div className="lp-ctas"><Link href="/app?menu=1" className="lp-btn gold xl">Open menu <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
+          <div><h2><TypeText text="Ready to start?" /></h2><p><Words delay={735} text="Swap, stake and scan in a few taps. New to crypto? We'll walk you through it." /></p></div>
+          <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/app?menu=1" className="lp-btn gold xl">Open menu <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
         </div>
       </section>
 
+      <SeqReveal />
       <footer className="lp-foot">
         <div className="lp-foot-cols">
           <div className="lp-foot-brand">
