@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
-import LangPicker from "@/components/LangPicker";
+import LangPicker, { openLangPicker } from "@/components/LangPicker";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
@@ -289,6 +289,13 @@ export default function AppShell({ admin, me, onMe, children }: {
             <div className="ax-sheet-h"><b>Menu</b><button type="button" aria-label="Close menu" onClick={() => setMore(false)}><Burger open /></button></div>
             {admin && <MoreGroup name="Owner" items={[{ href: "/admin", name: "Admin", note: "Everything happening on the site", icon: "i-adm" }]} path={path} close={() => setMore(false)} />}
             {MORE.map((g) => <MoreGroup key={g.name} name={g.name} items={g.items} path={path} close={() => setMore(false)} />)}
+            <section>
+              <small>Settings</small>
+              <a href="#" role="menuitem" onClick={(e) => { e.preventDefault(); setMore(false); openLangPicker(); }}>
+                <i className="ax-ic"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z" /></svg></i>
+                <span><b>Language</b><em>Translate the whole site</em></span>
+              </a>
+            </section>
           </div>
         </div>
       )}
