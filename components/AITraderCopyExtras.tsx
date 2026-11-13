@@ -141,7 +141,7 @@ export function RebuyBox({ on, dump, tp, sl, list, busy, onAct }: { on: boolean;
   );
 }
 
-export type LiveWallet = { chain: string; native: string; on: boolean; address: string | null; balance: number | null };
+export type LiveWallet = { chain: string; native: string; on: boolean; address: string | null; balance: number | null; stable?: { symbol: string; balance: number | null } | null };
 const CHAIN_LABEL: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", robinhood: "Robinhood Chain", elysium: "Elysium", solana: "Solana" };
 
 /** Live chains: switch each on or off, see its wallet address and balance, and make the Solana wallet. */

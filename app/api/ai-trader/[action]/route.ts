@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { ACTIVE_MS, TRADE_CHAINS, adminActive, adoptCoin, isOwnCoin, bnbUsd, closePosition, sellPart, topUpPosition, walletHoldings, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
+import { ACTIVE_MS, TRADE_CHAINS, adminActive, adoptCoin, convertStable, isOwnCoin, bnbUsd, closePosition, sellPart, topUpPosition, walletHoldings, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
 import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
@@ -163,6 +163,7 @@ async function postMine(action: string, b: any) {
       if (Array.isArray(b.callers)) up.callers = [...new Set(b.callers.map((h: unknown) => String(h).replace(/^@/, "").trim()).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
       if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
+      if (typeof b.stable_on === "boolean") up.stable_on = b.stable_on; // buy with / sell into stablecoins (Solana USDC)
       // Buy hours: the times of day it may buy, in the admin's own time zone ("22:00" to "06:00" runs past midnight).
       if (typeof b.buy_hours_on === "boolean") up.buy_hours_on = b.buy_hours_on;
       for (const k of ["buy_from", "buy_to"]) if (typeof b[k] === "string") {
@@ -475,6 +476,13 @@ async function postMine(action: string, b: any) {
     }
     case "run":
       return json(await runTrader({ force: true }).catch((e) => ({ error: (e as Error).message })));
+    case "convert": {
+      // SOL → USDC (to trade in stablecoins) or USDC → SOL, in the Solana trading wallet.
+      const amount = Number(b.amount);
+      if (!isFinite(amount) || amount <= 0 || amount > 1_000_000) return json({ error: "Enter an amount." }, 400);
+      try { await convertStable(b.to === "usdc", amount, Number(b.slot) === 2 ? 2 : 1); return json({ ok: true, note: b.to === "usdc" ? `Turned ${amount} SOL into USDC.` : `Turned ${amount} USDC into SOL.` }); }
+      catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
     case "holdings": {
       // What's really in the trading wallets, and which coins no trade is watching.
       try { return json({ ok: true, holdings: await walletHoldings() }); }
