@@ -907,7 +907,7 @@ export async function runFast() {
       // Kept open for most of the minute, checking every chat every ~2 seconds: buys land seconds after the call.
       // Watch until ~50 seconds after this run started (the next run takes over a few seconds later).
       const watchMs = Math.max(8_000, 50_000 - (Date.now() - started));
-      const errs = await tgaWatch(async (post) => out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => []))), watchMs).catch((e) => [(e as Error).message]);
+      const errs = await tgaWatch(async (post) => out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel, isBot: post.isBot }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => []))), watchMs).catch((e) => [(e as Error).message]);
       if (errs.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${errs[0]}`.slice(0, 300) }).eq("id", T());
     }
   }
@@ -1039,10 +1039,46 @@ async function chatSize(ref: string): Promise<number> {
 /** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
 const claimed = new Set<string>();
 
-export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string; isChannel?: boolean }, source: "x" | "telegram", label: string): Promise<string[]> {
+// ---- Token scanners in groups (Rick, Phanes and the like): when a call is posted, the group's scanner bot replies
+// with the token's details, including when it was FIRST shared ("first shared 8d ago", "🆕 new"). For picked callers
+// in groups, the AI waits for that reply (up to 20 s) and buys only if the scanner says new or under 1 minute.
+export type Scan = { ageSec: number; text: string } | "none";
+const scans = new Map<string, { ageSec: number; text: string; at: number }>();
+const waiting = new Map<string, (sc: Scan) => void>();
+const UNIT: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400, w: 604800, mo: 2592000, y: 31536000 };
+const unitOf = (u: string) => { const x = u.toLowerCase(); return x.startsWith("mo") ? "mo" : x.startsWith("mi") || x === "m" ? "m" : x[0]; };
+const AGE = "(\\d+(?:\\.\\d+)?)\\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|wks?|w|months?|mo|years?|yrs?|y)\\b";
+/** Seconds since the token was first shared, from a scanner bot's reply (0 = new); null if the reply doesn't say. */
+export function scannerAge(text: string): number | null {
+  const t = text.replace(/[*_`~|]/g, "");
+  const keyed = new RegExp(`(?:first\\s*(?:shared|call(?:ed)?|seen|mention(?:ed)?|posted)|shared|called|seen|mentioned)[^\\n]{0,40}?${AGE}`, "i").exec(t)
+    || new RegExp(`${AGE}\\s*ago`, "i").exec(t);
+  if (keyed) return Number(keyed[1]) * (UNIT[unitOf(keyed[2])] ?? 60);
+  if (/🆕|\bfirst\s*(?:call|share|time)\b|\bjust\s*now\b|\bnew\s*(?:call|token|share|pair)?\b|\bnever\s*(?:been\s*)?(?:shared|called)\b/i.test(t)) return 0;
+  return null;
+}
+const scanKey = (chat: string | undefined, token: string) => `${T()}:${chatKey(chat)}:${token.startsWith("0x") ? token.toLowerCase() : token}`;
+/** A scanner bot's reply: remember what it says about each token in it, and wake a call waiting for it. */
+function scannerPost(post: { text: string; chat?: string }) {
+  const age = scannerAge(post.text);
+  if (age == null) return;
+  const { evm, sol } = extract(post.text);
+  for (const tok of [...evm, ...sol].slice(0, 3)) {
+    const k = scanKey(post.chat, tok);
+    scans.set(k, { ageSec: age, text: post.text.slice(0, 200), at: Date.now() });
+    const w = waiting.get(k);
+    if (w) { waiting.delete(k); w({ ageSec: age, text: post.text.slice(0, 200) }); }
+  }
+  if (scans.size > 500) for (const [k, v] of scans) if (Date.now() - v.at > 10 * 60_000) scans.delete(k);
+}
+
+export async function copyPost(post: { text: string; user: string; url: string; at: number; from?: From; chat?: string; isChannel?: boolean; isBot?: boolean }, source: "x" | "telegram", label: string, scan?: Scan): Promise<string[]> {
   // (label gets the squad's name added when a squad member posted)
+  const label0 = label;
   const s = await getSettings();
   if (!s.enabled || !s.copy_on) return [];
+  // A bot in a group (the token scanner): never a call to buy; read what it says about when the token was first shared.
+  if (source === "telegram" && post.isBot) { scannerPost(post); return []; }
   // Telegram only mode ignores X, X only mode ignores Telegram.
   if ((source === "x" && !s.use_x) || (source === "telegram" && !s.use_tg)) return [];
   // Channels always buy every call (their posts come from the channel, not a person). Groups follow their picked callers.
@@ -1062,6 +1098,21 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const chains = tradeChains(s);
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
+  // A picked caller (or squad member) in a group: wait for the group's token scanner to say when it was first shared.
+  const picked = source === "telegram" && !post.isChannel && (!!base || !!squad);
+  if (picked && scan === undefined && refs.length) {
+    const k = scanKey(post.chat, refs[0].token);
+    const have = scans.get(k);
+    if (have && Date.now() - have.at < 120_000) scan = { ageSec: have.ageSec, text: have.text };
+    else {
+      const tid = T();
+      let done = false;
+      const go = (sc: Scan) => { if (done) return; done = true; withTrader(tid, () => copyPost(post, source, label0, sc)).catch(() => {}); };
+      waiting.set(k, go);
+      setTimeout(() => { if (waiting.get(k) === go) waiting.delete(k); go("none"); }, 20_000);
+      return ["waiting for the group's token scanner"];
+    }
+  }
   const out: string[] = [];
   const sb = supabaseService();
   for (const r of refs) {
@@ -1082,7 +1133,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
     const { data } = await tq("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("id");
     if (!data?.length) continue; // already handled this post
-    out.push(await actOnCopy(s, sig, f, label, caller, {
+    out.push(await actOnCopy(s, sig, f, label, caller, scan, {
       group: source === "telegram" ? post.user : `X · ${post.user}`,
       who: post.from?.username ? `@${post.from.username}` : source === "x" ? null : null,
     }));
@@ -1090,7 +1141,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   return out;
 }
 
-async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, src0?: { group: string; who: string | null }): Promise<string> {
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, scan: Scan | undefined, src0?: { group: string; who: string | null }): Promise<string> {
   const src = src0 ? { ...src0, sharedAt: sig.at } : undefined;
   // This caller's own stop-loss / take profit (set on Callers or Squads), else the copy-trading ones.
   const sl = caller?.sl && caller.sl > 0 ? caller.sl : s.copy_sl, tp = caller?.tp && caller.tp > 0 ? caller.tp : s.copy_tp;
@@ -1108,8 +1159,13 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const postMin = (Date.now() - sig.at) / 60_000;
   const freshMin = s.copy_fresh_min > 0 ? s.copy_fresh_min : 3;
   if (postMin > freshMin) return done(`skipped: shared ${ageTxt(postMin * 60)} ago (only calls newer than ${freshMin} min are bought)`);
+  // The group's token scanner is the judge for picked callers: new / under 1 minute = buy; older = a reshare.
+  if (scan && scan !== "none") {
+    if (scan.ageSec > 60) return done(`skipped: the group's token scanner says it was first shared ${ageTxt(scan.ageSec)} ago (only new / under 1 min is bought)`);
+    label = `${label} · scanner: ${scan.ageSec ? `first shared ${ageTxt(scan.ageSec)} ago` : "new"}`;
+  }
   const maxAge = s.copy_max_age_h > 0 ? s.copy_max_age_h : 3;
-  if (f.ageHours > maxAge) return done(`skipped: old coin (launched ${ageTxt(f.ageHours * 3600)} ago, limit ${maxAge}h): a reshare, not a new call`);
+  if (!(scan && scan !== "none") && f.ageHours > maxAge) return done(`skipped: old coin (launched ${ageTxt(f.ageHours * 3600)} ago, limit ${maxAge}h): a reshare, not a new call`);
   const maxPump = s.copy_max_pump > 0 ? s.copy_max_pump : 150;
   if (f.ch.h1 >= maxPump || f.ch.h6 >= maxPump * 1.5) return done(`skipped: already pumped (+${Math.round(Math.max(f.ch.h1, 0))}% in 1h, +${Math.round(Math.max(f.ch.h6, 0))}% in 6h)`);
   // Money check (both wallets) and coin check side by side: every second counts on a fresh call.

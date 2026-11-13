@@ -323,7 +323,7 @@ export async function tgaChats(): Promise<MyChat[]> {
   finally { await close(c); await giveTurn(turn); }
 }
 
-export type ChatPost = { text: string; chat: string; chatRef: string; isChannel: boolean; url: string; at: number; from: { id: string | null; username: string | null } };
+export type ChatPost = { text: string; chat: string; chatRef: string; isChannel: boolean; url: string; at: number; from: { id: string | null; username: string | null }; isBot?: boolean };
 
 /**
  * Every minute: new messages in the trader's followed chats (groups, channels, private chats) (up to 25 chats, 30 messages each), since the last one
@@ -369,7 +369,7 @@ export async function tgaWatch(onPost: (p: ChatPost) => Promise<unknown>, ms = 4
             if (!text) continue;
             const snd: any = m.sender;
             const from = { id: m.senderId != null ? String(m.senderId) : null, username: snd?.username ? String(snd.username).toLowerCase() : null };
-            found.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: ch.handle ? `https://t.me/${ch.handle}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from });
+            found.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: ch.handle ? `https://t.me/${ch.handle}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from, isBot: snd?.bot === true });
           }
         } catch (e) {
           if (DEAD.test(String((e as any)?.errorMessage || (e as Error)?.message || e))) { dead = true; await loginDied(e); return; }
@@ -418,7 +418,7 @@ export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string
           // Who posted it (for caller sizes): the sender's user id and @username when Telegram includes them.
           const snd: any = m.sender;
           const from = { id: m.senderId != null ? String(m.senderId) : null, username: snd?.username ? String(snd.username).toLowerCase() : null };
-          posts.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: user ? `https://t.me/${user}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from });
+          posts.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: user ? `https://t.me/${user}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from, isBot: snd?.bot === true });
         }
       } catch (e) { errors.push(`${ch.title || "a chat"}: ${friendly(e)}`); }
     }
