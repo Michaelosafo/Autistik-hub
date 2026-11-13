@@ -76,6 +76,19 @@ async function hypeUsd(): Promise<number> {
 
 export type Wallets = { evm: PrivateKeyAccount | null; sol: Keypair | null };
 
+/** USDC on Solana: what the trader buys with and sells into when "Trade in stablecoins" is on. */
+export const USDC_SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+/** Chains where trading in stablecoins is supported (the stable's mint/address and decimals). */
+export const STABLE: Partial<Record<LiveChain, { token: string; symbol: string; decimals: number }>> = { solana: { token: USDC_SOL, symbol: "USDC", decimals: 6 } };
+
+/** How many stablecoins (in dollars) the wallet holds on this chain. */
+export async function stableBalance(chain: LiveChain, w: Wallets): Promise<number> {
+  const st = STABLE[chain];
+  if (!st || chain !== "solana" || !w.sol) return 0;
+  const b = await solTokenRaw(w.sol.publicKey, st.token);
+  return Number(b.raw) / 10 ** st.decimals;
+}
+
 /** How much of the chain's own coin the wallet holds. */
 export async function chainBalance(chain: LiveChain, w: Wallets): Promise<number> {
   if (chain === "solana") {
@@ -326,10 +339,11 @@ async function jupSwap(kp: Keypair, inputMint: string, outputMint: string, amoun
   throw new Error(`Solana swap not confirmed (${sig.slice(0, 12)}…)`);
 }
 
-async function solBuy(kp: Keypair, mint: string, amountSol: number, tax: number) {
+async function solBuy(kp: Keypair, mint: string, amountIn: number, tax: number, stable = false) {
   const before = await solTokenRaw(kp.publicKey, mint);
+  const input = stable ? USDC_SOL : WSOL, inDec = stable ? 6 : 9;
   let sig: string;
-  try { sig = await jupSwap(kp, WSOL, mint, BigInt(Math.floor(amountSol * 1e9)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100))); }
+  try { sig = await jupSwap(kp, input, mint, BigInt(Math.floor(amountIn * 10 ** inDec)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100))); }
   catch (e) {
     // Not confirmed in time: if the coins arrived anyway, it's a buy (so it's tracked and sold at TP/SL, never lost).
     // A busy network can land it 10-30s later, so keep looking for a while (before, one look after 3s missed them).
@@ -345,7 +359,8 @@ async function solBuy(kp: Keypair, mint: string, amountSol: number, tax: number)
   return { hash: sig, raw: after.raw - before.raw, decimals: after.decimals || before.decimals || 6 };
 }
 
-async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0) {
+async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0, stable = false) {
+  if (stable) return solSellStable(kp, mint, raw, tax, extra);
   const have = (await solTokenRaw(kp.publicKey, mint)).raw;
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
@@ -380,16 +395,45 @@ export async function tokenBalanceOn(chain: LiveChain, w: Wallets, token: string
   return { raw, decimals };
 }
 
+/** Sells a coin into USDC (Jupiter Ultra first, then the normal route). Returns the dollars received. */
+async function solSellStable(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0) {
+  const have = (await solTokenRaw(kp.publicKey, mint)).raw;
+  const amount = raw > have ? have : raw;
+  if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
+  const before = (await solTokenRaw(kp.publicKey, USDC_SOL).catch(() => ({ raw: 0n }))).raw;
+  let sig: string, out: bigint | null = null, ultraErr = "";
+  try { ({ sig, out } = await ultraSwap(kp, mint, USDC_SOL, amount)); }
+  catch (e) {
+    ultraErr = (e as Error).message;
+    await new Promise((r) => setTimeout(r, 2500));
+    const left = (await solTokenRaw(kp.publicKey, mint).catch(() => ({ raw: have }))).raw;
+    if (left < have - amount / 2n) return { hash: "ultra", receivedNative: 0 };
+    try { sig = await jupSwap(kp, mint, USDC_SOL, amount, sellSlip(tax, extra)); }
+    catch (e2) { throw new Error(`${(e2 as Error).message}${ultraErr ? ` · ${ultraErr}` : ""}`); }
+  }
+  if (out == null) { const after = (await solTokenRaw(kp.publicKey, USDC_SOL).catch(() => ({ raw: before }))).raw; out = after > before ? after - before : 0n; }
+  return { hash: sig, receivedNative: Number(out) / 1e6 };
+}
+
+/** Turns some SOL into USDC (or USDC back into SOL) so the trader has stablecoins to buy with. */
+export async function solConvert(w: Wallets, toStable: boolean, amount: number) {
+  if (!w.sol) throw new Error("Create the Solana wallet first.");
+  if (!(amount > 0)) throw new Error("Enter an amount.");
+  const raw = BigInt(Math.floor(amount * (toStable ? 1e9 : 1e6)));
+  const r = await ultraSwap(w.sol, toStable ? WSOL : USDC_SOL, toStable ? USDC_SOL : WSOL, raw).catch(async () => ({ sig: await jupSwap(w.sol!, toStable ? WSOL : USDC_SOL, toStable ? USDC_SOL : WSOL, raw, 100), out: null }));
+  return r.sig;
+}
+
 // ---------------------------------------------------------------- One entry point per action
 
-export async function liveBuyOn(chain: LiveChain, w: Wallets, token: string, amountNative: number, tax: number) {
-  if (chain === "solana") { if (!w.sol) throw new Error("Create the Solana wallet first."); return solBuy(w.sol, token, amountNative, tax); }
+export async function liveBuyOn(chain: LiveChain, w: Wallets, token: string, amountNative: number, tax: number, stable = false) {
+  if (chain === "solana") { if (!w.sol) throw new Error("Create the Solana wallet first."); return solBuy(w.sol, token, amountNative, tax, stable); }
   if (!w.evm) throw new Error("Create the trading wallet first.");
   return evmBuy(chain, w.evm, token, amountNative, tax);
 }
 
-export async function liveSellOn(chain: LiveChain, w: Wallets, token: string, raw: bigint, tax: number, extra = 0) {
-  if (chain === "solana") { if (!w.sol) throw new Error("There's no Solana wallet, so this can't be sold here."); return solSell(w.sol, token, raw, tax, extra); }
+export async function liveSellOn(chain: LiveChain, w: Wallets, token: string, raw: bigint, tax: number, extra = 0, stable = false) {
+  if (chain === "solana") { if (!w.sol) throw new Error("There's no Solana wallet, so this can't be sold here."); return solSell(w.sol, token, raw, tax, extra, stable); }
   if (!w.evm) throw new Error("There's no trading wallet, so this can't be sold here.");
   return evmSell(chain, w.evm, token, raw, tax, extra);
 }

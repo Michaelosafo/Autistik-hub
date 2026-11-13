@@ -27,7 +27,7 @@ import { simulateHoneypot } from "@/lib/honeypot-sim";
 import { extract } from "@/lib/ai-signals";
 import { tgNotify, xFollowedPosts } from "@/lib/ai-trader-copy";
 import { tgaWatch } from "@/lib/tg-account";
-import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, relayBridge, relayBridgeQuote, walletAddress, type LiveChain, type Wallets, tokenBalanceOn } from "@/lib/ai-trader-chains";
+import { GAS_KEEP as CHAIN_GAS, LIVE_CHAINS, NATIVE, chainBalance, isLiveChain, liveBuyOn, liveSellOn, nativeUsd, relayBridge, relayBridgeQuote, walletAddress, type LiveChain, type Wallets, tokenBalanceOn, STABLE, stableBalance, solConvert } from "@/lib/ai-trader-chains";
 import { Keypair } from "@solana/web3.js";
 
 export const TRADE_CHAINS = ["bsc", "ethereum", "robinhood", "elysium", "solana"] as const;
@@ -44,7 +44,7 @@ export type Settings = {
   copy_on: boolean; copy_tp: number; copy_sl: number; copy_fresh_min: number; copy_max_age_h: number; copy_max_pump: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
   live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; callers_only: boolean;
-  buy_hours_on: boolean; buy_from: string; buy_to: string; buy_tz: string;
+  buy_hours_on: boolean; buy_from: string; buy_to: string; buy_tz: string; stable_on: boolean;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -223,6 +223,7 @@ export async function liveWallets(s: Settings) {
   return Promise.all(LIVE_CHAINS.map(async (chain) => ({
     chain, native: NATIVE[chain], on: s.live_chains.includes(chain), address: walletAddress(chain, w),
     balance: walletAddress(chain, w) ? await chainBalance(chain, w).catch(() => null) : null,
+    stable: STABLE[chain] && walletAddress(chain, w) ? { symbol: STABLE[chain]!.symbol, balance: await stableBalance(chain, w).catch(() => null) } : null,
   })));
 }
 
@@ -308,6 +309,7 @@ export async function getSettings(): Promise<Settings> {
   if (!s.chains.includes("bsc")) s.chains.unshift("bsc");
   s.need_socials = s.need_socials !== false;
   s.buy_hours_on = s.buy_hours_on === true;
+  s.stable_on = s.stable_on === true;
   s.buy_from = /^\d{2}:\d{2}$/.test(String(s.buy_from || "")) ? s.buy_from : "00:00";
   s.buy_to = /^\d{2}:\d{2}$/.test(String(s.buy_to || "")) ? s.buy_to : "23:59";
   s.buy_tz = typeof s.buy_tz === "string" && s.buy_tz ? s.buy_tz : "UTC";
@@ -503,9 +505,10 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       // once allowing 15%, then 35%, then 49% slippage. Getting out beats waiting a minute while it falls further.
       const urgent = /^(Stop-loss|Liquidity|Trailing|Closed by admin|Cancelled)/.test(reason);
       const w = await myWallets(n((p as any).wallet) === 2 ? 2 : 1);
+      const stable = await sellStable(p); // sells into USDC: bought with it, or "Trade in stablecoins" is on
       let r: Awaited<ReturnType<typeof liveSellOn>> | null = null, last: unknown = null;
       for (const extra of urgent ? [0, 1200, 3200, 4600] : [0]) {
-        try { r = await liveSellOn(p.chain, w, p.token, BigInt(p.amount_raw || "0"), tax, extra); break; }
+        try { r = await liveSellOn(p.chain, w, p.token, BigInt(p.amount_raw || "0"), tax, extra, stable); break; }
         catch (e) { last = e; if (/holds none/i.test(String((e as Error)?.message))) break; }
       }
       if (!r && /holds none/i.test(String((last as Error)?.message)) && price) {
@@ -516,7 +519,7 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       } else {
         if (!r) throw last instanceof Error ? last : new Error("The sell didn't go through.");
         receivedNative = r.receivedNative; sellTx = r.hash;
-        received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
+        received = stable ? await usdToBnb(r.receivedNative) : p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / (await bnbUsd());
         // Sold, but the amount back wasn't reported: work it out from the price.
         if (!(received > 0) && price) { received = (n(p.qty) * price * (1 - tax / 100)) / (await bnbUsd()); receivedNative = null; reason = `${reason} (amount back estimated)`; }
       }
@@ -554,6 +557,20 @@ export function inBuyHours(s: Settings, at = new Date()): boolean {
 }
 export const buyHoursText = (s: Settings) => `${s.buy_from} to ${s.buy_to}`;
 
+/** "Trade in stablecoins" applies on this chain (Solana: USDC). */
+export const useStable = (s: Pick<Settings, "stable_on">, chain: string) => !!s.stable_on && isLiveChain(chain) && !!STABLE[chain as LiveChain];
+/** A live trade is sold into stablecoins when it was bought with them, or the setting is on now. */
+const sellStable = async (p: Position) => isLiveChain(p.chain) && !!STABLE[p.chain as LiveChain] && ((p as any).native === STABLE[p.chain as LiveChain]!.symbol || (await getSettings()).stable_on);
+/** Dollars → BNB terms (how the trader counts every trade so totals add up across chains). */
+const usdToBnb = async (usd: number) => usd / (await bnbUsd());
+
+/** Switch SOL ↔ USDC in the Solana trading wallet. */
+export async function convertStable(toStable: boolean, amount: number, slot = 1) {
+  const sig = await solConvert(await myWallets(slot), toStable, amount);
+  await log("settings", toStable ? `Turned ${amount} SOL into USDC for trading.` : `Turned ${amount} USDC back into SOL.`);
+  return sig;
+}
+
 const nowIso = () => new Date().toISOString();
 
 /**
@@ -577,11 +594,14 @@ export async function topUpPosition(p: Position, usd: number): Promise<string> {
       if (!isLiveChain(p.chain)) throw new Error(`Live buying isn't set up for ${CHAIN_NAME[p.chain] || p.chain}.`);
       const chain = p.chain as LiveChain;
       const w = await myWallets(slot);
-      const nUsd = await nativeUsd(chain);
-      const free = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
-      const amount = +(usd / nUsd).toFixed(chain === "solana" ? 6 : 8);
-      if (amount > free) throw new Error(`Not enough ${NATIVE[chain]}: ${free.toFixed(4)} free (about $${(free * nUsd).toFixed(2)}).`);
-      const r = await liveBuyOn(chain, w, p.token, amount, tax);
+      // Tops up in the same money the trade was bought with (USDC or the chain's own coin).
+      const stable = !!STABLE[chain] && (p as any).native === STABLE[chain]!.symbol;
+      const unit = stable ? STABLE[chain]!.symbol : NATIVE[chain];
+      const nUsd = stable ? 1 : await nativeUsd(chain);
+      const free = stable ? await stableBalance(chain, w) : Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
+      const amount = +(usd / nUsd).toFixed(stable ? 2 : chain === "solana" ? 6 : 8);
+      if (amount > free) throw new Error(`Not enough ${unit}: ${free.toFixed(4)} free (about $${(free * nUsd).toFixed(2)}).`);
+      const r = await liveBuyOn(chain, w, p.token, amount, tax, stable);
       if (r.raw <= 0n) throw new Error("The swap went through but no tokens arrived.");
       bought = true;
       addRaw = r.raw; addQty = Number(r.raw) / 10 ** (r.decimals ?? p.decimals); tx = r.hash; addNative = amount;
@@ -606,7 +626,7 @@ export async function topUpPosition(p: Position, usd: number): Promise<string> {
       await log("error", `Bought more ${p.symbol}${tx ? ` (tx ${tx.slice(0, 10)}…)` : ""} but the trade was sold meanwhile: the extra coins are in the wallet, not managed by the bot.`);
       throw new Error(`${p.symbol} was sold while buying more. The extra coins are in the wallet.`);
     }
-    await log("buy", `➕ Bought more ${p.symbol}: $${usd.toFixed(2)}${addNative != null ? ` (${addNative} ${NATIVE[p.chain as LiveChain] || ""})` : " (practice)"}. Average buy price now $${entry.toPrecision(4)}.`);
+    await log("buy", `➕ Bought more ${p.symbol}: $${usd.toFixed(2)}${addNative != null ? ` (${addNative} ${(p as any).native || NATIVE[p.chain as LiveChain] || ""})` : " (practice)"}. Average buy price now $${entry.toPrecision(4)}.`);
     return `Bought $${usd.toFixed(2)} more ${p.symbol}.`;
   } catch (e) {
     if (!bought) await tq("ai_trader_positions").update({ status: "open", updated_at: nowIso() }).eq("id", p.id).eq("status", "closing");
@@ -639,9 +659,10 @@ export async function sellPart(p: Position, pct: number): Promise<string> {
       if (!isLiveChain(p.chain)) throw new Error(`Live selling isn't set up for ${CHAIN_NAME[p.chain] || p.chain}.`);
       soldRaw = (BigInt(p.amount_raw || "0") * BigInt(Math.round(f * 10_000))) / 10_000n;
       if (soldRaw <= 0n) throw new Error("Nothing to sell.");
-      const r = await liveSellOn(p.chain, await myWallets(slot), p.token, soldRaw, tax, 0);
+      const stable = await sellStable(p);
+      const r = await liveSellOn(p.chain, await myWallets(slot), p.token, soldRaw, tax, 0, stable);
       receivedNative = r.receivedNative; sellTx = r.hash;
-      received = p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / bnb;
+      received = stable ? r.receivedNative / bnb : p.chain === "bsc" ? r.receivedNative : (r.receivedNative * (await nativeUsd(p.chain))) / bnb;
     }
     sold = true;
     const keep = 1 - f, sn = (p as any).spent_native;
@@ -714,7 +735,7 @@ async function adoptPending() {
       const entry = n(q.entry_usd) || (n(q.entry_mcap) && capNow ? (now * n(q.entry_mcap)) / capNow : now);
       const qty = Number(bal.raw) / 10 ** bal.decimals;
       const bnb = await bnbUsd();
-      const spent = q.spent_native ? (n(q.spent_native) * (await nativeUsd(q.chain as LiveChain))) / bnb : (qty * entry) / bnb;
+      const spent = q.spent_native ? (n(q.spent_native) * (q.native === "USDC" ? 1 : await nativeUsd(q.chain as LiveChain))) / bnb : (qty * entry) / bnb;
       const { error } = await tq("ai_trader_positions").insert({
         mode: "live", native: q.native || NATIVE[q.chain as LiveChain], spent_native: q.spent_native ?? null, chain: q.chain, token: q.token, symbol: q.symbol || pair?.baseToken?.symbol || null, name: q.name || pair?.baseToken?.name || null, logo: q.logo || pair?.info?.imageUrl || null,
         spent: +spent.toFixed(6), qty, amount_raw: bal.raw.toString(), decimals: bal.decimals,
@@ -1009,27 +1030,29 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
     // Live on any chain: pays with that chain's own coin, worth the same dollars.
     const chain = c.chain as LiveChain;
     const w = await myWallets(slot);
-    const nUsd = await nativeUsd(chain);
+    // In stablecoins: pays in USDC (1 USDC = $1); otherwise in the chain's own coin, worth the same dollars.
+    const stable = useStable(s, chain);
+    const nUsd = stable ? 1 : await nativeUsd(chain);
     const wantUsd = spend * bnb;
-    const avail = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
-    const amount = +Math.min(wantUsd / nUsd, avail).toFixed(chain === "solana" ? 6 : 8);
-    if (amount * nUsd < wantUsd * 0.5) throw new Error(`Not enough ${NATIVE[chain]} on ${CHAIN_NAME[chain]}.`);
+    const avail = stable ? await stableBalance(chain, w) : Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
+    const amount = +Math.min(wantUsd / nUsd, avail).toFixed(stable ? 2 : chain === "solana" ? 6 : 8);
+    if (amount * nUsd < wantUsd * 0.5) throw new Error(`Not enough ${stable ? STABLE[chain]!.symbol : NATIVE[chain]} on ${CHAIN_NAME[chain]}.`);
     let r: Awaited<ReturnType<typeof liveBuyOn>>;
-    try { r = await liveBuyOn(chain, w, c.token, amount, c.buyTax ?? 0); }
+    try { r = await liveBuyOn(chain, w, c.token, amount, c.buyTax ?? 0, stable); }
     catch (e) {
       // The swap may still land after we stop waiting (busy network). Note it: the trader checks the wallet every
       // minute and, if the coins show up, records the trade so its stop-loss / take profit protect it.
       if (!/failed on-chain|No Solana route|Couldn't build|Not enough|Create the|no answer|didn't answer/i.test((e as Error).message)) {
         await tq("ai_trader_pending").upsert({
           chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, wallet: slot, entry_usd: c.price, entry_mcap: c.mcap || null,
-          spent_native: amount, native: NATIVE[chain], sl: o.sl, tp: o.tp, why: o.why, strategy: o.strategy,
+          spent_native: amount, native: stable ? STABLE[chain]!.symbol : NATIVE[chain], sl: o.sl, tp: o.tp, why: o.why, strategy: o.strategy,
           source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null, created_at: new Date().toISOString(),
         }, { onConflict: "trader_id,chain,token,wallet" }).then(() => {}, () => {});
       }
       throw e;
     }
     if (r.raw <= 0n) throw new Error("The swap went through but no tokens arrived.");
-    decimals = r.decimals; raw = r.raw.toString(); tx = r.hash; native = NATIVE[chain]; spentNative = amount;
+    decimals = r.decimals; raw = r.raw.toString(); tx = r.hash; native = stable ? STABLE[chain]!.symbol : NATIVE[chain]; spentNative = amount;
     qty = Number(r.raw) / 10 ** decimals;
     spend = +((amount * nUsd) / bnb).toFixed(6); // kept in BNB terms so totals add up across chains
   } else {
@@ -1120,8 +1143,16 @@ async function buyRoom(s: Settings, chain = "bsc", slot = 1): Promise<{ cash: nu
   if (!isLiveChain(chain) || !s.live_chains.includes(chain)) return `${CHAIN_NAME[chain] || chain} isn't switched on for live trading`;
   const w = await myWallets(slot);
   if (!walletAddress(chain, w)) return slot === 2 ? "no Wallet 2 on this network" : chain === "solana" ? "there's no Solana wallet yet" : "there's no trading wallet yet";
-  const have = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
   const needUsd = (s.per_trade_usd > 0 ? s.per_trade_usd : s.per_trade * (await bnbUsd())) * 0.5;
+  if (useStable(s, chain)) {
+    // Buys with stablecoins; the chain's own coin only pays the network fees.
+    const st = STABLE[chain as LiveChain]!;
+    const usd = await stableBalance(chain as LiveChain, w).catch(() => 0);
+    if (usd < needUsd) return `not enough ${st.symbol} on ${CHAIN_NAME[chain]} ($${usd.toFixed(2)})`;
+    if ((await chainBalance(chain, w).catch(() => 0)) < CHAIN_GAS[chain] / 2) return `needs a little ${NATIVE[chain]} for network fees`;
+    return { cash: usd, held };
+  }
+  const have = Math.max(0, (await chainBalance(chain, w)) - CHAIN_GAS[chain]);
   if (have * (await nativeUsd(chain)) < needUsd) return `not enough ${NATIVE[chain]} on ${CHAIN_NAME[chain]} (${have.toFixed(4)} ${NATIVE[chain]})`;
   return { cash: have, held };
 }

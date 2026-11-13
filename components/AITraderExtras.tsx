@@ -401,3 +401,41 @@ export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean
     </section>
   );
 }
+
+/**
+ * Trade in stablecoins: buys with USDC and sells back into USDC (Solana), so money between trades sits in dollars
+ * instead of moving with SOL's price. SOL is still needed in small amounts for network fees. Converts SOL ↔ USDC here.
+ */
+export function StableMode({ on, live, sol, busy, onAct }: { on: boolean; live: boolean; sol: LiveWallet | null; busy: boolean; onAct: Act }) {
+  const [amt, setAmt] = useState("");
+  const [dir, setDir] = useState<"usdc" | "sol">("usdc");
+  const usdc = sol?.stable?.balance ?? null;
+  return (
+    <section className={"card stack" + (on ? " aitx-hours" : "")}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <b>💵 Trade in stablecoins</b>
+        <small className="muted">{on ? "On: buys with USDC, sells into USDC" : "Off: buys with SOL, sells into SOL"}</small>
+      </div>
+      <label className={"aic-row" + (on ? " on" : "")}>
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => onAct("stable", "settings", { stable_on: e.target.checked }, e.target.checked ? "Stablecoins on: Solana coins are bought with USDC and sold back into USDC." : "Stablecoins off: Solana coins are bought with SOL and sold into SOL.")} />
+        <span className="grow"><b>Buy with USDC and sell into USDC</b><small className="muted">Your money between trades stays in dollars instead of rising and falling with SOL. Applies on Solana. Keep a little SOL (about 0.02) for network fees.</small></span>
+      </label>
+      {live && sol?.address && (
+        <>
+          <div className="aitx-two">
+            <div className="aitx-tile"><small>USDC</small><b>{usdc == null ? "–" : `$${usdc.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}</b></div>
+            <div className="aitx-tile"><small>SOL (fees{on ? "" : " and trading"})</small><b>{sol.balance == null ? "–" : sol.balance.toLocaleString("en-US", { maximumFractionDigits: 4 })}</b></div>
+          </div>
+          <div className="aitx-act-row">
+            <span className="ait-seg" role="group" aria-label="Convert direction">
+              <button type="button" className={dir === "usdc" ? "on" : ""} onClick={() => setDir("usdc")}>SOL → USDC</button>
+              <button type="button" className={dir === "sol" ? "on" : ""} onClick={() => setDir("sol")}>USDC → SOL</button>
+            </span>
+            <span className="ait-in" style={{ maxWidth: 160 }}><input inputMode="decimal" value={amt} placeholder={dir === "usdc" ? "SOL amount" : "USDC amount"} onChange={(e) => setAmt(e.target.value)} aria-label="Amount to convert" /><em>{dir === "usdc" ? "SOL" : "USDC"}</em></span>
+            <button type="button" className="btn primary small" disabled={busy || !(Number(amt) > 0)} onClick={() => { if (confirm(`Convert ${amt} ${dir === "usdc" ? "SOL into USDC" : "USDC into SOL"}?`)) onAct("convert", "convert", { to: dir, amount: Number(amt) }).then(() => setAmt("")); }}>Convert</button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
