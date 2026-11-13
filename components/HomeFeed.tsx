@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from "react";
 import { GROUPS } from "@/lib/groups";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import AvatarImg from "@/components/Avatar";
+import { PostViewsProvider, ViewCount, useSeen } from "@/components/PostViews";
 
 type Item =
   | { kind: "post"; id: string; at: string; body: string; channel: string; note: string | null; author: { id: string; alias: string; color: string; avatar_url?: string | null } | null }
@@ -23,7 +24,7 @@ const ago = (iso: string) => {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 };
 
-export default function HomeFeed({ me }: { me: { alias: string; color: string; avatar_url?: string | null } | null }) {
+export default function HomeFeed({ me }: { me: { id?: string; alias: string; color: string; avatar_url?: string | null } | null }) {
   const [tab, setTab] = useState<"foryou" | "following">("foryou");
   const [items, setItems] = useState<Item[] | null>(null);
   const [followsNobody, setFollowsNobody] = useState(false);
@@ -55,9 +56,11 @@ export default function HomeFeed({ me }: { me: { alias: string; color: string; a
               : me ? "Nothing here yet. Write the first post in the Lounge." : <><Link href="/login?next=/">Sign in</Link> to see what members are sharing.</>}
           </p>
         ) : (
-          <ol className="hf-list">
-            {items.map((it) => <li key={it.kind + it.id}>{it.kind === "post" ? <Post p={it} /> : <Launch l={it} />}</li>)}
-          </ol>
+          <PostViewsProvider ids={items.filter((it) => it.kind === "post").map((it) => it.id)}>
+            <ol className="hf-list">
+              {items.map((it) => <li key={it.kind + it.id}>{it.kind === "post" ? <Post p={it} myId={me?.id} /> : <Launch l={it} />}</li>)}
+            </ol>
+          </PostViewsProvider>
         )}
       {!me && items && items.length > 0 && <p className="muted hf-empty"><Link href="/login?next=/">Sign in</Link> to see members&apos; posts too.</p>}
     </div>
@@ -68,11 +71,12 @@ function Avatar({ alias, color, url }: { alias: string; color: string; url?: str
   return <AvatarImg className="me-av hf-av" alias={alias} color={color} url={url} />;
 }
 
-function Post({ p }: { p: Extract<Item, { kind: "post" }> }) {
+function Post({ p, myId }: { p: Extract<Item, { kind: "post" }>; myId?: string }) {
   const [show, setShow] = useState(!p.note);
   const a = p.author;
+  const seen = useSeen(p.id);
   return (
-    <article className="hf-item">
+    <article className="hf-item" ref={seen}>
       {a ? <Link href={`/members/${a.id}`} aria-label={a.alias}><Avatar alias={a.alias} color={a.color} url={a.avatar_url} /></Link> : <Avatar alias="?" color="#7B55E0" />}
       <div className="hf-body">
         <div className="hf-meta">
@@ -82,6 +86,7 @@ function Post({ p }: { p: Extract<Item, { kind: "post" }> }) {
         {show ? <p className="hf-text">{p.body}</p> : (
           <button type="button" className="hf-note" onClick={() => setShow(true)}>⚠️ {p.note}: tap to read</button>
         )}
+        <div className="hf-foot"><ViewCount id={p.id} mine={!!myId && a?.id === myId} /></div>
       </div>
     </article>
   );

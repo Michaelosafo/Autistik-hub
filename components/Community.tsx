@@ -6,6 +6,7 @@ import Art from "@/components/Art";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { GROUPS, CHANNELS } from "@/lib/groups";
 import { PHOTOS } from "@/lib/site";
+import { PostViewsProvider, ViewCount, useSeen } from "@/components/PostViews";
 
 type Post = { id: string; channel: string; author_id: string; body: string; content_note: string | null; created_at: string; hidden: boolean };
 type Profile = { id: string; alias: string; color: string; is_team?: boolean; team_title?: string | null };
@@ -169,13 +170,14 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
         )}
 
         {!posts.length && <div className="empty">Nothing in #{ch.name} yet. Your post could be the first.</div>}
+        <PostViewsProvider ids={posts.map((p) => p.id)}>
         {posts.map((p) => {
           const author = profiles[p.author_id];
           const h = hearts[p.id] || [];
           const mineHeart = h.includes(uid);
           const hiddenBody = p.content_note && !revealed[p.id];
           return (
-            <article key={p.id} className="card post fade">
+            <SeenArticle key={p.id} id={p.id} className="card post fade">
               <Avatar alias={author?.alias || "M"} color={author?.color} url={(author as any)?.avatar_url} />
               <div className="post-body">
                 <div className="post-head">
@@ -197,12 +199,19 @@ export default function Community({ uid, initialGroup, initialChannel }: { uid: 
                   <button className="linkbtn" type="button" aria-pressed={mineHeart} onClick={() => toggleHeart(p)}>{mineHeart ? "♥ Supported" : "♡ Support"}{h.length ? ` · ${h.length}` : ""}</button>
                   {(p.author_id === uid || isAdmin) && <button className="linkbtn" type="button" onClick={() => remove(p)}>Delete</button>}
                   {p.author_id !== uid && <button className="linkbtn" type="button" disabled={reported[p.id]} onClick={() => report(p)}>{reported[p.id] ? "Reported" : "Report"}</button>}
+                  <ViewCount id={p.id} mine={p.author_id === uid} />
                 </div>
               </div>
-            </article>
+            </SeenArticle>
           );
         })}
+        </PostViewsProvider>
       </div>
     </div>
   );
+}
+
+/** A post that counts as seen once it's been on screen for a moment (components/PostViews.tsx). */
+function SeenArticle({ id, className, children }: { id: string; className: string; children?: React.ReactNode }) {
+  return <article ref={useSeen(id)} className={className}>{children}</article>;
 }
