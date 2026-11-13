@@ -258,7 +258,41 @@ async function solTokenRaw(owner: PublicKey, mint: string): Promise<{ raw: bigin
   const bals = await Promise.all(atas.map((a) => conn.getTokenAccountBalance(a, "confirmed").then((r) => r.value).catch(() => null)));
   let raw = 0n, decimals = 0;
   for (const b of bals) if (b) { raw += BigInt(b.amount); decimals = Number(b.decimals); }
+  // The public RPC can refuse or rate-limit these reads from the server and answer "nothing". Jupiter's view of the
+  // wallet is the second opinion, so a coin that's really there is never missed (it was: sells and recoveries failed).
+  if (raw === 0n) {
+    const j = await jupHolding(owner.toBase58(), mint).catch(() => null);
+    if (j && j.raw > 0n) return j;
+  }
   return { raw, decimals };
+}
+
+/** One coin's balance in a wallet, from Jupiter (raw units). */
+async function jupHolding(owner: string, mint: string): Promise<{ raw: bigint; decimals: number } | null> {
+  const h = await fetch(`${JUP}/ultra/v1/holdings/${owner}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => null);
+  const accs: any[] = h?.tokens?.[mint] || [];
+  if (!accs.length) return null;
+  let raw = 0n, decimals = 0;
+  for (const a of accs) { try { raw += BigInt(String(a.amount ?? "0")); } catch { /* skip */ } decimals = Number(a.decimals) || decimals; }
+  return { raw, decimals: decimals || 6 };
+}
+
+/**
+ * A swap through Jupiter Ultra: Jupiter builds it, we sign it, and Jupiter sends it and confirms it on its own fast
+ * lane (no public RPC involved, the part that kept reporting "not confirmed"). Returns the signature and, when Jupiter
+ * reports it, how much came out (raw).
+ */
+async function ultraSwap(kp: Keypair, inputMint: string, outputMint: string, amount: bigint): Promise<{ sig: string; out: bigint | null }> {
+  const o = await fetch(`${JUP}/ultra/v1/order?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&taker=${kp.publicKey.toBase58()}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) }).then((r) => r.json()).catch(() => null);
+  if (!o?.transaction || !o?.requestId) throw new Error(`Jupiter Ultra: ${o?.errorMessage || o?.error || "no route"}`);
+  const tx = VersionedTransaction.deserialize(Buffer.from(o.transaction, "base64"));
+  tx.sign([kp]);
+  const e = await fetch(`${JUP}/ultra/v1/execute`, { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(60_000),
+    body: JSON.stringify({ signedTransaction: Buffer.from(tx.serialize()).toString("base64"), requestId: o.requestId }) }).then((r) => r.json()).catch(() => null);
+  if (e?.status !== "Success") throw new Error(`Jupiter Ultra: ${e?.error || e?.status || "not confirmed"}${e?.signature ? ` (${String(e.signature).slice(0, 12)}…)` : ""}`);
+  let out: bigint | null = null;
+  try { out = e.outputAmountResult != null ? BigInt(String(e.outputAmountResult)) : null; } catch { out = null; }
+  return { sig: String(e.signature), out };
 }
 
 async function jupSwap(kp: Keypair, inputMint: string, outputMint: string, amount: bigint, slippageBps: number) {
@@ -316,10 +350,22 @@ async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extr
   const amount = raw > have ? have : raw;
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
   const conn = solConn();
-  const before = await conn.getBalance(kp.publicKey);
-  const sig = await jupSwap(kp, mint, WSOL, amount, sellSlip(tax, extra));
-  const after = await conn.getBalance(kp.publicKey);
-  return { hash: sig, receivedNative: Math.max(0, after - before) / 1e9 };
+  const before = await conn.getBalance(kp.publicKey).catch(() => null);
+  // Jupiter Ultra first (Jupiter lands it itself); if Ultra can't, the normal Jupiter route with our own sending.
+  let sig: string, out: bigint | null = null, ultraErr = "";
+  try { ({ sig, out } = await ultraSwap(kp, mint, WSOL, amount)); }
+  catch (e) {
+    ultraErr = (e as Error).message;
+    // Ultra may have sold it even though it didn't say so: if the coins are gone, don't sell twice.
+    await new Promise((r) => setTimeout(r, 2500));
+    const left = (await solTokenRaw(kp.publicKey, mint).catch(() => ({ raw: have }))).raw;
+    if (left < have - amount / 2n) return { hash: "ultra", receivedNative: 0 };
+    try { sig = await jupSwap(kp, mint, WSOL, amount, sellSlip(tax, extra)); }
+    catch (e2) { throw new Error(`${(e2 as Error).message}${ultraErr ? ` · ${ultraErr}` : ""}`); }
+  }
+  const after = await conn.getBalance(kp.publicKey).catch(() => null);
+  const got = out != null ? Number(out) / 1e9 : before != null && after != null ? Math.max(0, after - before) / 1e9 : 0;
+  return { hash: sig, receivedNative: got };
 }
 
 /** How much of a coin a trading wallet holds right now (raw units and decimals). */
