@@ -6567,3 +6567,9 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .aitx-wallet .aitx-li .up{color:#0b5e35} .aitx-wallet .aitx-li .down{color:#9b1c14}
 .aitx-panel .btn.primary,.aitx-hours .btn.primary{background:var(--sun-bright,#F5C518);border-color:var(--sun-bright,#F5C518);color:#141830}
 .aitx-b.buy.on,.aitx-b.sell.on{outline-color:#F5C518}
+
+/* Front page: headings that type themselves out as you scroll to them (components/TypeText.tsx). */
+.tt-rest{visibility:hidden}
+.tt-caret{display:inline-block;width:.09em;min-width:2px;height:.95em;margin:0 .04em -.1em;background:var(--gold,#F0B90B);border-radius:1px;font-style:normal;animation:ttBlink .8s steps(1) infinite}
+@keyframes ttBlink{50%{opacity:0}}
+@media (prefers-reduced-motion: reduce){ .tt-caret{animation:none} }
