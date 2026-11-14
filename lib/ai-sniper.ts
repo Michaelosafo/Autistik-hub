@@ -71,14 +71,33 @@ export const snipeCfg = (s: FSettings): SnipeCfg => {
  * made or lost, minus what's in open trades. It never spends past this, and Turbo can't send this part to Hyperliquid.
  */
 export async function sniperReserve(deskId: number): Promise<number> {
+  const venue = deskId >= 500000 ? "copy" : "pumpfun"; // the Copy desk (500000 + id) works the same way
   const [{ data: st }, { data: ps }] = await Promise.all([
     sb().from("ai_futures_settings").select("snipe_budget").eq("id", deskId).maybeSingle(),
-    sb().from("ai_futures_positions").select("status,margin_usd,pnl_usd").eq("fut_id", deskId).eq("mode", "live").eq("venue", "pumpfun"),
+    sb().from("ai_futures_positions").select("status,margin_usd,pnl_usd").eq("fut_id", deskId).eq("mode", "live").eq("venue", venue),
   ]);
   const rows = (ps || []) as any[];
   const pnl = rows.filter((r) => r.status === "closed").reduce((a, r) => a + n(r.pnl_usd), 0);
   const inTrades = rows.filter((r) => r.status !== "closed").reduce((a, r) => a + n(r.margin_usd), 0);
   return Math.max(0, n(st?.snipe_budget) + pnl - inTrades);
+}
+
+/** The part of the shared Solana wallet that is Sniper's and Copy's budget (Turbo can't send it to Hyperliquid). */
+export async function sharedReserve(owner: number): Promise<number> {
+  const [a, b] = await Promise.all([sniperReserve(400000 + owner), sniperReserve(500000 + owner)]);
+  return a + b;
+}
+
+/**
+ * How much of a coin a live trade may sell from the shared wallet: everything if no other live trade (Sniper or Copy)
+ * holds the same coin, otherwise only this trade's own coins.
+ */
+export async function ownShare(p: FPos, bal: { raw: bigint; decimals: number }): Promise<bigint> {
+  const owner = Number((p as any).fut_id ?? T()) % 100000;
+  const { data } = await pos().select("id").in("fut_id", [400000 + owner, 500000 + owner]).eq("mode", "live").eq("coin", p.coin).in("status", ["open", "closing"]).neq("id", p.id).limit(1);
+  if (!data?.length) return bal.raw;
+  const mine = BigInt(Math.floor(n(p.size) * 10 ** bal.decimals));
+  return mine < bal.raw ? mine : bal.raw;
 }
 
 async function get(url: string) {
@@ -215,7 +234,8 @@ export async function closeSnipe(s: FSettings, p: FPos, reason: string, price?: 
     if (p.mode === "live") {
       const { liveSellOn, tokenBalanceOn, STABLES, nativeUsd } = await import("@/lib/ai-trader-chains");
       const w = await wallets();
-      const bal = await tokenBalanceOn("solana", w, p.coin);
+      const bal0 = await tokenBalanceOn("solana", w, p.coin);
+      const bal = { ...bal0, raw: await ownShare(p, bal0) };
       if (bal.raw > 0n) {
         const usdt = STABLES.solana![0];
         const panic = /stop|rug|liquidity/i.test(reason) ? 2000 : 0;

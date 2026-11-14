@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, isSnipeDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, COPY_DESK, MAD_DESK, isCopyDesk, isSpotDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,7 +46,7 @@ async function mine(): Promise<number | null> {
 /** ?desk=fx: the admin's Forex trader, ?desk=earn: their Earn desk (each its own id), otherwise their Futures trader. */
 const desk = (req: Request, id: number | null) => {
   const d = new URL(req.url).searchParams.get("desk");
-  const off: Record<string, number> = { fx: FX_DESK, earn: EARN_DESK, turbo: TURBO_DESK, snipe: SNIPE_DESK };
+  const off: Record<string, number> = { fx: FX_DESK, earn: EARN_DESK, turbo: TURBO_DESK, snipe: SNIPE_DESK, copy: COPY_DESK, mad: MAD_DESK };
   return id && d && off[d] ? off[d] + id : id;
 };
 
@@ -67,22 +67,30 @@ export async function POST(req: Request, { params }: { params: { action: string 
           for (const k of ["use_ta", "use_news", "use_x", "no_liq", "auto_fund"]) if (typeof b[k] === "boolean") up[k] = b[k];
           const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90], snipe_budget: [0, 1_000_000], profit_lock_pct: [0, 500] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
+          if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
+            const seen = new Set<string>();
+            up.copy_wallets = b.copy_wallets.map((w: any) => ({
+              address: String(w?.address || "").trim(), label: String(w?.label || "").trim().slice(0, 24) || undefined,
+              usd: clamp(w?.usd, 1, 10000), on: w?.on !== false,
+            })).filter((w: any) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.address) && !seen.has(w.address) && seen.add(w.address)).slice(0, 25);
+          }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
           if (Array.isArray(b.coins)) up.coins = [...new Set(b.coins.map((c: unknown) => String(c).trim().toUpperCase()).filter((c: string) => /^[A-Z0-9]{1,12}$/.test(c)))].slice(0, 15);
           if (Array.isArray(b.x_handles)) up.x_handles = [...new Set(b.x_handles.map((h: unknown) => String(h).trim().replace(/^@/, "")).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
           if (b.mode === "paper" || b.mode === "live") {
             if (b.mode === "live") {
               const { data: open } = await sb.from("ai_futures_positions").select("id").eq("fut_id", id).eq("mode", "paper").in("status", ["open", "closing"]).limit(1);
-              if (isSnipeDesk()) {
+              if (isSpotDesk()) {
+                const nm = isCopyDesk() ? "Copy" : "Sniper";
                 const sw = await (await import("@/lib/ai-sniper")).snipeWallet().catch(() => null);
-                if (!sw) return json({ error: "Create or import the Sniper's Solana wallet first." }, 400);
-                if (!(Number((s as any).snipe_budget ?? b.snipe_budget) > 0)) return json({ error: "Set the Sniper budget first: how much of the shared Solana wallet it may trade with." }, 400);
+                if (!sw) return json({ error: "Create or import the shared Solana wallet first." }, 400);
+                if (!(Number(b.snipe_budget ?? (s as any).snipe_budget) > 0)) return json({ error: `Set the ${nm} budget first: how much of the shared Solana wallet it may trade with.` }, 400);
                 if (sw.usdt + sw.usdc < 5 && sw.sol * sw.solUsd < 5) return json({ error: `The Solana wallet has about $${sw.total.toFixed(2)}. Send at least $5 of USDT / USDC (plus ~0.02 SOL for fees) to ${sw.address} first.` }, 400);
                 if (open?.length) await closeAllNow("paper");
                 up.mode = b.mode; up.day = null; up.day_start_usd = null;
                 const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
                 if (error) return json({ error: error.message }, 400);
-                return json({ ok: true, note: "Sniper is LIVE: it buys with the money in its Solana wallet." });
+                return json({ ok: true, note: `${nm} is LIVE: it buys with its budget in the shared Solana wallet.` });
               }
               const w = await futWallet();
               if (!w) return json({ error: "Create the AI Futures wallet first." }, 400);
@@ -99,7 +107,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (!Object.keys(up).length) return json({ error: "Nothing to change." }, 400);
           const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
           if (error) return json({ error: error.message }, 400);
-          await flog("settings", `Settings changed: ${Object.entries(up).filter(([k]) => !["day", "day_start_usd"].includes(k)).map(([k, v]) => `${k} = ${Array.isArray(v) ? v.join(", ") : v}`).join("; ")}`);
+          await flog("settings", `Settings changed: ${Object.entries(up).filter(([k]) => !["day", "day_start_usd"].includes(k)).map(([k, v]) => `${k} = ${Array.isArray(v) ? v.map((x: any) => (x && typeof x === "object" ? x.label || x.address : x)).join(", ") : v}`).join("; ")}`);
           return json({ ok: true, note: up.mode === "live" ? "LIVE: the AI now trades real money on Hyperliquid." : up.enabled === true ? "AI Futures is on." : up.enabled === false ? "Off. Open positions are still watched." : "Saved." });
         }
         case "wallet": { const address = await createFutWallet(); return json({ ok: true, address, note: "Wallet created. See How to fund." }); }
@@ -128,7 +136,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
         }
         case "run": return json({ ok: true, note: await runFutures() });
         case "move": {
-          const dest = ["futures", "forex", "turbo", "sniper"].includes(b.dest) ? b.dest : null;
+          const dest = ["futures", "forex", "turbo", "sniper", "copy", "madness"].includes(b.dest) ? b.dest : null;
           if (!dest) return json({ error: "Pick where to move it." }, 400);
           return json({ ok: true, note: await moveToDesk(dest, Number(b.usd)) });
         }

@@ -52,20 +52,32 @@ export const EARN_DESK = 200000;
  */
 export const TURBO_DESK = 300000;
 export const SNIPE_DESK = 400000;
+/** Copy (500000 + id): copies Solana wallets you pick, buys when they buy and sells when they sell (lib/ai-copy.ts). */
+export const COPY_DESK = 500000;
+/**
+ * Madness (600000 + id): Hyperliquid futures at the highest leverage each coin allows that still keeps liquidation
+ * at least 3x further away than a very tight stop-loss (0.25%–0.6%), on the most-traded coins, only when the news and
+ * the chart agree. The stop rests on Hyperliquid, so it is hit long before liquidation. Own wallet and money.
+ */
+export const MAD_DESK = 600000;
 export const isFxDesk = () => T() >= FX_DESK && T() < EARN_DESK;
 export const isEarnDesk = () => T() >= EARN_DESK && T() < TURBO_DESK;
 export const isTurboDesk = () => T() >= TURBO_DESK && T() < SNIPE_DESK;
-export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < SNIPE_DESK + FX_DESK;
+export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < COPY_DESK;
+export const isCopyDesk = () => T() >= COPY_DESK && T() < MAD_DESK;
+export const isMadDesk = () => T() >= MAD_DESK && T() < MAD_DESK + FX_DESK;
+/** Sniper and Copy: spot coins bought from the shared Solana wallet, each with its own budget. */
+export const isSpotDesk = () => isSnipeDesk() || isCopyDesk();
 /**
  * Turbo and Sniper share ONE Solana wallet (stored under the Sniper desk). Nothing is swept from it automatically:
  * Turbo gets only what you send to its Hyperliquid account, and Sniper only spends its own budget (lib/ai-sniper.ts).
  */
-export const solId = () => (isTurboDesk() ? SNIPE_DESK + (T() % FX_DESK) : T());
+export const solId = () => (isTurboDesk() || isCopyDesk() ? SNIPE_DESK + (T() % FX_DESK) : T());
 async function ensureSolDesk() {
   if (solId() === T()) return;
   await sb().from("ai_futures_settings").upsert({ id: solId(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }, { onConflict: "id", ignoreDuplicates: true });
 }
-const deskName = () => (isSnipeDesk() ? "Sniper" : isTurboDesk() ? "Turbo" : isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"); // the most anyone can set (each coin's own exchange maximum still applies)
+const deskName = () => (isMadDesk() ? "Madness" : isCopyDesk() ? "Copy" : isSnipeDesk() ? "Sniper" : isTurboDesk() ? "Turbo" : isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"); // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
@@ -92,7 +104,9 @@ const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news"
 export async function flog(kind: string, text: string) { await fq("ai_futures_log").insert({ kind, text: text.slice(0, 600) }); }
 
 export async function getF(): Promise<FSettings> {
-  const first = isSnipeDesk() ? { id: T(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }
+  const first = isCopyDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false, snipe_usd: 20, snipe_sl: 50, snipe_tp: 1000 }
+    : isSnipeDesk() ? { id: T(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }
+    : isMadDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 50, no_liq: false, risk_pct: 3, max_loss_pct: 25, max_positions: 3, max_hold_hours: 6, daily_loss_pct: 25, use_ta: true, use_news: true }
     : isTurboDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 15, no_liq: false, risk_pct: 3, max_loss_pct: 40, max_positions: 4, max_hold_hours: 12, daily_loss_pct: 25 }
     : isEarnDesk() ? { id: T(), venues: [], coins: [], enabled: false } : isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() };
   const made = await sb().from("ai_futures_settings").upsert(first, { onConflict: "id", ignoreDuplicates: true });
@@ -104,10 +118,11 @@ export async function getF(): Promise<FSettings> {
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   s.no_liq = s.no_liq !== false;
   s.auto_fund = s.auto_fund !== false;
-  if (isTurboDesk() || isSnipeDesk()) s.auto_fund = false; // shared wallet: only what you send moves
+  if (isTurboDesk() || isSpotDesk()) s.auto_fund = false; // shared wallet: only what you send moves
   if (isEarnDesk()) { s.venues = []; s.coins = []; s.enabled = false; }
-  else if (isSnipeDesk()) { s.venues = []; s.coins = []; }
+  else if (isSpotDesk()) { s.venues = []; s.coins = []; }
   else if (isTurboDesk()) s.venues = ["hyperliquid"];
+  else if (isMadDesk()) { s.venues = ["hyperliquid"]; s.no_liq = false; }
   else if (isFxDesk()) { s.venues = ["forex"]; s.coins = []; }
   else s.venues = (s.venues || []).filter((v: string) => v !== "forex");
   return s as FSettings;
@@ -352,10 +367,10 @@ export async function fundFromSolana(usd: number, symbol: "USDT" | "USDC", quote
   if (!kp) throw new Error(from === "perps" ? "Create or import the perps Solana wallet first." : "There's no copy-trader Solana wallet.");
   if (from === "perps" && isTurboDesk()) {
     // Shared with Sniper: its reserved budget stays in the wallet.
-    const { sniperReserve } = await import("@/lib/ai-sniper");
-    const [b, reserve] = await Promise.all([futSolBalances(kp), sniperReserve(solId())]);
+    const { sharedReserve } = await import("@/lib/ai-sniper");
+    const [b, reserve] = await Promise.all([futSolBalances(kp), sharedReserve(T() % FX_DESK)]);
     const have = symbol === "USDT" ? b.usdt : b.usdc, room = Math.max(0, b.usdt + b.usdc - reserve);
-    if (usd > Math.min(have, room) + 0.01) throw new Error(`Only $${Math.min(have, room).toFixed(2)} ${symbol} can go to Turbo: $${reserve.toFixed(2)} of the wallet is Sniper's budget.`);
+    if (usd > Math.min(have, room) + 0.01) throw new Error(`Only $${Math.min(have, room).toFixed(2)} ${symbol} can go to Turbo: $${reserve.toFixed(2)} of the wallet is Sniper's and Copy's budget.`);
   }
   if (quoteOnly) return solToHyperliquid({ evm: null, sol: kp }, a.address, usd, symbol, true);
   return sendSolToHl(kp, a.address, { usd, symbol }, "manual", from === "perps" ? "Perps Solana wallet" : "Copy-trader Solana wallet");
@@ -618,7 +633,7 @@ async function newsScores(coins: string[], m?: Mkt): Promise<Map<string, { score
 const pnlOf = (p: FPos, price: number) => (p.side === "long" ? 1 : -1) * p.notional_usd * (price / p.entry - 1);
 
 async function equity(s: FSettings, m: Mkt): Promise<{ total: number; free: number }> {
-  if (isSnipeDesk()) return (await import("@/lib/ai-sniper")).snipeEquity(s);
+  if (isSpotDesk()) return (await import("@/lib/ai-sniper")).snipeEquity(s);
   if (s.mode === "live") {
     const a = await futAccount();
     if (!a) return { total: 0, free: 0 };
@@ -635,6 +650,7 @@ async function equity(s: FSettings, m: Mkt): Promise<{ total: number; free: numb
 
 async function closePos(s: FSettings, m: Mkt, p: FPos, reason: string, price?: number) {
   if (p.venue === "pumpfun") return (await import("@/lib/ai-sniper")).closeSnipe(s, p, reason, price);
+  if (p.venue === "copy") return (await import("@/lib/ai-copy")).sellCopy(s, p, 1, reason, price);
   const { data: claimed } = await fq("ai_futures_positions").update({ status: "closing" }).eq("id", p.id).eq("status", "open").select("id");
   if (!claimed?.length) return;
   try {
@@ -686,7 +702,7 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
     let stop = n(p.stop);
     // At +1R the stop moves to break-even (plus fees); past +1.5R it trails 0.8R behind the best price.
     // Turbo (high leverage) protects sooner: break-even at +0.6R, trailing 0.6R behind from +1R.
-    const tb = isTurboDesk();
+    const tb = isTurboDesk() || isMadDesk();
     if (gainR >= (tb ? 0.6 : 1)) stop = long ? Math.max(stop, p.entry * 1.001) : Math.min(stop, p.entry * 0.999);
     if (gainR >= (tb ? 1 : 1.5)) stop = long ? Math.max(stop, best - (tb ? 0.6 : 0.8) * risk) : Math.min(stop, best + (tb ? 0.6 : 0.8) * risk);
     const hit = (long ? price <= stop : price >= stop) ? "Stop-loss" : (long ? price >= p.target : price <= p.target) ? "Take profit" : null;
@@ -735,13 +751,22 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   // Stop: 3× the 5-minute ATR (0.6%–4% away), but never more than the auto-sell loss (e.g. -5% of the margin = 5% ÷
   // leverage of price). Liquidation is about 1 ÷ leverage away, so the stop always comes first.
   // Currencies move far less, so their stop is 0.15%–1% away instead.
-  const stopPct = fx ? Math.min(0.01, Math.max(0.0015, (ta?.atrPct ?? 0.0008) * 3), s.max_loss_pct / 100 / lev)
+  let stopPct = fx ? Math.min(0.01, Math.max(0.0015, (ta?.atrPct ?? 0.0008) * 3), s.max_loss_pct / 100 / lev)
     : Math.min(isTurboDesk() ? 0.015 : 0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev); // Turbo: never more than 1.5% away
+  // Madness: a very tight stop (1.5x the 5-minute ATR, 0.25%–0.6%), then the highest leverage that keeps
+  // liquidation at least 3x further away than the stop (and within the coin's own maximum on Hyperliquid).
+  if (isMadDesk() && !fx) {
+    stopPct = Math.min(0.006, Math.max(0.0025, (ta?.atrPct ?? 0.002) * 1.5));
+    const coinMax = (assetOn(m, venue, coin) ?? m.hl.get(coin))?.maxLev ?? 10;
+    lev = Math.max(1, Math.min(coinMax, s.max_lev, Math.floor(1 / (3 * stopPct + 0.005))));
+    stopPct = Math.min(stopPct, s.max_loss_pct / 100 / lev);
+  }
   // Judgment: what recent results say, then the AI's second opinion; together they set the bet size.
   const label = fxLabel(coin, price);
   const les = await lessons(s.mode, coin, newsDriven);
   if (les.stop) return `${label}: ${les.stop}`;
-  const style = isTurboDesk() ? "aggressive high-leverage momentum on the most-traded crypto perps; accepts more risk but still needs a real edge"
+  const style = isMadDesk() ? "maximum-leverage futures with a very tight stop: only take trades where fresh news and a clean chart setup clearly agree and price should move fast in that direction now; skip chop, late moves and anything unclear"
+    : isTurboDesk() ? "aggressive high-leverage momentum on the most-traded crypto perps; accepts more risk but still needs a real edge"
     : isFxDesk() ? "conservative forex: news and chart must agree; avoid trading into big scheduled releases" : "careful crypto futures: news and chart together, protect the account first";
   const v = await secondOpinion(`${coin}:${side}`, style, {
     market: label, side, price, leverage: lev, stopPct: +(stopPct * 100).toFixed(2), targetPct: +(stopPct * (newsDriven ? 250 : 220)).toFixed(2),
@@ -757,10 +782,11 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   if (notional < 11) return "not enough money for a minimum-size position";
   const margin = notional / lev;
   const stop = long ? price * (1 - stopPct) : price * (1 + stopPct);
-  const target = long ? price * (1 + stopPct * (newsDriven ? 2.5 : 2.2)) : price * (1 - stopPct * (newsDriven ? 2.5 : 2.2));
+  const rr = isMadDesk() ? 3 : newsDriven ? 2.5 : 2.2;
+  const target = long ? price * (1 + stopPct * rr) : price * (1 - stopPct * rr);
   const liq = long ? price * (1 - 1 / lev + 0.005) : price * (1 + 1 / lev - 0.005);
   // Always: the stop must sit far before liquidation (at least 8x nearer), or no trade.
-  if (Math.abs(price - liq) / price < stopPct * 8) return `${fxLabel(coin, price)}: liquidation too close to the stop at ${lev}x`;
+  if (Math.abs(price - liq) / price < stopPct * (isMadDesk() ? 3 : 8)) return `${fxLabel(coin, price)}: liquidation too close to the stop at ${lev}x`;
   let entry = price, size: number | null = null, sl_oid: number | null = null, tx: string | null = null;
   if (s.mode === "live") {
     const a = await futAccount(), asset = assetOn(m, venue, coin);
@@ -810,7 +836,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
  */
 async function turboGuard(s: FSettings, untilMs: number) {
   while (Date.now() < untilMs) {
-    await new Promise((r) => setTimeout(r, 4000));
+    await new Promise((r) => setTimeout(r, isMadDesk() ? 2000 : 4000));
     const { data } = await fq("ai_futures_positions").select("*").eq("status", "open");
     const open = (data || []) as FPos[];
     if (!open.length) return;
@@ -836,6 +862,7 @@ export async function runFutures(): Promise<string> {
   try {
     // Sniper: its own engine, money stays in its Solana wallet (nothing goes to Hyperliquid).
     if (isSnipeDesk()) return note(await (await import("@/lib/ai-sniper")).runSniper(s));
+    if (isCopyDesk()) return note(await (await import("@/lib/ai-copy")).runCopy(s));
     await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
     await refreshTransfers(3).catch(() => null);
     // Earn: nothing to trade. Money sent from Solana arrives on Hyperliquid above; you put it into HLP from the page.
@@ -845,6 +872,8 @@ export async function runFutures(): Promise<string> {
     const m = await market(s, false, !!heldFx?.length);
     const { hl } = m;
     // Turbo: the 15 most-traded Hyperliquid coins right now (plus any it holds), picked fresh every minute.
+    // Madness: the 8 most-traded coins that allow 20x or more (the high-leverage majors).
+    if (isMadDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0 && (a.maxLev ?? 0) >= 20).sort((a, b) => b.dayVol - a.dayVol).slice(0, 8).map((a) => a.name);
     if (isTurboDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0).sort((a, b) => b.dayVol - a.dayVol).slice(0, 15).map((a) => a.name);
     // Forex markets it trades (when Forex is switched on and the forex market is open).
     const fxCoins = s.venues.includes("forex") ? [...m.fx.keys()] : [];
@@ -884,6 +913,14 @@ export async function runFutures(): Promise<string> {
         }
         return;
       }
+      // Madness: news and chart must agree. A news trade needs the chart leaning the same way; a chart trade needs
+      // a strong setup and no news against it.
+      if (isMadDesk()) {
+        if (!ta) return;
+        if (Math.abs(ns.score) >= 0.5 && Math.sign(t) === Math.sign(ns.score) && Math.abs(t) >= 0.2) cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + Math.abs(t), why: `News: ${ns.why} · chart agrees: ${ta.notes.join(", ")}`, news: true, ta });
+        else if (Math.abs(t) >= 0.7 && !(ns.score && Math.sign(ns.score) !== Math.sign(t))) cands.push({ coin, side: t > 0 ? "long" : "short", score: Math.abs(t), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news agrees ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
+        return;
+      }
       // Strong news trades first, as long as the chart isn't clearly against it.
       const turbo = isTurboDesk(); // quicker, riskier entries
       if (Math.abs(ns.score) >= (turbo ? 0.45 : 0.6) && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
@@ -903,7 +940,7 @@ export async function runFutures(): Promise<string> {
     const watching = isFxDesk() ? (fxOpen() ? `Watching ${fxCoins.length} forex pairs` : "Forex is closed for the weekend (opens Sunday 21:00 UTC)") : `Watching ${s.coins.length} coins`;
     return note(notes.length ? notes.join(" · ") : `${watching}; no setup strong enough. Account $${eq.total.toFixed(2)}.`);
   } finally {
-    if (isTurboDesk()) await turboGuard(s, t0 + 45_000).catch(() => {});
+    if (isTurboDesk() || isMadDesk()) await turboGuard(s, t0 + 45_000).catch(() => {});
     await sb().from("ai_futures_settings").update({ lease_until: null, last_run: new Date().toISOString() }).eq("id", T());
   }
   async function note(t: string) { await sb().from("ai_futures_settings").update({ last_note: t.slice(0, 400) }).eq("id", T()); return t; }
@@ -953,8 +990,8 @@ export async function futStatus() {
     settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
     earn: isEarnDesk() ? await earnState() : null,
     // Turbo: the part of the shared Solana wallet that is Sniper's budget (can't be sent to Hyperliquid).
-    sharedReserve: isTurboDesk() ? await (await import("@/lib/ai-sniper")).sniperReserve(solId()).catch(() => 0) : null,
-    snipe: isSnipeDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null), reserve: await sn.sniperReserve(T()).catch(() => 0) }; })() : null,
+    sharedReserve: isTurboDesk() ? await (await import("@/lib/ai-sniper")).sharedReserve(T() % FX_DESK).catch(() => 0) : null,
+    snipe: isSpotDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null), reserve: await sn.sniperReserve(T()).catch(() => 0) }; })() : null,
     fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],
@@ -988,8 +1025,8 @@ export async function earnMove(isDeposit: boolean, usd: number) {
 
 // ---------------------------------------------------------------- Move money between your traders
 
-export type DeskKey = "futures" | "forex" | "turbo" | "sniper";
-const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex", turbo: "Turbo", sniper: "Sniper" };
+export type DeskKey = "futures" | "forex" | "turbo" | "sniper" | "copy" | "madness";
+const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex", turbo: "Turbo", sniper: "Sniper", copy: "Copy", madness: "Madness" };
 
 /**
  * One tap: move free money from this trader's Hyperliquid account to another of your traders.
@@ -998,24 +1035,39 @@ const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex"
  */
 export async function moveToDesk(dest: DeskKey, usd: number): Promise<string> {
   const owner = T() % FX_DESK;
-  const ids: Record<DeskKey, number> = { futures: owner, forex: FX_DESK + owner, turbo: TURBO_DESK + owner, sniper: SNIPE_DESK + owner };
+  const ids: Record<DeskKey, number> = { futures: owner, forex: FX_DESK + owner, turbo: TURBO_DESK + owner, sniper: SNIPE_DESK + owner, copy: COPY_DESK + owner, madness: MAD_DESK + owner };
   const destId = ids[dest];
   if (!destId || destId === T()) throw new Error("That's this trader.");
-  if (isSnipeDesk() || isEarnDesk()) throw new Error("Move money from Futures, Forex or Turbo.");
+  if (isSpotDesk()) {
+    // Sniper ⇄ Copy: same Solana wallet, so only the budgets change (instant, free).
+    if (dest !== "sniper" && dest !== "copy") throw new Error("From here, money can go to Sniper or Copy (same Solana wallet). To send it to Turbo, use Send on the Turbo page.");
+    if (!(usd > 0)) throw new Error("Type an amount.");
+    const { sniperReserve } = await import("@/lib/ai-sniper");
+    const free = await sniperReserve(T());
+    if (usd > free + 0.01) throw new Error(`Only $${free.toFixed(2)} of ${deskName()}'s budget is free (the rest is in open trades).`);
+    const [{ data: a }, { data: b }] = await Promise.all([sb().from("ai_futures_settings").select("snipe_budget").eq("id", T()).single(), sb().from("ai_futures_settings").select("snipe_budget").eq("id", destId).maybeSingle()]);
+    if (!b) throw new Error(`Open the ${DESK_NAMES[dest]} page once first.`);
+    await sb().from("ai_futures_settings").update({ snipe_budget: Math.max(0, n(a?.snipe_budget) - usd) }).eq("id", T());
+    await sb().from("ai_futures_settings").update({ snipe_budget: n(b.snipe_budget) + usd }).eq("id", destId);
+    await flog("transfer", `🔁 Moved $${usd.toFixed(2)} of budget to ${DESK_NAMES[dest]} (same Solana wallet).`);
+    await withTraderLazy(destId, () => flog("transfer", `🔁 Received $${usd.toFixed(2)} of budget from ${deskName()} (same Solana wallet).`));
+    return `Moved $${usd.toFixed(2)} to ${DESK_NAMES[dest]}. Instant: it's the same Solana wallet.`;
+  }
+  if (isEarnDesk()) throw new Error("Move money from Futures, Forex or Turbo.");
   if (!(usd >= 1)) throw new Error("Type an amount of $1 or more.");
   const { withTrader } = await import("@/lib/ai-trader-ctx");
   const me = deskName();
-  if (dest === "sniper") {
+  if (dest === "sniper" || dest === "copy") {
     const addr = await withTrader(destId, async () => { await getF(); return (await futSolAccount())?.publicKey.toBase58() ?? null; });
-    if (!addr) throw new Error("Create or import the Sniper's Solana wallet first (Sniper page).");
+    if (!addr) throw new Error(`Create or import the shared Solana wallet first (${DESK_NAMES[dest]} page).`);
     const r: any = await withdrawFut({ usd, to: "solana", address: addr, symbol: "USDT" });
     const got = Math.max(0, Number(r?.receive ?? usd) || usd);
     await withTrader(destId, async () => {
       const { data } = await sb().from("ai_futures_settings").select("snipe_budget").eq("id", destId).single();
       await sb().from("ai_futures_settings").update({ snipe_budget: n(data?.snipe_budget) + got }).eq("id", destId);
-      await flog("transfer", `🔁 ~$${got.toFixed(2)} USDT on its way from ${me} (Hyperliquid) to the shared Solana wallet; Sniper's budget +$${got.toFixed(2)}.`);
+      await flog("transfer", `🔁 ~$${got.toFixed(2)} USDT on its way from ${me} (Hyperliquid) to the shared Solana wallet; ${DESK_NAMES[dest]}'s budget +$${got.toFixed(2)}.`);
     });
-    return `Moving $${usd.toFixed(2)} to Sniper: ~$${got.toFixed(2)} USDT lands in the shared Solana wallet in about a minute and is added to Sniper's budget.`;
+    return `Moving $${usd.toFixed(2)} to ${DESK_NAMES[dest]}: ~$${got.toFixed(2)} USDT lands in the shared Solana wallet in about a minute and is added to ${DESK_NAMES[dest]}'s budget.`;
   }
   const addr = await withTrader(destId, async () => { await getF(); return (await futAccount())?.address ?? null; });
   if (!addr) throw new Error(`${DESK_NAMES[dest]} has no wallet yet: open its page and tap Create wallet first.`);
@@ -1023,3 +1075,5 @@ export async function moveToDesk(dest: DeskKey, usd: number): Promise<string> {
   await withTrader(destId, () => flog("transfer", `🔁 Received $${usd.toFixed(2)} from ${me} (Hyperliquid, instant).`));
   return `Moved $${usd.toFixed(2)} to ${DESK_NAMES[dest]}'s Hyperliquid account. It's there now.`;
 }
+
+async function withTraderLazy<R>(id: number, fn: () => Promise<R>) { const { withTrader } = await import("@/lib/ai-trader-ctx"); return withTrader(id, fn); }
