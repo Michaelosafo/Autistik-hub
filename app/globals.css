@@ -6718,12 +6718,18 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .lp .lp-launch small { font-weight: 500; }
 .wd .w { transition-duration: .4s; transition-delay: calc(var(--wd, 0ms) + var(--i, 0) * 12ms); }
 
-/* Homepage header on phones: the icons stay on one row and "Open App" gets its own full-width row, never cut off. */
+/* Homepage header on phones: one row, "Open App" stays at the top right; the other items shrink to icons to make room. */
 @media (max-width: 600px) {
-  .lp-bar { flex-wrap: wrap; row-gap: 8px; }
-  .lp-bar .lp-openapp { order: 20; flex: 1 1 100%; justify-content: center; height: 42px; }
+  .lp-bar { flex-wrap: nowrap; gap: 8px; padding-left: 10px; padding-right: 10px; }
+  .lp-bar .lp-id { min-width: 0; flex: 0 1 auto; }
+  .lp-bar .me-pic-l { display: none; }
+  .lp-bar .lp-signin.lp-admin span, .lp-bar .lp-signin.lp-home span { display: none; }
+  .lp-bar .lp-signin { padding: 9px; }
+  .lp-bar .lp-openapp { margin-left: auto; flex: none; height: 40px; padding: 0 12px; gap: 6px; font-size: .9em; }
   .lp-bar .lp-openapp > i { display: none; }
-  .lp-bar .lp-signin.lp-admin span { display: none; }
-  .lp-bar .lp-signin.lp-admin { padding: 10px; }
+}
+@media (max-width: 360px) {
+  .lp-bar { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  .lp-bar .lp-openapp { padding: 0 10px; font-size: .85em; }
 }
 .sq-on [data-sq="up"].sq-in > * { animation-duration: .5s; animation-delay: calc(var(--sd, 0ms) * .6 + var(--k, 0) * 70ms); }
