@@ -31,6 +31,12 @@ type D = {
   news: { key: string; at: string; source: string; title: string; url: string; coin: string; direction: number; strength: number }[];
   stats: { trades: number; wins: number; winRate: number | null; pnl: number };
   perf?: Perf | null;
+  transfers?: Xfer[];
+};
+type Xfer = { id: number; at: string; dir: "in" | "out"; route: string; amount_usd: number | null; symbol: string | null; to_addr: string | null; request_id: string | null; status: string; receive_usd: number | null; fee_usd: number | null; detail: string | null };
+const XS: Record<string, [string, string]> = {
+  sending: ["⏳ Sending…", "muted"], pending: ["🚚 On the way", "muted"], waiting: ["🚚 On the way", "muted"], depositing: ["🚚 On the way", "muted"], submitted: ["🚚 On the way", "muted"], delayed: ["🐢 Delayed", "muted"],
+  arrived: ["✅ Arrived", "up"], refunded: ["↩️ Refunded", "down"], refund: ["↩️ Refunded", "down"], failed: ["❌ Failed", "down"], failure: ["❌ Failed", "down"],
 };
 const VN: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster" };
 const usd = (x: number | null | undefined, d = 2) => (x == null || !isFinite(x) ? "–" : `${x < 0 ? "-" : ""}$${Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`);
@@ -116,22 +122,112 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
   );
 }
 
-/** Send USDT / USDC from the AI trader's Solana wallet straight into the futures account on Hyperliquid. */
-function FundFromSolana({ busy, act }: { busy: string; act: (n: string, a: string, b: unknown, d?: string) => Promise<void> }) {
+/** Send USDT / USDC from a Solana wallet (the perps one, or the copy-trader's) straight into the futures account on Hyperliquid. */
+function FundFromSolana({ busy, act, hasPerps }: { busy: string; act: (n: string, a: string, b: unknown, d?: string) => Promise<void>; hasPerps: boolean }) {
   const [amt, setAmt] = useState("100");
   const [sym, setSym] = useState<"USDT" | "USDC">("USDT");
+  const [from, setFrom] = useState<"perps" | "trader">(hasPerps ? "perps" : "trader");
   const [q, setQ] = useState("");
+  const fromName = from === "perps" ? "perps Solana wallet" : "copy-trader's Solana wallet";
   return (
     <div className="stack fut-fund" style={{ gap: 8 }}>
-      <small><b>Fund from Solana</b> <span className="muted">USDT / USDC in the AI trader&apos;s Solana wallet goes straight to Hyperliquid, ready to trade (Relay; about a minute, no Arbitrum or ETH needed).</span></small>
+      <small><b>Send now from Solana</b> <span className="muted">Moves USDT / USDC into the Hyperliquid account, ready to trade (about a minute). With auto-fund on you don&apos;t need this for the perps Solana wallet.</span></small>
       <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <span className="ait-seg" role="group" aria-label="Send from">
+          <button type="button" className={from === "perps" ? "on" : ""} disabled={!hasPerps} onClick={() => { setFrom("perps"); setQ(""); }}>Perps wallet</button>
+          <button type="button" className={from === "trader" ? "on" : ""} onClick={() => { setFrom("trader"); setQ(""); }}>Copy-trader wallet</button>
+        </span>
         <span className="ait-seg" role="group" aria-label="Stablecoin">{(["USDT", "USDC"] as const).map((x) => <button key={x} type="button" className={sym === x ? "on" : ""} onClick={() => { setSym(x); setQ(""); }}>{x}</button>)}</span>
         <span className="ait-in" style={{ maxWidth: 140 }}><em>$</em><input inputMode="decimal" value={amt} onChange={(e) => { setAmt(e.target.value); setQ(""); }} aria-label="Dollars to send" /></span>
-        <button type="button" className="btn small" disabled={!!busy || !(Number(amt) >= 5)} onClick={async () => { try { const r = await call("fund-sol", { usd: Number(amt), symbol: sym, quote: true }); setQ(r.note); } catch (e) { setQ((e as Error).message); } }}>Check fee</button>
-        <button type="button" className="btn small primary" disabled={!!busy || !(Number(amt) >= 5)} onClick={() => { if (confirm(`Send $${amt} ${sym} from the Solana trading wallet to the AI Futures account on Hyperliquid?`)) act("fund", "fund-sol", { usd: Number(amt), symbol: sym }); }}>{busy === "fund" ? "Sending…" : `Send $${Number(amt) || 0} ${sym}`}</button>
+        <button type="button" className="btn small" disabled={!!busy || !(Number(amt) >= 5)} onClick={async () => { try { const r = await call("fund-sol", { usd: Number(amt), symbol: sym, from, quote: true }); setQ(r.note); } catch (e) { setQ((e as Error).message); } }}>Check fee</button>
+        <button type="button" className="btn small primary" disabled={!!busy || !(Number(amt) >= 5)} onClick={() => { if (confirm(`Send $${amt} ${sym} from the ${fromName} to the AI Futures account on Hyperliquid? Tap once: it shows in Money in & out.`)) act("fund", "fund-sol", { usd: Number(amt), symbol: sym, from }); }}>{busy === "fund" ? "Sending…" : `Send $${Number(amt) || 0} ${sym}`}</button>
       </div>
       {q && <small className="muted" role="status">{q}</small>}
     </div>
+  );
+}
+
+/** Where the money is, step by step; what the AI does with it; every transfer in and out; close all; withdraw. */
+function MoneyFlow({ d, busy, act, set }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; set: (b: Partial<S>, done?: string) => Promise<void> }) {
+  const s = d.settings, live = s.mode === "live", w = d.wallet;
+  const solUsd = w?.sol ? (w.sol.usdt ?? 0) + (w.sol.usdc ?? 0) : null;
+  const hl = w?.hlValue ?? null, free = w?.hlFree ?? null;
+  const moving = (d.transfers || []).filter((t) => ["sending", "pending", "waiting", "depositing", "submitted", "delayed"].includes(t.status));
+  const [to, setTo] = useState<"solana" | "arbitrum">("solana");
+  const [addr, setAddr] = useState("");
+  const [amt, setAmt] = useState("");
+  const [sym, setSym] = useState<"USDT" | "USDC">("USDT");
+  const [q, setQ] = useState("");
+  const body = () => ({ usd: Number(amt), to, address: addr.trim(), symbol: sym });
+  return (
+    <section className="card stack fut-money">
+      <b>💰 Your money</b>
+      <div className="fut-flow">
+        <div><small>1 · Perps Solana wallet</small><b>{solUsd == null ? "–" : usd(solUsd)}</b><em>{w?.sol ? (s.auto_fund !== false ? "auto-sends to Hyperliquid" : "auto-fund off") : "not set up"}</em></div>
+        <span aria-hidden="true">→</span>
+        <div><small>2 · Hyperliquid account</small><b>{usd(hl)}</b><em>{free == null ? "" : `${usd(free)} free to withdraw`}</em></div>
+        <span aria-hidden="true">→</span>
+        <div><small>3 · The AI trades it</small><b className={live && s.enabled ? "up" : "down"}>{live ? (s.enabled ? "Live ✓" : "Live, stopped") : "Practice"}</b><em>{live ? "real money" : "pretend money, not yours"}</em></div>
+      </div>
+      {moving.length > 0 && <small className="muted" role="status">🚚 {moving.length} transfer{moving.length === 1 ? "" : "s"} on the way. It updates by itself.</small>}
+      {!live && (hl ?? 0) >= 5 && (
+        <div className="fut-warn stack" style={{ gap: 6 }}>
+          <b>⚠ Your {usd(hl)} is on Hyperliquid, but the AI is in Practice mode.</b>
+          <small>In Practice it trades pretend money to test itself, so your real money just sits there. Switch to Live to let it trade your {usd(hl)}: every trade has a stop-loss at -{s.max_loss_pct}% and leverage up to {s.max_lev}x. You can lose money.</small>
+          <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { if (confirm(`Trade your real ${usd(hl)} on Hyperliquid? The AI opens longs and shorts at up to ${s.max_lev}x, each with a stop-loss at -${s.max_loss_pct}%. You can lose money.`)) set({ mode: "live", enabled: true }, "Live: the AI now trades your real money on Hyperliquid. Every trade shows below with its reason."); }}>Trade my real {usd(hl)} (go Live)</button>
+        </div>
+      )}
+      {live && !s.enabled && (hl ?? 0) >= 5 && <small className="down">The AI is stopped: tap ▶ START above to let it trade.</small>}
+
+      <details open={(d.transfers || []).length > 0}>
+        <summary><b>Money in &amp; out</b> <span className="muted">({(d.transfers || []).length})</span></summary>
+        {!(d.transfers || []).length ? <small className="muted">No transfers yet.</small> : (
+          <ul className="fut-xfers">
+            {(d.transfers || []).map((t) => {
+              const [label, cls] = XS[t.status] || [t.status, "muted"];
+              return (
+                <li key={t.id}>
+                  <span className={t.dir === "in" ? "up" : "down"}>{t.dir === "in" ? "⬇ In" : "⬆ Out"}</span>
+                  <span className="grow"><b>{t.amount_usd != null ? usd(Number(t.amount_usd)) : "–"} {t.symbol}</b> <small className="muted">· {t.route} · {ago(t.at)}{t.receive_usd != null ? ` · ≈${usd(Number(t.receive_usd))} arrives` : ""}</small>
+                    {t.detail && <><br /><small className="muted">{t.detail}</small></>}</span>
+                  <span className={cls}>{t.request_id ? <a href={`https://relay.link/transaction/${t.request_id}`} target="_blank" rel="noreferrer">{label}</a> : label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </details>
+
+      <details>
+        <summary><b>Close trades &amp; withdraw</b></summary>
+        <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+          {d.open.length > 0 ? (
+            <button type="button" className="btn" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { if (confirm(`Close all ${d.open.length} open trade${d.open.length === 1 ? "" : "s"} now at the market price?`)) act("ca", "close-all", {}); }}>{busy === "ca" ? "Closing…" : `Close all ${d.open.length} open trade${d.open.length === 1 ? "" : "s"}`}</button>
+          ) : <small className="muted">No open trades. To stop new ones, tap ■ STOP above.</small>}
+          {!w ? <small className="muted">No AI Futures wallet yet.</small> : (
+            <>
+              <small>Withdraw from Hyperliquid <span className="muted">(only the free part: {usd(free)}; money in open trades must be closed first)</span></small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span className="ait-seg" role="group" aria-label="Withdraw to">
+                  <button type="button" className={to === "solana" ? "on" : ""} onClick={() => { setTo("solana"); setQ(""); }}>To Solana</button>
+                  <button type="button" className={to === "arbitrum" ? "on" : ""} onClick={() => { setTo("arbitrum"); setQ(""); }}>To Arbitrum / exchange</button>
+                </span>
+                {to === "solana" && <span className="ait-seg" role="group" aria-label="Receive as">{(["USDT", "USDC"] as const).map((x) => <button key={x} type="button" className={sym === x ? "on" : ""} onClick={() => { setSym(x); setQ(""); }}>{x}</button>)}</span>}
+                <span className="ait-in" style={{ maxWidth: 140 }}><em>$</em><input inputMode="decimal" value={amt} placeholder="0" onChange={(e) => { setAmt(e.target.value); setQ(""); }} aria-label="Dollars to withdraw" /></span>
+                {free != null && free > 0 && <button type="button" className="btn small ghost" onClick={() => { setAmt(String(Math.floor(free * 100) / 100)); setQ(""); }}>Max</button>}
+              </div>
+              <input className="ait-text" value={addr} onChange={(e) => { setAddr(e.target.value); setQ(""); }} placeholder={to === "solana" ? "Your Solana address (Phantom / exchange deposit address for Solana)" : "Your Arbitrum address (0x…) or an exchange's USDC-on-Arbitrum deposit address"} aria-label="Send to address" />
+              {to === "solana" && w.sol && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => setAddr(w.sol!.address)}>Use the perps Solana wallet</button>}
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button type="button" className="btn small" disabled={!!busy || !(Number(amt) > 0) || !addr.trim()} onClick={async () => { try { const r = await call("withdraw", { ...body(), quote: true }); setQ(r.note); } catch (e) { setQ((e as Error).message); } }}>Check fee</button>
+                <button type="button" className="btn small primary" disabled={!!busy || !(Number(amt) > 0) || !addr.trim()} onClick={() => { if (confirm(`Withdraw $${amt} from Hyperliquid to ${addr.trim()}${to === "solana" ? ` as ${sym} on Solana` : " as USDC on Arbitrum"}? Double-check the address: crypto sent to a wrong address can't be recovered.`)) act("wd", "withdraw", body()); }}>{busy === "wd" ? "Withdrawing…" : `Withdraw $${Number(amt) || 0}`}</button>
+              </div>
+              {q && <small className="muted" role="status">{q}</small>}
+            </>
+          )}
+        </div>
+      </details>
+    </section>
   );
 }
 
@@ -200,6 +296,8 @@ export default function AIFutures() {
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
         {msg && <small className="aic-note" role="status">{msg}</small>}
       </section>
+
+      <MoneyFlow d={d} busy={busy} act={act} set={set} />
 
       {(() => {
         const open = d.open.reduce((a, p) => a + (p.upnl || 0), 0), total = d.stats.pnl + open;
@@ -282,7 +380,7 @@ export default function AIFutures() {
           <>
             <small>Address: <button type="button" className="aic-addr" onClick={() => { navigator.clipboard?.writeText(d.wallet!.address).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>{copied ? "Copied ✓" : d.wallet.address}</button></small>
             <small>On Hyperliquid: <b>{usd(d.wallet.hlValue)}</b> ({usd(d.wallet.hlFree)} free) · Waiting on Arbitrum: <b>{d.wallet.arbUsdc == null ? "–" : `${d.wallet.arbUsdc.toFixed(2)} USDC`}</b>, {d.wallet.arbEth == null ? "–" : `${d.wallet.arbEth.toFixed(5)} ETH`}</small>
-            <FundFromSolana busy={busy} act={act} />
+            <FundFromSolana busy={busy} act={act} hasPerps={!!d.wallet.sol} />
             <details>
               <summary><b>Other ways to fund it</b></summary>
               <ol className="muted" style={{ margin: "6px 0", paddingLeft: 18, fontSize: ".9em" }}>

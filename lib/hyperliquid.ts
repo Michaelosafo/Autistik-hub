@@ -185,3 +185,55 @@ export async function hlStopLoss(account: PrivateKeyAccount, a: HlAsset, closeIs
 export async function hlCancel(account: PrivateKeyAccount, asset: number, oid: number) {
   return exchange(account, { type: "cancel", cancels: [{ a: asset, o: oid }] }).catch(() => null);
 }
+
+// ---------------------------------------------------------------- Moving money out (user-signed actions)
+// Money actions are signed differently from trades: EIP-712 in the "HyperliquidSignTransaction" domain, with the
+// chain id the signature is made "on" (Arbitrum, 0xa4b1), and posted as-is to /exchange.
+
+const SIG_CHAIN = 42161;
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
+async function postUserAction(account: PrivateKeyAccount, primaryType: string, fields: { name: string; type: string }[], action: Record<string, any>, nonce: number) {
+  const message: Record<string, unknown> = {};
+  for (const f of fields) message[f.name] = f.type.startsWith("uint") ? BigInt(action[f.name]) : action[f.name];
+  const sig = await account.signTypedData({
+    domain: { name: "HyperliquidSignTransaction", version: "1", chainId: SIG_CHAIN, verifyingContract: ZERO_ADDR },
+    types: { [primaryType]: fields } as any,
+    primaryType,
+    message,
+  } as any);
+  const signature = { r: sig.slice(0, 66), s: `0x${sig.slice(66, 130)}`, v: parseInt(sig.slice(130, 132), 16) };
+  const r = await fetch(EXCHANGE, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, nonce, signature }), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  const j = await r.json().catch(() => null);
+  if (!r.ok || j?.status !== "ok") throw new Error(`Hyperliquid: ${typeof j?.response === "string" ? j.response : JSON.stringify(j).slice(0, 200)}`);
+  return j;
+}
+const usdStr = (usd: number) => String(Math.floor(usd * 100) / 100);
+
+/** Withdraw USDC from the Hyperliquid account to any Arbitrum address (Hyperliquid's $1 fee; arrives in ~5 minutes). */
+export async function hlWithdraw(account: PrivateKeyAccount, destination: string, usd: number) {
+  const time = Date.now();
+  const action = { type: "withdraw3", hyperliquidChain: "Mainnet", signatureChainId: "0xa4b1", destination, amount: usdStr(usd), time };
+  return postUserAction(account, "HyperliquidTransaction:Withdraw", [
+    { name: "hyperliquidChain", type: "string" }, { name: "destination", type: "string" }, { name: "amount", type: "string" }, { name: "time", type: "uint64" },
+  ], action, time);
+}
+
+/** Send trading USDC to another Hyperliquid account (instant, free). */
+export async function hlUsdSend(account: PrivateKeyAccount, destination: string, usd: number) {
+  const time = Date.now();
+  const action = { type: "usdSend", hyperliquidChain: "Mainnet", signatureChainId: "0xa4b1", destination, amount: usdStr(usd), time };
+  return postUserAction(account, "HyperliquidTransaction:UsdSend", [
+    { name: "hyperliquidChain", type: "string" }, { name: "destination", type: "string" }, { name: "amount", type: "string" }, { name: "time", type: "uint64" },
+  ], action, time);
+}
+
+/** A Relay step that is a Hyperliquid transfer (sendAsset to Relay's depository): signed and posted like Relay's own SDK. */
+export async function hlRelayStep(account: PrivateKeyAccount, d: any) {
+  const types: Record<string, { name: string; type: string }[]> = { ...(d?.eip712Types || {}) };
+  delete types.EIP712Domain;
+  const primaryType = String(d?.eip712PrimaryType || "");
+  const fields = types[primaryType];
+  if (!d?.action?.type || !fields) throw new Error("Relay sent a Hyperliquid step this can't read.");
+  const action = { ...d.action.parameters, type: d.action.type, signatureChainId: "0xa4b1" };
+  return postUserAction(account, primaryType, fields, action, Number(action.nonce ?? action.time));
+}

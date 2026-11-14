@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { LIVE_VENUES, VENUES, closeNow, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -66,11 +66,12 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (b.mode === "paper" || b.mode === "live") {
             if (b.mode === "live") {
               const { data: open } = await sb.from("ai_futures_positions").select("id").eq("fut_id", id).eq("mode", "paper").in("status", ["open", "closing"]).limit(1);
-              if (open?.length) return json({ error: "Close the practice positions first." }, 400);
               const w = await futWallet();
               if (!w) return json({ error: "Create the AI Futures wallet first." }, 400);
               if ((w.hlValue ?? 0) < 10) return json({ error: `The wallet has $${(w.hlValue ?? 0).toFixed(2)} on Hyperliquid. Fund it with at least $10 (see How to fund) before going live.` }, 400);
               if (!(up.venues as string[] | undefined ?? s.venues).some((v) => LIVE_VENUES.includes(v))) return json({ error: "Switch Hyperliquid on: live trading runs on Hyperliquid." }, 400);
+              // Practice trades are pretend: close them so the AI starts fresh with the real money.
+              if (open?.length) await closeAllNow("paper");
             } else {
               const { data: open } = await sb.from("ai_futures_positions").select("id").eq("fut_id", id).eq("mode", "live").in("status", ["open", "closing"]).limit(1);
               if (open?.length) return json({ error: "Close the live positions first (or let them finish)." }, 400);
@@ -93,11 +94,20 @@ export async function POST(req: Request, { params }: { params: { action: string 
           // USDT / USDC from the AI trader's Solana wallet straight into this futures account on Hyperliquid (Relay).
           const amt = Number(b.usd), sym = b.symbol === "USDC" ? "USDC" : "USDT";
           if (!isFinite(amt) || amt < 5 || amt > 100_000) return json({ error: "Send between $5 and $100,000." }, 400);
-          const r = await fundFromSolana(amt, sym, b.quote === true);
+          const r = await fundFromSolana(amt, sym, b.quote === true, b.from === "trader" ? "trader" : "perps");
           return json({ ok: true, ...r, note: b.quote === true ? `You'd get about $${(r.receive ?? amt).toFixed(2)} on Hyperliquid (fee about $${r.feeUsd.toFixed(2)}${r.seconds ? `, ~${r.seconds}s` : ""}).` : `Sent. About $${(r.receive ?? amt).toFixed(2)} arrives on Hyperliquid in about a minute.` });
         }
         case "deposit": { const tx = await depositToHl(); return json({ ok: true, note: `Sent to Hyperliquid (tx ${tx.slice(0, 10)}…). It shows there in about a minute.` }); }
         case "close": { await closeNow(Number(b.id)); return json({ ok: true, note: "Closed." }); }
+        case "close-all": { const k = await closeAllNow(); return json({ ok: true, note: k ? `Closed ${k} trade${k === 1 ? "" : "s"}. The money is free to withdraw now.` : "No open trades." }); }
+        case "withdraw": {
+          const to = b.to === "arbitrum" ? "arbitrum" : b.to === "hyperliquid" ? "hyperliquid" : "solana";
+          const amt = Number(b.usd);
+          if (!isFinite(amt) || amt <= 0 || amt > 1_000_000) return json({ error: "Enter an amount." }, 400);
+          const r = await withdrawFut({ usd: amt, to, address: String(b.address || ""), symbol: b.symbol === "USDC" ? "USDC" : "USDT", quoteOnly: b.quote === true });
+          const got = (r.receive ?? amt).toFixed(2);
+          return json({ ok: true, ...r, note: b.quote === true ? `You'd receive about $${got} (fee about $${(r.feeUsd ?? 0).toFixed(2)}).` : to === "arbitrum" ? `Withdrawal sent: about $${got} USDC arrives on Arbitrum in ~5 minutes.` : to === "hyperliquid" ? `Sent $${got} to that Hyperliquid account.` : `Withdrawal sent: about $${got} arrives on Solana in about a minute. Track it in Money in & out.` });
+        }
         case "run": return json({ ok: true, note: await runFutures() });
         case "reset": {
           const s = await getF();
