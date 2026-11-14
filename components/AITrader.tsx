@@ -111,7 +111,7 @@ const FIELDS: { k: keyof S; label: string; unit: string; step: string; hint: str
   { k: "max_positions", label: "Coins at once", unit: "", step: "1", hint: "Most coins it holds at the same time" },
   { k: "stop_loss", label: "Stop-loss", unit: "%", step: "1", hint: "Sells if a coin falls this much below the buy price" },
   { k: "take_profit", label: "Take profit", unit: "%", step: "5", hint: "Sells when a coin is up this much" },
-  { k: "trail", label: "Trailing stop", unit: "%", step: "1", hint: "Once up 10%+ (small coins 25%+), sells if it drops this much from its high. It tightens as profit grows and always keeps some: +3% after a 10% run, +15% after 30%, +35% after 60%, +70% after 100% (0 = off)" },
+  { k: "trail", label: "Trailing stop", unit: "%", step: "1", hint: "Once a coin is up 5%+, it never sells at a loss: sells if it drops this much from its high, and always keeps at least +2% after a 5% run, +5% after 10%, +15% after 30%, +35% after 60%, +70% after 100% (0 = off)" },
   { k: "max_hold_hours", label: "Max hold", unit: "hours", step: "1", hint: "Sells anything held longer than this" },
   { k: "min_liquidity", label: "Min liquidity", unit: "$", step: "1000", hint: "Skips coins with a smaller pool" },
   { k: "max_tax", label: "Max tax", unit: "%", step: "1", hint: "Skips coins with a higher buy or sell tax" },
