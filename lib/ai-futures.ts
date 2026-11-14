@@ -68,8 +68,9 @@ const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news"
 export async function flog(kind: string, text: string) { await fq("ai_futures_log").insert({ kind, text: text.slice(0, 600) }); }
 
 export async function getF(): Promise<FSettings> {
-  await sb().from("ai_futures_settings").upsert({ id: T() }, { onConflict: "id", ignoreDuplicates: true });
+  const made = await sb().from("ai_futures_settings").upsert(isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() }, { onConflict: "id", ignoreDuplicates: true });
   const { data } = await sb().from("ai_futures_settings").select("*").eq("id", T()).single();
+  if (!data) throw new Error(`Couldn't set up this ${isFxDesk() ? "Forex" : "Futures"} trader${made.error ? `: ${made.error.message}` : ""}.`);
   const s = data as any;
   for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
