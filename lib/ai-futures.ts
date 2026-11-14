@@ -55,6 +55,15 @@ export const isFxDesk = () => T() >= FX_DESK && T() < EARN_DESK;
 export const isEarnDesk = () => T() >= EARN_DESK && T() < TURBO_DESK;
 export const isTurboDesk = () => T() >= TURBO_DESK && T() < SNIPE_DESK;
 export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < SNIPE_DESK + FX_DESK;
+/**
+ * Turbo and Sniper share ONE Solana wallet (stored under the Sniper desk). Nothing is swept from it automatically:
+ * Turbo gets only what you send to its Hyperliquid account, and Sniper only spends its own budget (lib/ai-sniper.ts).
+ */
+export const solId = () => (isTurboDesk() ? SNIPE_DESK + (T() % FX_DESK) : T());
+async function ensureSolDesk() {
+  if (solId() === T()) return;
+  await sb().from("ai_futures_settings").upsert({ id: solId(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }, { onConflict: "id", ignoreDuplicates: true });
+}
 const deskName = () => (isSnipeDesk() ? "Sniper" : isTurboDesk() ? "Turbo" : isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"); // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
@@ -93,6 +102,7 @@ export async function getF(): Promise<FSettings> {
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   s.no_liq = s.no_liq !== false;
   s.auto_fund = s.auto_fund !== false;
+  if (isTurboDesk() || isSnipeDesk()) s.auto_fund = false; // shared wallet: only what you send moves
   if (isEarnDesk()) { s.venues = []; s.coins = []; s.enabled = false; }
   else if (isSnipeDesk()) { s.venues = []; s.coins = []; }
   else if (isTurboDesk()) s.venues = ["hyperliquid"];
@@ -152,21 +162,21 @@ export async function revealFutKey(): Promise<string> {
 const solCache = new Map<number, { key: string; kp: Keypair }>();
 /** AI Futures' own Solana wallet: send USDT / USDC here and it's moved into the Hyperliquid account by itself. */
 export async function futSolAccount(): Promise<Keypair | null> {
-  const { data } = await sb().rpc("ai_futures_sol_key_get", { p_id: T() });
+  const { data } = await sb().rpc("ai_futures_sol_key_get", { p_id: solId() });
   if (typeof data !== "string" || !data.startsWith("[")) return null;
-  const c = solCache.get(T());
+  const c = solCache.get(solId());
   if (c?.key === data) return c.kp;
   const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(data)));
-  solCache.set(T(), { key: data, kp });
+  solCache.set(solId(), { key: data, kp });
   return kp;
 }
 export async function createFutSolWallet(): Promise<string> {
-  if (await futSolAccount()) throw new Error("AI Futures already has a Solana wallet.");
-  await getF();
+  if (await futSolAccount()) throw new Error("There's already a Solana wallet here.");
+  await getF(); await ensureSolDesk();
   const kp = Keypair.generate();
-  const { error } = await sb().rpc("ai_futures_sol_key_set", { p_id: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: false });
+  const { error } = await sb().rpc("ai_futures_sol_key_set", { p_id: solId(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: false });
   if (error) throw new Error(error.message);
-  solCache.delete(T());
+  solCache.delete(solId());
   await flog("settings", `AI Futures Solana wallet created: ${kp.publicKey.toBase58()}. Send USDT or USDC (and ~0.01 SOL for fees) to it.`);
   return kp.publicKey.toBase58();
 }
@@ -179,10 +189,10 @@ export async function importFutSolKey(raw: string): Promise<string> {
     const b = await futSolBalances(cur).catch(() => null);
     if (b && (b.usdt + b.usdc > 1 || b.sol > 0.01)) throw new Error(`The current AI Futures Solana wallet still holds money ($${(b.usdt + b.usdc).toFixed(2)}, ${b.sol.toFixed(4)} SOL). Move it out first (Show private key → Phantom).`);
   }
-  await getF();
-  const { error } = await sb().rpc("ai_futures_sol_key_set", { p_id: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: true });
+  await getF(); await ensureSolDesk();
+  const { error } = await sb().rpc("ai_futures_sol_key_set", { p_id: solId(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: true });
   if (error) throw new Error(error.message);
-  solCache.delete(T());
+  solCache.delete(solId());
   await flog("settings", `AI Futures now uses your Solana wallet: ${kp.publicKey.toBase58()}.`);
   return kp.publicKey.toBase58();
 }
@@ -322,6 +332,13 @@ export async function fundFromSolana(usd: number, symbol: "USDT" | "USDC", quote
   let kp = from === "perps" ? await futSolAccount() : null;
   if (from === "trader") kp = (await (await import("@/lib/ai-trader")).myWallets(1)).sol;
   if (!kp) throw new Error(from === "perps" ? "Create or import the perps Solana wallet first." : "There's no copy-trader Solana wallet.");
+  if (from === "perps" && isTurboDesk()) {
+    // Shared with Sniper: its reserved budget stays in the wallet.
+    const { sniperReserve } = await import("@/lib/ai-sniper");
+    const [b, reserve] = await Promise.all([futSolBalances(kp), sniperReserve(solId())]);
+    const have = symbol === "USDT" ? b.usdt : b.usdc, room = Math.max(0, b.usdt + b.usdc - reserve);
+    if (usd > Math.min(have, room) + 0.01) throw new Error(`Only $${Math.min(have, room).toFixed(2)} ${symbol} can go to Turbo: $${reserve.toFixed(2)} of the wallet is Sniper's budget.`);
+  }
   if (quoteOnly) return solToHyperliquid({ evm: null, sol: kp }, a.address, usd, symbol, true);
   return sendSolToHl(kp, a.address, { usd, symbol }, "manual", from === "perps" ? "Perps Solana wallet" : "Copy-trader Solana wallet");
 }
@@ -871,7 +888,7 @@ export async function futStatus() {
   return {
     settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
     earn: isEarnDesk() ? await earnState() : null,
-    snipe: isSnipeDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null) }; })() : null,
+    snipe: isSnipeDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null), reserve: await sn.sniperReserve(T()).catch(() => 0) }; })() : null,
     fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],

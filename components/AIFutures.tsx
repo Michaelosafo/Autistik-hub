@@ -30,7 +30,7 @@ type P = {
 };
 type D = {
   settings: S; equity: { total: number; free: number }; liveVenues: string[];
-  snipe?: { cfg: { usd: number; tp: number; sl: number }; wallet: { address: string; usdt: number; usdc: number; sol: number; solUsd: number; total: number } | null } | null;
+  snipe?: { cfg: { usd: number; tp: number; sl: number; budget: number }; reserve?: number; wallet: { address: string; usdt: number; usdc: number; sol: number; solUsd: number; total: number } | null } | null;
   earn?: { free: number; inHlp: number; lockedUntil: number | null; apr: number | null; vault: string } | null;
   fx?: { pairs: { coin: string; label: string; price: number; maxLev: number }[]; open: boolean };
   wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
@@ -331,7 +331,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
 
       {snipeDesk && (
         <section className="card stack">
-          <b>◎ Sniper&apos;s Solana wallet</b>
+          <b>◎ Solana wallet (shared by Sniper and Turbo)</b>
+          <small className="muted">One wallet for both, create it here or on Turbo, or import your own. Nothing is swept out of it: Turbo only gets what you tap Send on (its page), and Sniper only trades its budget below. The rest stays put.</small>
           {!d.snipe?.wallet ? (
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
               <button type="button" className="btn" disabled={!!busy} onClick={() => act("sw", "sol-wallet", {})}>Create Solana wallet</button>
@@ -348,10 +349,10 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
             </>
           )}
           <b>🎯 Each buy</b>
-          {([["snipe_usd", "Buy", "$ per coin", d.snipe?.cfg.usd], ["snipe_tp", "Take profit at", "% up", d.snipe?.cfg.tp], ["snipe_sl", "Stop-loss at", "% down", d.snipe?.cfg.sl]] as const).map(([k, label, unit, v]) => (
+          {([["snipe_budget", "Sniper budget", `$ of the wallet it may trade (free now: ${usd(d.snipe?.reserve ?? 0)})`, d.snipe?.cfg.budget], ["snipe_usd", "Buy", "$ per coin", d.snipe?.cfg.usd], ["snipe_tp", "Take profit at", "% up", d.snipe?.cfg.tp], ["snipe_sl", "Stop-loss at", "% down", d.snipe?.cfg.sl]] as const).map(([k, label, unit, v]) => (
             <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <small><b>{label}:</b> {String(v ?? "")} {unit}</small>
-              <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${label} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) > 0) set({ [k]: Number(x) } as any); }}>Change</button>
+              <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${label} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) >= 0) set({ [k]: Number(x) } as any); }}>Change</button>
             </div>
           ))}
         </section>
@@ -417,10 +418,11 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
             <small>Solana address: <button type="button" className="aic-addr" onClick={() => { navigator.clipboard?.writeText(d.wallet!.sol!.address).then(() => { setCopiedSol(true); setTimeout(() => setCopiedSol(false), 1500); }).catch(() => {}); }}>{copiedSol ? "Copied ✓" : d.wallet.sol.address}</button></small>
             <small>Holds: <b>{d.wallet.sol.usdt == null ? "–" : `${d.wallet.sol.usdt.toFixed(2)} USDT`}</b> · <b>{d.wallet.sol.usdc == null ? "–" : `${d.wallet.sol.usdc.toFixed(2)} USDC`}</b> · {d.wallet.sol.sol == null ? "–" : `${d.wallet.sol.sol.toFixed(4)} SOL`}</small>
             {d.wallet.sol.sol != null && d.wallet.sol.sol < 0.004 && <small className="down">⚠ Send about 0.01 SOL here too: moving the USDT / USDC needs a small network fee.</small>}
+            {turboDesk ? <small className="muted">Shared with Sniper: nothing is sent to Hyperliquid by itself. Use Send below for the amount Turbo should trade; Sniper&apos;s budget can&apos;t be sent.</small> :
             <label className={"aic-row" + (s.auto_fund !== false ? " on" : "")}>
               <input type="checkbox" checked={s.auto_fund !== false} disabled={!!busy} onChange={(e) => set({ auto_fund: e.target.checked }, e.target.checked ? "Auto-fund on: USDT / USDC arriving here goes to Hyperliquid by itself." : "Auto-fund off: money stays in the Solana wallet.")} />
               <span className="grow"><b>Add funds automatically</b><br /><small className="muted">Every few minutes: $5 or more of USDT / USDC here → Hyperliquid (about a minute). USDC sent to the Arbitrum address is deposited by itself too. Each move shows in the activity log as 💸.</small></span>
-            </label>
+            </label>}
             <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
               <button type="button" className="btn small" disabled={!!busy} onClick={() => { const k = prompt("Paste the private key of your own Solana wallet (Phantom / Solflare). Only works while the current one is empty."); if (k?.trim()) act("si", "sol-key-import", { key: k.trim() }); }}>Use a different Solana wallet</button>
               <button type="button" className="btn small ghost" disabled={!!busy} onClick={async () => { if (!confirm("Show the Solana wallet's private key? Anyone who sees it can take the money.")) return; try { const r = await call("sol-key-reveal", {}); prompt("Solana private key — paste into Phantom → Import private key (keep it secret):", r.key); } catch (e) { alert((e as Error).message); } }}>Show private key</button>

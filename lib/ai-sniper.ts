@@ -25,11 +25,26 @@ const pos = () => sb().from("ai_futures_positions");
 const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
 const LAUNCHPAD = /pump|bonk|launchlab|moonshot|believe|bags|meteora|dbc/i;
 
-export type SnipeCfg = { usd: number; tp: number; sl: number };
+export type SnipeCfg = { usd: number; tp: number; sl: number; budget: number };
 export const snipeCfg = (s: FSettings): SnipeCfg => {
   const a = s as any;
-  return { usd: Math.max(1, n(a.snipe_usd) || 10), tp: Math.max(10, n(a.snipe_tp) || 100), sl: Math.min(90, Math.max(5, n(a.snipe_sl) || 25)) };
+  return { usd: Math.max(1, n(a.snipe_usd) || 10), tp: Math.max(10, n(a.snipe_tp) || 100), sl: Math.min(90, Math.max(5, n(a.snipe_sl) || 25)), budget: Math.max(0, n(a.snipe_budget)) };
 };
+
+/**
+ * Live: the Sniper's own money inside the Solana wallet it shares with Turbo. Its budget plus what its live trades
+ * made or lost, minus what's in open trades. It never spends past this, and Turbo can't send this part to Hyperliquid.
+ */
+export async function sniperReserve(deskId: number): Promise<number> {
+  const [{ data: st }, { data: ps }] = await Promise.all([
+    sb().from("ai_futures_settings").select("snipe_budget").eq("id", deskId).maybeSingle(),
+    sb().from("ai_futures_positions").select("status,margin_usd,pnl_usd").eq("fut_id", deskId).eq("mode", "live").eq("venue", "pumpfun"),
+  ]);
+  const rows = (ps || []) as any[];
+  const pnl = rows.filter((r) => r.status === "closed").reduce((a, r) => a + n(r.pnl_usd), 0);
+  const inTrades = rows.filter((r) => r.status !== "closed").reduce((a, r) => a + n(r.margin_usd), 0);
+  return Math.max(0, n(st?.snipe_budget) + pnl - inTrades);
+}
 
 async function get(url: string) {
   const r = await fetch(url, { headers: { accept: "application/json" }, cache: "no-store", signal: AbortSignal.timeout(8000) });
@@ -91,16 +106,17 @@ export async function snipeEquity(s: FSettings): Promise<{ total: number; free: 
   const open = (data || []) as FPos[];
   const inTrades = open.reduce((a, p) => a + n(p.notional_usd) * (n(p.last) || n(p.entry)) / n(p.entry), 0);
   if (s.mode === "live") {
-    const w = await snipeWallet().catch(() => null);
-    const free = w ? w.usdt + w.usdc + Math.max(0, w.sol - 0.02) * w.solUsd : 0;
-    return { total: (w?.total ?? 0) + inTrades, free };
+    // Only its own budget counts (the rest of the shared wallet is yours / Turbo's), and never more than the wallet holds.
+    const [w, mine] = await Promise.all([snipeWallet().catch(() => null), sniperReserve(T())]);
+    const inWallet = w ? w.usdt + w.usdc + Math.max(0, w.sol - 0.02) * w.solUsd : 0;
+    return { total: mine + inTrades, free: Math.min(mine, inWallet) };
   }
   return { total: s.paper_usd + inTrades, free: s.paper_usd };
 }
 
 async function buy(s: FSettings, c: Pick, cfg: SnipeCfg): Promise<string> {
   const eq = await snipeEquity(s);
-  if (eq.free < cfg.usd) return `not enough free money ($${eq.free.toFixed(2)}, each buy is $${cfg.usd})`;
+  if (eq.free < cfg.usd) return s.mode === "live" ? `budget used up ($${eq.free.toFixed(2)} of its budget free, each buy is $${cfg.usd}): raise the Sniper budget or add money` : `not enough free money ($${eq.free.toFixed(2)}, each buy is $${cfg.usd})`;
   let entry = c.price * 1.02, qty = cfg.usd / entry, tx: string | null = null, spent = cfg.usd;
   if (s.mode === "live") {
     const { liveBuyOn, bestStable, nativeUsd } = await import("@/lib/ai-trader-chains");
