@@ -30,8 +30,10 @@ export default function TypeLoop({ words, delay = 0, speed = 55, hold = 2200, in
       else { back = false; w = (w + 1) % words.length; if (w === 0) rounds++; timer = setTimeout(run, 380); }
     };
     const io = new IntersectionObserver(([e]) => {
+      const was = seen;
       seen = e.isIntersecting;
       if (!seen) { clearTimeout(timer); return; }
+      if (!was && started) rounds = 0; // back in view: its key clicks play again for a round
       setLive(true);
       if (!started) {
         started = true;
