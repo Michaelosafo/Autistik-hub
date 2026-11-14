@@ -220,17 +220,23 @@ async function relaySolStep(kp: Keypair, d: any): Promise<string> {
  * on Solana, arrives as trading USDC on Hyperliquid, no Arbitrum or ETH needed). quoteOnly: just the price.
  */
 export async function solToHyperliquid(w: Wallets, recipient: string, usd: number, symbol: "USDT" | "USDC", quoteOnly = false) {
-  if (!w.sol) throw new Error("There's no Solana trading wallet (create it on the AI trader page).");
-  if (!/^0x[0-9a-fA-F]{40}$/.test(recipient)) throw new Error("Create the AI Futures wallet first.");
+  if (!w.sol) throw new Error("There's no Solana wallet to send from.");
   const st = stableBySymbol("solana", symbol);
   if (!st) throw new Error("Pick USDT or USDC.");
   if (!(usd >= 5)) throw new Error("Send at least $5.");
   const have = Number((await solTokenRaw(w.sol.publicKey, st.token)).raw) / 10 ** st.decimals;
-  if (usd > have + 1e-9) throw new Error(`The Solana wallet has only $${have.toFixed(2)} ${symbol}.`);
-  const q = await relayQuote({ user: w.sol.publicKey.toBase58(), recipient, originChainId: RELAY_ID.solana, destinationChainId: HL_RELAY_ID, originCurrency: st.token, destinationCurrency: HL_PERPS_USDC, amount: parseUnits(usd.toFixed(6), st.decimals).toString() });
-  const fees = q.fees || {};
-  const feeUsd = ["gas", "relayer", "app"].reduce((a, k) => a + (Number(fees[k]?.amountUsd) || 0), 0);
-  const info = { receive: Number(q.details?.currencyOut?.amountFormatted) || null, feeUsd: +feeUsd.toFixed(4), seconds: Number(q.details?.timeEstimate) || null };
+  if (usd > have + 1e-9) throw new Error(`That Solana wallet has only $${have.toFixed(2)} ${symbol}.`);
+  return solCoinToHyperliquid(w.sol, recipient, st.token, parseUnits(usd.toFixed(6), st.decimals), quoteOnly);
+}
+/** SOL itself into the Hyperliquid account (Relay swaps it to trading USDC on the way). */
+export async function solNativeToHyperliquid(kp: Keypair, recipient: string, sol: number, quoteOnly = false) {
+  if (!(sol > 0)) throw new Error("No SOL to send.");
+  return solCoinToHyperliquid(kp, recipient, SOL_NATIVE_RELAY, parseUnits(sol.toFixed(9), 9), quoteOnly);
+}
+async function solCoinToHyperliquid(kp: Keypair, recipient: string, token: string, raw: bigint, quoteOnly: boolean) {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(recipient)) throw new Error("Create the AI Futures wallet first.");
+  const q = await relayQuote({ user: kp.publicKey.toBase58(), recipient, originChainId: RELAY_ID.solana, destinationChainId: HL_RELAY_ID, originCurrency: token, destinationCurrency: HL_PERPS_USDC, amount: raw.toString() });
+  const info = relayInfo(q);
   if (quoteOnly) return { ...info, requestId: null as string | null, sigs: [] as string[] };
   const sigs: string[] = [];
   let requestId: string | null = null;
@@ -239,10 +245,68 @@ export async function solToHyperliquid(w: Wallets, recipient: string, usd: numbe
     if (step.kind !== "transaction") throw new Error("Relay asked for a signature step, which can't be done here.");
     for (const it of step.items || []) {
       if (it.status === "complete") continue;
-      sigs.push(await relaySolStep(w.sol, it.data));
+      sigs.push(await relaySolStep(kp, it.data));
     }
   }
   return { ...info, requestId, sigs };
+}
+function relayInfo(q: any) {
+  const fees = q.fees || {};
+  const feeUsd = ["gas", "relayer", "app"].reduce((a, k) => a + (Number(fees[k]?.amountUsd) || 0), 0);
+  return { receive: Number(q.details?.currencyOut?.amountUsd || q.details?.currencyOut?.amountFormatted) || null, feeUsd: +feeUsd.toFixed(4), seconds: Number(q.details?.timeEstimate) || null };
+}
+
+/**
+ * Withdraw from the Hyperliquid futures account straight to a Solana address as USDT / USDC (Relay). Two signatures
+ * from the futures wallet, no gas: Relay's "authorize" (links the transfer to this order), then the Hyperliquid
+ * transfer to Relay, which pays out on Solana in about a minute.
+ */
+export async function hlToSolana(account: PrivateKeyAccount, recipient: string, usd: number, symbol: "USDT" | "USDC", quoteOnly = false) {
+  const st = stableBySymbol("solana", symbol);
+  if (!st) throw new Error("Pick USDT or USDC.");
+  try { new PublicKey(recipient); } catch { throw new Error("That isn't a Solana address."); }
+  if (!(usd >= 5)) throw new Error("Withdraw at least $5.");
+  const q = await relayQuote({ user: account.address, recipient, refundTo: account.address, originChainId: HL_RELAY_ID, destinationChainId: RELAY_ID.solana, originCurrency: HL_PERPS_USDC, destinationCurrency: st.token, amount: parseUnits(usd.toFixed(2), 8).toString(), protocolVersion: "v2" });
+  const info = relayInfo(q);
+  if (quoteOnly) return { ...info, requestId: null as string | null };
+  const { hlRelayStep } = await import("@/lib/hyperliquid");
+  let requestId: string | null = null;
+  for (const step of q.steps) {
+    requestId = requestId || step.requestId || null;
+    for (const it of step.items || []) {
+      if (it.status === "complete") continue;
+      const d = it.data || {};
+      if (step.kind === "signature" && d.sign && d.post) {
+        const sg = d.sign;
+        const types = { ...(sg.types || {}) }; delete types.EIP712Domain;
+        const domain = { ...sg.domain, chainId: 42161 };
+        const signature = await account.signTypedData({ domain, types, primaryType: sg.primaryType, message: sg.value } as any);
+        const body = { ...(d.post.body || {}), signatureChainId: 42161 };
+        const r = await fetch(`https://api.relay.link${d.post.endpoint}?signature=${signature}`, { method: d.post.method || "POST", headers: { "content-type": "application/json", "x-api-key": String(process.env.RELAY_API_KEY) }, body: JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+        if (!r.ok) { const j = await r.json().catch(() => null); throw new Error(`Relay authorize: ${j?.message || r.status}`); }
+      } else if (step.kind === "transaction" && d.action) {
+        await hlRelayStep(account, d);
+      } else throw new Error(`Relay sent a step this can't do (${step.kind}).`);
+    }
+  }
+  return { ...info, requestId };
+}
+
+/** A Solana wallet's SOL, USDT and USDC. Jupiter first (one call, reliable from the server), the RPC as backup. */
+export async function solWalletBalances(owner: string): Promise<{ sol: number | null; usdt: number; usdc: number }> {
+  const usdtMint = stableBySymbol("solana", "USDT")!.token, usdcMint = stableBySymbol("solana", "USDC")!.token;
+  const h = await fetch(`${JUP}/ultra/v1/holdings/${owner}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const ui = (mint: string) => ((h?.tokens?.[mint] || []) as any[]).reduce((a, x) => a + (Number(x.uiAmount) || 0), 0);
+  if (h && (h.uiAmount != null || h.amount != null || h.tokens)) {
+    return { sol: h.uiAmount != null ? Number(h.uiAmount) : Number(h.amount || 0) / 1e9, usdt: ui(usdtMint), usdc: ui(usdcMint) };
+  }
+  const pk = new PublicKey(owner);
+  const [sol, t, c] = await Promise.all([
+    solConn().getBalance(pk).then((x) => x / 1e9).catch(() => null),
+    solTokenRaw(pk, usdtMint).then((x) => Number(x.raw) / 1e6).catch(() => 0),
+    solTokenRaw(pk, usdcMint).then((x) => Number(x.raw) / 1e6).catch(() => 0),
+  ]);
+  return { sol, usdt: t, usdc: c };
 }
 
 /** Where a Relay order stands: waiting, depositing, pending, success, refund or failure. */

@@ -46,7 +46,7 @@ export type FPos = {
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const sb = () => supabaseService();
-const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news") => ({
+const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news" | "ai_futures_transfers") => ({
   select: (cols = "*"): any => sb().from(table).select(cols).eq("fut_id", T()),
   update: (v: Record<string, unknown>): any => sb().from(table).update(v).eq("fut_id", T()),
   insert: (v: any): any => sb().from(table).insert(Array.isArray(v) ? v.map((r) => ({ ...r, fut_id: T() })) : { ...v, fut_id: T() }),
@@ -159,41 +159,92 @@ export async function revealFutSolKey(): Promise<string> {
   return b58encode(kp.secretKey);
 }
 async function futSolBalances(kp: Keypair) {
-  const { stableBalances, chainBalance } = await import("@/lib/ai-trader-chains");
-  const w = { evm: null, sol: kp };
-  const [st, sol] = await Promise.all([stableBalances("solana", w), chainBalance("solana", w).catch(() => 0)]);
-  return { usdt: st.find((x) => x.symbol === "USDT")?.balance ?? 0, usdc: st.find((x) => x.symbol === "USDC")?.balance ?? 0, sol };
+  const { solWalletBalances } = await import("@/lib/ai-trader-chains");
+  return solWalletBalances(kp.publicKey.toBase58());
+}
+
+// ---------------------------------------------------------------- Money in and out: every transfer is recorded
+
+type Xfer = { dir: "in" | "out"; route: string; amount_usd: number; symbol: string; from_addr?: string | null; to_addr?: string | null; detail?: string };
+/** One transfer at a time: a second tap (or the auto-funder) while one is being sent is refused, so money never goes twice. */
+async function beginTransfer(x: Xfer): Promise<number> {
+  const { data: busy } = await fq("ai_futures_transfers").select("id").eq("status", "sending").gte("at", new Date(Date.now() - 3 * 60_000).toISOString()).limit(1);
+  if (busy?.length) throw new Error("A transfer is already being sent. Wait a minute and check Money in & out.");
+  const { data, error } = await fq("ai_futures_transfers").insert({ ...x, status: "sending" }).select("id").single();
+  if (error) throw new Error(error.message);
+  return Number(data.id);
+}
+async function endTransfer(id: number, v: Record<string, unknown>) {
+  await sb().from("ai_futures_transfers").update({ ...v, updated_at: new Date().toISOString() }).eq("id", id);
+}
+const DONE = new Set(["success", "arrived", "failure", "failed", "refund", "refunded"]);
+/** Asks Relay where the recent transfers stand (sending → pending → arrived / refunded / failed). */
+async function refreshTransfers(limit = 5) {
+  const { data } = await fq("ai_futures_transfers").select("id,request_id,status,at").not("request_id", "is", null).gte("at", new Date(Date.now() - 2 * 86400_000).toISOString()).order("at", { ascending: false }).limit(20);
+  const todo = ((data || []) as any[]).filter((t) => !DONE.has(String(t.status))).slice(0, limit);
+  const { relayStatus } = await import("@/lib/ai-trader-chains");
+  await Promise.all(todo.map(async (t) => {
+    const st = await relayStatus(String(t.request_id)).catch(() => null);
+    if (!st || st.status === "unknown") return;
+    const status = st.status === "success" ? "arrived" : st.status === "refund" ? "refunded" : st.status;
+    if (status !== t.status) await endTransfer(Number(t.id), { status, detail: st.txs.length ? `tx ${st.txs[st.txs.length - 1]}` : undefined });
+  }));
 }
 
 /**
  * Funds arriving by themselves (on, by default), checked every minute, at most every 4 minutes:
  *  - USDT / USDC in AI Futures' Solana wallet (at least $5) goes straight into the Hyperliquid account (Relay).
+ *  - SOL there beyond ~0.015 kept for fees goes too (swapped to trading USDC on the way), if it's worth $5+.
  *  - USDC on Arbitrum in its EVM wallet (at least 5, with a little ETH for gas) is deposited to Hyperliquid.
  */
+const SOL_KEEP = 0.015;
 async function autoFund(s: FSettings) {
   if (!s.auto_fund || (s.fund_at && Date.now() - Date.parse(s.fund_at) < 4 * 60_000)) return;
   const a = await futAccount();
   if (!a) return;
   const kp = await futSolAccount();
+  const stamp = () => sb().from("ai_futures_settings").update({ fund_at: new Date().toISOString() }).eq("id", T());
   if (kp) {
-    const b = await futSolBalances(kp).catch(() => null);
-    const sym = b && b.usdt >= b.usdc ? "USDT" : "USDC";
-    const amt = b ? Math.floor((sym === "USDT" ? b.usdt : b.usdc) * 100) / 100 : 0;
-    if (b && amt >= 5) {
-      await sb().from("ai_futures_settings").update({ fund_at: new Date().toISOString() }).eq("id", T());
-      if (b.sol < 0.004) { await flog("error", `$${amt} ${sym} is waiting in the AI Futures Solana wallet, but it needs about 0.01 SOL for the network fee to move it. Send a little SOL to it.`); return; }
-      const { solToHyperliquid } = await import("@/lib/ai-trader-chains");
-      try {
-        const r = await solToHyperliquid({ evm: null, sol: kp }, a.address, amt, sym);
-        await flog("settings", `💸 Funds added automatically: $${amt} ${sym} from the Solana wallet → Hyperliquid (≈$${(r.receive ?? amt).toFixed(2)} arrives, fee ≈$${r.feeUsd.toFixed(2)}).`);
-      } catch (e) { await flog("error", `Couldn't move $${amt} ${sym} to Hyperliquid: ${(e as Error).message}`); }
+    const b = await futSolBalances(kp).catch((e) => { throw new Error(`couldn't read the Solana wallet (${(e as Error).message})`); });
+    const sym = b.usdt >= b.usdc ? "USDT" : "USDC";
+    const amt = Math.floor((sym === "USDT" ? b.usdt : b.usdc) * 100) / 100;
+    if (amt >= 5) {
+      await stamp();
+      if (b.sol != null && b.sol < 0.004) { await flog("error", `$${amt} ${sym} is waiting in the AI Futures Solana wallet, but it needs about 0.01 SOL for the network fee to move it. Send a little SOL to it.`); return; }
+      await sendSolToHl(kp, a.address, { usd: amt, symbol: sym }, "auto");
       return;
+    }
+    const spare = b.sol == null ? 0 : Math.floor((b.sol - SOL_KEEP) * 1e6) / 1e6;
+    if (spare >= 0.03) {
+      const { solNativeToHyperliquid } = await import("@/lib/ai-trader-chains");
+      const q = await solNativeToHyperliquid(kp, a.address, spare, true).catch(() => null);
+      if (q?.receive && q.receive >= 5) { await stamp(); await sendSolToHl(kp, a.address, { sol: spare, usdGuess: q.receive }, "auto"); return; }
     }
   }
   const w = await futWallet().catch(() => null);
   if (w && (w.arbUsdc ?? 0) >= 5 && (w.arbEth ?? 0) > 0.00002) {
-    await sb().from("ai_futures_settings").update({ fund_at: new Date().toISOString() }).eq("id", T());
-    await depositToHl().then((h) => flog("settings", `💸 Funds added automatically: ${(w.arbUsdc ?? 0).toFixed(2)} USDC from Arbitrum → Hyperliquid (tx ${h.slice(0, 10)}…).`), (e) => flog("error", `Couldn't deposit the Arbitrum USDC: ${(e as Error).message}`));
+    await stamp();
+    const id = await beginTransfer({ dir: "in", route: "Arbitrum → Hyperliquid (auto)", amount_usd: w.arbUsdc!, symbol: "USDC", from_addr: a.address, to_addr: a.address });
+    await depositToHl().then(async (h) => { await endTransfer(id, { status: "arrived", detail: `tx ${h}` }); await flog("settings", `💸 Funds added automatically: ${(w.arbUsdc ?? 0).toFixed(2)} USDC from Arbitrum → Hyperliquid.`); },
+      async (e) => { await endTransfer(id, { status: "failed", detail: (e as Error).message }); await flog("error", `Couldn't deposit the Arbitrum USDC: ${(e as Error).message}`); });
+  }
+}
+
+/** Solana → Hyperliquid account, recorded. Either stablecoins ({usd, symbol}) or SOL ({sol}). */
+async function sendSolToHl(kp: Keypair, hlAddr: string, what: { usd: number; symbol: "USDT" | "USDC" } | { sol: number; usdGuess: number }, how: "auto" | "manual", fromLabel = "Perps Solana wallet") {
+  const { solToHyperliquid, solNativeToHyperliquid } = await import("@/lib/ai-trader-chains");
+  const isSol = "sol" in what;
+  const label = isSol ? `${what.sol.toFixed(4)} SOL` : `$${what.usd.toFixed(2)} ${what.symbol}`;
+  const id = await beginTransfer({ dir: "in", route: `${fromLabel} → Hyperliquid${how === "auto" ? " (auto)" : ""}`, amount_usd: isSol ? what.usdGuess : what.usd, symbol: isSol ? "SOL" : what.symbol, from_addr: kp.publicKey.toBase58(), to_addr: hlAddr, detail: isSol ? label : undefined });
+  try {
+    const r = isSol ? await solNativeToHyperliquid(kp, hlAddr, what.sol) : await solToHyperliquid({ evm: null, sol: kp }, hlAddr, what.usd, what.symbol);
+    await endTransfer(id, { status: "pending", request_id: r.requestId, receive_usd: r.receive, fee_usd: r.feeUsd });
+    await flog("settings", `💸 ${how === "auto" ? "Funds added automatically" : "Sent"}: ${label} from the ${fromLabel} → Hyperliquid (≈$${(r.receive ?? 0).toFixed(2)} arrives in about a minute, fee ≈$${r.feeUsd.toFixed(2)}).`);
+    return r;
+  } catch (e) {
+    await endTransfer(id, { status: "failed", detail: (e as Error).message.slice(0, 300) });
+    await flog("error", `Couldn't move ${label} to Hyperliquid: ${(e as Error).message}`);
+    throw e;
   }
 }
 
@@ -229,14 +280,58 @@ export async function depositToHl(): Promise<string> {
  * Fund it from Solana: sends USDT / USDC from the AI trader's Solana wallet straight into this futures account on
  * Hyperliquid (Relay). Arrives as trading USDC in about a minute. quoteOnly: what you'd receive and the fee.
  */
-export async function fundFromSolana(usd: number, symbol: "USDT" | "USDC", quoteOnly = false) {
+export async function fundFromSolana(usd: number, symbol: "USDT" | "USDC", quoteOnly = false, from: "perps" | "trader" = "perps") {
   const a = await futAccount();
   if (!a) throw new Error("Create the AI Futures wallet first.");
-  const { myWallets } = await import("@/lib/ai-trader");
   const { solToHyperliquid } = await import("@/lib/ai-trader-chains");
-  const r = await solToHyperliquid(await myWallets(1), a.address, usd, symbol, quoteOnly);
-  if (!quoteOnly) await flog("settings", `Sent $${usd.toFixed(2)} ${symbol} from the Solana wallet to Hyperliquid (≈$${(r.receive ?? usd).toFixed(2)} arrives, fee ≈$${r.feeUsd.toFixed(2)}). Relay order ${r.requestId || "?"}.`);
-  return r;
+  let kp = from === "perps" ? await futSolAccount() : null;
+  if (from === "trader") kp = (await (await import("@/lib/ai-trader")).myWallets(1)).sol;
+  if (!kp) throw new Error(from === "perps" ? "Create or import the perps Solana wallet first." : "There's no copy-trader Solana wallet.");
+  if (quoteOnly) return solToHyperliquid({ evm: null, sol: kp }, a.address, usd, symbol, true);
+  return sendSolToHl(kp, a.address, { usd, symbol }, "manual", from === "perps" ? "Perps Solana wallet" : "Copy-trader Solana wallet");
+}
+
+/**
+ * Take money out of the Hyperliquid account. Only the free part (not tied up in open trades) can leave.
+ *  - to "solana": USDT / USDC lands at that Solana address (Relay, ~1 minute, no gas).
+ *  - to "arbitrum": USDC lands at that Arbitrum address, e.g. an exchange deposit address (Hyperliquid, $1 fee, ~5 minutes).
+ *  - to "hyperliquid": USDC to another Hyperliquid account (instant, free).
+ */
+export async function withdrawFut(o: { usd: number; to: "solana" | "arbitrum" | "hyperliquid"; address: string; symbol?: "USDT" | "USDC"; quoteOnly?: boolean }) {
+  const a = await futAccount();
+  if (!a) throw new Error("There's no AI Futures wallet.");
+  const acct = await hlAccount(a.address);
+  const usd = Math.floor(Math.min(o.usd, acct.free) * 100) / 100;
+  if (!(o.usd > 0)) throw new Error("Enter an amount.");
+  if (o.usd > acct.free + 0.01) throw new Error(`Only $${acct.free.toFixed(2)} is free to withdraw${acct.value > acct.free + 0.5 ? " (the rest is in open trades: close them first)" : ""}.`);
+  const addr = o.address.trim();
+  if (o.to === "solana") {
+    const { hlToSolana } = await import("@/lib/ai-trader-chains");
+    const sym = o.symbol === "USDC" ? "USDC" : "USDT";
+    if (o.quoteOnly) return hlToSolana(a, addr, usd, sym, true);
+    // Sending to the perps Solana wallet with auto-fund on would just send it straight back.
+    const own = await futSolAccount().catch(() => null);
+    const s = await getF();
+    if (own && own.publicKey.toBase58() === addr && s.auto_fund) { await sb().from("ai_futures_settings").update({ auto_fund: false }).eq("id", T()); await flog("settings", "Auto-fund turned off, so the withdrawal to the perps Solana wallet isn't sent back."); }
+    const id = await beginTransfer({ dir: "out", route: "Hyperliquid → Solana", amount_usd: usd, symbol: sym, from_addr: a.address, to_addr: addr });
+    try {
+      const r = await hlToSolana(a, addr, usd, sym);
+      await endTransfer(id, { status: "pending", request_id: r.requestId, receive_usd: r.receive, fee_usd: r.feeUsd });
+      await flog("settings", `🏧 Withdrawing $${usd.toFixed(2)} from Hyperliquid → ${sym} on Solana ${addr.slice(0, 4)}…${addr.slice(-4)} (≈$${(r.receive ?? 0).toFixed(2)} arrives in about a minute).`);
+      return r;
+    } catch (e) { await endTransfer(id, { status: "failed", detail: (e as Error).message.slice(0, 300) }); throw e; }
+  }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) throw new Error("That isn't an Arbitrum / EVM address (0x…).");
+  if (o.to === "arbitrum" && usd < 2) throw new Error("Withdraw at least $2 (Hyperliquid keeps $1 as its fee).");
+  if (o.quoteOnly) return { receive: o.to === "arbitrum" ? usd - 1 : usd, feeUsd: o.to === "arbitrum" ? 1 : 0, seconds: o.to === "arbitrum" ? 300 : 1, requestId: null };
+  const id = await beginTransfer({ dir: "out", route: o.to === "arbitrum" ? "Hyperliquid → Arbitrum" : "Hyperliquid → Hyperliquid account", amount_usd: usd, symbol: "USDC", from_addr: a.address, to_addr: addr });
+  try {
+    const { hlWithdraw, hlUsdSend } = await import("@/lib/hyperliquid");
+    if (o.to === "arbitrum") await hlWithdraw(a, addr, usd); else await hlUsdSend(a, addr, usd);
+    await endTransfer(id, { status: o.to === "arbitrum" ? "pending" : "arrived", receive_usd: o.to === "arbitrum" ? usd - 1 : usd, fee_usd: o.to === "arbitrum" ? 1 : 0, detail: o.to === "arbitrum" ? "Arrives on Arbitrum in about 5 minutes" : undefined });
+    await flog("settings", `🏧 Withdrew $${usd.toFixed(2)} from Hyperliquid → ${o.to === "arbitrum" ? "Arbitrum" : "Hyperliquid account"} ${addr.slice(0, 6)}…${addr.slice(-4)}.`);
+    return { receive: usd, feeUsd: o.to === "arbitrum" ? 1 : 0, seconds: null, requestId: null };
+  } catch (e) { await endTransfer(id, { status: "failed", detail: (e as Error).message.slice(0, 300) }); throw e; }
 }
 
 /**
@@ -577,6 +672,7 @@ export async function runFutures(): Promise<string> {
   if (!go) return "busy";
   try {
     await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
+    await refreshTransfers(3).catch(() => null);
     const [hl, aster] = await Promise.all([hlMarket(), s.venues.includes("aster") ? asterMarket().catch(() => new Map()) : Promise.resolve(new Map())]);
     const m: Mkt = { hl, aster };
     if (s.enabled && (s.use_news || s.use_x)) await readNews(s).catch((e) => flog("error", `News: ${(e as Error).message}`));
@@ -628,6 +724,20 @@ export async function closeNow(id: number) {
   await closePos(s, { hl, aster }, data as FPos, "Closed by admin");
 }
 
+/** Close every open trade now (current mode first, then any other), at the market price. */
+export async function closeAllNow(onlyMode?: "paper" | "live") {
+  const s = await getF();
+  let qy = fq("ai_futures_positions").select("*").eq("status", "open");
+  if (onlyMode) qy = qy.eq("mode", onlyMode);
+  const { data } = await qy;
+  const list = (data || []) as FPos[];
+  if (!list.length) return 0;
+  const [hl, aster] = await Promise.all([hlMarket(), asterMarket().catch(() => new Map())]);
+  let n = 0;
+  for (const p of list) { await closePos(s, { hl, aster }, p, "Closed by admin (close all)").then(() => n++, (e) => flog("error", `Couldn't close ${p.coin}: ${(e as Error).message}`)); }
+  return n;
+}
+
 /** The page: settings, wallet, account value, open and closed positions, log, latest judged news. */
 export async function futStatus() {
   const s = await getF();
@@ -639,14 +749,16 @@ export async function futStatus() {
     fq("ai_futures_log").select("*").order("at", { ascending: false }).limit(60),
     fq("ai_futures_news").select("*").not("direction", "is", null).neq("direction", 0).order("at", { ascending: false }).limit(20),
     futWallet().catch(() => null),
+    refreshTransfers().catch(() => null),
   ]);
+  const { data: transfers } = await fq("ai_futures_transfers").select("id,at,dir,route,amount_usd,symbol,to_addr,request_id,status,receive_usd,fee_usd,detail").order("at", { ascending: false }).limit(25);
   const eq = await equity(s, m).catch(() => ({ total: 0, free: 0 }));
   const done = ((closedP || []) as FPos[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + n(p.pnl_usd), 0), wins = done.filter((p) => n(p.pnl_usd) > 0).length;
   const openNow = ((openP || []) as FPos[]).map((p) => { const px = priceOn(m, p.venue, p.coin) || n(p.last); return { ...p, price: px, upnl: px ? pnlOf(p, px) - n(p.fees_usd) : null }; });
   const perf = await performance(s, eq.total, openNow.filter((p) => p.mode === s.mode).reduce((a, p) => a + n(p.upnl), 0)).catch(() => null);
   return {
-    settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf,
+    settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
     open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],
     stats: { trades: done.length, wins, winRate: done.length ? Math.round((wins / done.length) * 100) : null, pnl },

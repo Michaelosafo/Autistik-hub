@@ -6667,3 +6667,16 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .fut-profit { border-left: 4px solid var(--muted, #888); }
 .fut-profit.up { border-left-color: #16a34a; }
 .fut-profit.down { border-left-color: #dc2626; }
+
+/* AI Futures: where the money is, transfers, withdraw */
+.fut-flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 8px; align-items: center; }
+.fut-flow > div { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 10px; background: rgba(127,127,127,.08); min-width: 0; }
+.fut-flow > div b { font-size: 1.25rem; }
+.fut-flow > div em { font-style: normal; font-size: .8em; opacity: .75; }
+.fut-flow > span { opacity: .5; font-size: 1.2rem; }
+@media (max-width: 640px) { .fut-flow { grid-template-columns: 1fr; } .fut-flow > span { transform: rotate(90deg); justify-self: center; } }
+.fut-warn { padding: 10px 12px; border-radius: 10px; border: 1px solid #f59e0b; background: rgba(245,158,11,.1); }
+.fut-xfers { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fut-xfers li { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; border-bottom: 1px solid rgba(127,127,127,.15); }
+.fut-xfers li > span:last-child { white-space: nowrap; font-size: .9em; }
+.ait-text { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(127,127,127,.35); background: transparent; color: inherit; font: inherit; }
