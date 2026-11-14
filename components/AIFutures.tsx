@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import TraderTabs from "@/components/TraderTabs";
+import { fxLabel } from "@/lib/fx";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; max_loss_pct: number; risk_pct: number;
@@ -26,6 +27,7 @@ type P = {
 };
 type D = {
   settings: S; equity: { total: number; free: number }; liveVenues: string[];
+  fx?: { pairs: { coin: string; label: string; price: number; maxLev: number }[]; open: boolean };
   wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
   open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[];
   news: { key: string; at: string; source: string; title: string; url: string; coin: string; direction: number; strength: number }[];
@@ -38,7 +40,7 @@ const XS: Record<string, [string, string]> = {
   sending: ["⏳ Sending…", "muted"], pending: ["🚚 On the way", "muted"], waiting: ["🚚 On the way", "muted"], depositing: ["🚚 On the way", "muted"], submitted: ["🚚 On the way", "muted"], delayed: ["🐢 Delayed", "muted"],
   arrived: ["✅ Arrived", "up"], refunded: ["↩️ Refunded", "down"], refund: ["↩️ Refunded", "down"], failed: ["❌ Failed", "down"], failure: ["❌ Failed", "down"],
 };
-const VN: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster" };
+const VN: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster", forex: "Forex" };
 const usd = (x: number | null | undefined, d = 2) => (x == null || !isFinite(x) ? "–" : `${x < 0 ? "-" : ""}$${Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`);
 const px = (x: number | null | undefined) => (x == null || !isFinite(x) ? "–" : `$${x >= 100 ? x.toLocaleString("en-US", { maximumFractionDigits: 2 }) : x.toPrecision(5)}`);
 const ago = (iso: string) => { const s = (Date.now() - Date.parse(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`; };
@@ -104,7 +106,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
           <div key={t.id} className="fut-trade">
             <button type="button" className="fut-trade-h" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}>
               <b className={t.pnl >= 0 ? "up" : "down"}>{usd(t.pnl)}</b>
-              <span className="grow">{t.side === "long" ? "📈" : "📉"} {t.side} {t.coin} {t.lev}x <span className="muted">· {t.closed.replace(/\s*\(.*$/, "")} · {ago(t.at)}</span></span>
+              <span className="grow">{t.side === "long" ? "📈" : "📉"} {t.side} {fxLabel(t.coin, t.entry)} {t.lev}x <span className="muted">· {t.closed.replace(/\s*\(.*$/, "")} · {ago(t.at)}</span></span>
               <small className={(t.impactPct ?? 0) >= 0 ? "up" : "down"}>{pct(t.impactPct, 2)} of account</small>
             </button>
             {open === t.id && (
@@ -328,13 +330,13 @@ export default function AIFutures() {
         {!d.open.length ? <small className="muted">None right now.</small> : d.open.map((p) => (
           <div key={p.id} className="aic-row on" style={{ alignItems: "flex-start" }}>
             <span className="grow">
-              <b className={p.side === "long" ? "up" : "down"}>{p.side === "long" ? "📈 LONG" : "📉 SHORT"} {p.coin}</b> <small className="muted">· {VN[p.venue] || p.venue} · {p.lev}x · {usd(p.notional_usd, 0)} position ({usd(p.margin_usd, 0)} margin){p.mode === "paper" ? " · practice" : ""}</small><br />
+              <b className={p.side === "long" ? "up" : "down"}>{p.side === "long" ? "📈 LONG" : "📉 SHORT"} {fxLabel(p.coin, p.entry)}</b> <small className="muted">· {VN[p.venue] || p.venue} · {p.lev}x · {usd(p.notional_usd, 0)} position ({usd(p.margin_usd, 0)} margin){p.mode === "paper" ? " · practice" : ""}</small><br />
               <small>Entry {px(p.entry)} · now {px(p.price)} · <b className={(p.upnl || 0) >= 0 ? "up" : "down"}>{usd(p.upnl)}</b></small><br />
               <small className="muted">Stop {px(p.stop)} · target {px(p.target)} · liquidation ~{px(p.liq)} · opened {ago(p.opened_at)}</small>
               {p.liq && p.price ? <><br /><small className="up">🛡 The stop is {Math.max(1, Math.round(Math.abs(p.price - p.liq) / Math.max(1e-9, Math.abs(p.price - p.stop))))}× closer than liquidation{p.mode === "live" ? " and rests on Hyperliquid itself" : ""}.</small></> : null}
               {p.why && <><br /><small className="muted">{p.why}</small></>}
             </span>
-            <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${p.coin} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
+            <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${fxLabel(p.coin, p.entry)} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
           </div>
         ))}
       </section>
@@ -402,10 +404,16 @@ export default function AIFutures() {
       <section className="card stack">
         <b>⚙️ Rules</b>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          {["hyperliquid", "aster"].map((v) => (
-            <label key={v} className="ait-check"><input type="checkbox" checked={s.venues.includes(v)} disabled={!!busy} onChange={(e) => set({ venues: e.target.checked ? [...s.venues, v] : s.venues.filter((x) => x !== v) })} /> <span>{VN[v]}{!d.liveVenues.includes(v) ? " (practice only for now)" : ""}</span></label>
+          {["hyperliquid", "aster", "forex"].map((v) => (
+            <label key={v} className="ait-check"><input type="checkbox" checked={s.venues.includes(v)} disabled={!!busy} onChange={(e) => set({ venues: e.target.checked ? [...s.venues, v] : s.venues.filter((x) => x !== v) }, v === "forex" ? (e.target.checked ? "Forex on: it also trades currency pairs (EUR/USD, USD/JPY, …) on Hyperliquid." : "Forex off. Open forex trades are still watched until they close.") : undefined)} /> <span>{VN[v]}{!d.liveVenues.includes(v) ? " (practice only for now)" : ""}</span></label>
           ))}
         </div>
+        {s.venues.includes("forex") && (
+          <small className="muted">
+            <b>💱 Forex</b> {d.fx?.open ? "· market open" : "· closed for the weekend (Fri 21:00 – Sun 21:00 UTC)"}<br />
+            Currency pairs on trade.xyz, inside Hyperliquid: {d.fx?.pairs.length ? d.fx.pairs.map((x) => x.label).join(", ") : "loading…"}. Same wallet and the same money you fund from Solana; in Live the margin for each forex trade moves into the forex account and back by itself. It reads forex news (FXStreet, investingLive, US data and central banks) and only trades when the news and the chart agree, or on a strong chart setup. Every trade has a stop-loss resting on Hyperliquid, moves to break-even at +1R and trails after. Forex trades close before Friday&apos;s close so the weekend gap can&apos;t skip the stop.
+          </small>
+        )}
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <label className="ait-check"><input type="checkbox" checked={s.use_ta} disabled={!!busy} onChange={(e) => set({ use_ta: e.target.checked })} /> <span>Charts (technical analysis)</span></label>
           <label className="ait-check"><input type="checkbox" checked={s.use_news} disabled={!!busy} onChange={(e) => set({ use_news: e.target.checked })} /> <span>News sites</span></label>
@@ -437,14 +445,14 @@ export default function AIFutures() {
       <section className="card stack">
         <b>📰 News the AI acted on</b>
         {!d.news.length ? <small className="muted">Nothing market-moving yet.</small> : d.news.map((x) => (
-          <small key={x.key}><b className={x.direction > 0 ? "up" : "down"}>{x.direction > 0 ? "▲" : "▼"} {x.coin}</b> {Math.round(x.strength * 100)}% · <a href={x.url} target="_blank" rel="noopener noreferrer">{x.title.slice(0, 140)}</a> <span className="muted">· {x.source} · {ago(x.at)}</span></small>
+          <small key={x.key}><b className={x.direction > 0 ? "up" : "down"}>{x.direction > 0 ? "▲" : "▼"} {x.coin === "USD" ? "US dollar" : fxLabel(x.coin)}</b> {Math.round(x.strength * 100)}% · <a href={x.url} target="_blank" rel="noopener noreferrer">{x.title.slice(0, 140)}</a> <span className="muted">· {x.source} · {ago(x.at)}</span></small>
         ))}
       </section>
 
       <section className="card stack">
         <b>Closed trades</b>
         {!d.closed.length ? <small className="muted">None yet.</small> : d.closed.slice(0, 30).map((p) => (
-          <small key={p.id}><b className={(p.pnl_usd || 0) >= 0 ? "up" : "down"}>{usd(p.pnl_usd)}</b> · {p.side} {p.coin} {p.lev}x on {VN[p.venue] || p.venue} · {px(p.entry)} → {px(p.exit)} · {p.reason}{p.mode === "paper" ? " · practice" : ""} · <span className="muted">{p.closed_at ? ago(p.closed_at) : ""}</span></small>
+          <small key={p.id}><b className={(p.pnl_usd || 0) >= 0 ? "up" : "down"}>{usd(p.pnl_usd)}</b> · {p.side} {fxLabel(p.coin, p.entry)} {p.lev}x on {VN[p.venue] || p.venue} · {px(p.entry)} → {px(p.exit)} · {p.reason}{p.mode === "paper" ? " · practice" : ""} · <span className="muted">{p.closed_at ? ago(p.closed_at) : ""}</span></small>
         ))}
       </section>
 

@@ -69,7 +69,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
               const w = await futWallet();
               if (!w) return json({ error: "Create the AI Futures wallet first." }, 400);
               if ((w.hlValue ?? 0) < 10) return json({ error: `The wallet has $${(w.hlValue ?? 0).toFixed(2)} on Hyperliquid. Fund it with at least $10 (see How to fund) before going live.` }, 400);
-              if (!(up.venues as string[] | undefined ?? s.venues).some((v) => LIVE_VENUES.includes(v))) return json({ error: "Switch Hyperliquid on: live trading runs on Hyperliquid." }, 400);
+              if (!(up.venues as string[] | undefined ?? s.venues).some((v) => LIVE_VENUES.includes(v))) return json({ error: "Switch Hyperliquid or Forex on: live trading runs on Hyperliquid." }, 400);
               // Practice trades are pretend: close them so the AI starts fresh with the real money.
               if (open?.length) await closeAllNow("paper");
             } else {

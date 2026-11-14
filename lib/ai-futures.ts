@@ -14,6 +14,11 @@
  *
  * Practice: pretend dollars, real prices, real fees. Live: Hyperliquid, from its own wallet, with every stop-loss
  * also resting on Hyperliquid (so it still protects the position if this site is down). Aster: practice only for now.
+ *
+ * Forex (third venue): the currency markets on trade.xyz inside Hyperliquid (EUR/USD, USD/JPY, GBP/USD, DXY, …). Same
+ * wallet and the same money funded from Solana; for each live forex trade the margin is moved into the forex account
+ * and back when it closes. It reads forex news (FXStreet, investingLive) as well, is stricter than for crypto (news
+ * and chart must agree), sits out the weekend and closes forex trades before Friday's close.
  */
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { Keypair } from "@solana/web3.js";
@@ -23,12 +28,13 @@ import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { accountPosts } from "@/lib/ai-trader-copy";
-import { hlAccount, hlCancel, hlCandles, hlMarket, hlMarketOrder, hlSetLeverage, hlStopLoss, type Candle, type HlAsset } from "@/lib/hyperliquid";
+import { FX_DEX, hlAccount, hlCancel, hlCandles, hlDexTransfer, hlFxMarket, hlMarket, hlMarketOrder, hlSetLeverage, hlStopLoss, type Candle, type HlAsset } from "@/lib/hyperliquid";
+import { fxLabel, fxOpen, fxWeekendSoon, isFx, usdSign } from "@/lib/fx";
 
-export const VENUES = ["hyperliquid", "aster"] as const;
-export const LIVE_VENUES = ["hyperliquid"];
-export const VENUE_NAME: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster" };
-const FEE = { hyperliquid: 0.00045, aster: 0.00035 } as Record<string, number>; // taker fee per side
+export const VENUES = ["hyperliquid", "aster", "forex"] as const;
+export const LIVE_VENUES = ["hyperliquid", "forex"];
+export const VENUE_NAME: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster", forex: "Forex (trade.xyz)" };
+const FEE = { hyperliquid: 0.00045, aster: 0.00035, forex: 0.0009 } as Record<string, number>; // taker fee per side
 const MAX_LEV = 50; // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
@@ -384,7 +390,16 @@ async function performance(s: FSettings, eqTotal: number, openUpnl: number) {
 
 // ---------------------------------------------------------------- Market data
 
-type Mkt = { hl: Map<string, HlAsset>; aster: Map<string, { mark: number; funding: number }> };
+type Mkt = { hl: Map<string, HlAsset>; aster: Map<string, { mark: number; funding: number }>; fx: Map<string, HlAsset> };
+/** Prices for every venue that's needed: Aster and forex only when switched on (or asked for with all). */
+async function market(s: FSettings | null, all = false, fxToo = false): Promise<Mkt> {
+  const [hl, aster, fx] = await Promise.all([
+    all ? hlMarket().catch(() => new Map<string, HlAsset>()) : hlMarket(),
+    all || s?.venues.includes("aster") ? asterMarket().catch(() => new Map()) : Promise.resolve(new Map()),
+    all || fxToo || s?.venues.includes("forex") ? hlFxMarket().catch(() => new Map<string, HlAsset>()) : Promise.resolve(new Map<string, HlAsset>()),
+  ]);
+  return { hl, aster, fx };
+}
 async function asterMarket(): Promise<Map<string, { mark: number; funding: number }>> {
   const r = await fetch("https://fapi.asterdex.com/fapi/v1/premiumIndex", { cache: "no-store", signal: AbortSignal.timeout(8000) });
   const j = r.ok ? await r.json() : [];
@@ -397,8 +412,11 @@ async function asterMarket(): Promise<Map<string, { mark: number; funding: numbe
   }
   return out;
 }
-const priceOn = (m: Mkt, venue: string, coin: string) => (venue === "aster" ? m.aster.get(coin)?.mark : m.hl.get(coin)?.mark) || 0;
-const fundingOn = (m: Mkt, venue: string, coin: string) => (venue === "aster" ? m.aster.get(coin)?.funding : m.hl.get(coin)?.funding) ?? 0;
+/** The Hyperliquid market a live order goes to (main exchange, or trade.xyz for forex). */
+const assetOn = (m: Mkt, venue: string, coin: string) => (venue === "forex" ? m.fx.get(coin) : m.hl.get(coin));
+const priceOn = (m: Mkt, venue: string, coin: string) => (venue === "aster" ? m.aster.get(coin)?.mark : assetOn(m, venue, coin)?.mark) || 0;
+const fundingOn = (m: Mkt, venue: string, coin: string) => (venue === "aster" ? m.aster.get(coin)?.funding : assetOn(m, venue, coin)?.funding) ?? 0;
+const dexOf = (venue: string) => (venue === "forex" ? FX_DEX : "");
 
 // ---------------------------------------------------------------- Technical analysis
 
@@ -425,7 +443,8 @@ async function analyse(coin: string): Promise<TA | null> {
   const e21h = ema(c1, 21), e50h = ema(c1, 50);
   const trend = Math.sign(e21h.at(-1)! - e50h.at(-1)!) * (Math.sign(e21h.at(-1)! - e21h.at(-6)!) === Math.sign(e21h.at(-1)! - e50h.at(-1)!) ? 1 : 0.5);
   const e9 = ema(c5, 9), e21 = ema(c5, 21);
-  const mom = Math.max(-1, Math.min(1, ((e9.at(-1)! - e21.at(-1)!) / price) * 400));
+  // Currencies move about a tenth as much as coins, so their momentum is scaled up to the same -1…+1.
+  const mom = Math.max(-1, Math.min(1, ((e9.at(-1)! - e21.at(-1)!) / price) * (isFx(coin) ? 3000 : 400)));
   const prev = m5.slice(-21, -1), last = m5.at(-1)!;
   const hi = Math.max(...prev.map((c) => c.h)), lo = Math.min(...prev.map((c) => c.l));
   const vAvg = prev.reduce((a, c) => a + c.v, 0) / prev.length;
@@ -451,10 +470,14 @@ const FEEDS = [
   ["Decrypt", "https://decrypt.co/feed"],
   ["The Block", "https://www.theblock.co/rss.xml"],
 ] as const;
+const FX_FEEDS = [
+  ["FXStreet", "https://www.fxstreet.com/rss/news"],
+  ["investingLive", "https://investinglive.com/feed/"],
+] as const;
 type Item = { key: string; source: string; title: string; url: string; at: number };
 const tag = (x: string, t: string) => (x.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`, "i"))?.[1] || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
-async function rss(): Promise<Item[]> {
-  const all = await Promise.all(FEEDS.map(async ([name, url]) => {
+async function rss(fx = false): Promise<Item[]> {
+  const all = await Promise.all([...FEEDS, ...(fx ? FX_FEEDS : [])].map(async ([name, url]) => {
     const x = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000), headers: { "user-agent": "Mozilla/5.0 AUTISTIK-Hub" } }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
     return (x.match(/<item[\s>][\s\S]*?<\/item>/gi) || []).slice(0, 15).map((it) => {
       const link = tag(it, "link") || tag(it, "guid");
@@ -465,9 +488,10 @@ async function rss(): Promise<Item[]> {
 }
 
 /** New headlines and X posts (each judged once), read by the AI: which coin, up or down, how strongly. */
-async function readNews(s: FSettings): Promise<number> {
+async function readNews(s: FSettings, m: Mkt): Promise<number> {
   const items: Item[] = [];
-  if (s.use_news) items.push(...(await rss().catch(() => [])));
+  const fx = s.venues.includes("forex") ? [...m.fx.keys()] : [];
+  if (s.use_news) items.push(...(await rss(fx.length > 0).catch(() => [])));
   if (s.use_x && s.x_handles.length) {
     const posts = await accountPosts(s.x_handles.slice(0, 20)).catch(() => []);
     items.push(...posts.map((p) => ({ key: `x:${p.id}`, source: `@${p.user}`, title: p.text.slice(0, 400), url: p.url, at: p.at })));
@@ -479,9 +503,12 @@ async function readNews(s: FSettings): Promise<number> {
   const todo = items.filter((i) => keys.has(i.key)).slice(0, 20);
   if (!todo.length || !process.env.ANTHROPIC_API_KEY) return 0;
   const coins = s.coins.join(", ");
+  // Forex markets, with what "up" means for each (dir 1 = this market's price rises).
+  const fxList = fx.map((c) => `${c} (${fxLabel(c, m.fx.get(c)?.mark)}: price up = ${fxLabel(c, m.fx.get(c)?.mark).startsWith("USD/") ? "dollar stronger" : c.endsWith("DXY") ? "dollar stronger" : `${c.slice(4)} stronger`})`).join(", ");
+  const fxRule = fx.length ? ` Forex markets: ${fxList}. Use "USD" for news that moves the US dollar against everything (Fed decisions and speeches, US CPI, jobs/NFP, GDP, Treasury yields): dir 1 = dollar stronger. For news about one currency (ECB, BoE, BoJ, RBA decisions, that country's data), use that market's exact name and dir for ITS price. Scheduled data only counts once the actual number is out (beat or miss vs forecast), never previews.` : "";
   const msg = await anthropic().messages.create({
     model: FAST_MODEL, max_tokens: 900,
-    system: `You are a crypto futures desk reading breaking news. For each numbered item decide if it should move a coin's price in the next hour. Coins: ${coins}. Use "MARKET" for news that moves all crypto (macro, ETF flows, regulation, exchange hacks, big liquidations). Reply ONLY with a JSON array: [{"i":1,"coin":"BTC"|"MARKET"|null,"dir":1|-1|0,"strength":0..1}]. strength 0.8+ only for clearly market-moving, fresh, confirmed news (listings, hacks, ETF approvals, rate decisions, big partnerships). Opinion, price recaps, old news, ads and rumours are dir 0.`,
+    system: `You are a futures desk reading breaking news. For each numbered item decide if it should move a market's price in the next hour. Coins: ${coins}. Use "MARKET" for news that moves all crypto (macro, ETF flows, regulation, exchange hacks, big liquidations).${fxRule} Reply ONLY with a JSON array: [{"i":1,"coin":"BTC"|"MARKET"${fx.length ? '|"USD"|"xyz:EUR"' : ""}|null,"dir":1|-1|0,"strength":0..1}]. strength 0.8+ only for clearly market-moving, fresh, confirmed news (listings, hacks, ETF approvals, rate decisions, data surprises, big partnerships). Opinion, price recaps, old news, ads and rumours are dir 0.`,
     messages: [{ role: "user", content: todo.map((t, i) => `${i + 1}. [${t.source}] ${t.title}`).join("\n") }],
   } as any).catch(() => null);
   const text = (msg as any)?.content?.find?.((b: any) => b.type === "text")?.text || "";
@@ -491,7 +518,7 @@ async function readNews(s: FSettings): Promise<number> {
   for (const o of Array.isArray(out) ? out : []) {
     const it = todo[Number(o.i) - 1];
     if (!it) continue;
-    const coin = typeof o.coin === "string" && (o.coin === "MARKET" || s.coins.includes(o.coin)) ? o.coin : null;
+    const coin = typeof o.coin === "string" && (o.coin === "MARKET" || s.coins.includes(o.coin) || (fx.length && (o.coin === "USD" || fx.includes(o.coin)))) ? o.coin : null;
     const dir = [1, -1].includes(Number(o.dir)) ? Number(o.dir) : 0;
     const strength = Math.max(0, Math.min(1, n(o.strength)));
     await fq("ai_futures_news").update({ coin, direction: dir, strength }).eq("key", it.key);
@@ -500,16 +527,21 @@ async function readNews(s: FSettings): Promise<number> {
   return hits;
 }
 
-/** The news score per coin: recent judged items, fading to nothing over 30 minutes. MARKET news counts for every coin. */
-async function newsScores(coins: string[]): Promise<Map<string, { score: number; why: string }>> {
+/**
+ * The news score per coin: recent judged items, fading to nothing over 30 minutes. MARKET news counts for every crypto
+ * coin; USD (dollar) news counts for every forex market, turned the right way for how that pair is quoted.
+ */
+async function newsScores(coins: string[], m?: Mkt): Promise<Map<string, { score: number; why: string }>> {
   const { data } = await fq("ai_futures_news").select("coin,direction,strength,at,title,source").gte("at", new Date(Date.now() - 30 * 60_000).toISOString()).not("coin", "is", null).neq("direction", 0);
   const out = new Map<string, { score: number; why: string }>();
   for (const c of coins) {
     let score = 0, why = "", best = 0;
+    const fx = isFx(c);
     for (const r of (data || []) as any[]) {
-      if (r.coin !== c && r.coin !== "MARKET") continue;
+      if (r.coin !== c && r.coin !== (fx ? "USD" : "MARKET")) continue;
       const w = (1 - (Date.now() - Date.parse(r.at)) / (30 * 60_000)) * n(r.strength) * (r.coin === "MARKET" ? 0.7 : 1);
-      score += Number(r.direction) * w;
+      const sign = r.coin === "USD" ? usdSign(c, m?.fx.get(c)?.mark || 0) : 1;
+      score += Number(r.direction) * sign * w;
       if (w > best) { best = w; why = `${r.source}: ${String(r.title).slice(0, 120)}`; }
     }
     out.set(c, { score: Math.max(-1, Math.min(1, score)), why });
@@ -525,8 +557,9 @@ async function equity(s: FSettings, m: Mkt): Promise<{ total: number; free: numb
   if (s.mode === "live") {
     const a = await futAccount();
     if (!a) return { total: 0, free: 0 };
-    const acc = await hlAccount(a.address);
-    return { total: acc.value, free: acc.free };
+    const [acc, fxAcc] = await Promise.all([hlAccount(a.address), s.venues.includes("forex") ? hlAccount(a.address, FX_DEX).catch(() => null) : Promise.resolve(null)]);
+    // Forex margin sits in its own account on trade.xyz: counted in the total, and free money there can be used too.
+    return { total: acc.value + (fxAcc?.value ?? 0), free: acc.free + (fxAcc?.free ?? 0) };
   }
   const { data } = await fq("ai_futures_positions").select("*").eq("mode", "paper").in("status", ["open", "closing"]);
   const open = (data || []) as FPos[];
@@ -541,15 +574,16 @@ async function closePos(s: FSettings, m: Mkt, p: FPos, reason: string, price?: n
   try {
     let exit = price ?? priceOn(m, p.venue, p.coin), tx: string | null = null;
     if (p.mode === "live") {
-      const a = await futAccount(), asset = m.hl.get(p.coin);
+      const a = await futAccount(), asset = assetOn(m, p.venue, p.coin);
       if (!a || !asset) throw new Error("wallet or market missing");
       if (p.sl_oid) await hlCancel(a, asset.index, Number(p.sl_oid));
-      const acc = await hlAccount(a.address);
+      const acc = await hlAccount(a.address, dexOf(p.venue));
       const held = Math.abs(acc.positions.get(p.coin)?.size || 0);
       if (held > 0) {
         const r = await hlMarketOrder(a, asset, p.side === "short", held, true, 0.05);
         exit = r.avgPx; tx = String(r.oid);
       } else reason = `${reason} (already closed on Hyperliquid, likely by its stop-loss)`;
+      if (p.venue === "forex") await sweepFx(a).catch((e) => flog("error", `Couldn't move forex money back to the main account: ${(e as Error).message}`));
     }
     const fees = n(p.fees_usd) + n(p.notional_usd) * (exit / n(p.entry)) * (FEE[p.venue] ?? 0.0005);
     let pnl = pnlOf(p, exit) - fees;
@@ -559,11 +593,18 @@ async function closePos(s: FSettings, m: Mkt, p: FPos, reason: string, price?: n
       const fresh = await getF();
       await sb().from("ai_futures_settings").update({ paper_usd: fresh.paper_usd + n(p.margin_usd) + pnl }).eq("id", T());
     }
-    await flog(pnl >= 0 ? "win" : "loss", `${pnl >= 0 ? "✅" : "🔻"} Closed ${p.side} ${p.coin} on ${VENUE_NAME[p.venue]} (${reason}): ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${((pnl / n(p.margin_usd)) * 100).toFixed(1)}% of margin)${p.mode === "paper" ? " · practice" : ""}.`);
+    await flog(pnl >= 0 ? "win" : "loss", `${pnl >= 0 ? "✅" : "🔻"} Closed ${p.side} ${fxLabel(p.coin, exit)} on ${VENUE_NAME[p.venue]} (${reason}): ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${((pnl / n(p.margin_usd)) * 100).toFixed(1)}% of margin)${p.mode === "paper" ? " · practice" : ""}.`);
   } catch (e) {
     await fq("ai_futures_positions").update({ status: "open" }).eq("id", p.id);
     await flog("error", `Couldn't close ${p.coin}: ${(e as Error).message}`);
   }
+}
+
+/** With no forex trade left open, the forex account's money goes back to the main account (instant, free). */
+async function sweepFx(a: PrivateKeyAccount) {
+  const fxAcc = await hlAccount(a.address, FX_DEX);
+  if ([...fxAcc.positions.values()].some((q) => q.size !== 0)) return;
+  if (fxAcc.free >= 0.5) await hlDexTransfer(a, FX_DEX, "", fxAcc.free);
 }
 
 /** Stops, targets, break-even and trailing, time limit, news against it. */
@@ -584,6 +625,8 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
     const liqHit = p.liq && (long ? price <= p.liq : price >= p.liq);
     const ns = news.get(p.coin)?.score ?? 0;
     const old = Date.now() - Date.parse(p.opened_at) > s.max_hold_hours * 3600e3;
+    // Forex: closed before Friday's close, so a weekend gap can't jump over the stop.
+    if (p.venue === "forex" && fxWeekendSoon()) { await closePos(s, m, p, "Closed before the forex weekend", price); continue; }
     if (liqHit && p.mode === "paper") { await closePos(s, m, p, "Liquidated", p.liq!); continue; }
     // Auto-sell: the trade is down the set % of its margin (like the P&L % the exchange shows).
     const roe = (pnlOf(p, price) / n(p.margin_usd)) * 100;
@@ -595,7 +638,7 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
     // Live: the stop moved, so move the one resting on Hyperliquid too.
     let sl_oid = p.sl_oid;
     if (p.mode === "live" && stop !== n(p.stop)) {
-      const a = await futAccount(), asset = m.hl.get(p.coin);
+      const a = await futAccount(), asset = assetOn(m, p.venue, p.coin);
       if (a && asset && p.size) {
         const fresh = await hlStopLoss(a, asset, !long, n(p.size), stop).catch(() => null);
         if (fresh) { if (sl_oid) await hlCancel(a, asset.index, Number(sl_oid)); sl_oid = fresh; }
@@ -608,21 +651,24 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
 
 async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, coin: string, side: "long" | "short", ta: TA | null, why: string, newsDriven: boolean) {
   const long = side === "long";
-  // Venue: of the switched-on ones (live: Hyperliquid only for now) that list the coin, the one with the cheaper funding for this side.
-  const venues = s.venues.filter((v) => (s.mode === "live" ? LIVE_VENUES.includes(v) : true) && priceOn(m, v, coin) > 0);
+  // Venue: of the switched-on ones (live: Hyperliquid and forex) that list the coin, the one with the cheaper funding for this side.
+  const fx = isFx(coin);
+  const venues = s.venues.filter((v) => (v === "forex") === fx && (s.mode === "live" ? LIVE_VENUES.includes(v) : true) && priceOn(m, v, coin) > 0);
   if (!venues.length) return `no venue lists ${coin}`;
   const venue = venues.sort((a, b) => (long ? fundingOn(m, a, coin) - fundingOn(m, b, coin) : fundingOn(m, b, coin) - fundingOn(m, a, coin)))[0];
   const f = fundingOn(m, venue, coin);
   if (long ? f > 0.0005 : f < -0.0005) return `funding too costly on ${VENUE_NAME[venue]}`;
   const price = priceOn(m, venue, coin);
   // Stop: 3× the 5-minute ATR, between 0.6% and 4% away. At 3x, liquidation is ~32% away, far past any stop.
-  let lev = Math.min(MAX_LEV, s.max_lev, m.hl.get(coin)?.maxLev ?? MAX_LEV);
+  let lev = Math.min(MAX_LEV, s.max_lev, (assetOn(m, venue, coin) ?? m.hl.get(coin))?.maxLev ?? MAX_LEV);
   // "Never get liquidated" (on): liquidation at least 15% away (6x at most), so even a sudden crash reaches the
   // stop-loss resting on Hyperliquid long before it could reach liquidation.
   if (s.no_liq) lev = Math.min(lev, 6);
   // Stop: 3× the 5-minute ATR (0.6%–4% away), but never more than the auto-sell loss (e.g. -5% of the margin = 5% ÷
   // leverage of price). Liquidation is about 1 ÷ leverage away, so the stop always comes first.
-  const stopPct = Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev);
+  // Currencies move far less, so their stop is 0.15%–1% away instead.
+  const stopPct = fx ? Math.min(0.01, Math.max(0.0015, (ta?.atrPct ?? 0.0008) * 3), s.max_loss_pct / 100 / lev)
+    : Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev);
   // Size: a stop-loss costs risk_pct of the account; margin never more than a third of the account or 90% of free cash.
   let notional = (eq.total * (s.risk_pct / 100)) / stopPct;
   notional = Math.min(notional, eq.total * 0.33 * lev, eq.free * 0.9 * lev);
@@ -632,18 +678,28 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   const target = long ? price * (1 + stopPct * (newsDriven ? 2.5 : 2.2)) : price * (1 - stopPct * (newsDriven ? 2.5 : 2.2));
   const liq = long ? price * (1 - 1 / lev + 0.005) : price * (1 + 1 / lev - 0.005);
   // Always: the stop must sit far before liquidation (at least 8x nearer), or no trade.
-  if (Math.abs(price - liq) / price < stopPct * 8) return `${coin}: liquidation too close to the stop at ${lev}x`;
+  if (Math.abs(price - liq) / price < stopPct * 8) return `${fxLabel(coin, price)}: liquidation too close to the stop at ${lev}x`;
   let entry = price, size: number | null = null, sl_oid: number | null = null, tx: string | null = null;
   if (s.mode === "live") {
-    const a = await futAccount(), asset = m.hl.get(coin);
+    const a = await futAccount(), asset = assetOn(m, venue, coin);
     if (!a || !asset) return "no wallet";
+    if (fx) {
+      // The forex account has its own margin: move this trade's margin (plus a little for fees) in from the main one.
+      const fxAcc = await hlAccount(a.address, FX_DEX);
+      const need = notional / lev * 1.05 + 1 - fxAcc.free;
+      if (need > 0) await hlDexTransfer(a, "", FX_DEX, need);
+    }
     await hlSetLeverage(a, asset.index, lev);
-    const r = await hlMarketOrder(a, asset, long, notional / price, false, 0.01);
+    const r = await hlMarketOrder(a, asset, long, notional / price, false, fx ? 0.003 : 0.01).catch(async (e) => {
+      if (fx) await sweepFx(a).catch(() => {}); // nothing opened: the margin goes back to the main account
+      throw e;
+    });
     entry = r.avgPx; size = r.size; tx = String(r.oid);
     const st = long ? entry * (1 - stopPct) : entry * (1 + stopPct);
     sl_oid = await hlStopLoss(a, asset, !long, size, st).catch(async (e) => {
       // No stop on the exchange = too risky to keep: close it at once.
       await hlMarketOrder(a, asset, !long, size!, true, 0.05).catch(() => {});
+      if (fx) await sweepFx(a).catch(() => {});
       throw new Error(`Couldn't place the stop-loss, so closed it again: ${(e as Error).message}`);
     });
     notional = size * entry;
@@ -660,7 +716,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
     risk_usd: +(notional * stopPct).toFixed(4), equity_at_open: +eq.total.toFixed(2),
   });
   if (error) await flog("error", `Opened ${coin} but couldn't save it: ${error.message}`);
-  await flog("open", `${long ? "📈 Long" : "📉 Short"} ${coin} on ${VENUE_NAME[venue]} at $${entry.toPrecision(6)}, ${lev}x, $${notional.toFixed(0)} position ($${(notional / lev).toFixed(0)} margin). Stop $${(long ? entry * (1 - stopPct) : entry * (1 + stopPct)).toPrecision(6)} (-${(stopPct * 100).toFixed(2)}%), target +${(stopPct * (newsDriven ? 250 : 220)).toFixed(2)}%. ${why}${s.mode === "paper" ? " · practice" : ""}`);
+  await flog("open", `${long ? "📈 Long" : "📉 Short"} ${fxLabel(coin, entry)} on ${VENUE_NAME[venue]} at $${entry.toPrecision(6)}, ${lev}x, $${notional.toFixed(0)} position ($${(notional / lev).toFixed(0)} margin). Stop $${(long ? entry * (1 - stopPct) : entry * (1 + stopPct)).toPrecision(6)} (-${(stopPct * 100).toFixed(2)}%), target +${(stopPct * (newsDriven ? 250 : 220)).toFixed(2)}%. ${why}${s.mode === "paper" ? " · practice" : ""}`);
   return "opened";
 }
 
@@ -673,10 +729,14 @@ export async function runFutures(): Promise<string> {
   try {
     await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
     await refreshTransfers(3).catch(() => null);
-    const [hl, aster] = await Promise.all([hlMarket(), s.venues.includes("aster") ? asterMarket().catch(() => new Map()) : Promise.resolve(new Map())]);
-    const m: Mkt = { hl, aster };
-    if (s.enabled && (s.use_news || s.use_x)) await readNews(s).catch((e) => flog("error", `News: ${(e as Error).message}`));
-    const news = await newsScores(s.coins);
+    // Open forex trades are always watched, even if Forex was switched off after they opened.
+    const { data: heldFx } = await fq("ai_futures_positions").select("coin").eq("status", "open").eq("venue", "forex");
+    const m = await market(s, false, !!heldFx?.length);
+    const { hl } = m;
+    // Forex markets it trades (when Forex is switched on and the forex market is open).
+    const fxCoins = s.venues.includes("forex") ? [...m.fx.keys()] : [];
+    if (s.enabled && (s.use_news || s.use_x)) await readNews(s, m).catch((e) => flog("error", `News: ${(e as Error).message}`));
+    const news = await newsScores([...s.coins, ...new Set([...fxCoins, ...((heldFx || []) as any[]).map((r) => r.coin)])], m);
     await manage(s, m, news);
     if (!s.enabled) return note("Off. Open positions are still watched.");
     const eq = await equity(s, m);
@@ -689,10 +749,24 @@ export async function runFutures(): Promise<string> {
     if (held.size >= s.max_positions) return note(`Holding ${held.size} of ${s.max_positions}. Account $${eq.total.toFixed(2)}.`);
     // Score every coin not held: chart and news side by side.
     const cands: { coin: string; side: "long" | "short"; score: number; why: string; news: boolean; ta: TA | null }[] = [];
-    await Promise.all(s.coins.filter((c) => !held.has(c) && hl.has(c)).map(async (coin) => {
+    const scan = [...s.coins.filter((c) => !held.has(c) && hl.has(c)), ...(fxOpen() ? fxCoins.filter((c) => !held.has(c)) : [])];
+    await Promise.all(scan.map(async (coin) => {
       const ta = s.use_ta ? await analyse(coin).catch(() => null) : null;
       const ns = news.get(coin) || { score: 0, why: "" };
       const t = ta?.score ?? 0;
+      if (isFx(coin)) {
+        // Forex is stricter: news trades only when the chart already leans the same way; chart-only trades need a
+        // stronger setup. Fewer trades, but more of them should win.
+        if (!ta) return;
+        const label = fxLabel(coin, m.fx.get(coin)?.mark);
+        if (Math.abs(ns.score) >= 0.6 && Math.sign(t) === Math.sign(ns.score) && Math.abs(t) >= 0.15) {
+          cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + 0.5, why: `${label} news: ${ns.why} · chart: ${ta.notes.join(", ")}`, news: true, ta });
+        } else {
+          const blended = ns.score ? 0.65 * t + 0.35 * ns.score : t;
+          if (Math.abs(blended) >= 0.75 && !(ns.score && Math.sign(ns.score) !== Math.sign(blended))) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `${label} chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
+        }
+        return;
+      }
       // Strong news trades first, as long as the chart isn't clearly against it.
       if (Math.abs(ns.score) >= 0.6 && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
         cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + 0.5, why: `News: ${ns.why}${ta ? ` · chart: ${ta.notes.join(", ")}` : ""}`, news: true, ta });
@@ -705,10 +779,11 @@ export async function runFutures(): Promise<string> {
     const notes: string[] = [];
     for (const c of cands.slice(0, s.max_positions - held.size)) {
       const r = await open(s, m, await equity(s, m), c.coin, c.side, c.ta, c.why, c.news).catch((e) => `failed: ${(e as Error).message}`);
-      notes.push(`${c.coin} ${c.side}: ${r}`);
-      if (/^failed/.test(r)) await flog("error", `${c.coin}: ${r}`);
+      notes.push(`${fxLabel(c.coin, m.fx.get(c.coin)?.mark)} ${c.side}: ${r}`);
+      if (/^failed/.test(r)) await flog("error", `${fxLabel(c.coin, m.fx.get(c.coin)?.mark)}: ${r}`);
     }
-    return note(notes.length ? notes.join(" · ") : `Watching ${s.coins.length} coins; no setup strong enough. Account $${eq.total.toFixed(2)}.`);
+    const fxNote = fxCoins.length ? (fxOpen() ? ` and ${fxCoins.length} forex pairs` : " (forex closed for the weekend)") : "";
+    return note(notes.length ? notes.join(" · ") : `Watching ${s.coins.length} coins${fxNote}; no setup strong enough. Account $${eq.total.toFixed(2)}.`);
   } finally {
     await sb().from("ai_futures_settings").update({ lease_until: null, last_run: new Date().toISOString() }).eq("id", T());
   }
@@ -720,8 +795,7 @@ export async function closeNow(id: number) {
   const s = await getF();
   const { data } = await fq("ai_futures_positions").select("*").eq("id", id).eq("status", "open").maybeSingle();
   if (!data) throw new Error("That position isn't open.");
-  const [hl, aster] = await Promise.all([hlMarket(), asterMarket().catch(() => new Map())]);
-  await closePos(s, { hl, aster }, data as FPos, "Closed by admin");
+  await closePos(s, await market(s, true), data as FPos, "Closed by admin");
 }
 
 /** Close every open trade now (current mode first, then any other), at the market price. */
@@ -732,17 +806,16 @@ export async function closeAllNow(onlyMode?: "paper" | "live") {
   const { data } = await qy;
   const list = (data || []) as FPos[];
   if (!list.length) return 0;
-  const [hl, aster] = await Promise.all([hlMarket(), asterMarket().catch(() => new Map())]);
+  const m = await market(s, true);
   let n = 0;
-  for (const p of list) { await closePos(s, { hl, aster }, p, "Closed by admin (close all)").then(() => n++, (e) => flog("error", `Couldn't close ${p.coin}: ${(e as Error).message}`)); }
+  for (const p of list) { await closePos(s, m, p, "Closed by admin (close all)").then(() => n++, (e) => flog("error", `Couldn't close ${p.coin}: ${(e as Error).message}`)); }
   return n;
 }
 
 /** The page: settings, wallet, account value, open and closed positions, log, latest judged news. */
 export async function futStatus() {
   const s = await getF();
-  const [hl, aster] = await Promise.all([hlMarket().catch(() => new Map()), asterMarket().catch(() => new Map())]);
-  const m: Mkt = { hl: hl as any, aster: aster as any };
+  const m = await market(s, true);
   const [{ data: openP }, { data: closedP }, { data: logs }, { data: news }, wallet] = await Promise.all([
     fq("ai_futures_positions").select("*").in("status", ["open", "closing"]).order("opened_at", { ascending: false }),
     fq("ai_futures_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(50),
@@ -759,6 +832,7 @@ export async function futStatus() {
   const perf = await performance(s, eq.total, openNow.filter((p) => p.mode === s.mode).reduce((a, p) => a + n(p.upnl), 0)).catch(() => null);
   return {
     settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
+    fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],
     stats: { trades: done.length, wins, winRate: done.length ? Math.round((wins / done.length) * 100) : null, pnl },
