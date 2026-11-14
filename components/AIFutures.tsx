@@ -10,7 +10,7 @@ import TraderTabs from "@/components/TraderTabs";
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; max_loss_pct: number; risk_pct: number;
   max_positions: number; daily_loss_pct: number; max_hold_hours: number; use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[];
-  last_run: string | null; last_note: string | null; no_liq?: boolean;
+  last_run: string | null; last_note: string | null; no_liq?: boolean; auto_fund?: boolean;
 };
 type Trade = { id: number; coin: string; side: string; lev: number; venue: string; entry: number; exit: number; pnl: number; fees: number; impactPct: number | null; r: number | null; holdMin: number; opened: string; closed: string; driver: string; at: string };
 type Group = { key: string; trades: number; wins: number; pnl: number };
@@ -26,7 +26,7 @@ type P = {
 };
 type D = {
   settings: S; equity: { total: number; free: number }; liveVenues: string[];
-  wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null } | null;
+  wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
   open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[];
   news: { key: string; at: string; source: string; title: string; url: string; coin: string; direction: number; strength: number }[];
   stats: { trades: number; wins: number; winRate: number | null; pnl: number };
@@ -148,6 +148,7 @@ export default function AIFutures() {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [copied, setCopied] = useState(false);
+  const [copiedSol, setCopiedSol] = useState(false);
   const load = async () => {
     const r = await fetch("/api/ai-futures/status", { cache: "no-store" });
     const j = await r.json().catch(() => ({}));
@@ -200,6 +201,21 @@ export default function AIFutures() {
         {msg && <small className="aic-note" role="status">{msg}</small>}
       </section>
 
+      {(() => {
+        const open = d.open.reduce((a, p) => a + (p.upnl || 0), 0), total = d.stats.pnl + open;
+        const ret = d.perf?.returnPct ?? null;
+        return (
+          <section className={"card fut-profit " + (total >= 0 ? "up" : "down")} aria-live="polite">
+            <small className="muted">{live ? "Is it making money? (real account)" : "Is it making money? (practice money)"}</small>
+            <div className="row" style={{ alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+              <b style={{ fontSize: "2rem" }} className={total >= 0 ? "up" : "down"}>{total >= 0 ? "▲ " : "▼ "}{usd(total)}</b>
+              {ret != null && <b className={ret >= 0 ? "up" : "down"}>{pct(ret)}</b>}
+            </div>
+            <small className="muted">{usd(d.stats.pnl)} from {d.stats.trades} closed trade{d.stats.trades === 1 ? "" : "s"}{d.open.length ? ` + ${usd(open)} on ${d.open.length} open` : ""}{d.perf ? ` · started ${usd(d.perf.start)}, now ${usd(d.perf.now)}` : ""}. Money you add is not counted as profit. Every trade, its reason and its result are in Performance below.</small>
+          </section>
+        );
+      })()}
+
       <section className="ait-stats">
         <div><small>{live ? "Account (Hyperliquid)" : "Practice account"}</small><b>{usd(d.equity.total)}</b><em>{usd(d.equity.free)} free</em></div>
         <div><small>Open</small><b>{d.open.length}</b><em className={(d.open.reduce((a, p) => a + (p.upnl || 0), 0)) >= 0 ? "up" : "down"}>{usd(d.open.reduce((a, p) => a + (p.upnl || 0), 0))} now</em></div>
@@ -223,6 +239,33 @@ export default function AIFutures() {
             <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${p.coin} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
           </div>
         ))}
+      </section>
+
+      <section className="card stack">
+        <b>◎ Solana wallet for perps</b>
+        {!d.wallet ? <small className="muted">Create or import the AI Futures wallet below first; the Solana wallet sends its money there.</small> : !d.wallet.sol ? (
+          <>
+            <small className="muted">Fund perps from Solana: send USDT or USDC on Solana to this wallet and it&apos;s moved into Hyperliquid by itself, ready to trade.</small>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn primary" disabled={!!busy} onClick={() => act("sw", "sol-wallet", {})}>{busy === "sw" ? "Creating…" : "Create Solana wallet"}</button>
+              <button type="button" className="btn ghost" disabled={!!busy} onClick={() => { const k = prompt("Paste the private key of your own Solana wallet (Phantom / Solflare: Settings → Manage accounts → Show private key). Use a wallet just for this. It's stored encrypted."); if (k?.trim()) act("si", "sol-key-import", { key: k.trim() }); }}>Import my Solana wallet</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <small>Solana address: <button type="button" className="aic-addr" onClick={() => { navigator.clipboard?.writeText(d.wallet!.sol!.address).then(() => { setCopiedSol(true); setTimeout(() => setCopiedSol(false), 1500); }).catch(() => {}); }}>{copiedSol ? "Copied ✓" : d.wallet.sol.address}</button></small>
+            <small>Holds: <b>{d.wallet.sol.usdt == null ? "–" : `${d.wallet.sol.usdt.toFixed(2)} USDT`}</b> · <b>{d.wallet.sol.usdc == null ? "–" : `${d.wallet.sol.usdc.toFixed(2)} USDC`}</b> · {d.wallet.sol.sol == null ? "–" : `${d.wallet.sol.sol.toFixed(4)} SOL`}</small>
+            {d.wallet.sol.sol != null && d.wallet.sol.sol < 0.004 && <small className="down">⚠ Send about 0.01 SOL here too: moving the USDT / USDC needs a small network fee.</small>}
+            <label className={"aic-row" + (s.auto_fund !== false ? " on" : "")}>
+              <input type="checkbox" checked={s.auto_fund !== false} disabled={!!busy} onChange={(e) => set({ auto_fund: e.target.checked }, e.target.checked ? "Auto-fund on: USDT / USDC arriving here goes to Hyperliquid by itself." : "Auto-fund off: money stays in the Solana wallet.")} />
+              <span className="grow"><b>Add funds automatically</b><br /><small className="muted">Every few minutes: $5 or more of USDT / USDC here → Hyperliquid (about a minute). USDC sent to the Arbitrum address is deposited by itself too. Each move shows in the activity log as 💸.</small></span>
+            </label>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn small" disabled={!!busy} onClick={() => { const k = prompt("Paste the private key of your own Solana wallet (Phantom / Solflare). Only works while the current one is empty."); if (k?.trim()) act("si", "sol-key-import", { key: k.trim() }); }}>Use a different Solana wallet</button>
+              <button type="button" className="btn small ghost" disabled={!!busy} onClick={async () => { if (!confirm("Show the Solana wallet's private key? Anyone who sees it can take the money.")) return; try { const r = await call("sol-key-reveal", {}); prompt("Solana private key — paste into Phantom → Import private key (keep it secret):", r.key); } catch (e) { alert((e as Error).message); } }}>Show private key</button>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="card stack">

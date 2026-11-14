@@ -115,18 +115,30 @@ function b58(t: string) {
   for (const ch of t) { if (ch !== "1") break; out.unshift(0); }
   return Uint8Array.from(out);
 }
+/** Bytes → base58 (the form Phantom / Solflare import a private key in). */
+export function b58encode(b: Uint8Array): string {
+  let v = 0n;
+  for (const x of b) v = v * 256n + BigInt(x);
+  let out = "";
+  while (v > 0n) { out = B58[Number(v % 58n)] + out; v /= 58n; }
+  for (const x of b) { if (x !== 0) break; out = "1" + out; }
+  return out;
+}
 
 /**
  * Use your own Solana wallet: paste its private key as Phantom / Solflare export it (a long base58 string) or as the
  * 64-number list. Only while the current Solana trading wallet is empty and no live Solana coin is open.
  */
-export async function importSolKey(raw: string): Promise<string> {
+/** A Solana private key as Phantom / Solflare show it (base58, or the [..] byte list) → its keypair. */
+export function solKeypairFrom(raw: string): Keypair {
   const t = raw.trim();
   let bytes: Uint8Array;
   try { bytes = t.startsWith("[") ? Uint8Array.from(JSON.parse(t)) : b58(t); } catch { throw new Error("That isn't a Solana private key. Copy it from Phantom or Solflare: Settings → Show private key."); }
   if (bytes.length !== 64) throw new Error("That isn't a full Solana private key (it should be the long key Phantom or Solflare shows).");
-  let kp: Keypair;
-  try { kp = Keypair.fromSecretKey(bytes); } catch { throw new Error("That private key isn't valid."); }
+  try { return Keypair.fromSecretKey(bytes); } catch { throw new Error("That private key isn't valid."); }
+}
+export async function importSolKey(raw: string): Promise<string> {
+  const kp = solKeypairFrom(raw);
   const { data: openSol } = await tq("ai_trader_positions").select("id").eq("mode", "live").eq("chain", "solana").in("status", ["open", "closing"]).limit(1);
   if (openSol?.length) throw new Error("Sell the open live Solana coins first.");
   const cur = await solAccount();

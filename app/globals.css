@@ -6662,3 +6662,8 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .fut-fund{padding:12px;border-radius:12px;border:1.5px solid #F5C518}
 .aitx-trust{min-height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:.78em;cursor:pointer;color:var(--ink)}
 .aitx-trust.on{background:#F5C518;border-color:#F5C518;color:#141830}
+
+/* AI Futures: profit headline */
+.fut-profit { border-left: 4px solid var(--muted, #888); }
+.fut-profit.up { border-left-color: #16a34a; }
+.fut-profit.down { border-left-color: #dc2626; }
