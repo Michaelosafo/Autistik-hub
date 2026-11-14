@@ -926,6 +926,26 @@ export async function adoptCoin(chain: LiveChain, token: string, slot: number, s
   return `${p.symbol || "It"} is now watched: sells at -${sl}% or +${tp}%.`;
 }
 
+/**
+ * Profit-lock trailing stop. Once a coin is up enough it starts trailing, and the higher it has been, the tighter the
+ * trail and the more profit is locked in, so a big run can't turn back into a loss. Each step:
+ * [best gain so far %, widest trail allowed %, smallest gain it may sell at %]. The trade's own trail % is used when
+ * it is tighter than the step's cap; 0 turns the trailing stop off.
+ */
+const TRAIL_STEPS: [number, number, number][] = [[100, 8, 70], [60, 10, 35], [30, 12, 15], [0, Infinity, 3]];
+const TRAIL_START = 10; // normal picks start trailing once up 10%
+const TRAIL_START_SMALL = 25; // small-coin setup trades swing harder, so they start once up 25%
+
+/** The price the trailing stop sells at, or null while it is off or not yet armed. */
+function trailStop(p: Position, high: number): number | null {
+  const entry = n(p.entry_usd), t = n(p.trail);
+  if (t <= 0 || !entry) return null;
+  const peak = (high / entry - 1) * 100;
+  if (peak < (p.strategy ? TRAIL_START_SMALL : TRAIL_START)) return null;
+  const [, cap, floor] = TRAIL_STEPS.find(([g]) => peak >= g)!;
+  return Math.max(high * (1 - Math.min(t, cap) / 100), entry * (1 + floor / 100));
+}
+
 async function manage(s: Settings) {
   await adoptPending().catch(() => {});
   const sb = supabaseService();
@@ -961,12 +981,12 @@ async function manage(s: Settings) {
     let why: string | null = null;
     // Setup and signal trades keep their own target; older trades use the "away" take profit in hands-on mode.
     const tp = p.strategy ? n(p.take_profit) : s.manual_active ? n(s.away_take_profit) || n(p.take_profit) : n(p.take_profit);
-    const trailFrom = p.strategy ? 1.5 : 1.1; // small-coin trades only start trailing once they're up 50%
+    const stopAt = trailStop(p, high);
     if (rug) why = "Liquidity dropped sharply (possible rug)";
     else if (ch <= -n(p.stop_loss)) why = `Stop-loss (${ch.toFixed(1)}%)`;
     else if (ch >= tp) why = `Take profit (+${ch.toFixed(1)}%)`;
     else if (p.strategy && f && ch >= 40 && f.sells5 >= 8 && f.sells5 > f.buys5 * 1.8) why = `Sellers taking over near the top (+${ch.toFixed(1)}%: ${f.sells5} sells vs ${f.buys5} buys in 5m)`;
-    else if (n(p.trail) > 0 && high >= n(p.entry_usd) * trailFrom && price <= high * (1 - n(p.trail) / 100)) why = `Trailing stop (${((price / high - 1) * 100).toFixed(1)}% from the high)`;
+    else if (stopAt != null && price <= stopAt) why = `Trailing stop (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%, ${((price / high - 1) * 100).toFixed(1)}% from the high of +${((high / n(p.entry_usd) - 1) * 100).toFixed(1)}%)`;
     else if (ageH >= s.max_hold_hours) why = `Held ${Math.round(ageH)}h, the most allowed (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%)`;
     if (why) await closePosition({ ...p, high_usd: high }, why, price);
   }
