@@ -18,6 +18,7 @@ import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { resolve, type Flow } from "@/lib/ai-signals";
 import { flog, futSolAccount, type FPos, type FSettings } from "@/lib/ai-futures";
+import { confidenceSize, lessons, profitLocked, secondOpinion } from "@/lib/ai-judge";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const sb = () => supabaseService();
@@ -52,7 +53,7 @@ async function get(url: string) {
   return r.json();
 }
 
-type Pick = { mint: string; symbol: string; mcap: number; price: number; why: string; score: number };
+type Pick = { mint: string; symbol: string; mcap: number; price: number; why: string; score: number; facts: Record<string, unknown> };
 
 /** Coins pumping right now that pass every filter, best first. */
 async function candidates(skip: Set<string>): Promise<Pick[]> {
@@ -81,6 +82,13 @@ async function candidates(skip: Set<string>): Promise<Pick[]> {
       mint, symbol: String(t.symbol || "?"), mcap, price: n(t.usdPrice),
       why: `${t.symbol || "?"}: +${ch5.toFixed(0)}% in 5 min, ${buys} buys vs ${sells} sells, ${n(t.holderCount)} holders, $${Math.round(mcap).toLocaleString("en-US")} cap, ${Math.round(ageMin)} min old${t.launchpad ? ` (${t.launchpad})` : ""}`,
       score: ch5 * Math.min(4, buys / Math.max(1, sells)),
+      facts: {
+        symbol: t.symbol, name: t.name, launchpad: t.launchpad, ageMinutes: Math.round(ageMin), marketCap: Math.round(mcap), liquidity: Math.round(n(t.liquidity)),
+        holders: n(t.holderCount), topHoldersPct: top, devPct: t.audit?.devBalancePercentage ?? null, organicScore: t.organicScore ?? null,
+        last5m: { priceChangePct: ch5, buys, sells, buyVolume: Math.round(n(st.buyVolume)), sellVolume: Math.round(n(st.sellVolume)) },
+        last1h: { priceChangePct: n(t.stats1h?.priceChange), buys: n(t.stats1h?.numBuys), sells: n(t.stats1h?.numSells) },
+        socials: { x: !!t.twitter, telegram: !!t.telegram, website: !!t.website },
+      },
     });
   }
   return out.sort((a, b) => b.score - a.score);
@@ -118,6 +126,14 @@ export async function snipeEquity(s: FSettings): Promise<{ total: number; free: 
 
 async function buy(s: FSettings, c: Pick, cfg: SnipeCfg): Promise<string> {
   const eq = await snipeEquity(s);
+  // Judgment: the AI's second opinion on the coin (fake / exhausted / bot-pumped?) and recent results set the size.
+  const les = await lessons(s.mode);
+  if (les.stop) return les.stop;
+  const v = await secondOpinion(`snipe:${c.mint}`, "high-risk sniper of brand-new Solana launch coins: wants early, organic momentum with real buyers; rejects bundled / bot-pumped coins, copycats, dev-heavy supply and pumps that already ran", c.facts);
+  if (!v.go) { await flog("skip", `🧠 Skipped ${c.symbol}: ${v.why}`); return `AI said no (${v.why})`; }
+  const want = Math.max(1, +(cfg.usd * les.size * confidenceSize(v.confidence)).toFixed(2));
+  cfg = { ...cfg, usd: Math.min(want, Math.max(1, eq.free)) };
+  c = { ...c, why: `${c.why} · 🧠 AI ${Math.round(v.confidence * 100)}%: ${v.why}` };
   if (eq.free < cfg.usd) return s.mode === "live" ? `budget used up ($${eq.free.toFixed(2)} of its budget free, each buy is $${cfg.usd}): raise the Sniper budget or add money` : `not enough free money ($${eq.free.toFixed(2)}, each buy is $${cfg.usd})`;
   let entry = c.price * 1.02, qty = cfg.usd / entry, tx: string | null = null, spent = cfg.usd;
   if (s.mode === "live") {
@@ -203,8 +219,36 @@ async function manage(s: FSettings) {
   }
 }
 
+/**
+ * Fast exits: for the rest of the minute, every 5 seconds, re-price every open trade (one Jupiter price call) and
+ * sell at once on the stop-loss, take profit or trailing stop. New coins can crash 50%+ inside a minute.
+ */
+async function guard(s: FSettings, untilMs: number) {
+  while (Date.now() < untilMs) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open");
+    const open = (data || []) as FPos[];
+    if (!open.length) return;
+    const px = await get(`${JUP}/price/v3?ids=${open.map((p) => p.coin).join(",")}`).catch(() => null);
+    for (const p of open) {
+      const price = n(px?.[p.coin]?.usdPrice);
+      if (!price) continue;
+      const entry = n(p.entry), best = Math.max(n(p.best) || entry, price), peak = (best / entry - 1) * 100, up = (price / entry - 1) * 100;
+      const trail = peak >= 50 ? Math.max(best * 0.8, entry * 1.1) : null;
+      const why = price <= n(p.stop) ? `Stop-loss (${up.toFixed(0)}%)` : price >= n(p.target) ? `Take profit (+${up.toFixed(0)}%)` : trail && price <= trail ? `Trailing stop (+${up.toFixed(0)}%, high was +${peak.toFixed(0)}%)` : null;
+      if (why) await closeSnipe(s, { ...p, best, last: price }, why, price);
+      else if (best > n(p.best)) await pos().update({ best, last: price }).eq("id", p.id);
+    }
+  }
+}
+
 /** One minute of the Sniper: manage open trades, then buy the best fresh pumps (at most 2 a minute). */
 export async function runSniper(s: FSettings): Promise<string> {
+  const t0 = Date.now();
+  try { return await tick(s); } finally { await guard(s, t0 + 48_000).catch(() => {}); }
+}
+
+async function tick(s: FSettings): Promise<string> {
   await manage(s);
   if (!s.enabled) return "Off. Open trades are still watched.";
   const cfg = snipeCfg(s);
@@ -216,6 +260,8 @@ export async function runSniper(s: FSettings): Promise<string> {
   const today = new Date().toISOString().slice(0, 10);
   if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total }).eq("id", T()); s.day_start_usd = eq.total; }
   if (eq.total < n(s.day_start_usd) * (1 - s.daily_loss_pct / 100)) return `Paused for today: down ${(100 - (eq.total / n(s.day_start_usd)) * 100).toFixed(1)}% (limit ${s.daily_loss_pct}%).`;
+  const locked = profitLocked(s, eq.total);
+  if (locked) return locked;
   const { data: ever } = await pos().select("coin").eq("fut_id", T()).eq("venue", "pumpfun").limit(2000);
   const picks = await candidates(new Set(((ever || []) as any[]).map((r) => String(r.coin))));
   const notes: string[] = [];

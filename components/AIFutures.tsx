@@ -547,7 +547,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
           ["max_positions", "Positions at once", "", ""],
           ["daily_loss_pct", "Daily loss limit", "%", "Down this much today: no new trades until tomorrow (UTC)."],
           ["max_hold_hours", "Max hold", "hours", ""],
-        ].filter(([k]) => !snipeDesk || ["max_positions", "daily_loss_pct", "max_hold_hours"].includes(k)).map(([k, label, unit, hint]) => (
+          ["profit_lock_pct", "Daily profit lock", "%", "Up this much today: it keeps the profit and opens no new trades until tomorrow (UTC). 0 = off."],
+        ].filter(([k]) => !snipeDesk || ["max_positions", "daily_loss_pct", "max_hold_hours", "profit_lock_pct"].includes(k)).map(([k, label, unit, hint]) => (
           <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <small><b>{label}:</b> {String((s as any)[k])}{unit ? ` ${unit}` : ""}</small>
             <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt(`${label}${hint ? ` (${hint})` : ""}:`, String((s as any)[k])); if (v != null && v.trim() !== "" && isFinite(Number(v))) set({ [k]: Number(v) } as any); }}>Change</button>
