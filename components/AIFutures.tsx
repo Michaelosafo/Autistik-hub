@@ -194,7 +194,7 @@ function MoneyFlow({ d, busy, act, set }: { d: D; busy: string; act: (n: string,
   const solUsd = w?.sol ? (w.sol.usdt ?? 0) + (w.sol.usdc ?? 0) : null;
   const hl = w?.hlValue ?? null, free = w?.hlFree ?? null;
   const moving = (d.transfers || []).filter((t) => ["sending", "pending", "waiting", "depositing", "submitted", "delayed"].includes(t.status));
-  const [to, setTo] = useState<"solana" | "arbitrum">("solana");
+  const [to, setTo] = useState<"solana" | "arbitrum" | "hyperliquid">("solana");
   const [addr, setAddr] = useState("");
   const [amt, setAmt] = useState("");
   const [sym, setSym] = useState<"USDT" | "USDC">("USDT");
@@ -252,16 +252,17 @@ function MoneyFlow({ d, busy, act, set }: { d: D; busy: string; act: (n: string,
                 <span className="ait-seg" role="group" aria-label="Withdraw to">
                   <button type="button" className={to === "solana" ? "on" : ""} onClick={() => { setTo("solana"); setQ(""); }}>To Solana</button>
                   <button type="button" className={to === "arbitrum" ? "on" : ""} onClick={() => { setTo("arbitrum"); setQ(""); }}>To Arbitrum / exchange</button>
+                  <button type="button" className={to === "hyperliquid" ? "on" : ""} onClick={() => { setTo("hyperliquid"); setQ(""); }}>To another Hyperliquid account</button>
                 </span>
                 {to === "solana" && <span className="ait-seg" role="group" aria-label="Receive as">{(["USDT", "USDC"] as const).map((x) => <button key={x} type="button" className={sym === x ? "on" : ""} onClick={() => { setSym(x); setQ(""); }}>{x}</button>)}</span>}
                 <span className="ait-in" style={{ maxWidth: 140 }}><em>$</em><input inputMode="decimal" value={amt} placeholder="0" onChange={(e) => { setAmt(e.target.value); setQ(""); }} aria-label="Dollars to withdraw" /></span>
                 {free != null && free > 0 && <button type="button" className="btn small ghost" onClick={() => { setAmt(String(Math.floor(free * 100) / 100)); setQ(""); }}>Max</button>}
               </div>
-              <input className="ait-text" value={addr} onChange={(e) => { setAddr(e.target.value); setQ(""); }} placeholder={to === "solana" ? "Your Solana address (Phantom / exchange deposit address for Solana)" : "Your Arbitrum address (0x…) or an exchange's USDC-on-Arbitrum deposit address"} aria-label="Send to address" />
+              <input className="ait-text" value={addr} onChange={(e) => { setAddr(e.target.value); setQ(""); }} placeholder={to === "solana" ? "Your Solana address (Phantom / exchange deposit address for Solana)" : to === "hyperliquid" ? "Hyperliquid account address (0x…), e.g. another trader's wallet: instant and free" : "Your Arbitrum address (0x…) or an exchange's USDC-on-Arbitrum deposit address"} aria-label="Send to address" />
               {to === "solana" && w.sol && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => setAddr(w.sol!.address)}>Use the perps Solana wallet</button>}
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <button type="button" className="btn small" disabled={!!busy || !(Number(amt) > 0) || !addr.trim()} onClick={async () => { try { const r = await call("withdraw", { ...body(), quote: true }); setQ(r.note); } catch (e) { setQ((e as Error).message); } }}>Check fee</button>
-                <button type="button" className="btn small primary" disabled={!!busy || !(Number(amt) > 0) || !addr.trim()} onClick={() => { if (confirm(`Withdraw $${amt} from Hyperliquid to ${addr.trim()}${to === "solana" ? ` as ${sym} on Solana` : " as USDC on Arbitrum"}? Double-check the address: crypto sent to a wrong address can't be recovered.`)) act("wd", "withdraw", body()); }}>{busy === "wd" ? "Withdrawing…" : `Withdraw $${Number(amt) || 0}`}</button>
+                <button type="button" className="btn small primary" disabled={!!busy || !(Number(amt) > 0) || !addr.trim()} onClick={() => { if (confirm(`Withdraw $${amt} from Hyperliquid to ${addr.trim()}${to === "solana" ? ` as ${sym} on Solana` : to === "hyperliquid" ? " (another Hyperliquid account, instant and free)" : " as USDC on Arbitrum"}? Double-check the address: crypto sent to a wrong address can't be recovered.`)) act("wd", "withdraw", body()); }}>{busy === "wd" ? "Withdrawing…" : `Withdraw $${Number(amt) || 0}`}</button>
               </div>
               {q && <small className="muted" role="status">{q}</small>}
             </>
