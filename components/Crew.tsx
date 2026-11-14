@@ -101,11 +101,6 @@ export function CrewHero() {
     <div className="crew-hero" aria-hidden="true">
       <div className="crew-hero-glow" />
       <div className="crew-hero-main"><Mate m={CREW[0]} size={300} id="hero" /></div>
-      <span className="crew-pill p1">∞ Different, not less</span>
-      <span className="crew-pill p2">🎧 Calm mode on</span>
-      <span className="crew-pill p3">💛 1 community</span>
-      <div className="crew-mini m1"><Mate m={CREW[1]} size={84} id="h1" /></div>
-      <div className="crew-mini m2"><Mate m={CREW[2]} size={70} id="h2" /></div>
     </div>
   );
 }

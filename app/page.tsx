@@ -12,7 +12,7 @@ import TypeSoundToggle from "@/components/TypeSoundToggle";
 import { SeqReveal, Words } from "@/components/Sequence";
 import { LogoBadge } from "@/components/LogoMark";
 import Wordmark from "@/components/Wordmark";
-import { CrewHero, CrewMarquee } from "@/components/Crew";
+import { CrewHero } from "@/components/Crew";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { GROUPS, TOKEN_ADDRESS } from "@/lib/groups";
@@ -131,7 +131,6 @@ export default async function Home() {
         </div>
         <div className="lp-hero-art crew-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><CrewHero /></div>
       </section>
-      <CrewMarquee />
 
       <section data-sq="up" style={{ ["--sd" as string]: "150ms" }} className="lp-stats" aria-label="AUTISTIK in numbers">
         <div><b>{usd(m?.priceUsd)}</b><span>$AUTISTIK price</span></div>
