@@ -16,6 +16,7 @@
  * also resting on Hyperliquid (so it still protects the position if this site is down). Aster: practice only for now.
  */
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { Keypair } from "@solana/web3.js";
 import { createPublicClient, createWalletClient, erc20Abi, http, parseUnits } from "viem";
 import { arbitrum } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
@@ -34,7 +35,7 @@ export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
   max_lev: number; max_loss_pct: number; risk_pct: number; max_positions: number; daily_loss_pct: number; max_hold_hours: number;
   use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[]; last_run: string | null; last_note: string | null;
-  day_start_usd: number | null; day: string | null; no_liq: boolean;
+  day_start_usd: number | null; day: string | null; no_liq: boolean; auto_fund: boolean; fund_at: string | null;
 };
 export type FPos = {
   id: number; mode: string; venue: string; coin: string; side: "long" | "short"; lev: number; margin_usd: number; notional_usd: number;
@@ -61,6 +62,7 @@ export async function getF(): Promise<FSettings> {
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   s.no_liq = s.no_liq !== false;
+  s.auto_fund = s.auto_fund !== false;
   return s as FSettings;
 }
 
@@ -110,6 +112,91 @@ export async function revealFutKey(): Promise<string> {
   return data;
 }
 
+// ---------------------------------------------------------------- Its own Solana wallet (fund it from Solana)
+
+const solCache = new Map<number, { key: string; kp: Keypair }>();
+/** AI Futures' own Solana wallet: send USDT / USDC here and it's moved into the Hyperliquid account by itself. */
+export async function futSolAccount(): Promise<Keypair | null> {
+  const { data } = await sb().rpc("ai_futures_sol_key_get", { p_id: T() });
+  if (typeof data !== "string" || !data.startsWith("[")) return null;
+  const c = solCache.get(T());
+  if (c?.key === data) return c.kp;
+  const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(data)));
+  solCache.set(T(), { key: data, kp });
+  return kp;
+}
+export async function createFutSolWallet(): Promise<string> {
+  if (await futSolAccount()) throw new Error("AI Futures already has a Solana wallet.");
+  await getF();
+  const kp = Keypair.generate();
+  const { error } = await sb().rpc("ai_futures_sol_key_set", { p_id: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: false });
+  if (error) throw new Error(error.message);
+  solCache.delete(T());
+  await flog("settings", `AI Futures Solana wallet created: ${kp.publicKey.toBase58()}. Send USDT or USDC (and ~0.01 SOL for fees) to it.`);
+  return kp.publicKey.toBase58();
+}
+/** Use your own Solana wallet (Phantom / Solflare private key). Only when the current one is empty. */
+export async function importFutSolKey(raw: string): Promise<string> {
+  const { solKeypairFrom } = await import("@/lib/ai-trader");
+  const kp = solKeypairFrom(raw);
+  const cur = await futSolAccount();
+  if (cur && cur.publicKey.toBase58() !== kp.publicKey.toBase58()) {
+    const b = await futSolBalances(cur).catch(() => null);
+    if (b && (b.usdt + b.usdc > 1 || b.sol > 0.01)) throw new Error(`The current AI Futures Solana wallet still holds money ($${(b.usdt + b.usdc).toFixed(2)}, ${b.sol.toFixed(4)} SOL). Move it out first (Show private key → Phantom).`);
+  }
+  await getF();
+  const { error } = await sb().rpc("ai_futures_sol_key_set", { p_id: T(), p_key: JSON.stringify(Array.from(kp.secretKey)), p_replace: true });
+  if (error) throw new Error(error.message);
+  solCache.delete(T());
+  await flog("settings", `AI Futures now uses your Solana wallet: ${kp.publicKey.toBase58()}.`);
+  return kp.publicKey.toBase58();
+}
+export async function revealFutSolKey(): Promise<string> {
+  const kp = await futSolAccount();
+  if (!kp) throw new Error("There's no AI Futures Solana wallet yet.");
+  await flog("settings", "The AI Futures Solana wallet's private key was viewed.");
+  const { b58encode } = await import("@/lib/ai-trader");
+  return b58encode(kp.secretKey);
+}
+async function futSolBalances(kp: Keypair) {
+  const { stableBalances, chainBalance } = await import("@/lib/ai-trader-chains");
+  const w = { evm: null, sol: kp };
+  const [st, sol] = await Promise.all([stableBalances("solana", w), chainBalance("solana", w).catch(() => 0)]);
+  return { usdt: st.find((x) => x.symbol === "USDT")?.balance ?? 0, usdc: st.find((x) => x.symbol === "USDC")?.balance ?? 0, sol };
+}
+
+/**
+ * Funds arriving by themselves (on, by default), checked every minute, at most every 4 minutes:
+ *  - USDT / USDC in AI Futures' Solana wallet (at least $5) goes straight into the Hyperliquid account (Relay).
+ *  - USDC on Arbitrum in its EVM wallet (at least 5, with a little ETH for gas) is deposited to Hyperliquid.
+ */
+async function autoFund(s: FSettings) {
+  if (!s.auto_fund || (s.fund_at && Date.now() - Date.parse(s.fund_at) < 4 * 60_000)) return;
+  const a = await futAccount();
+  if (!a) return;
+  const kp = await futSolAccount();
+  if (kp) {
+    const b = await futSolBalances(kp).catch(() => null);
+    const sym = b && b.usdt >= b.usdc ? "USDT" : "USDC";
+    const amt = b ? Math.floor((sym === "USDT" ? b.usdt : b.usdc) * 100) / 100 : 0;
+    if (b && amt >= 5) {
+      await sb().from("ai_futures_settings").update({ fund_at: new Date().toISOString() }).eq("id", T());
+      if (b.sol < 0.004) { await flog("error", `$${amt} ${sym} is waiting in the AI Futures Solana wallet, but it needs about 0.01 SOL for the network fee to move it. Send a little SOL to it.`); return; }
+      const { solToHyperliquid } = await import("@/lib/ai-trader-chains");
+      try {
+        const r = await solToHyperliquid({ evm: null, sol: kp }, a.address, amt, sym);
+        await flog("settings", `💸 Funds added automatically: $${amt} ${sym} from the Solana wallet → Hyperliquid (≈$${(r.receive ?? amt).toFixed(2)} arrives, fee ≈$${r.feeUsd.toFixed(2)}).`);
+      } catch (e) { await flog("error", `Couldn't move $${amt} ${sym} to Hyperliquid: ${(e as Error).message}`); }
+      return;
+    }
+  }
+  const w = await futWallet().catch(() => null);
+  if (w && (w.arbUsdc ?? 0) >= 5 && (w.arbEth ?? 0) > 0.00002) {
+    await sb().from("ai_futures_settings").update({ fund_at: new Date().toISOString() }).eq("id", T());
+    await depositToHl().then((h) => flog("settings", `💸 Funds added automatically: ${(w.arbUsdc ?? 0).toFixed(2)} USDC from Arbitrum → Hyperliquid (tx ${h.slice(0, 10)}…).`), (e) => flog("error", `Couldn't deposit the Arbitrum USDC: ${(e as Error).message}`));
+  }
+}
+
 const USDC_ARB = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 const HL_BRIDGE = "0x2Df1c51E09aECF9cacB7bc98cB1742757f163dF7";
 const arb = () => createPublicClient({ chain: arbitrum, transport: http("https://arb1.arbitrum.io/rpc", { timeout: 10_000 }) });
@@ -122,7 +209,9 @@ export async function futWallet() {
     arb().readContract({ address: USDC_ARB, abi: erc20Abi, functionName: "balanceOf", args: [a.address] }).then((x) => Number(x) / 1e6).catch(() => null),
     arb().getBalance({ address: a.address }).then((x) => Number(x) / 1e18).catch(() => null),
   ]);
-  return { address: a.address, hlValue: hl?.value ?? null, hlFree: hl?.free ?? null, arbUsdc: usdc, arbEth: eth };
+  const kp = await futSolAccount().catch(() => null);
+  const sol = kp ? { address: kp.publicKey.toBase58(), ...(await futSolBalances(kp).catch(() => ({ usdt: null, usdc: null, sol: null }))) } : null;
+  return { address: a.address, hlValue: hl?.value ?? null, hlFree: hl?.free ?? null, arbUsdc: usdc, arbEth: eth, sol };
 }
 /** Sends the wallet's USDC on Arbitrum into its Hyperliquid account (Hyperliquid's bridge; arrives in about a minute). */
 export async function depositToHl(): Promise<string> {
@@ -487,6 +576,7 @@ export async function runFutures(): Promise<string> {
   const { data: go } = await sb().rpc("ai_futures_lease", { p_id: T(), p_seconds: 55 });
   if (!go) return "busy";
   try {
+    await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
     const [hl, aster] = await Promise.all([hlMarket(), s.venues.includes("aster") ? asterMarket().catch(() => new Map()) : Promise.resolve(new Map())]);
     const m: Mkt = { hl, aster };
     if (s.enabled && (s.use_news || s.use_x)) await readNews(s).catch((e) => flog("error", `News: ${(e as Error).message}`));
