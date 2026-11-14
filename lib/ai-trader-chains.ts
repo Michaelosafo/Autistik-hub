@@ -235,7 +235,21 @@ export async function solNativeToHyperliquid(kp: Keypair, recipient: string, sol
 }
 async function solCoinToHyperliquid(kp: Keypair, recipient: string, token: string, raw: bigint, quoteOnly: boolean) {
   if (!/^0x[0-9a-fA-F]{40}$/.test(recipient)) throw new Error("Create the AI Futures wallet first.");
-  const q = await relayQuote({ user: kp.publicKey.toBase58(), recipient, originChainId: RELAY_ID.solana, destinationChainId: HL_RELAY_ID, originCurrency: token, destinationCurrency: HL_PERPS_USDC, amount: raw.toString() });
+  return solRelayTo(kp, recipient, token, raw, HL_RELAY_ID, HL_PERPS_USDC, quoteOnly);
+}
+
+/**
+ * Money for a call on another network: USDT / USDC from the Solana wallet → the trading wallet on BNB Chain or
+ * Ethereum (Relay, usually 10-30 seconds), either as that chain's USDT / USDC or as its own coin (for network fees).
+ */
+export async function solFundChain(kp: Keypair, evmAddr: string, from: Stable, usd: number, to: Exclude<LiveChain, "solana">, as: "stable" | "native") {
+  const dest = as === "native" ? ZERO : (stableBySymbol(to, from.symbol) || stableBySymbol(to, "USDT"))?.token;
+  if (!dest) throw new Error(`No stablecoin set up on ${to}.`);
+  return solRelayTo(kp, evmAddr, from.token, parseUnits(usd.toFixed(6), from.decimals), RELAY_ID[to], dest, false);
+}
+
+async function solRelayTo(kp: Keypair, recipient: string, token: string, raw: bigint, destChainId: number, destCurrency: string, quoteOnly: boolean) {
+  const q = await relayQuote({ user: kp.publicKey.toBase58(), recipient, originChainId: RELAY_ID.solana, destinationChainId: destChainId, originCurrency: token, destinationCurrency: destCurrency, amount: raw.toString() });
   const info = relayInfo(q);
   if (quoteOnly) return { ...info, requestId: null as string | null, sigs: [] as string[] };
   const sigs: string[] = [];

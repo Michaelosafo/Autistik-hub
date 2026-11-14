@@ -412,7 +412,7 @@ export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean
  * that network) and sells back into the same one, so money between trades stays in dollars. Each network still needs a
  * little of its own coin for fees. SOL ↔ USDT / USDC can be converted here.
  */
-export function StableMode({ on, live, wallets, busy, onAct }: { on: boolean; live: boolean; wallets: LiveWallet[]; busy: boolean; onAct: Act }) {
+export function StableMode({ on, live, wallets, busy, onAct, bridge = true }: { on: boolean; live: boolean; wallets: LiveWallet[]; busy: boolean; onAct: Act; bridge?: boolean }) {
   const [amt, setAmt] = useState("");
   const [dir, setDir] = useState<"usdc" | "sol">("usdc");
   const [sym, setSym] = useState<"USDT" | "USDC">("USDT");
@@ -428,6 +428,10 @@ export function StableMode({ on, live, wallets, busy, onAct }: { on: boolean; li
       <label className={"aic-row" + (on ? " on" : "")}>
         <input type="checkbox" checked={on} disabled={busy} onChange={(e) => onAct("stable", "settings", { stable_on: e.target.checked }, e.target.checked ? "Stablecoins on: coins are bought with USDT / USDC on their own network and sold back into it." : "Stablecoins off: coins are bought with each network's own coin.")} />
         <span className="grow"><b>Buy with USDT / USDC and sell back into it</b><small className="muted">On Solana, BNB Chain and Ethereum: a coin on Solana is bought with Solana USDT / USDC, a BNB Chain coin with BNB Chain USDT / USDC, and so on. It uses whichever of the two you hold more of there (USDT if you mostly keep USDT). Keep a little SOL / BNB / ETH on each network for fees.</small></span>
+      </label>
+      <label className={"aic-row" + (bridge ? " on" : "")}>
+        <input type="checkbox" checked={bridge} disabled={busy} onChange={(e) => onAct("bridge", "settings", { bridge_on: e.target.checked }, e.target.checked ? "Bridging on: calls on BNB Chain / Ethereum are bought with money moved from Solana (Relay)." : "Bridging off: only calls on your ticked networks are bought.")} />
+        <span className="grow"><b>🌉 Buy calls on other chains (bridge from Solana)</b><small className="muted">When one of your callers or channels calls a coin on BNB Chain or Ethereum, the buy amount is moved from your Solana USDT / USDC with Relay (usually 10-30 seconds, plus a little BNB / ETH for fees if needed), then it buys with the same stop-loss and take profit. Sells go back into USDT there, ready for the next call on that chain.</small></span>
       </label>
       {live && nets.length > 0 && (
         <div className="aitx-list">

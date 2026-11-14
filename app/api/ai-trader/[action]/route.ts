@@ -165,6 +165,7 @@ async function postMine(action: string, b: any) {
       if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
       if (typeof b.stable_on === "boolean") up.stable_on = b.stable_on;
+      if (typeof b.bridge_on === "boolean") up.bridge_on = b.bridge_on;
       // Caller scout: on / off, budget and per-trade size, the bar a caller / group must clear, trust rules.
       for (const k of ["scout_on", "scout_trust_skip", "scout_honeypot_trusted"]) if (typeof b[k] === "boolean") up[k] = b[k];
       const scoutNums: Record<string, [number, number]> = { scout_budget: [0, 100_000], scout_trade_usd: [1, 10_000], scout_min_win: [1, 100], scout_min_calls: [3, 100], scout_multiple: [1.5, 100], scout_fast_min: [5, 1440], scout_group_rate: [1, 100] };
