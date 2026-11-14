@@ -28,7 +28,7 @@ import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { accountPosts } from "@/lib/ai-trader-copy";
-import { FX_DEX, hlAccount, hlCancel, hlCandles, hlDexTransfer, hlFxMarket, hlMarket, hlMarketOrder, hlSetLeverage, hlStopLoss, type Candle, type HlAsset } from "@/lib/hyperliquid";
+import { FX_DEX, HLP_VAULT, hlVaultApr, hlVaultEquity, hlVaultTransfer, hlAccount, hlCancel, hlCandles, hlDexTransfer, hlFxMarket, hlMarket, hlMarketOrder, hlSetLeverage, hlStopLoss, type Candle, type HlAsset } from "@/lib/hyperliquid";
 import { fxLabel, fxOpen, fxWeekendSoon, isFx, usdSign } from "@/lib/fx";
 
 export const VENUES = ["hyperliquid", "aster", "forex"] as const;
@@ -42,7 +42,10 @@ const MAX_LEV = 50;
  * trades forex; the Futures trader only trades crypto.
  */
 export const FX_DESK = 100000;
-export const isFxDesk = () => T() >= FX_DESK; // the most anyone can set (each coin's own exchange maximum still applies)
+/** The Earn desk (200000 + id): no trading; its money sits in Hyperliquid's HLP vault. Own wallet and Solana funding. */
+export const EARN_DESK = 200000;
+export const isFxDesk = () => T() >= FX_DESK && T() < EARN_DESK;
+export const isEarnDesk = () => T() >= EARN_DESK; // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
@@ -68,16 +71,17 @@ const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news"
 export async function flog(kind: string, text: string) { await fq("ai_futures_log").insert({ kind, text: text.slice(0, 600) }); }
 
 export async function getF(): Promise<FSettings> {
-  const made = await sb().from("ai_futures_settings").upsert(isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() }, { onConflict: "id", ignoreDuplicates: true });
+  const made = await sb().from("ai_futures_settings").upsert(isEarnDesk() ? { id: T(), venues: [], coins: [], enabled: false } : isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() }, { onConflict: "id", ignoreDuplicates: true });
   const { data } = await sb().from("ai_futures_settings").select("*").eq("id", T()).single();
-  if (!data) throw new Error(`Couldn't set up this ${isFxDesk() ? "Forex" : "Futures"} trader${made.error ? `: ${made.error.message}` : ""}.`);
+  if (!data) throw new Error(`Couldn't set up this ${isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"} trader${made.error ? `: ${made.error.message}` : ""}.`);
   const s = data as any;
   for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   s.no_liq = s.no_liq !== false;
   s.auto_fund = s.auto_fund !== false;
-  if (isFxDesk()) { s.venues = ["forex"]; s.coins = []; }
+  if (isEarnDesk()) { s.venues = []; s.coins = []; s.enabled = false; }
+  else if (isFxDesk()) { s.venues = ["forex"]; s.coins = []; }
   else s.venues = (s.venues || []).filter((v: string) => v !== "forex");
   return s as FSettings;
 }
@@ -739,6 +743,8 @@ export async function runFutures(): Promise<string> {
   try {
     await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
     await refreshTransfers(3).catch(() => null);
+    // Earn: nothing to trade. Money sent from Solana arrives on Hyperliquid above; you put it into HLP from the page.
+    if (isEarnDesk()) { const e = await earnState().catch(() => null); return note(e ? `Earn: $${e.inHlp.toFixed(2)} in HLP, $${e.free.toFixed(2)} free on Hyperliquid.` : "Earn: no wallet yet."); }
     // Open forex trades are always watched, even if Forex was switched off after they opened.
     const { data: heldFx } = await fq("ai_futures_positions").select("coin").eq("status", "open").eq("venue", "forex");
     const m = await market(s, false, !!heldFx?.length);
@@ -842,9 +848,34 @@ export async function futStatus() {
   const perf = await performance(s, eq.total, openNow.filter((p) => p.mode === s.mode).reduce((a, p) => a + n(p.upnl), 0)).catch(() => null);
   return {
     settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
+    earn: isEarnDesk() ? await earnState() : null,
     fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],
     stats: { trades: done.length, wins, winRate: done.length ? Math.round((wins / done.length) * 100) : null, pnl },
   };
+}
+
+// ---------------------------------------------------------------- Earn (HLP vault)
+
+/** The Earn desk's money: free on Hyperliquid, in HLP, its lock, and HLP's recent yearly rate. */
+async function earnState() {
+  const a = await futAccount();
+  if (!a) return { free: 0, inHlp: 0, lockedUntil: null as number | null, apr: await hlVaultApr().catch(() => null), vault: HLP_VAULT };
+  const [acc, v, apr] = await Promise.all([hlAccount(a.address).catch(() => null), hlVaultEquity(a.address).catch(() => ({ equity: 0, lockedUntil: null })), hlVaultApr().catch(() => null)]);
+  return { free: acc?.free ?? 0, inHlp: v.equity, lockedUntil: v.lockedUntil, apr, vault: HLP_VAULT };
+}
+
+/** Deposit into / withdraw from HLP (Earn desk only). Withdrawals only after the 4-day lock of the newest deposit. */
+export async function earnMove(isDeposit: boolean, usd: number) {
+  if (!isEarnDesk()) throw new Error("Only the Earn page does this.");
+  const a = await futAccount();
+  if (!a) throw new Error("Create or import the Earn wallet first.");
+  const st = await earnState();
+  if (isDeposit && usd > st.free + 1e-6) throw new Error(`Only $${st.free.toFixed(2)} is free on Hyperliquid. Fund the wallet first (from Solana below).`);
+  if (!isDeposit && usd > st.inHlp + 1e-6) throw new Error(`Only $${st.inHlp.toFixed(2)} is in HLP.`);
+  if (!isDeposit && st.lockedUntil && st.lockedUntil > Date.now()) throw new Error(`Locked until ${new Date(st.lockedUntil).toUTCString().slice(0, 22)} UTC (HLP keeps each deposit for 4 days).`);
+  await hlVaultTransfer(a, isDeposit, usd);
+  await flog(isDeposit ? "transfer" : "transfer", isDeposit ? `💰 Put $${usd.toFixed(2)} into HLP (Hyperliquid's market-making vault). It can come out 4 days after this deposit.` : `💰 Took $${usd.toFixed(2)} out of HLP back to the wallet's Hyperliquid balance.`);
+  return isDeposit ? `Put $${usd.toFixed(2)} into HLP.` : `Took $${usd.toFixed(2)} out of HLP.`;
 }

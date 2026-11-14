@@ -1,5 +1,5 @@
 "use client";
-/** The switch at the top of the AI pages: the Telegram copy-trading Bot, Futures or Forex. Each side has its own Practice / Live mode. */
+/** The switch at the top of the AI pages: the Telegram copy-trading Bot, Futures, Forex or Earn. Each side has its own Practice / Live mode. */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ export default function TraderTabs() {
     { href: "/admin/ai-trader", label: "🤖 TG Bot", sub: "Telegram calls · spot coins" },
     { href: "/admin/ai-futures", label: "📊 Futures", sub: "Crypto · Hyperliquid / Aster" },
     { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz" },
+    { href: "/admin/ai-earn", label: "💰 Earn", sub: "Steady · HLP vault" },
   ];
   return (
     <nav className="ait-tabs" role="tablist" aria-label="Choose the AI to use">

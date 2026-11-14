@@ -27,6 +27,7 @@ type P = {
 };
 type D = {
   settings: S; equity: { total: number; free: number }; liveVenues: string[];
+  earn?: { free: number; inHlp: number; lockedUntil: number | null; apr: number | null; vault: string } | null;
   fx?: { pairs: { coin: string; label: string; price: number; maxLev: number }[]; open: boolean };
   wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
   open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[];
@@ -242,10 +243,10 @@ async function call(action: string, body: unknown) {
   return d;
 }
 
-export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
-  const fxDesk = desk === "fx";
-  DESK = fxDesk ? "?desk=fx" : "";
-  const NAME = fxDesk ? "AI Forex" : "AI Futures";
+export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
+  const fxDesk = desk === "fx", earnDesk = desk === "earn";
+  DESK = fxDesk ? "?desk=fx" : earnDesk ? "?desk=earn" : "";
+  const NAME = earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
@@ -285,10 +286,11 @@ export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
       <TraderTabs />
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
-        <h1>{fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
-        {fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
+        <h1>{earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
+        {earnDesk ? <p className="muted">The fourth one, for slow and steady growth: no picking coins. Its own wallet; fund it from Solana like the others, then put the money into HLP, Hyperliquid&apos;s own market-making vault. HLP earns from making markets and liquidations on every Hyperliquid market, and your share grows (or shrinks) with it every day. Each deposit can be taken out 4 days after it was made. It&apos;s not a savings account: in bad weeks HLP can lose money too.</p> : fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
       </div>
 
+{!earnDesk && (<>
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
         <div className="ait-state">
           <span className={"ait-dot" + (s.enabled ? " on" : "")} aria-hidden="true" />
@@ -303,9 +305,27 @@ export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
         {msg && <small className="aic-note" role="status">{msg}</small>}
       </section>
+      </>)}
+
+      {earnDesk && d.earn && (
+        <section className="card stack fut-profit up">
+          <b>💰 Your money in HLP</b>
+          <div className="ait-stats">
+            <div><small>In HLP</small><b>{usd(d.earn.inHlp)}</b><em>{d.earn.lockedUntil && d.earn.lockedUntil > Date.now() ? `can come out ${new Date(d.earn.lockedUntil).toLocaleString()}` : d.earn.inHlp > 0 ? "can come out now" : "nothing in yet"}</em></div>
+            <div><small>Free on Hyperliquid</small><b>{usd(d.earn.free)}</b><em>ready to put in</em></div>
+            <div><small>HLP lately</small><b className={(d.earn.apr ?? 0) >= 0 ? "up" : "down"}>{d.earn.apr == null ? "–" : `${(d.earn.apr * 100).toFixed(1)}%`}</b><em>a year, at its recent pace (not promised)</em></div>
+          </div>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <button type="button" className="btn small primary" disabled={!!busy || !(d.earn.free >= 1)} onClick={() => { const v = prompt(`Put how many $ into HLP? (free: $${d.earn!.free.toFixed(2)}; it can come out 4 days after this deposit)`, String(Math.floor(d.earn!.free))); if (v && Number(v) > 0) act("earn-in", "earn", { op: "deposit", usd: Number(v) }); }}>{busy === "earn-in" ? "Putting in…" : "Put into HLP"}</button>
+            <button type="button" className="btn small" disabled={!!busy || !(d.earn.inHlp >= 1) || !!(d.earn.lockedUntil && d.earn.lockedUntil > Date.now())} onClick={() => { const v = prompt(`Take how many $ out of HLP? (in: $${d.earn!.inHlp.toFixed(2)})`, String(Math.floor(d.earn!.inHlp))); if (v && Number(v) > 0) act("earn-out", "earn", { op: "withdraw", usd: Number(v) }); }}>{busy === "earn-out" ? "Taking out…" : "Take out"}</button>
+          </div>
+          <small className="muted">Money you take out lands back on the wallet&apos;s Hyperliquid balance; withdraw it to Solana below (Money in &amp; out). {msg}</small>
+        </section>
+      )}
 
       <MoneyFlow d={d} busy={busy} act={act} set={set} />
 
+{!earnDesk && (<>
       {(() => {
         const open = d.open.reduce((a, p) => a + (p.upnl || 0), 0), total = d.stats.pnl + open;
         const ret = d.perf?.returnPct ?? null;
@@ -345,6 +365,7 @@ export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
           </div>
         ))}
       </section>
+      </>)}
 
       <section className="card stack">
         <b>◎ Solana wallet for perps</b>
@@ -406,6 +427,7 @@ export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
         )}
       </section>
 
+{!earnDesk && (<>
       <section className="card stack">
         <b>⚙️ Rules</b>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
@@ -460,6 +482,7 @@ export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
           <small key={p.id}><b className={(p.pnl_usd || 0) >= 0 ? "up" : "down"}>{usd(p.pnl_usd)}</b> · {p.side} {fxLabel(p.coin, p.entry)} {p.lev}x on {VN[p.venue] || p.venue} · {px(p.entry)} → {px(p.exit)} · {p.reason}{p.mode === "paper" ? " · practice" : ""} · <span className="muted">{p.closed_at ? ago(p.closed_at) : ""}</span></small>
         ))}
       </section>
+      </>)}
 
       <section className="card stack">
         <b>What it did</b>
