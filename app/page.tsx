@@ -8,6 +8,7 @@ import MeButton from "@/components/MeButton";
 import Avatar from "@/components/Avatar";
 import TypeText from "@/components/TypeText";
 import TypeLoop from "@/components/TypeLoop";
+import TypeSoundToggle from "@/components/TypeSoundToggle";
 import { SeqReveal, Words } from "@/components/Sequence";
 import { LogoBadge } from "@/components/LogoMark";
 import TokenLogo from "@/components/TokenLogo";
@@ -26,44 +27,44 @@ export const dynamic = "force-dynamic";
 
 // The vision in plain words, for someone new to autism, crypto or both. [question, answer, icon]
 // The hero's second line keeps typing through these.
-const HERO_LOOP = ["It's a community.", "It's a strength.", "It's a perspective.", "It's a way of being."];
+const HERO_LOOP = ["It's a different way of thinking.", "It's a source of strength.", "It's a community.", "It's a way of being."];
 
 const WHY: { q: string; a: string; icon: IconName }[] = [
-  { q: "What is AUTISTIK?", a: "A website and app where autistic people, their families and supporters can meet, learn and find support. It also has simple, safe tools for using crypto (digital money), explained in plain words.", icon: "groups" },
-  { q: "Why autism?", a: "Around 1 in 100 people are autistic. Many still face stigma, are left out of work and online spaces, and can't get the support they need. We chose to build everything around this one cause.", icon: "heart" },
-  { q: "How does it help?", a: "A portion of the trading activity on AUTISTIK goes into the AUTISTIK Fund. The Fund will pay for therapy, equipment, education and everyday essentials for autistic people and families. It opens soon.", icon: "rewards" },
-  { q: "Who is it for?", a: "Autistic adults, families, carers, supporters, practitioners and organisations, including people who have never used crypto. Joining the community is free.", icon: "chat" },
-  { q: "Who builds it?", a: "AUTISTIK is built by and for the autistic community and the people who love them. Autistic people lead; families, supporters and practitioners join in. Nothing about us without us.", icon: "live" },
-  { q: "Is it safe?", a: "We never ask for your password or recovery phrase, health information is never put on the blockchain, and any coin can be checked with our scanner before you buy. Calm mode and larger text make the site easier to use.", icon: "scan" },
+  { q: "What is AUTISTIK?", a: "A website and app where autistic people, their families and supporters connect, learn and find support, with simple, secure crypto (digital money) tools explained in plain language.", icon: "groups" },
+  { q: "Why autism?", a: "Around 1 in 100 people are autistic. Many still face stigma, are excluded from work and online spaces, and struggle to access the support they need. Everything we build is centred on this one cause.", icon: "heart" },
+  { q: "How does it help?", a: "A portion of all trading activity on AUTISTIK flows into the AUTISTIK Fund, which will cover therapy, equipment, education and everyday essentials for autistic people and their families. The Fund opens soon.", icon: "rewards" },
+  { q: "Who is it for?", a: "Autistic adults, families, carers, supporters, practitioners and organisations, including people who have never used crypto before. Joining the community is free.", icon: "chat" },
+  { q: "Who builds it?", a: "AUTISTIK is built by and for the autistic community and the people who care about them. Autistic people lead, with families, supporters and practitioners alongside. Nothing about us without us.", icon: "live" },
+  { q: "Is it safe?", a: "We will never ask for your password or recovery phrase, health information is never stored on the blockchain, and any token can be checked with our scanner before you buy. Calm mode and larger text make the site easier to use.", icon: "scan" },
 ];
 
 // How using AUTISTIK turns into support, in three steps. [title, text]
 const STEPS: [string, string][] = [
-  ["People join and use the tools", "Members chat in the groups, and anyone can buy, swap or stake coins on AUTISTIK."],
-  ["Activity feeds the Fund", "A portion of that trading activity is set aside in the AUTISTIK Fund."],
-  ["The Fund supports autistic people", "Therapy, equipment, education and everyday essentials, for individuals and families."],
+  ["Join and take part", "Members connect in the community groups, and anyone can buy, swap or stake tokens on AUTISTIK."],
+  ["Activity builds the Fund", "A portion of that trading activity is set aside in the AUTISTIK Fund."],
+  ["The Fund reaches people", "Therapy, equipment, education and everyday essentials for autistic individuals and their families."],
 ];
 
 // The App's main tools, each opening its own screen.
 const PRODUCTS: { title: string; text: string; href: string; tag: string; icon: IconName; points: string[] }[] = [
-  { title: "Swap", text: "Trade any token at the best price across every DEX.", href: "/swap", tag: "Trade", icon: "swap", points: ["BNB Chain, Base, Ethereum, Arbitrum, Solana", "Cross-chain in one step"] },
+  { title: "Swap", text: "Trade any token at the best available price across leading DEXs.", href: "/swap", tag: "Trade", icon: "swap", points: ["BNB Chain, Base, Ethereum, Arbitrum, Solana", "Cross-chain in one step"] },
   { title: "Stake", text: "Stake $AUTISTIK and earn BNB from platform fees.", href: "/stake", tag: "Earn", icon: "stake", points: ["Paid in BNB", "Up to 3x for longer locks"] },
-  { title: "Lockers", text: "Lock liquidity or team tokens on-chain so buyers can trust a project.", href: "/lockers", tag: "Lock", icon: "lock", points: ["Liquidity and team tokens", "Public proof for buyers"] },
-  { title: "Launch Pad", text: "Launch your own token in minutes. No code.", href: "/launchpad/new", tag: "Launch", icon: "launch", points: ["Liquidity locked or burned", "Live on the board straight away"] },
-  { title: "Token scanner", text: "Holders, whales, dev wallets and safety checks for any coin.", href: "/analytics", tag: "Scanner", icon: "scan", points: ["Honeypot and tax checks", "Explained in plain words"] },
-  { title: "Wallet", text: "Your own self-custody wallet. Your keys, your coins.", href: "/wallet", tag: "Wallet", icon: "wallet", points: ["Every network in one place", "Limit and stop-loss orders"] },
+  { title: "Lockers", text: "Lock liquidity or team tokens on-chain, so buyers can trust a project.", href: "/lockers", tag: "Lock", icon: "lock", points: ["Liquidity and team tokens", "Public proof for buyers"] },
+  { title: "Launch Pad", text: "Launch your own token in minutes, with no code.", href: "/launchpad/new", tag: "Launch", icon: "launch", points: ["Liquidity locked or burned", "Live on the board straight away"] },
+  { title: "Token scanner", text: "Holders, whales, developer wallets and safety checks for any token.", href: "/analytics", tag: "Scanner", icon: "scan", points: ["Honeypot and tax checks", "Explained in plain words"] },
+  { title: "Wallet", text: "Your own self-custody wallet: your keys, your coins.", href: "/wallet", tag: "Wallet", icon: "wallet", points: ["Every network in one place", "Limit and stop-loss orders"] },
 ];
 
 const COMMUNITY: { title: string; text: string; href: string; icon: IconName }[] = [
-  { title: "Groups", text: "Spectrum Lounge to hang out, Support & Questions for hard days.", href: "/community", icon: "groups" },
-  { title: "Companions", text: "Believer and Purity: two assistant friends to talk, plan and draw with.", href: "/companions", icon: "chat" },
-  { title: "Live sessions", text: "Talks and support circles with checked practitioners.", href: "/sessions", icon: "live" },
-  { title: "AUTISTIK Fund", text: "Direct support for autistic people and families.", href: "/fund", icon: "heart" },
+  { title: "Groups", text: "Spectrum Lounge for everyday conversation, and Support & Questions for the harder days.", href: "/community", icon: "groups" },
+  { title: "Companions", text: "Believer and Purity, two AI companions to talk, plan and create with.", href: "/companions", icon: "chat" },
+  { title: "Live sessions", text: "Talks and support circles led by verified practitioners.", href: "/sessions", icon: "live" },
+  { title: "AUTISTIK Fund", text: "Direct support for autistic people and their families.", href: "/fund", icon: "heart" },
 ];
 
 // What the Fund pays for. [icon, title, text]
 const FUND: [IconName, string, string][] = [
-  ["heart", "Therapy", "Sessions with checked practitioners"],
+  ["heart", "Therapy", "Sessions with verified practitioners"],
   ["tool", "Equipment", "Sensory and assistive tools"],
   ["book", "Education", "Courses, tutoring and training"],
   ["basket", "Everyday essentials", "Help with day-to-day costs"],
@@ -115,10 +116,10 @@ export default async function Home() {
 
       <section className="lp-hero">
         <div className="lp-hero-copy">
-          <div className="lp-eyebrow"><TypeText text="The autism community, powered by crypto" speed={16} /></div>
+          <div className="lp-eyebrow"><TypeText text="A global autism community, powered by crypto" speed={16} /></div>
           <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={1309} /></span><span className="lp-loop"><TypeLoop intro delay={2534} words={HERO_LOOP} /></span></h1>
-          <p><Words delay={3874} text="AUTISTIK is a global community for autistic people, their families and supporters, paired with simple, secure crypto tools. A share of all trading activity funds real support for autistic people." /></p>
-          <p className="lp-why"><b>How it works:</b> <Words delay={4574} text="every swap, stake and launch on AUTISTIK contributes to the AUTISTIK Fund, which pays for therapy, equipment, education and everyday essentials. Clear language, no pressure." /></p>
+          <p><Words delay={3874} text="AUTISTIK brings autistic people, their families and supporters together in one global community, with simple, secure crypto tools built in. A share of all trading activity funds real-world support for autistic people." /></p>
+          <p className="lp-why"><b>How it works:</b> <Words delay={4574} text="every swap, stake and token launch on AUTISTIK contributes to the AUTISTIK Fund, set up to cover therapy, equipment, education and everyday essentials. Plain language throughout, and never any pressure." /></p>
           <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "5474ms" }}>
             <Link href="/app?menu=1" className="lp-btn gold xl">Open menu <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
@@ -139,7 +140,7 @@ export default async function Home() {
 
       <section id="why" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={738} text="Our mission" /></h2><p><Words delay={1277} text="What AUTISTIK is, who it serves and how it supports autistic people. No crypto experience required." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={738} text="Our mission" /></h2><p><Words delay={1277} text="Who we are, who we serve and how everyday activity on AUTISTIK becomes real support. No crypto experience needed." /></p></div>
           <Link href="/start" className="lp-more">New here? Start here <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-why-grid">
@@ -158,7 +159,7 @@ export default async function Home() {
 
       <section id="products" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={493} text="Everything you need, in one place" /></h2><p><Words delay={2110} text="Trade, earn, launch and stay protected. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or create one with your email." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={493} text="Everything you need, in one place" /></h2><p><Words delay={2110} text="Trade, earn, launch and stay protected from one app. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or create a wallet with just your email." /></p></div>
           <Link href="/app" className="lp-more">Open the App <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-tools">
@@ -176,7 +177,7 @@ export default async function Home() {
 
       <section id="markets" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={493} text="Live markets on AUTISTIK" /></h2><p><Words delay={1669} text="Real-time prices for every token listed or launched on AUTISTIK. Select a token to view its chart, holders and safety report." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={493} text="Live markets on AUTISTIK" /></h2><p><Words delay={1669} text="Real-time prices for every token listed or launched on AUTISTIK. Select any token to view its chart, holders and safety report." /></p></div>
           <Link href="/launchpad" className="lp-more">All tokens <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-mkts">
@@ -191,7 +192,7 @@ export default async function Home() {
           <div className="lp-token-copy">
             <div className="lp-eyebrow"><TypeText text="The token" /></div>
             <h2><TypeText delay={591} text="$AUTISTIK on BNB Chain" /></h2>
-            <p><Words delay={1669} text="Holders support the platform and help decide what we build next. Stake $AUTISTIK to earn a share of platform trading fees." /></p>
+            <p><Words delay={1669} text="Holders support the platform and help shape what we build next. Stake $AUTISTIK to earn a share of platform trading fees, paid in BNB." /></p>
             <CopyAddress address={TOKEN_ADDRESS} />
             <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}>
               <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn gold">Buy $AUTISTIK</Link>
@@ -212,7 +213,7 @@ export default async function Home() {
 
       <section id="community" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeLoop intro delay={591} words={["Built with autistic people.", "Led by autistic people.", "Made for autistic people."]} /></h2><p><Words delay={2481} text="Nothing about us without us. Autistic people lead the community, with families, supporters and practitioners alongside." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeLoop intro delay={591} words={["Built with autistic people.", "Led by autistic people.", "Made for autistic people."]} /></h2><p><Words delay={2481} text="Nothing about us without us. Autistic people lead this community, with families, supporters and practitioners alongside them." /></p></div>
           <Link href="/community" className="lp-more">Join the groups <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-tools four">
@@ -232,7 +233,7 @@ export default async function Home() {
           <div>
             <div className="lp-eyebrow"><TypeText text="AUTISTIK Fund" /></div>
             <h2><TypeText delay={787} text="Community-funded. Individually focused." /></h2>
-            <p><Words delay={2698} text="A share of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon: register your interest today, for yourself or someone you care for." /></p>
+            <p><Words delay={2698} text="A share of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon. Register your interest today, for yourself or for someone you care for." /></p>
             <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
           </div>
           <ul data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-fund-list">
@@ -243,17 +244,18 @@ export default async function Home() {
 
       <section className="lp-sec">
         <div className="lp-band">
-          <div><h2><TypeLoop intro words={["Ready to start?", "Ready to swap?", "Ready to stake?", "Ready to belong?"]} /></h2><p><Words delay={1050} text="Swap, stake and scan in a few taps. New to crypto? We'll guide you every step of the way." /></p></div>
+          <div><h2><TypeLoop intro words={["Ready to start?", "Ready to swap?", "Ready to stake?", "Ready to belong?"]} /></h2><p><Words delay={1050} text="Swap, stake and scan in a few taps. New to crypto? We'll guide you through every step." /></p></div>
           <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/app?menu=1" className="lp-btn gold xl">Open menu <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
         </div>
       </section>
 
       <SeqReveal />
+      <TypeSoundToggle />
       <footer className="lp-foot">
         <div className="lp-foot-cols">
           <div className="lp-foot-brand">
             <Link href="/mood" className="lp-logo" aria-label="Open TIK" title="Open TIK"><LogoBadge size={30} /></Link>
-            <p>A home for autistic people and supporters, with simple, safe crypto tools.</p>
+            <p>A home for autistic people and those who support them, with simple, secure crypto tools.</p>
           </div>
           <div><b>App</b><Link href="/swap">Swap</Link><Link href="/stake">Stake</Link><Link href="/lockers">Lockers</Link><Link href="/launchpad/new">Launch Pad</Link><Link href="/analytics">Scanner</Link></div>
           <div><b>Community</b><Link href="/community">Groups</Link><Link href="/companions">Companions</Link><Link href="/sessions">Live sessions</Link><Link href="/fund">Fund</Link></div>
