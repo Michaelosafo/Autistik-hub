@@ -486,6 +486,21 @@ async function jupSwap(kp: Keypair, inputMint: string, outputMint: string, amoun
   throw new Error(`Solana swap not confirmed (${sig.slice(0, 12)}…)`);
 }
 
+/** Stablecoin → SOL (Jupiter Ultra). Returns the lamports that arrived (0 if none). */
+async function stableToSol(kp: Keypair, stable: Stable, amt: bigint, errs: string[]): Promise<bigint> {
+  const solBefore = await solConn().getBalance(kp.publicKey).catch(() => -1);
+  try {
+    const x = await ultraSwap(kp, stable.token, WSOL, amt);
+    if (x.out != null && x.out > BigInt(0)) return x.out;
+  } catch (e) {
+    errs.push(`${stable.symbol}→SOL: ${(e as Error).message.slice(0, 70)}`);
+    await new Promise((ok) => setTimeout(ok, 2500));
+  }
+  if (solBefore < 0) return BigInt(0);
+  const now = await solConn().getBalance(kp.publicKey).catch(() => -1);
+  return now > solBefore ? BigInt(now - solBefore) : BigInt(0);
+}
+
 /**
  * Buy a Solana coin with SOL or USDT / USDC. Brand-new coins (still on pump.fun's launch curve) often have no direct
  * stablecoin route, so it tries, in order, stopping at the first that works:
@@ -526,21 +541,9 @@ async function solBuy(kp: Keypair, mint: string, amountIn: number, tax: number, 
   if (!r) r = await attempt("Jupiter", () => jupSwap(kp, input, mint, amt, slip));
   if (!r && stable) {
     // Two steps through SOL: launch-curve coins trade against SOL only.
-    const solBefore = await solConn().getBalance(kp.publicKey).catch(() => null);
-    let lamports: bigint | null = null;
-    try {
-      const x = await ultraSwap(kp, stable.token, WSOL, amt);
-      lamports = x.out;
-    } catch (e) {
-      errs.push(`${stable.symbol}→SOL: ${(e as Error).message.slice(0, 70)}`);
-      await new Promise((ok) => setTimeout(ok, 2500));
-    }
-    if (lamports == null && solBefore != null) {
-      const now = await solConn().getBalance(kp.publicKey).catch(() => null);
-      if (now != null && now > solBefore) lamports = BigInt(now - solBefore);
-    }
-    if (lamports && lamports > 0n) {
-      const use = (lamports * 99n) / 100n; // a hair less, so fees never make it fail
+    const lamports = await stableToSol(kp, stable, amt, errs);
+    if (lamports > BigInt(0)) {
+      const use = lamports - lamports / BigInt(100); // a hair less, so fees never make it fail
       r = await attempt("SOL→coin (Ultra)", async () => (await ultraSwap(kp, WSOL, mint, use)).sig);
       if (!r) r = await attempt("SOL→coin", () => jupSwap(kp, WSOL, mint, use, slip));
       if (!r) throw new Error(`Couldn't buy it: the ${stable.symbol} was changed to SOL, which stays in the wallet (${errs.slice(-2).join(" · ")})`);
