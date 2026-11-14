@@ -50,6 +50,12 @@ export async function resolve(ref: { chain?: string; token?: string; ticker?: st
     pairs = ((await get(`${DS}/latest/dex/search?q=${encodeURIComponent(t)}`).catch(() => null))?.pairs || [])
       .filter((p: any) => String(p?.baseToken?.symbol || "").toLowerCase() === t.toLowerCase() && n(p?.liquidity?.usd) >= 10_000);
   }
+  // A link to a trading pair (DexScreener / Photon / Axiom) instead of the coin: look the pair up and use its coin.
+  if (!(pairs || []).length && ref.token && ref.chain) {
+    const pr = await get(`${DS}/latest/dex/pairs/${ref.chain}/${ref.token}`).catch(() => null);
+    const p0 = (pr?.pairs || (pr?.pair ? [pr.pair] : []))[0];
+    if (p0?.baseToken?.address) return resolve({ chain: ref.chain, token: String(p0.baseToken.address) }, chains);
+  }
   const ok = (pairs || []).filter((p: any) => chains.includes(String(p?.chainId)) && (!ref.token || String(p?.baseToken?.address || "").toLowerCase() === ref.token.toLowerCase()));
   ok.sort((a: any, b: any) => (ref.ticker ? n(b?.volume?.h24) - n(a?.volume?.h24) : n(b?.liquidity?.usd) - n(a?.liquidity?.usd)));
   return ok[0] ? toFlow(ok[0]) : null;
@@ -58,7 +64,13 @@ export async function resolve(ref: { chain?: string; token?: string; ticker?: st
 /** Contract addresses and $TICKERS in a post. */
 export function extract(text: string): { evm: string[]; sol: string[]; tickers: string[] } {
   const evm = [...new Set((text.match(/0x[a-fA-F0-9]{40}/g) || []).map((a) => a.toLowerCase()))];
-  const sol = [...new Set((text.replace(/https?:\/\/\S+/g, " ").match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g) || []).filter((a) => /\d/.test(a) && /[a-z]/.test(a) && /[A-Z]/.test(a)))];
+  const isSol = (a: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a) && /\d/.test(a) && /[a-z]/.test(a) && /[A-Z]/.test(a);
+  // Addresses in the text first, then ones inside links (pump.fun/coin/…, dexscreener.com/solana/…, gmgn, birdeye,
+  // trading-bot buttons like ?start=…_<address>): call channels often show the address only as a link.
+  const inText = (text.replace(/https?:\/\/\S+/g, " ").match(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g) || []).filter(isSol);
+  const inLinks = (text.match(/https?:\/\/\S+/g) || []).filter((u) => !/(?:x|twitter)\.com\/|t\.me\/(?!.*start=)|solscan\.io\/tx|explorer|\/tx\//i.test(u))
+    .flatMap((u) => u.split(/[\/?&=_.#-]+/)).filter(isSol);
+  const sol = [...new Set([...inText, ...inLinks])];
   const tickers = [...new Set((text.match(/\$[A-Za-z][A-Za-z0-9]{1,9}\b/g) || []).map((t) => t.toUpperCase()))].filter((t) => !/^\$(USD|USDT|USDC|BTC|ETH|BNB|SOL)$/.test(t));
   return { evm, sol, tickers };
 }
