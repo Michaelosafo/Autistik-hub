@@ -3,7 +3,8 @@ import { adminState } from "@/lib/admin";
 import { ACTIVE_MS, TRADE_CHAINS, adminActive, adoptCoin, convertStable, isOwnCoin, bnbUsd, closePosition, sellPart, topUpPosition, walletHoldings, createTraderWallet, importTraderKey, revealTraderKey, getSettings, liveBalance, log, runTrader, traderAccount, withdrawBnb, type Position } from "@/lib/ai-trader";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { T, tq, withTrader } from "@/lib/ai-trader-ctx";
-import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus } from "@/lib/tg-account";
+import { scoutAvailable, scoutBoard } from "@/lib/ai-trader-scout";
+import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaResend, tgaReset, tgaStart, tgaStatus, tgaPublicChat } from "@/lib/tg-account";
 import { cronDenied } from "@/lib/cron-auth";
 import { chatKey, runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
@@ -82,7 +83,7 @@ async function getMine(_req: Request, action: string) {
   ]);
   const [{ data: srcs }, { data: callers }, { data: rebuys }, { data: squads }, { data: squadMembers }] = await Promise.all([
     tq("ai_trader_sources").select("id,kind,ref,title,enabled,last_post_at,added_at,usd").order("added_at", { ascending: true }),
-    tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title,sl,tp").order("usd", { ascending: false }),
+    tq("ai_trader_callers").select("id,platform,who,usd,chat,chat_title,sl,tp,scout,trusted").order("usd", { ascending: false }),
     tq("ai_trader_rebuy").select("id,chain,token,symbol,sold_usd,low_usd,status,note,sold_at").order("sold_at", { ascending: false }).limit(15),
     tq("ai_trader_squads").select("id,name,usd,enabled,sl,tp").order("created_at", { ascending: true }),
     tq("ai_trader_squad_members").select("id,squad_id,kind,value,label,usd,sl,tp").order("added_at", { ascending: true }),
@@ -163,7 +164,11 @@ async function postMine(action: string, b: any) {
       if (Array.isArray(b.callers)) up.callers = [...new Set(b.callers.map((h: unknown) => String(h).replace(/^@/, "").trim()).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
       if (b.caller_mcap_max != null && isFinite(Number(b.caller_mcap_max))) up.caller_mcap_max = Math.min(1e9, Math.max(10_000, Number(b.caller_mcap_max)));
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
-      if (typeof b.stable_on === "boolean") up.stable_on = b.stable_on; // buy with / sell into USDT or USDC (Solana, BNB Chain, Ethereum)
+      if (typeof b.stable_on === "boolean") up.stable_on = b.stable_on;
+      // Caller scout: on / off, budget and per-trade size, the bar a caller / group must clear, trust rules.
+      for (const k of ["scout_on", "scout_trust_skip", "scout_honeypot_trusted"]) if (typeof b[k] === "boolean") up[k] = b[k];
+      const scoutNums: Record<string, [number, number]> = { scout_budget: [0, 100_000], scout_trade_usd: [1, 10_000], scout_min_win: [1, 100], scout_min_calls: [3, 100], scout_multiple: [1.5, 100], scout_fast_min: [5, 1440], scout_group_rate: [1, 100] };
+      for (const [k, [lo, hi]] of Object.entries(scoutNums)) if (b[k] != null && isFinite(Number(b[k]))) up[k] = Math.min(hi, Math.max(lo, Number(b[k]))); // buy with / sell into USDT or USDC (Solana, BNB Chain, Ethereum)
       // Buy hours: the times of day it may buy, in the admin's own time zone ("22:00" to "06:00" runs past midnight).
       if (typeof b.buy_hours_on === "boolean") up.buy_hours_on = b.buy_hours_on;
       for (const k of ["buy_from", "buy_to"]) if (typeof b[k] === "string") {
@@ -341,6 +346,8 @@ async function postMine(action: string, b: any) {
     case "caller": {
       // Callers whose posts buy a set $ amount: a Telegram @username or user id, or an X handle.
       if (b.op === "remove") { await tq("ai_trader_callers").delete().eq("id", Number(b.id)); return json({ ok: true, note: "Caller removed." }); }
+      // Trusted (a legit account / consistent winner): its scout trades skip the rug check.
+      if (b.op === "trust") { await tq("ai_trader_callers").update({ trusted: b.trusted === true }).eq("id", Number(b.id)); return json({ ok: true, note: b.trusted === true ? "Trusted: no rug check on its scout buys." : "Not trusted: its scout buys are rug-checked." }); }
       // Stop-loss / take profit in %, blank = the copy-trading default.
       const pct = (v: unknown, max: number) => (v === "" || v == null ? null : isFinite(Number(v)) && Number(v) > 0 ? Math.min(max, Number(v)) : null);
       if (b.op === "edit") {
@@ -476,6 +483,24 @@ async function postMine(action: string, b: any) {
     }
     case "run":
       return json(await runTrader({ force: true }).catch((e) => ({ error: (e as Error).message })));
+    case "scout": {
+      // The scout's scoreboard, budget and the chats it reads.
+      const s = await getSettings();
+      const [board, money, { data: chats }] = await Promise.all([
+        scoutBoard(), scoutAvailable(s.scout_budget, await bnbUsd()),
+        tq("ai_scout_chats").select("ref,title,kind,enabled,scanned_at").order("title").limit(500),
+      ]);
+      return json({ ok: true, board, money, chats: chats || [] });
+    }
+    case "scout-chat": {
+      // Add a public group / channel by link (read without joining), or switch one the scout reads on / off.
+      if (b.op === "toggle") { await tq("ai_scout_chats").update({ enabled: b.enabled === true }).eq("ref", String(b.ref || "")); return json({ ok: true }); }
+      try {
+        const c = await tgaPublicChat(String(b.link || ""));
+        await tq("ai_scout_chats").upsert({ ref: c.ref, title: c.title, kind: c.kind, username: c.username, enabled: true }, { onConflict: "trader_id,ref" });
+        return json({ ok: true, note: `The scout now reads "${c.title}" too.` });
+      } catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
     case "convert": {
       // SOL → USDC (to trade in stablecoins) or USDC → SOL, in the Solana trading wallet.
       const amount = Number(b.amount);

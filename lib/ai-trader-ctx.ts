@@ -20,7 +20,7 @@ export function T(): number {
   return id;
 }
 
-type Table = "ai_trader_positions" | "ai_trader_log" | "ai_trader_signals" | "ai_trader_sources" | "ai_trader_callers" | "ai_trader_rebuy" | "ai_trader_ca_seen" | "ai_trader_pending";
+type Table = "ai_trader_positions" | "ai_trader_log" | "ai_trader_signals" | "ai_trader_sources" | "ai_trader_callers" | "ai_trader_rebuy" | "ai_trader_ca_seen" | "ai_trader_pending" | "ai_scout_chats" | "ai_scout_calls";
 const stamp = (v: any) => (Array.isArray(v) ? v.map((r) => ({ ...r, trader_id: T() })) : { ...v, trader_id: T() });
 
 /** A query on a per-trader table, limited to the current trader. */

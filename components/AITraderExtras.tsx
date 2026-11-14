@@ -265,7 +265,7 @@ export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly =
     ...copy.sources.map((x) => ({ key: `s${x.id}`, name: x.title || x.ref, alt: x.ref, type: KIND[x.kind] || x.kind, group: "channels" as const, platform: x.kind.startsWith("x") ? "X" : "TG", on: x.enabled, last: x.last_post_at,
       edit: x.kind === "tg_chat" ? { kind: "source" as const, id: x.id, usd: x.usd ?? null, sl: null, tp: null } : null })),
     ...copy.callers.map((c) => ({ key: `c${c.id}`, name: `@${c.who}`, alt: c.who, type: c.platform === "x" ? "X caller" : `Caller · ${c.chat_title ? `only in ${c.chat_title}` : "all groups"}`, group: "callers" as const, platform: c.platform === "x" ? "X" : "TG", on: true, last: null as string | null,
-      edit: { kind: "caller" as const, id: c.id, usd: Number(c.usd) || null, sl: c.sl ?? null, tp: c.tp ?? null } })),
+      edit: { kind: "caller" as const, id: c.id, usd: Number(c.usd) || null, sl: c.sl ?? null, tp: c.tp ?? null }, trusted: !!c.trusted, scout: !!c.scout })),
     ...xCallers.filter((h) => !copy.callers.some((c) => norm(c.who) === norm(h))).map((h) => ({ key: `x${h}`, name: `@${h}`, alt: h, type: "X caller (fresh signals)", group: "callers" as const, platform: "X", on: true, last: null as string | null, edit: null })),
   ];
   const stats = (r: (typeof rows)[number]) => {
@@ -311,6 +311,11 @@ export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly =
                     <span className={"aitx-plat " + r.platform.toLowerCase()}>{r.platform}</span>
                     <span className="grow"><b>{r.name}</b><br /><small className="muted">{r.type}{r.on ? "" : " · paused"}{st.last ? ` · last call ${ago(st.last)}` : ""}</small>{buys && <><br /><small className="aitx-buys">{buys}</small></>}</span>
                     <span className="n"><b>{st.calls}</b> <small className="muted">calls</small><br /><small className={st.bought ? "up" : "muted"}>{st.bought} bought</small></span>
+                    {e?.kind === "caller" && onAct && (
+                      <button type="button" className={"aitx-trust" + ((r as any).trusted ? " on" : "")} aria-pressed={!!(r as any).trusted} disabled={busy}
+                        onClick={() => onAct(`tr${e.id}`, "caller", { op: "trust", id: e.id, trusted: !(r as any).trusted })}
+                        title="Trusted: a legit account or consistent winner. Its scout buys skip the rug check.">{(r as any).trusted ? "✓ Trusted" : "Trust"}{(r as any).scout ? " · scout" : ""}</button>
+                    )}
                     {e && onAct && editing !== r.key && <button type="button" className="aic-x" disabled={busy} onClick={() => setEditing(r.key)} aria-label={`Edit what ${r.name} buys`}>✏️</button>}
                     {e && onAct && editing === r.key && <BuyEdit kind={e.kind} id={e.id} usd={e.usd} sl={e.sl} tp={e.tp} dsl={dsl} dtp={dtp} busy={busy} onAct={onAct} onDone={() => setEditing(null)} />}
                   </div>
@@ -448,6 +453,86 @@ export function StableMode({ on, live, wallets, busy, onAct }: { on: boolean; li
           <button type="button" className="btn primary small" disabled={busy || !(Number(amt) > 0)} onClick={() => { if (confirm(`Convert ${amt} ${dir === "usdc" ? `SOL into ${sym}` : `${sym} into SOL`}?`)) onAct("convert", "convert", { to: dir, symbol: sym, amount: Number(amt) }).then(() => setAmt("")); }}>Convert</button>
         </div>
       )}
+    </section>
+  );
+}
+
+type ScoutRow = { key: string; platform: "tg" | "x"; who: string; chats: string[]; calls: number; wins: number; winRate: number; medianPeak: number; rugRate: number; fastRate: number; following: boolean };
+type ScoutData = { board: { callers: ScoutRow[]; groups: ScoutRow[]; calls: number; scored: number; chats: number }; money: { avail: number; inTrades: number; pnl: number }; chats: { ref: string; title: string; kind: string; enabled: boolean; scanned_at: string | null }[] };
+type ScoutS = { scout_on?: boolean; scout_budget?: number; scout_trade_usd?: number; scout_min_win?: number; scout_min_calls?: number; scout_multiple?: number; scout_fast_min?: number; scout_group_rate?: number; scout_trust_skip?: boolean; scout_honeypot_trusted?: boolean };
+
+/**
+ * Caller scout: reads every group / channel the Telegram account is in (and public ones added by link) and the X
+ * accounts you follow, scores every call against real prices, follows the callers and groups that clear the bar, and
+ * trades them from a capped budget (rug-checked, except trusted callers).
+ */
+export function ScoutCard({ s, busy, onAct }: { s: ScoutS; busy: boolean; onAct: Act }) {
+  const [d, setD] = useState<ScoutData | null>(null);
+  const [tab, setTab] = useState<"callers" | "groups">("callers");
+  const [link, setLink] = useState("");
+  const on = !!s.scout_on;
+  const load = async () => { const r = await fetch("/api/ai-trader/scout", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }).then((x) => x.json()).catch(() => null); if (r?.ok) setD(r); };
+  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t); }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = (b: ScoutS, done?: string) => onAct("scout-set", "settings", b, done);
+  const num = (k: keyof ScoutS, label: string, unit: string, hint: string) => (
+    <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <small><b>{label}:</b> {String(s[k] ?? "–")}{unit}</small>
+      <button type="button" className="btn small" disabled={busy} onClick={() => { const v = prompt(`${label} (${hint}):`, String(s[k] ?? "")); if (v != null && v.trim() !== "" && isFinite(Number(v))) set({ [k]: Number(v) } as ScoutS); }}>Change</button>
+      <small className="muted">{hint}</small>
+    </div>
+  );
+  const rows = d ? (tab === "callers" ? d.board.callers : d.board.groups) : [];
+  const budget = Number(s.scout_budget) || 0;
+  const m = d?.money;
+  return (
+    <section className={"card stack" + (on ? " aitx-hours" : "")}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <b>🔎 Caller scout</b>
+        <small className="muted">{d ? `${d.board.chats} chats read · ${d.board.calls} calls seen · ${d.board.scored} scored` : "…"}</small>
+      </div>
+      <label className={"aic-row" + (on ? " on" : "")}>
+        <input type="checkbox" checked={on} disabled={busy} onChange={(e) => set({ scout_on: e.target.checked }, e.target.checked ? "Scout on: it reads all your Telegram groups and channels and the X accounts you follow, and learns who calls winners." : "Scout off.")} />
+        <span className="grow"><b>Find and trade the best callers and groups</b><small className="muted">Reads every group and channel your Telegram account is in (not only the ones you copy) and the X accounts you follow. Each call is checked against the real price for 24 hours. Callers whose calls reach {s.scout_multiple ?? 3}x at least {s.scout_min_win ?? 97}% of the time (over {s.scout_min_calls ?? 5}+ calls), and groups whose calls double within {s.scout_fast_min ?? 30} min at least {s.scout_group_rate ?? 60}% of the time, are followed automatically.</small></span>
+      </label>
+      <div className="aitx-two">
+        <div className="aitx-tile"><small>Scout budget</small><b>${budget.toLocaleString("en-US")}</b><small className="muted">its trades never use more than this{m ? `, plus what they've made (${m.pnl >= 0 ? "+" : "−"}$${Math.abs(m.pnl).toFixed(2)})` : ""}</small></div>
+        <div className="aitx-tile"><small>Free to use now</small><b>{m ? `$${m.avail.toFixed(2)}` : "–"}</b><small className="muted">{m ? `$${m.inTrades.toFixed(2)} in open scout trades` : ""}</small></div>
+      </div>
+      {num("scout_budget", "Budget", " $", "the most the scout's trades can have in at once; losses shrink it, wins grow it")}
+      {num("scout_trade_usd", "Each trade", " $", "per call; it buys less if the budget has less left")}
+      <details>
+        <summary><b>The bar to be followed</b></summary>
+        <div className="stack" style={{ gap: 6, marginTop: 6 }}>
+          {num("scout_min_win", "Caller win rate", " %", "share of their calls that reached the target")}
+          {num("scout_multiple", "Target", "x", "a call wins if the price reached this within 24 h")}
+          {num("scout_min_calls", "At least", " calls", "fewer is too little to tell skill from luck")}
+          {num("scout_group_rate", "Group fast-pump rate", " %", "share of a group's calls that doubled fast")}
+          {num("scout_fast_min", "Fast means within", " min", "")}
+        </div>
+      </details>
+      <label className="ait-check"><input type="checkbox" checked={s.scout_trust_skip !== false} disabled={busy} onChange={(e) => set({ scout_trust_skip: e.target.checked })} /> <span>No rug check for trusted callers (consistent winners the scout found, and ones you mark ✓ Trusted). Everyone else is rug-checked: honeypot, extreme tax, freeze traps, pool under $5K, danger flags.</span></label>
+      {s.scout_trust_skip !== false && <label className="ait-check"><input type="checkbox" checked={s.scout_honeypot_trusted !== false} disabled={busy} onChange={(e) => set({ scout_honeypot_trusted: e.target.checked })} /> <span>Still block honeypots for trusted callers (coins that can&apos;t be sold at all). Recommended: a legit account can be hacked or paid to post.</span></label>}
+      <div className="ait-seg" role="tablist" aria-label="Scoreboard">
+        <button type="button" role="tab" aria-selected={tab === "callers"} className={tab === "callers" ? "on" : ""} onClick={() => setTab("callers")}>Top callers</button>
+        <button type="button" role="tab" aria-selected={tab === "groups"} className={tab === "groups" ? "on" : ""} onClick={() => setTab("groups")}>Fast-pump groups</button>
+      </div>
+      {!d ? <small className="muted">Loading…</small> : !rows.length ? <small className="muted">{on ? "Learning: calls are scored once their 24 hours are up (or they hit the target). The first scores show within the hour from the groups' recent history." : "Switch the scout on to start learning."}</small> : (
+        <div className="aitx-list">
+          {rows.slice(0, 25).map((r) => (
+            <div key={r.key} className="aitx-li wrap">
+              <span className={"aitx-plat " + (r.platform === "x" ? "x" : "tg")}>{r.platform === "x" ? "X" : "TG"}</span>
+              <span className="grow"><b>{tab === "callers" ? `@${r.who}` : r.who}</b>{r.following && <small className="up"> · following</small>}<br />
+                <small className="muted">{tab === "callers" ? `${r.chats.join(", ")} · ` : ""}{r.calls} calls · median peak {r.medianPeak.toFixed(1)}x · rugs {Math.round(r.rugRate)}%</small></span>
+              <span className="n"><b className={(tab === "callers" ? r.winRate : r.fastRate) >= (tab === "callers" ? Number(s.scout_min_win ?? 97) : Number(s.scout_group_rate ?? 60)) ? "up" : ""}>{Math.round(tab === "callers" ? r.winRate : r.fastRate)}%</b><br /><small className="muted">{tab === "callers" ? `hit ${s.scout_multiple ?? 3}x` : `2x in ${s.scout_fast_min ?? 30}m`}</small></span>
+            </div>
+          ))}
+        </div>
+      )}
+      <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); if (link.trim()) onAct("scout-chat", "scout-chat", { link: link.trim() }).then(() => { setLink(""); load(); }); }}>
+        <input className="input" style={{ flex: "1 1 200px" }} value={link} onChange={(e) => setLink(e.target.value)} placeholder="Add a public group: t.me/name or @name" aria-label="Public group link" />
+        <button type="submit" className="btn small" disabled={busy || !link.trim()}>Add to scout</button>
+      </form>
+      <small className="muted">A high win rate over a few calls can be luck, and callers sometimes delete their losing calls, so the scoreboard shows every number. Few callers reach {s.scout_min_win ?? 97}%: if nobody qualifies after a few days, lowering the bar is a choice, not a fix.</small>
     </section>
   );
 }
