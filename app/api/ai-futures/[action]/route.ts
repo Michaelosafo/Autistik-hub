@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { EARN_DESK, FX_DESK, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, isSnipeDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,7 +46,8 @@ async function mine(): Promise<number | null> {
 /** ?desk=fx: the admin's Forex trader, ?desk=earn: their Earn desk (each its own id), otherwise their Futures trader. */
 const desk = (req: Request, id: number | null) => {
   const d = new URL(req.url).searchParams.get("desk");
-  return id && d === "fx" ? FX_DESK + id : id && d === "earn" ? EARN_DESK + id : id;
+  const off: Record<string, number> = { fx: FX_DESK, earn: EARN_DESK, turbo: TURBO_DESK, snipe: SNIPE_DESK };
+  return id && d && off[d] ? off[d] + id : id;
 };
 
 const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : undefined; };
@@ -64,7 +65,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const up: Record<string, unknown> = {};
           if (typeof b.enabled === "boolean") up.enabled = b.enabled;
           for (const k of ["use_ta", "use_news", "use_x", "no_liq", "auto_fund"]) if (typeof b[k] === "boolean") up[k] = b[k];
-          const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168] };
+          const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
           if (Array.isArray(b.coins)) up.coins = [...new Set(b.coins.map((c: unknown) => String(c).trim().toUpperCase()).filter((c: string) => /^[A-Z0-9]{1,12}$/.test(c)))].slice(0, 15);
@@ -72,6 +73,16 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (b.mode === "paper" || b.mode === "live") {
             if (b.mode === "live") {
               const { data: open } = await sb.from("ai_futures_positions").select("id").eq("fut_id", id).eq("mode", "paper").in("status", ["open", "closing"]).limit(1);
+              if (isSnipeDesk()) {
+                const sw = await (await import("@/lib/ai-sniper")).snipeWallet().catch(() => null);
+                if (!sw) return json({ error: "Create or import the Sniper's Solana wallet first." }, 400);
+                if (sw.usdt + sw.usdc < 5 && sw.sol * sw.solUsd < 5) return json({ error: `The Solana wallet has about $${sw.total.toFixed(2)}. Send at least $5 of USDT / USDC (plus ~0.02 SOL for fees) to ${sw.address} first.` }, 400);
+                if (open?.length) await closeAllNow("paper");
+                up.mode = b.mode; up.day = null; up.day_start_usd = null;
+                const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
+                if (error) return json({ error: error.message }, 400);
+                return json({ ok: true, note: "Sniper is LIVE: it buys with the money in its Solana wallet." });
+              }
               const w = await futWallet();
               if (!w) return json({ error: "Create the AI Futures wallet first." }, 400);
               if ((w.hlValue ?? 0) < 10) return json({ error: `The wallet has $${(w.hlValue ?? 0).toFixed(2)} on Hyperliquid. Fund it with at least $10 (see How to fund) before going live.` }, 400);

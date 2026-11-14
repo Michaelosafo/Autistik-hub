@@ -8,6 +8,9 @@ import { useEffect, useState } from "react";
 import TraderTabs from "@/components/TraderTabs";
 import { fxLabel } from "@/lib/fx";
 
+/** A trade's name: the coin's symbol for Sniper trades (kept at the start of its reason), else the market / pair. */
+const lbl = (p: { venue?: string; coin: string; entry?: number; why?: string | null }) => (p.venue === "pumpfun" ? (p.why?.split(":")[0] || `${p.coin.slice(0, 6)}…`) : fxLabel(p.coin, p.entry));
+
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; max_loss_pct: number; risk_pct: number;
   max_positions: number; daily_loss_pct: number; max_hold_hours: number; use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[];
@@ -27,6 +30,7 @@ type P = {
 };
 type D = {
   settings: S; equity: { total: number; free: number }; liveVenues: string[];
+  snipe?: { cfg: { usd: number; tp: number; sl: number }; wallet: { address: string; usdt: number; usdc: number; sol: number; solUsd: number; total: number } | null } | null;
   earn?: { free: number; inHlp: number; lockedUntil: number | null; apr: number | null; vault: string } | null;
   fx?: { pairs: { coin: string; label: string; price: number; maxLev: number }[]; open: boolean };
   wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
@@ -107,7 +111,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
           <div key={t.id} className="fut-trade">
             <button type="button" className="fut-trade-h" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}>
               <b className={t.pnl >= 0 ? "up" : "down"}>{usd(t.pnl)}</b>
-              <span className="grow">{t.side === "long" ? "📈" : "📉"} {t.side} {fxLabel(t.coin, t.entry)} {t.lev}x <span className="muted">· {t.closed.replace(/\s*\(.*$/, "")} · {ago(t.at)}</span></span>
+              <span className="grow">{t.side === "long" ? "📈" : "📉"} {t.side} {lbl(t as any)} {t.lev}x <span className="muted">· {t.closed.replace(/\s*\(.*$/, "")} · {ago(t.at)}</span></span>
               <small className={(t.impactPct ?? 0) >= 0 ? "up" : "down"}>{pct(t.impactPct, 2)} of account</small>
             </button>
             {open === t.id && (
@@ -243,10 +247,10 @@ async function call(action: string, body: unknown) {
   return d;
 }
 
-export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
-  const fxDesk = desk === "fx", earnDesk = desk === "earn";
-  DESK = fxDesk ? "?desk=fx" : earnDesk ? "?desk=earn" : "";
-  const NAME = earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
+export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "snipe" } = {}) {
+  const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", snipeDesk = desk === "snipe";
+  DESK = desk ? `?desk=${desk}` : "";
+  const NAME = snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
@@ -286,8 +290,10 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
       <TraderTabs />
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
-        <h1>{earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
-        {earnDesk ? <p className="muted">The fourth one, for slow and steady growth: no picking coins. Its own wallet; fund it from Solana like the others, then put the money into HLP, Hyperliquid&apos;s own market-making vault. HLP earns from making markets and liquidations on every Hyperliquid market, and your share grows (or shrinks) with it every day. Each deposit can be taken out 4 days after it was made. It&apos;s not a savings account: in bad weeks HLP can lose money too.</p> : fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
+        <h1>{snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
+        {snipeDesk ? <p className="muted">⚠️ High risk. Its own Solana wallet and money. Every minute it scans brand-new Solana launch coins (pump.fun, letsbonk, …) and buys the ones pumping hard right now: under an hour old, $8K–$150K market cap, +15% in 5 minutes, far more buys than sells, 40+ holders, no whale holding most of it. ${d.snipe?.cfg.usd ?? 10} a buy; sells at +{d.snipe?.cfg.tp ?? 100}%, -{d.snipe?.cfg.sl ?? 25}%, a trailing stop once it&apos;s up 50%, a rug or {s.max_hold_hours}h. Most new coins go to zero: a few big wins have to pay for many small losses.</p>
+        : turboDesk ? <p className="muted">⚠️ High risk. Its own wallet and money, funded from Solana like Futures. Every minute it trades the 15 most-traded coins on Hyperliquid right now, long or short, at up to {s.max_lev}x with {s.risk_pct}% of the account at risk a trade, and jumps in on weaker signals than Futures (charts and breaking news). Every trade still has a stop-loss resting on Hyperliquid, moves to break-even in profit and trails. It can grow fast and lose fast: a bad day can cost {s.daily_loss_pct}% before it pauses.</p>
+        : earnDesk ? <p className="muted">The fourth one, for slow and steady growth: no picking coins. Its own wallet; fund it from Solana like the others, then put the money into HLP, Hyperliquid&apos;s own market-making vault. HLP earns from making markets and liquidations on every Hyperliquid market, and your share grows (or shrinks) with it every day. Each deposit can be taken out 4 days after it was made. It&apos;s not a savings account: in bad weeks HLP can lose money too.</p> : fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
       </div>
 
 {!earnDesk && (<>
@@ -323,7 +329,35 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
         </section>
       )}
 
-      <MoneyFlow d={d} busy={busy} act={act} set={set} />
+      {snipeDesk && (
+        <section className="card stack">
+          <b>◎ Sniper&apos;s Solana wallet</b>
+          {!d.snipe?.wallet ? (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              <button type="button" className="btn" disabled={!!busy} onClick={() => act("sw", "sol-wallet", {})}>Create Solana wallet</button>
+              <button type="button" className="btn ghost" disabled={!!busy} onClick={() => { const k = prompt("Paste the Solana wallet's private key (from Phantom → Export private key):"); if (k?.trim()) act("si", "sol-key-import", { key: k.trim() }); }}>Import my wallet</button>
+            </div>
+          ) : (
+            <>
+              <small>Send USDT or USDC (plus ~0.02 SOL for fees) to:</small>
+              <code style={{ wordBreak: "break-all" }}>{d.snipe.wallet.address}</code>
+              <small className="muted">Holds {usd(d.snipe.wallet.usdt + d.snipe.wallet.usdc)} in stablecoins and {d.snipe.wallet.sol.toFixed(4)} SOL ({usd(d.snipe.wallet.sol * d.snipe.wallet.solUsd)}). It buys with USDT / USDC first, else SOL, and sells back into USDT. To take money out, Show private key and import it into Phantom.</small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button type="button" className="btn small ghost" disabled={!!busy} onClick={async () => { if (!confirm("Show the Solana wallet's private key? Anyone who sees it can take the money.")) return; try { const r = await call("sol-key-reveal", {}); prompt("Solana private key — paste into Phantom → Import private key (keep it secret):", r.key); } catch (e) { alert((e as Error).message); } }}>Show private key</button>
+              </div>
+            </>
+          )}
+          <b>🎯 Each buy</b>
+          {([["snipe_usd", "Buy", "$ per coin", d.snipe?.cfg.usd], ["snipe_tp", "Take profit at", "% up", d.snipe?.cfg.tp], ["snipe_sl", "Stop-loss at", "% down", d.snipe?.cfg.sl]] as const).map(([k, label, unit, v]) => (
+            <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <small><b>{label}:</b> {String(v ?? "")} {unit}</small>
+              <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${label} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) > 0) set({ [k]: Number(x) } as any); }}>Change</button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {!snipeDesk && <MoneyFlow d={d} busy={busy} act={act} set={set} />}
 
 {!earnDesk && (<>
       {(() => {
@@ -355,18 +389,19 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
         {!d.open.length ? <small className="muted">None right now.</small> : d.open.map((p) => (
           <div key={p.id} className="aic-row on" style={{ alignItems: "flex-start" }}>
             <span className="grow">
-              <b className={p.side === "long" ? "up" : "down"}>{p.side === "long" ? "📈 LONG" : "📉 SHORT"} {fxLabel(p.coin, p.entry)}</b> <small className="muted">· {VN[p.venue] || p.venue} · {p.lev}x · {usd(p.notional_usd, 0)} position ({usd(p.margin_usd, 0)} margin){p.mode === "paper" ? " · practice" : ""}</small><br />
+              <b className={p.side === "long" ? "up" : "down"}>{p.side === "long" ? "📈 LONG" : "📉 SHORT"} {lbl(p)}</b> <small className="muted">· {VN[p.venue] || p.venue} · {p.lev}x · {usd(p.notional_usd, 0)} position ({usd(p.margin_usd, 0)} margin){p.mode === "paper" ? " · practice" : ""}</small><br />
               <small>Entry {px(p.entry)} · now {px(p.price)} · <b className={(p.upnl || 0) >= 0 ? "up" : "down"}>{usd(p.upnl)}</b></small><br />
               <small className="muted">Stop {px(p.stop)} · target {px(p.target)} · liquidation ~{px(p.liq)} · opened {ago(p.opened_at)}</small>
               {p.liq && p.price ? <><br /><small className="up">🛡 The stop is {Math.max(1, Math.round(Math.abs(p.price - p.liq) / Math.max(1e-9, Math.abs(p.price - p.stop))))}× closer than liquidation{p.mode === "live" ? " and rests on Hyperliquid itself" : ""}.</small></> : null}
               {p.why && <><br /><small className="muted">{p.why}</small></>}
             </span>
-            <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${fxLabel(p.coin, p.entry)} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
+            <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${lbl(p)} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
           </div>
         ))}
       </section>
       </>)}
 
+{!snipeDesk && (<>
       <section className="card stack">
         <b>◎ Solana wallet for perps</b>
         {!d.wallet ? <small className="muted">Create or import the AI Futures wallet below first; the Solana wallet sends its money there.</small> : !d.wallet.sol ? (
@@ -428,10 +463,12 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
       </section>
 
 {!earnDesk && (<>
+      </>)}
+
       <section className="card stack">
         <b>⚙️ Rules</b>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          {(fxDesk ? [] : ["hyperliquid", "aster"]).map((v) => (
+          {(fxDesk || turboDesk || snipeDesk ? [] : ["hyperliquid", "aster"]).map((v) => (
             <label key={v} className="ait-check"><input type="checkbox" checked={s.venues.includes(v)} disabled={!!busy} onChange={(e) => set({ venues: e.target.checked ? [...s.venues, v] : s.venues.filter((x) => x !== v) }, v === "forex" ? (e.target.checked ? "Forex on: it also trades currency pairs (EUR/USD, USD/JPY, …) on Hyperliquid." : "Forex off. Open forex trades are still watched until they close.") : undefined)} /> <span>{VN[v]}{!d.liveVenues.includes(v) ? " (practice only for now)" : ""}</span></label>
           ))}
         </div>
@@ -441,15 +478,15 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
             Currency pairs on trade.xyz, inside Hyperliquid: {d.fx?.pairs.length ? d.fx.pairs.map((x) => x.label).join(", ") : "loading…"}. Same wallet and the same money you fund from Solana; in Live the margin for each forex trade moves into the forex account and back by itself. It reads forex news (FXStreet, investingLive, US data and central banks) and only trades when the news and the chart agree, or on a strong chart setup. Every trade has a stop-loss resting on Hyperliquid, moves to break-even at +1R and trails after. Forex trades close before Friday&apos;s close so the weekend gap can&apos;t skip the stop.
           </small>
         )}
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        {!snipeDesk && <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <label className="ait-check"><input type="checkbox" checked={s.use_ta} disabled={!!busy} onChange={(e) => set({ use_ta: e.target.checked })} /> <span>Charts (technical analysis)</span></label>
           <label className="ait-check"><input type="checkbox" checked={s.use_news} disabled={!!busy} onChange={(e) => set({ use_news: e.target.checked })} /> <span>News sites</span></label>
           <label className="ait-check"><input type="checkbox" checked={s.use_x} disabled={!!busy} onChange={(e) => set({ use_x: e.target.checked })} /> <span>X accounts</span></label>
-        </div>
-        <label className={"aic-row" + (s.no_liq !== false ? " on" : "")}>
+        </div>}
+        {!snipeDesk && <label className={"aic-row" + (s.no_liq !== false ? " on" : "")}>
           <input type="checkbox" checked={s.no_liq !== false} disabled={!!busy} onChange={(e) => set({ no_liq: e.target.checked }, e.target.checked ? "Never get liquidated: on (at most 6x, liquidation 15%+ away)." : "Never get liquidated: off. Your leverage setting is used as is.")} />
           <span className="grow"><b>🛡 Never get liquidated</b><small className="muted">Caps leverage at 6x so liquidation is at least 15% away, and every trade&apos;s stop-loss sits at least 8× closer than that, resting on Hyperliquid itself. Each trade uses only its own margin (isolated), so one trade can never take the rest of the account.</small></span>
-        </label>
+        </label>}
         {[
           ["max_lev", "Leverage", "x", `1 to 50 (each coin's own maximum applies). At ${s.max_lev}x, liquidation is ~${(100 / s.max_lev).toFixed(1)}% away.`],
           ["max_loss_pct", "Auto-sell every trade at", "% loss", `of its margin (the P&L % Hyperliquid shows). At ${s.max_lev}x that's a ${(s.max_loss_pct / s.max_lev).toFixed(2)}% price move.`],
@@ -457,29 +494,32 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" } = {}) {
           ["max_positions", "Positions at once", "", ""],
           ["daily_loss_pct", "Daily loss limit", "%", "Down this much today: no new trades until tomorrow (UTC)."],
           ["max_hold_hours", "Max hold", "hours", ""],
-        ].map(([k, label, unit, hint]) => (
+        ].filter(([k]) => !snipeDesk || ["max_positions", "daily_loss_pct", "max_hold_hours"].includes(k)).map(([k, label, unit, hint]) => (
           <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <small><b>{label}:</b> {String((s as any)[k])}{unit ? ` ${unit}` : ""}</small>
             <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt(`${label}${hint ? ` (${hint})` : ""}:`, String((s as any)[k])); if (v != null && v.trim() !== "" && isFinite(Number(v))) set({ [k]: Number(v) } as any); }}>Change</button>
             {hint && <small className="muted">{hint}</small>}
           </div>
         ))}
-        {!fxDesk && list("Coins", s.coins, "coins", "it trades these (Hyperliquid names)")}
-        {list("X accounts", s.x_handles, "x_handles", "fast news accounts it reads every minute (uses your X login from the AI trader page)")}
+        {!fxDesk && !turboDesk && !snipeDesk && list("Coins", s.coins, "coins", "it trades these (Hyperliquid names)")}
+        {turboDesk && <small className="muted">Coins: the 15 most-traded on Hyperliquid right now, picked fresh every minute.</small>}
+        {!snipeDesk && list("X accounts", s.x_handles, "x_handles", "fast news accounts it reads every minute (uses your X login from the AI trader page)")}
         {!live && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how many dollars? (closes all practice positions)", "1000"); if (v && Number(v) >= 100) act("reset", "reset", { usd: Number(v) }); }}>Reset practice account</button>}
       </section>
 
+      {!snipeDesk && (
       <section className="card stack">
         <b>📰 News the AI acted on</b>
         {!d.news.length ? <small className="muted">Nothing market-moving yet.</small> : d.news.map((x) => (
           <small key={x.key}><b className={x.direction > 0 ? "up" : "down"}>{x.direction > 0 ? "▲" : "▼"} {x.coin === "USD" ? "US dollar" : fxLabel(x.coin)}</b> {Math.round(x.strength * 100)}% · <a href={x.url} target="_blank" rel="noopener noreferrer">{x.title.slice(0, 140)}</a> <span className="muted">· {x.source} · {ago(x.at)}</span></small>
         ))}
       </section>
+      )}
 
       <section className="card stack">
         <b>Closed trades</b>
         {!d.closed.length ? <small className="muted">None yet.</small> : d.closed.slice(0, 30).map((p) => (
-          <small key={p.id}><b className={(p.pnl_usd || 0) >= 0 ? "up" : "down"}>{usd(p.pnl_usd)}</b> · {p.side} {fxLabel(p.coin, p.entry)} {p.lev}x on {VN[p.venue] || p.venue} · {px(p.entry)} → {px(p.exit)} · {p.reason}{p.mode === "paper" ? " · practice" : ""} · <span className="muted">{p.closed_at ? ago(p.closed_at) : ""}</span></small>
+          <small key={p.id}><b className={(p.pnl_usd || 0) >= 0 ? "up" : "down"}>{usd(p.pnl_usd)}</b> · {p.side} {lbl(p)} {p.lev}x on {VN[p.venue] || p.venue} · {px(p.entry)} → {px(p.exit)} · {p.reason}{p.mode === "paper" ? " · practice" : ""} · <span className="muted">{p.closed_at ? ago(p.closed_at) : ""}</span></small>
         ))}
       </section>
       </>)}
