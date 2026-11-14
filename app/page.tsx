@@ -117,8 +117,8 @@ export default async function Home() {
       </header>
 
       <section className="lp-hero">
+        <div className="lp-hero-mark"><Wordmark className="lp-wordmark" /></div>
         <div className="lp-hero-copy">
-          <Wordmark className="lp-wordmark" />
           <div className="lp-eyebrow"><TypeText text="A global autism community, powered by crypto" speed={16} /></div>
           <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={650} sound human /></span><span className="lp-loop"><TypeLoop intro delay={1450} words={HERO_LOOP} /></span></h1>
           <p><Words delay={1500} text="AUTISTIK brings autistic people, their families and supporters together in one global community, with simple, secure crypto tools built in. A share of all trading activity funds real-world support for autistic people." /></p>

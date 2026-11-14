@@ -6982,3 +6982,8 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .lp .lp-btn.gold { box-shadow: 0 0 0 1px rgba(255,216,77,.5), 0 0 28px rgba(240,185,11,.45), 0 10px 30px rgba(240,185,11,.25); }
 .lp .lp-btn:not(.gold) { border: 1px solid rgba(255,255,255,.14); }
 :root[data-theme="light"] .lp .lp-btn:not(.gold) { border-color: rgba(25,19,38,.16); }
+
+/* The AUTISTIK wordmark (with the eyes) sits at the very top of the page, above the picture, on every screen size */
+.lp .lp-hero-mark { grid-column: 1 / -1; order: -2; display: flex; justify-content: center; margin: 0 0 -6px; }
+.lp .lp-hero-mark .lp-wordmark { margin: 0; }
+@media (max-width: 900px) { .lp .lp-hero-mark { margin: 0 0 4px; } }
