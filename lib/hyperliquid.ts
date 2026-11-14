@@ -39,9 +39,40 @@ export async function hlCandles(coin: string, interval: "1m" | "5m" | "15m" | "1
   return (Array.isArray(j) ? j : []).map((k) => ({ t: Number(k.t), o: Number(k.o), h: Number(k.h), l: Number(k.l), c: Number(k.c), v: Number(k.v) }));
 }
 
-/** The wallet's Hyperliquid account: total value, money free to trade, and open positions by coin. */
-export async function hlAccount(user: string) {
-  const j = await hlInfo<any>({ type: "clearinghouseState", user });
+/**
+ * Forex on Hyperliquid: currency perps on trade.xyz, a builder-deployed (HIP-3) exchange inside Hyperliquid. Same
+ * account and wallet, but its own margin balance ("dex" xyz). Names look like "xyz:EUR"; order ids are
+ * 100000 + the exchange's number × 10000 + the market's place in its list.
+ */
+export const FX_DEX = "xyz";
+const FX_NAMES = new Set(["EUR", "GBP", "JPY", "AUD", "NZD", "CAD", "CHF", "KRW", "CNH", "MXN", "INR", "SGD", "HKD", "BRL", "TRY", "ZAR", "DXY"]);
+let fxDexIdx: { at: number; idx: number } | null = null;
+async function fxDexIndex(): Promise<number> {
+  if (fxDexIdx && Date.now() - fxDexIdx.at < 3600e3) return fxDexIdx.idx;
+  const j = await hlInfo<any[]>({ type: "perpDexs" });
+  const idx = (Array.isArray(j) ? j : []).findIndex((d) => d && String(d.name) === FX_DEX);
+  if (idx < 1) throw new Error("Hyperliquid's forex exchange (trade.xyz) isn't listed right now.");
+  fxDexIdx = { at: Date.now(), idx };
+  return idx;
+}
+/** The currency markets on trade.xyz (USDC margin only), keyed "xyz:EUR". Empty if it can't be read. */
+export async function hlFxMarket(): Promise<Map<string, HlAsset>> {
+  const out = new Map<string, HlAsset>();
+  const [idx, j] = await Promise.all([fxDexIndex(), hlInfo<any[]>({ type: "metaAndAssetCtxs", dex: FX_DEX })]);
+  const meta = j?.[0] || {}, uni: any[] = meta.universe || [], ctx: any[] = j?.[1] || [];
+  // Margin has to be USDC (token 0), the money the account is funded with from Solana.
+  if (meta.collateralToken != null && Number(meta.collateralToken) !== 0) return out;
+  uni.forEach((u, i) => {
+    const c = ctx[i] || {}, name = String(u?.name || "");
+    if (u?.isDelisted || !FX_NAMES.has(name.replace(/^[^:]+:/, ""))) return;
+    out.set(name, { index: 100000 + idx * 10000 + i, name, szDecimals: Number(u.szDecimals) || 0, maxLev: Number(u.maxLeverage) || 1, mark: Number(c.markPx) || 0, funding: Number(c.funding) || 0, oi: Number(c.openInterest) || 0, dayVol: Number(c.dayNtlVlm) || 0 });
+  });
+  return out;
+}
+
+/** The wallet's Hyperliquid account: total value, money free to trade, and open positions by coin. dex: "xyz" for forex. */
+export async function hlAccount(user: string, dex = "") {
+  const j = await hlInfo<any>(dex ? { type: "clearinghouseState", user, dex } : { type: "clearinghouseState", user });
   const positions = new Map<string, { size: number; entry: number; liq: number | null; upnl: number }>();
   for (const p of j?.assetPositions || []) {
     const q = p?.position;
@@ -225,6 +256,16 @@ export async function hlUsdSend(account: PrivateKeyAccount, destination: string,
   return postUserAction(account, "HyperliquidTransaction:UsdSend", [
     { name: "hyperliquidChain", type: "string" }, { name: "destination", type: "string" }, { name: "amount", type: "string" }, { name: "time", type: "uint64" },
   ], action, time);
+}
+
+/** Move trading USDC between the main account ("") and a builder exchange's account (e.g. "xyz" for forex). Instant, free. */
+export async function hlDexTransfer(account: PrivateKeyAccount, fromDex: string, toDex: string, usd: number) {
+  const nonce = Date.now();
+  const action = { type: "sendAsset", hyperliquidChain: "Mainnet", signatureChainId: "0xa4b1", destination: account.address.toLowerCase(), sourceDex: fromDex, destinationDex: toDex, token: "USDC:0x6d1e7cde53ba9467b783cb7c530ce054", amount: usdStr(usd), fromSubAccount: "", nonce };
+  return postUserAction(account, "HyperliquidTransaction:SendAsset", [
+    { name: "hyperliquidChain", type: "string" }, { name: "destination", type: "string" }, { name: "sourceDex", type: "string" }, { name: "destinationDex", type: "string" },
+    { name: "token", type: "string" }, { name: "amount", type: "string" }, { name: "fromSubAccount", type: "string" }, { name: "nonce", type: "uint64" },
+  ], action, nonce);
 }
 
 /** A Relay step that is a Hyperliquid transfer (sendAsset to Relay's depository): signed and posted like Relay's own SDK. */
