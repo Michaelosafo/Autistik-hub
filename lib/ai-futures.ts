@@ -34,7 +34,7 @@ export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
   max_lev: number; max_loss_pct: number; risk_pct: number; max_positions: number; daily_loss_pct: number; max_hold_hours: number;
   use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[]; last_run: string | null; last_note: string | null;
-  day_start_usd: number | null; day: string | null;
+  day_start_usd: number | null; day: string | null; no_liq: boolean;
 };
 export type FPos = {
   id: number; mode: string; venue: string; coin: string; side: "long" | "short"; lev: number; margin_usd: number; notional_usd: number;
@@ -60,6 +60,7 @@ export async function getF(): Promise<FSettings> {
   for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
+  s.no_liq = s.no_liq !== false;
   return s as FSettings;
 }
 
@@ -133,6 +134,68 @@ export async function depositToHl(): Promise<string> {
   const hash = await w.writeContract({ address: USDC_ARB, abi: erc20Abi, functionName: "transfer", args: [HL_BRIDGE, bal] });
   await flog("settings", `Deposited ${(Number(bal) / 1e6).toFixed(2)} USDC into Hyperliquid (tx ${hash}).`);
   return hash;
+}
+
+/**
+ * Fund it from Solana: sends USDT / USDC from the AI trader's Solana wallet straight into this futures account on
+ * Hyperliquid (Relay). Arrives as trading USDC in about a minute. quoteOnly: what you'd receive and the fee.
+ */
+export async function fundFromSolana(usd: number, symbol: "USDT" | "USDC", quoteOnly = false) {
+  const a = await futAccount();
+  if (!a) throw new Error("Create the AI Futures wallet first.");
+  const { myWallets } = await import("@/lib/ai-trader");
+  const { solToHyperliquid } = await import("@/lib/ai-trader-chains");
+  const r = await solToHyperliquid(await myWallets(1), a.address, usd, symbol, quoteOnly);
+  if (!quoteOnly) await flog("settings", `Sent $${usd.toFixed(2)} ${symbol} from the Solana wallet to Hyperliquid (≈$${(r.receive ?? usd).toFixed(2)} arrives, fee ≈$${r.feeUsd.toFixed(2)}). Relay order ${r.requestId || "?"}.`);
+  return r;
+}
+
+/**
+ * Performance of the current mode (practice or live): the account over time, return, win rate, average win / loss,
+ * profit factor, biggest drop from a high (drawdown), fees, best / worst trade, by coin, by exit reason, and for every
+ * trade why it opened, why it closed and what it did to the account.
+ */
+async function performance(s: FSettings, eqTotal: number, openUpnl: number) {
+  const { data } = await fq("ai_futures_positions").select("id,coin,side,lev,venue,entry,exit,pnl_usd,fees_usd,reason,why,opened_at,closed_at,risk_usd,equity_at_open,notional_usd").eq("status", "closed").eq("mode", s.mode).order("closed_at", { ascending: true }).limit(2000);
+  const ts = ((data || []) as any[]).filter((t) => t.closed_at);
+  const total = ts.reduce((a, t) => a + n(t.pnl_usd), 0);
+  // Starting money: practice = the reset amount; live = today's value minus everything the trades made (so deposits count as starting money).
+  const start = s.mode === "paper" ? n(s.paper_start) : Math.max(0.01, eqTotal - total - openUpnl);
+  let run = start, peak = start, maxDd = 0;
+  const curve: { t: string; v: number }[] = [{ t: ts[0]?.opened_at || new Date().toISOString(), v: +start.toFixed(2) }];
+  const trades = ts.map((t) => {
+    const before = n(t.equity_at_open) || run;
+    run += n(t.pnl_usd);
+    peak = Math.max(peak, run);
+    maxDd = Math.max(maxDd, peak > 0 ? (peak - run) / peak : 0);
+    curve.push({ t: t.closed_at, v: +run.toFixed(2) });
+    const r = n(t.risk_usd) > 0 ? n(t.pnl_usd) / n(t.risk_usd) : null;
+    return {
+      id: t.id, coin: t.coin, side: t.side, lev: n(t.lev), venue: t.venue, entry: n(t.entry), exit: n(t.exit), pnl: n(t.pnl_usd), fees: n(t.fees_usd),
+      impactPct: before > 0 ? (n(t.pnl_usd) / before) * 100 : null, r, holdMin: Math.round((Date.parse(t.closed_at) - Date.parse(t.opened_at)) / 60000),
+      opened: t.why || "", closed: t.reason || "", driver: /news|headline|📰|\bX\b|tweet/i.test(String(t.why || "")) ? "news" : "chart", at: t.closed_at,
+    };
+  });
+  curve.push({ t: new Date().toISOString(), v: +eqTotal.toFixed(2) });
+  const wins = trades.filter((t) => t.pnl > 0), losses = trades.filter((t) => t.pnl <= 0);
+  const sumW = wins.reduce((a, t) => a + t.pnl, 0), sumL = -losses.reduce((a, t) => a + t.pnl, 0);
+  const group = (key: (t: (typeof trades)[number]) => string) => {
+    const m = new Map<string, { trades: number; wins: number; pnl: number }>();
+    for (const t of trades) { const k = key(t); const g = m.get(k) || { trades: 0, wins: 0, pnl: 0 }; g.trades++; if (t.pnl > 0) g.wins++; g.pnl += t.pnl; m.set(k, g); }
+    return [...m.entries()].map(([k, g]) => ({ key: k, ...g, pnl: +g.pnl.toFixed(2) })).sort((a, b) => b.pnl - a.pnl);
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const day = trades.filter((t) => String(t.at).slice(0, 10) === today).reduce((a, t) => a + t.pnl, 0);
+  return {
+    start: +start.toFixed(2), now: +eqTotal.toFixed(2), returnPct: start > 0 ? ((eqTotal - start) / start) * 100 : null, today: +day.toFixed(2),
+    trades: trades.length, winRate: trades.length ? (wins.length / trades.length) * 100 : null,
+    avgWin: wins.length ? sumW / wins.length : null, avgLoss: losses.length ? -sumL / losses.length : null,
+    profitFactor: sumL > 0 ? sumW / sumL : wins.length ? null : null, maxDrawdownPct: maxDd * 100,
+    fees: trades.reduce((a, t) => a + t.fees, 0), best: trades.reduce<any>((b, t) => (!b || t.pnl > b.pnl ? t : b), null), worst: trades.reduce<any>((b, t) => (!b || t.pnl < b.pnl ? t : b), null),
+    avgHoldMin: trades.length ? Math.round(trades.reduce((a, t) => a + t.holdMin, 0) / trades.length) : null,
+    byCoin: group((t) => t.coin), byExit: group((t) => t.closed.replace(/\s*\(.*$/, "")), byDriver: group((t) => t.driver),
+    curve: curve.slice(-400), journal: trades.slice(-60).reverse(),
+  };
 }
 
 // ---------------------------------------------------------------- Market data
@@ -369,7 +432,10 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   if (long ? f > 0.0005 : f < -0.0005) return `funding too costly on ${VENUE_NAME[venue]}`;
   const price = priceOn(m, venue, coin);
   // Stop: 3× the 5-minute ATR, between 0.6% and 4% away. At 3x, liquidation is ~32% away, far past any stop.
-  const lev = Math.min(MAX_LEV, s.max_lev, m.hl.get(coin)?.maxLev ?? MAX_LEV);
+  let lev = Math.min(MAX_LEV, s.max_lev, m.hl.get(coin)?.maxLev ?? MAX_LEV);
+  // "Never get liquidated" (on): liquidation at least 15% away (6x at most), so even a sudden crash reaches the
+  // stop-loss resting on Hyperliquid long before it could reach liquidation.
+  if (s.no_liq) lev = Math.min(lev, 6);
   // Stop: 3× the 5-minute ATR (0.6%–4% away), but never more than the auto-sell loss (e.g. -5% of the margin = 5% ÷
   // leverage of price). Liquidation is about 1 ÷ leverage away, so the stop always comes first.
   const stopPct = Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev);
@@ -381,6 +447,8 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   const stop = long ? price * (1 - stopPct) : price * (1 + stopPct);
   const target = long ? price * (1 + stopPct * (newsDriven ? 2.5 : 2.2)) : price * (1 - stopPct * (newsDriven ? 2.5 : 2.2));
   const liq = long ? price * (1 - 1 / lev + 0.005) : price * (1 + 1 / lev - 0.005);
+  // Always: the stop must sit far before liquidation (at least 8x nearer), or no trade.
+  if (Math.abs(price - liq) / price < stopPct * 8) return `${coin}: liquidation too close to the stop at ${lev}x`;
   let entry = price, size: number | null = null, sl_oid: number | null = null, tx: string | null = null;
   if (s.mode === "live") {
     const a = await futAccount(), asset = m.hl.get(coin);
@@ -405,6 +473,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
     mode: s.mode, venue, coin, side, lev, margin_usd: notional / lev, notional_usd: notional, entry,
     stop: long ? entry * (1 - stopPct) : entry * (1 + stopPct), target: long ? entry * (target / price) : entry * (target / price), liq, best: entry, last: entry,
     fees_usd: fees, why: why.slice(0, 500), size, sl_oid, open_tx: tx,
+    risk_usd: +(notional * stopPct).toFixed(4), equity_at_open: +eq.total.toFixed(2),
   });
   if (error) await flog("error", `Opened ${coin} but couldn't save it: ${error.message}`);
   await flog("open", `${long ? "📈 Long" : "📉 Short"} ${coin} on ${VENUE_NAME[venue]} at $${entry.toPrecision(6)}, ${lev}x, $${notional.toFixed(0)} position ($${(notional / lev).toFixed(0)} margin). Stop $${(long ? entry * (1 - stopPct) : entry * (1 + stopPct)).toPrecision(6)} (-${(stopPct * 100).toFixed(2)}%), target +${(stopPct * (newsDriven ? 250 : 220)).toFixed(2)}%. ${why}${s.mode === "paper" ? " · practice" : ""}`);
@@ -484,9 +553,11 @@ export async function futStatus() {
   const eq = await equity(s, m).catch(() => ({ total: 0, free: 0 }));
   const done = ((closedP || []) as FPos[]).filter((p) => p.mode === s.mode);
   const pnl = done.reduce((a, p) => a + n(p.pnl_usd), 0), wins = done.filter((p) => n(p.pnl_usd) > 0).length;
+  const openNow = ((openP || []) as FPos[]).map((p) => { const px = priceOn(m, p.venue, p.coin) || n(p.last); return { ...p, price: px, upnl: px ? pnlOf(p, px) - n(p.fees_usd) : null }; });
+  const perf = await performance(s, eq.total, openNow.filter((p) => p.mode === s.mode).reduce((a, p) => a + n(p.upnl), 0)).catch(() => null);
   return {
-    settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES,
-    open: ((openP || []) as FPos[]).map((p) => { const px = priceOn(m, p.venue, p.coin) || n(p.last); return { ...p, price: px, upnl: px ? pnlOf(p, px) - n(p.fees_usd) : null }; }),
+    settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf,
+    open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],
     stats: { trades: done.length, wins, winRate: done.length ? Math.round((wins / done.length) * 100) : null, pnl },
   };

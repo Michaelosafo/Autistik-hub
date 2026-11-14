@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { LIVE_VENUES, VENUES, closeNow, createFutWallet, depositToHl, flog, futStatus, futWallet, getF, importFutKey, revealFutKey, runFutures } from "@/lib/ai-futures";
+import { LIVE_VENUES, VENUES, closeNow, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, revealFutKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -57,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const s = await getF();
           const up: Record<string, unknown> = {};
           if (typeof b.enabled === "boolean") up.enabled = b.enabled;
-          for (const k of ["use_ta", "use_news", "use_x"]) if (typeof b[k] === "boolean") up[k] = b[k];
+          for (const k of ["use_ta", "use_news", "use_x", "no_liq"]) if (typeof b[k] === "boolean") up[k] = b[k];
           const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
@@ -86,6 +86,13 @@ export async function POST(req: Request, { params }: { params: { action: string 
         case "wallet": { const address = await createFutWallet(); return json({ ok: true, address, note: "Wallet created. See How to fund." }); }
         case "key-reveal": return json({ ok: true, key: await revealFutKey() });
         case "key-import": { const address = await importFutKey(String(b.key || "")); return json({ ok: true, address, note: `Futures now trade from your wallet ${address.slice(0, 6)}…${address.slice(-4)}.` }); }
+        case "fund-sol": {
+          // USDT / USDC from the AI trader's Solana wallet straight into this futures account on Hyperliquid (Relay).
+          const amt = Number(b.usd), sym = b.symbol === "USDC" ? "USDC" : "USDT";
+          if (!isFinite(amt) || amt < 5 || amt > 100_000) return json({ error: "Send between $5 and $100,000." }, 400);
+          const r = await fundFromSolana(amt, sym, b.quote === true);
+          return json({ ok: true, ...r, note: b.quote === true ? `You'd get about $${(r.receive ?? amt).toFixed(2)} on Hyperliquid (fee about $${r.feeUsd.toFixed(2)}${r.seconds ? `, ~${r.seconds}s` : ""}).` : `Sent. About $${(r.receive ?? amt).toFixed(2)} arrives on Hyperliquid in about a minute.` });
+        }
         case "deposit": { const tx = await depositToHl(); return json({ ok: true, note: `Sent to Hyperliquid (tx ${tx.slice(0, 10)}…). It shows there in about a minute.` }); }
         case "close": { await closeNow(Number(b.id)); return json({ ok: true, note: "Closed." }); }
         case "run": return json({ ok: true, note: await runFutures() });
