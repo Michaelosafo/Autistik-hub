@@ -6950,3 +6950,35 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .crew-card figcaption small { color: var(--muted); font-size: .74rem; }
 @keyframes crewScroll { to { transform: translateX(-50%); } }
 @media (prefers-reduced-motion: reduce) { .crew-track, .crew-hero-main, .crew-pill, .crew-mini { animation: none; } .crew { overflow-x: auto; } }
+
+/* ===== Homepage, bold display style: heavy condensed headings, eyes logo, highlight box, outline numbers ===== */
+.lp { --f-heavy: "Anton", "Bebas Neue", "Impact", system-ui, sans-serif; }
+.wordmark { font-family: var(--f-heavy); font-weight: 400; letter-spacing: .005em; text-transform: uppercase; }
+.lp .lp-wordmark { font-size: clamp(3.4rem, 13vw, 7.2rem); line-height: .86; margin: 0 0 14px; }
+.wordmark .wm-logo { width: 1.5em; height: .95em; margin: 0 .04em; transform: translateY(.01em); }
+.eye-logo { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 .05em .16em rgba(181,124,255,.6)); }
+.eye-logo .el-pupils { transform: translate(var(--px, 0px), var(--py, 0px)); transition: transform .18s ease-out; }
+.eye-logo .el-lids rect { fill: #2A1F45; transform-box: fill-box; transform-origin: center top; transform: scaleY(0); animation: elBlink 5.5s infinite; }
+@keyframes elBlink { 0%, 92%, 100% { transform: scaleY(0); } 95% { transform: scaleY(1); } }
+:root[data-calm="on"] .eye-logo .el-lids rect { animation: none; }
+@media (prefers-reduced-motion: reduce) { .eye-logo .el-lids rect { animation: none; } .eye-logo .el-pupils { transition: none; } }
+
+/* Headline: big condensed capitals, the "Autism is not a disease." line in a bright highlight box */
+.lp .lp-hero h1 { font-family: var(--f-heavy); font-weight: 400; text-transform: uppercase; letter-spacing: .005em; line-height: .98; }
+.lp .lp-hero h1 .lp-punch { display: inline; padding: .04em .22em .02em; background: linear-gradient(92deg, #FFD84D, #F0B90B 55%, #FF9F5A); color: #191326 !important; -webkit-text-fill-color: #191326; border-radius: 8px; box-decoration-break: clone; -webkit-box-decoration-break: clone; box-shadow: 0 10px 34px rgba(240,185,11,.28); }
+.lp .lp-hero h1 .lp-punch span { color: #191326 !important; -webkit-text-fill-color: #191326 !important; }
+.lp .lp-hero h1 .lp-punch .tt-caret { background: #191326 !important; }
+.lp .lp-hero h1 .lp-loop { display: block; font-family: var(--f-body); text-transform: none; letter-spacing: -.015em; margin-top: 14px; }
+
+/* Section titles in the same heavy capitals */
+.lp .lp-sec h2, .lp .lp-head h2 { font-family: var(--f-heavy); font-weight: 400; text-transform: uppercase; letter-spacing: .01em; font-size: clamp(2.1rem, 6vw, 3.6rem); line-height: .95; }
+
+/* "How it works" numbers as big outline digits */
+.lp .lp-steps li { background: rgba(255,255,255,.03); border-color: rgba(181,124,255,.22); padding: 18px 20px; }
+.lp .lp-steps li > span { width: auto; height: auto; background: none; border-radius: 0; font-family: var(--f-heavy); font-weight: 400; font-size: 3.4rem; line-height: .9; color: transparent; -webkit-text-stroke: 1.6px #F0B90B; }
+:root[data-theme="light"] .lp .lp-steps li > span { color: transparent; -webkit-text-stroke-color: #C98A00; }
+
+/* Glowing main button */
+.lp .lp-btn.gold { box-shadow: 0 0 0 1px rgba(255,216,77,.5), 0 0 28px rgba(240,185,11,.45), 0 10px 30px rgba(240,185,11,.25); }
+.lp .lp-btn:not(.gold) { border: 1px solid rgba(255,255,255,.14); }
+:root[data-theme="light"] .lp .lp-btn:not(.gold) { border-color: rgba(25,19,38,.16); }
