@@ -31,7 +31,7 @@ const HERO_LOOP = ["It's a different way of thinking.", "It's a source of streng
 
 const WHY: { q: string; a: string; icon: IconName }[] = [
   { q: "What is AUTISTIK?", a: "A website and app where autistic people, their families and supporters connect, learn and find support, with simple, secure crypto (digital money) tools explained in plain language.", icon: "groups" },
-  { q: "Why autism?", a: "Around 1 in 100 people are autistic. Many still face stigma, are excluded from work and online spaces, and struggle to access the support they need. Everything we build is centred on this one cause.", icon: "heart" },
+  { q: "Why autism?", a: "Autism is a different way of experiencing the world, not something to be fixed. Many autistic people are still misunderstood, left out at school, at work and online, and find it hard to get the right support. We focus on this one cause so we can do it well: a welcoming place to belong, and practical help when it's needed.", icon: "heart" },
   { q: "How does it help?", a: "A portion of all trading activity on AUTISTIK flows into the AUTISTIK Fund, which will cover therapy, equipment, education and everyday essentials for autistic people and their families. The Fund opens soon.", icon: "rewards" },
   { q: "Who is it for?", a: "Autistic adults, families, carers, supporters, practitioners and organisations, including people who have never used crypto before. Joining the community is free.", icon: "chat" },
   { q: "Who builds it?", a: "AUTISTIK is built by and for the autistic community and the people who care about them. Autistic people lead, with families, supporters and practitioners alongside. Nothing about us without us.", icon: "live" },
