@@ -258,6 +258,29 @@ export async function hlUsdSend(account: PrivateKeyAccount, destination: string,
   ], action, time);
 }
 
+/**
+ * HLP: Hyperliquid's own market-making vault. Deposits earn a share of its trading and liquidation profits (and losses);
+ * a deposit can be withdrawn 4 days after it was made. usd is in micro-dollars (1 USDC = 1,000,000).
+ */
+export const HLP_VAULT = "0xdfc24b077bc1425ad1dea75bcb6f8158e10df303";
+export async function hlVaultTransfer(account: PrivateKeyAccount, isDeposit: boolean, usd: number) {
+  const micro = Math.floor(usd * 1e6);
+  if (micro < 1e6) throw new Error("The smallest amount is $1.");
+  return exchange(account, { type: "vaultTransfer", vaultAddress: HLP_VAULT, isDeposit, usd: micro });
+}
+/** What the wallet has in HLP (equity) and until when the newest deposit is locked. */
+export async function hlVaultEquity(user: string): Promise<{ equity: number; lockedUntil: number | null }> {
+  const j = await hlInfo<any[]>({ type: "userVaultEquities", user });
+  const v = (Array.isArray(j) ? j : []).find((x) => String(x?.vaultAddress || "").toLowerCase() === HLP_VAULT);
+  return { equity: Number(v?.equity) || 0, lockedUntil: v?.lockedUntilTimestamp ? Number(v.lockedUntilTimestamp) : null };
+}
+/** HLP's recent yearly rate (as Hyperliquid reports it, e.g. 0.12 = 12%), or null. */
+export async function hlVaultApr(): Promise<number | null> {
+  const j = await hlInfo<any>({ type: "vaultDetails", vaultAddress: HLP_VAULT }).catch(() => null);
+  const a = Number(j?.apr);
+  return isFinite(a) && j?.apr != null ? a : null;
+}
+
 /** Move trading USDC between the main account ("") and a builder exchange's account (e.g. "xyz" for forex). Instant, free. */
 export async function hlDexTransfer(account: PrivateKeyAccount, fromDex: string, toDex: string, usd: number) {
   const nonce = Date.now();

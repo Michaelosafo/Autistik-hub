@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { FX_DESK, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { EARN_DESK, FX_DESK, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -20,7 +20,7 @@ export async function GET(req: Request, { params }: { params: { action: string }
     if (denied) return denied;
     const sb = supabaseService();
     const [{ data: on }, { data: holding }] = await Promise.all([
-      sb.from("ai_futures_settings").select("id").eq("enabled", true),
+      sb.from("ai_futures_settings").select("id").or(`enabled.eq.true,id.gte.${EARN_DESK}`), // Earn desks run to move Solana money in
       sb.from("ai_futures_positions").select("fut_id").in("status", ["open", "closing"]),
     ]);
     const ids = [...new Set([...(on || []).map((r: any) => Number(r.id)), ...(holding || []).map((r: any) => Number(r.fut_id))])];
@@ -43,8 +43,11 @@ async function mine(): Promise<number | null> {
   return data?.id ? Number(data.id) : null;
 }
 
-/** ?desk=fx: the admin's Forex trader (its own id), otherwise their Futures trader. */
-const desk = (req: Request, id: number | null) => (id && new URL(req.url).searchParams.get("desk") === "fx" ? FX_DESK + id : id);
+/** ?desk=fx: the admin's Forex trader, ?desk=earn: their Earn desk (each its own id), otherwise their Futures trader. */
+const desk = (req: Request, id: number | null) => {
+  const d = new URL(req.url).searchParams.get("desk");
+  return id && d === "fx" ? FX_DESK + id : id && d === "earn" ? EARN_DESK + id : id;
+};
 
 const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : undefined; };
 
@@ -112,6 +115,11 @@ export async function POST(req: Request, { params }: { params: { action: string 
           return json({ ok: true, ...r, note: b.quote === true ? `You'd receive about $${got} (fee about $${(r.feeUsd ?? 0).toFixed(2)}).` : to === "arbitrum" ? `Withdrawal sent: about $${got} USDC arrives on Arbitrum in ~5 minutes.` : to === "hyperliquid" ? `Sent $${got} to that Hyperliquid account.` : `Withdrawal sent: about $${got} arrives on Solana in about a minute. Track it in Money in & out.` });
         }
         case "run": return json({ ok: true, note: await runFutures() });
+        case "earn": {
+          const usd = Number(b.usd);
+          if (!(usd > 0) || usd > 1_000_000) return json({ error: "Type a dollar amount, like 50." }, 400);
+          return json({ ok: true, note: await earnMove(b.op !== "withdraw", usd) });
+        }
         case "reset": {
           const s = await getF();
           if (s.mode !== "paper") return json({ error: "Reset is for practice only." }, 400);
