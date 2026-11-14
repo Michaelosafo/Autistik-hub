@@ -109,48 +109,13 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
   const toggle = () => { const o = !open; setOpen(o); try { localStorage.setItem("madness-open", o ? "1" : "0"); } catch {} };
 
   if (full) {
-    const NAV: [Tab, string, string, string][] = [
-      ["home", "Home", "News, activity, tokens people are watching, clean scans and people to follow", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'],
-      ["following", "Following", "Posts from people you follow", '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 11l2 2 4-4"/>'],
-      ["everyone", "What's happening", "The whole TIK feed", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>'],
-      ["alerts", "Alerts", "Replies, follows and likes", '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'],
-      ["people", "Find people", "Search and follow members", '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'],
-    ];
+    // TIK on its own page, kept simple: the "What's happening" box and everyone's posts (or one opened post).
     return (
-      <section className="tik-pro" aria-label="TIK">
-        <aside className="tik-side" aria-label="TIK menu">
-          <div className="tik-brand">
-            <span className="tik-logo" aria-hidden="true">T</span>
-            <span><b>TIK</b><small>LIVE · SOCIAL · AUTISTIK</small></span>
-          </div>
-          <nav className="tik-nav" role="tablist" aria-orientation="vertical">
-            {NAV.map(([t, l, , d]) => (
-              <button key={t} type="button" role="tab" aria-selected={!focus && tab === t} onClick={() => { setTab(t); if (focus) window.location.href = "/mood"; }}>
-                <span className="tik-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} /></span>
-                <span className="tik-nl">{l}</span>
-                {t === "alerts" && unread > 0 && <em className="tik-badge">{unread > 9 ? "9+" : unread}</em>}
-                {t === "trending" && hotCount > 0 && <em className="tik-badge hot">{hotCount}</em>}
-              </button>
-            ))}
-          </nav>
-          <Link href="/spaces?host=1" className="tik-host"><i aria-hidden="true" />Host a live</Link>
-          <div className="tik-links">
-            <Link href="/spaces">Live rooms</Link>
-            <Link href="/chats">Chats</Link>
-            <Link href="/board">Board</Link>
-          </div>
-          {side && <div className="tik-live"><div className="tik-cap"><span className="tik-dot" aria-hidden="true" />Live now</div>{side}</div>}
-        </aside>
+      <section className="tik-pro simple" aria-label="TIK">
         <div className="tik-main">
-          
           {focus}
-          {!focus && (tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
-          {!focus && tab === "home" && <TikHome admin={admin} />}
-          {!focus && tab === "trending" && <TrendingFeed me={me} />}
-          {!focus && tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
-          {!focus && tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
-          {!focus && tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
-          {!focus && tab === "people" && <FindPeople />}
+          {!focus && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer big onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
+          {!focus && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
         </div>
       </section>
     );
