@@ -11,7 +11,7 @@
  * and each sell exactly how much of the chain's coin came back.
  */
 import { createPublicClient, createWalletClient, defineChain, erc20Abi, getAddress, http, parseUnits, type PrivateKeyAccount } from "viem";
-import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction, type AddressLookupTableAccount } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { WCHAINS, WSOL } from "@/lib/wallet-chains";
 import { build, market, quote, walletChainClient, type EvmTx } from "@/lib/wallet-server";
@@ -181,6 +181,68 @@ async function relayRun(q: any, account: PrivateKeyAccount): Promise<{ hashes: s
     }
   }
   return { hashes, requestId };
+}
+
+/** Hyperliquid's own chain for Relay, and its perps USDC (lands in the futures account, ready to trade). */
+const HL_RELAY_ID = 1337, HL_PERPS_USDC = "0x00000000000000000000000000000000";
+
+/** Signs and sends one Solana step of a Relay order (instructions + address lookup tables), waiting for confirmation. */
+async function relaySolStep(kp: Keypair, d: any): Promise<string> {
+  const conn = solConn();
+  let tx: VersionedTransaction;
+  if (Array.isArray(d?.instructions)) {
+    const ixs = d.instructions.map((i: any) => new TransactionInstruction({
+      programId: new PublicKey(i.programId),
+      keys: (i.keys || []).map((k: any) => ({ pubkey: new PublicKey(k.pubkey), isSigner: !!k.isSigner, isWritable: !!k.isWritable })),
+      data: Buffer.from(String(i.data || ""), "hex"),
+    }));
+    const luts = (await Promise.all(((d.addressLookupTableAddresses || []) as string[]).map((a) => conn.getAddressLookupTable(new PublicKey(a)).then((r) => r.value)))).filter(Boolean) as AddressLookupTableAccount[];
+    const { blockhash } = await conn.getLatestBlockhash("confirmed");
+    tx = new VersionedTransaction(new TransactionMessage({ payerKey: kp.publicKey, recentBlockhash: blockhash, instructions: ixs }).compileToV0Message(luts));
+  } else if (typeof d?.serializedTransaction === "string" || typeof d?.transaction === "string") {
+    tx = VersionedTransaction.deserialize(Buffer.from(String(d.serializedTransaction || d.transaction), "base64"));
+  } else throw new Error("Relay sent a Solana step this can't read.");
+  tx.sign([kp]);
+  const raw = tx.serialize();
+  const sig = await conn.sendRawTransaction(raw, { skipPreflight: false, maxRetries: 2 });
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const st = (await conn.getSignatureStatuses([sig]).catch(() => null))?.value?.[0];
+    if (st?.err) throw new Error("The Solana transfer failed on-chain.");
+    if (st?.confirmationStatus === "confirmed" || st?.confirmationStatus === "finalized") return sig;
+    if (i % 3 === 2) conn.sendRawTransaction(raw, { skipPreflight: true, maxRetries: 0 }).catch(() => {});
+  }
+  return sig; // sent; Relay's status says whether it arrived
+}
+
+/**
+ * Sends USDT / USDC from the Solana trading wallet straight into a Hyperliquid futures account (Relay: one transfer
+ * on Solana, arrives as trading USDC on Hyperliquid, no Arbitrum or ETH needed). quoteOnly: just the price.
+ */
+export async function solToHyperliquid(w: Wallets, recipient: string, usd: number, symbol: "USDT" | "USDC", quoteOnly = false) {
+  if (!w.sol) throw new Error("There's no Solana trading wallet (create it on the AI trader page).");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(recipient)) throw new Error("Create the AI Futures wallet first.");
+  const st = stableBySymbol("solana", symbol);
+  if (!st) throw new Error("Pick USDT or USDC.");
+  if (!(usd >= 5)) throw new Error("Send at least $5.");
+  const have = Number((await solTokenRaw(w.sol.publicKey, st.token)).raw) / 10 ** st.decimals;
+  if (usd > have + 1e-9) throw new Error(`The Solana wallet has only $${have.toFixed(2)} ${symbol}.`);
+  const q = await relayQuote({ user: w.sol.publicKey.toBase58(), recipient, originChainId: RELAY_ID.solana, destinationChainId: HL_RELAY_ID, originCurrency: st.token, destinationCurrency: HL_PERPS_USDC, amount: parseUnits(usd.toFixed(6), st.decimals).toString() });
+  const fees = q.fees || {};
+  const feeUsd = ["gas", "relayer", "app"].reduce((a, k) => a + (Number(fees[k]?.amountUsd) || 0), 0);
+  const info = { receive: Number(q.details?.currencyOut?.amountFormatted) || null, feeUsd: +feeUsd.toFixed(4), seconds: Number(q.details?.timeEstimate) || null };
+  if (quoteOnly) return { ...info, requestId: null as string | null, sigs: [] as string[] };
+  const sigs: string[] = [];
+  let requestId: string | null = null;
+  for (const step of q.steps) {
+    requestId = requestId || step.requestId || null;
+    if (step.kind !== "transaction") throw new Error("Relay asked for a signature step, which can't be done here.");
+    for (const it of step.items || []) {
+      if (it.status === "complete") continue;
+      sigs.push(await relaySolStep(w.sol, it.data));
+    }
+  }
+  return { ...info, requestId, sigs };
 }
 
 /** Where a Relay order stands: waiting, depositing, pending, success, refund or failure. */

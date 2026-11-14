@@ -168,7 +168,7 @@ async function wallet2(): Promise<Wallets> {
   }
   return { evm, sol };
 }
-const myWallets = async (slot = 1): Promise<Wallets> => (slot === 2 ? wallet2() : { evm: await traderAccount(), sol: await solAccount() });
+export const myWallets = async (slot = 1): Promise<Wallets> => (slot === 2 ? wallet2() : { evm: await traderAccount(), sol: await solAccount() });
 
 /** Add (or replace) wallet 2 for BNB-family networks ("evm") or Solana ("sol") from its private key. */
 export async function setWallet2(kind: "evm" | "sol", raw: string): Promise<string> {
