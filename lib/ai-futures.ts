@@ -44,8 +44,18 @@ const MAX_LEV = 50;
 export const FX_DESK = 100000;
 /** The Earn desk (200000 + id): no trading; its money sits in Hyperliquid's HLP vault. Own wallet and Solana funding. */
 export const EARN_DESK = 200000;
+/**
+ * High-risk desks, each its own trader with its own wallets and money:
+ *  - Turbo (300000 + id): this engine on the fastest-moving Hyperliquid coins, 15x, 3% risk a trade, quicker entries.
+ *  - Sniper (400000 + id): brand-new Solana launch coins from its own Solana wallet (lib/ai-sniper.ts).
+ */
+export const TURBO_DESK = 300000;
+export const SNIPE_DESK = 400000;
 export const isFxDesk = () => T() >= FX_DESK && T() < EARN_DESK;
-export const isEarnDesk = () => T() >= EARN_DESK; // the most anyone can set (each coin's own exchange maximum still applies)
+export const isEarnDesk = () => T() >= EARN_DESK && T() < TURBO_DESK;
+export const isTurboDesk = () => T() >= TURBO_DESK && T() < SNIPE_DESK;
+export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < SNIPE_DESK + FX_DESK;
+const deskName = () => (isSnipeDesk() ? "Sniper" : isTurboDesk() ? "Turbo" : isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"); // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
@@ -71,9 +81,12 @@ const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news"
 export async function flog(kind: string, text: string) { await fq("ai_futures_log").insert({ kind, text: text.slice(0, 600) }); }
 
 export async function getF(): Promise<FSettings> {
-  const made = await sb().from("ai_futures_settings").upsert(isEarnDesk() ? { id: T(), venues: [], coins: [], enabled: false } : isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() }, { onConflict: "id", ignoreDuplicates: true });
+  const first = isSnipeDesk() ? { id: T(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }
+    : isTurboDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 15, no_liq: false, risk_pct: 3, max_loss_pct: 40, max_positions: 4, max_hold_hours: 12, daily_loss_pct: 25 }
+    : isEarnDesk() ? { id: T(), venues: [], coins: [], enabled: false } : isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() };
+  const made = await sb().from("ai_futures_settings").upsert(first, { onConflict: "id", ignoreDuplicates: true });
   const { data } = await sb().from("ai_futures_settings").select("*").eq("id", T()).single();
-  if (!data) throw new Error(`Couldn't set up this ${isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"} trader${made.error ? `: ${made.error.message}` : ""}.`);
+  if (!data) throw new Error(`Couldn't set up this ${deskName()} trader${made.error ? `: ${made.error.message}` : ""}.`);
   const s = data as any;
   for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
@@ -81,6 +94,8 @@ export async function getF(): Promise<FSettings> {
   s.no_liq = s.no_liq !== false;
   s.auto_fund = s.auto_fund !== false;
   if (isEarnDesk()) { s.venues = []; s.coins = []; s.enabled = false; }
+  else if (isSnipeDesk()) { s.venues = []; s.coins = []; }
+  else if (isTurboDesk()) s.venues = ["hyperliquid"];
   else if (isFxDesk()) { s.venues = ["forex"]; s.coins = []; }
   else s.venues = (s.venues || []).filter((v: string) => v !== "forex");
   return s as FSettings;
@@ -568,6 +583,7 @@ async function newsScores(coins: string[], m?: Mkt): Promise<Map<string, { score
 const pnlOf = (p: FPos, price: number) => (p.side === "long" ? 1 : -1) * p.notional_usd * (price / p.entry - 1);
 
 async function equity(s: FSettings, m: Mkt): Promise<{ total: number; free: number }> {
+  if (isSnipeDesk()) return (await import("@/lib/ai-sniper")).snipeEquity(s);
   if (s.mode === "live") {
     const a = await futAccount();
     if (!a) return { total: 0, free: 0 };
@@ -583,6 +599,7 @@ async function equity(s: FSettings, m: Mkt): Promise<{ total: number; free: numb
 }
 
 async function closePos(s: FSettings, m: Mkt, p: FPos, reason: string, price?: number) {
+  if (p.venue === "pumpfun") return (await import("@/lib/ai-sniper")).closeSnipe(s, p, reason, price);
   const { data: claimed } = await fq("ai_futures_positions").update({ status: "closing" }).eq("id", p.id).eq("status", "open").select("id");
   if (!claimed?.length) return;
   try {
@@ -741,6 +758,8 @@ export async function runFutures(): Promise<string> {
   const { data: go } = await sb().rpc("ai_futures_lease", { p_id: T(), p_seconds: 55 });
   if (!go) return "busy";
   try {
+    // Sniper: its own engine, money stays in its Solana wallet (nothing goes to Hyperliquid).
+    if (isSnipeDesk()) return note(await (await import("@/lib/ai-sniper")).runSniper(s));
     await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
     await refreshTransfers(3).catch(() => null);
     // Earn: nothing to trade. Money sent from Solana arrives on Hyperliquid above; you put it into HLP from the page.
@@ -749,6 +768,8 @@ export async function runFutures(): Promise<string> {
     const { data: heldFx } = await fq("ai_futures_positions").select("coin").eq("status", "open").eq("venue", "forex");
     const m = await market(s, false, !!heldFx?.length);
     const { hl } = m;
+    // Turbo: the 15 most-traded Hyperliquid coins right now (plus any it holds), picked fresh every minute.
+    if (isTurboDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0).sort((a, b) => b.dayVol - a.dayVol).slice(0, 15).map((a) => a.name);
     // Forex markets it trades (when Forex is switched on and the forex market is open).
     const fxCoins = s.venues.includes("forex") ? [...m.fx.keys()] : [];
     if (s.enabled && (s.use_news || s.use_x)) await readNews(s, m).catch((e) => flog("error", `News: ${(e as Error).message}`));
@@ -784,12 +805,13 @@ export async function runFutures(): Promise<string> {
         return;
       }
       // Strong news trades first, as long as the chart isn't clearly against it.
-      if (Math.abs(ns.score) >= 0.6 && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
+      const turbo = isTurboDesk(); // quicker, riskier entries
+      if (Math.abs(ns.score) >= (turbo ? 0.45 : 0.6) && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
         cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + 0.5, why: `News: ${ns.why}${ta ? ` · chart: ${ta.notes.join(", ")}` : ""}`, news: true, ta });
         return;
       }
       const blended = ns.score ? 0.65 * t + 0.35 * ns.score : t;
-      if (ta && Math.abs(blended) >= 0.65) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
+      if (ta && Math.abs(blended) >= (turbo ? 0.5 : 0.65)) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
     }));
     cands.sort((a, b) => b.score - a.score);
     const notes: string[] = [];
@@ -849,6 +871,7 @@ export async function futStatus() {
   return {
     settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
     earn: isEarnDesk() ? await earnState() : null,
+    snipe: isSnipeDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null) }; })() : null,
     fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
     closed: closedP || [], log: logs || [], news: news || [],
