@@ -233,14 +233,19 @@ function MoneyFlow({ d, busy, act, set }: { d: D; busy: string; act: (n: string,
   );
 }
 
+/** Which trader this page drives: "" = Futures (crypto), "?desk=fx" = the Forex trader. Set by the page. */
+let DESK = "";
 async function call(action: string, body: unknown) {
-  const r = await fetch(`/api/ai-futures/${action}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/ai-futures/${action}${DESK}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Something went wrong.");
   return d;
 }
 
-export default function AIFutures() {
+export default function AIFutures({ desk }: { desk?: "fx" } = {}) {
+  const fxDesk = desk === "fx";
+  DESK = fxDesk ? "?desk=fx" : "";
+  const NAME = fxDesk ? "AI Forex" : "AI Futures";
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
@@ -248,7 +253,7 @@ export default function AIFutures() {
   const [copied, setCopied] = useState(false);
   const [copiedSol, setCopiedSol] = useState(false);
   const load = async () => {
-    const r = await fetch("/api/ai-futures/status", { cache: "no-store" });
+    const r = await fetch(`/api/ai-futures/status${DESK}`, { cache: "no-store" });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { setErr(j.error || "Couldn't load."); return; }
     setD(j); setErr("");
@@ -261,8 +266,8 @@ export default function AIFutures() {
     setBusy("");
   };
 
-  if (err) return <div className="card stack"><b>AI Futures</b><p className="muted">{err}</p>{/AI Trader page/.test(err) && <Link className="btn" href="/admin/ai-trader">Open AI Trader</Link>}</div>;
-  if (!d) return <div className="card"><small className="muted">Loading AI Futures…</small></div>;
+  if (err) return <div className="card stack"><b>{NAME}</b><p className="muted">{err}</p>{/AI Trader page/.test(err) && <Link className="btn" href="/admin/ai-trader">Open AI Trader</Link>}</div>;
+  if (!d) return <div className="card"><small className="muted">Loading {NAME}…</small></div>;
   const s = d.settings, live = s.mode === "live";
   const set = (b: Partial<S>, done?: string) => act("set", "settings", b, done);
   const list = (label: string, cur: string[], key: "coins" | "x_handles", hint: string) => (
@@ -280,8 +285,8 @@ export default function AIFutures() {
       <TraderTabs />
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
-        <h1>📊 AI Futures</h1>
-        <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>
+        <h1>{fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
+        {fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
       </div>
 
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
@@ -404,11 +409,11 @@ export default function AIFutures() {
       <section className="card stack">
         <b>⚙️ Rules</b>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          {["hyperliquid", "aster", "forex"].map((v) => (
+          {(fxDesk ? [] : ["hyperliquid", "aster"]).map((v) => (
             <label key={v} className="ait-check"><input type="checkbox" checked={s.venues.includes(v)} disabled={!!busy} onChange={(e) => set({ venues: e.target.checked ? [...s.venues, v] : s.venues.filter((x) => x !== v) }, v === "forex" ? (e.target.checked ? "Forex on: it also trades currency pairs (EUR/USD, USD/JPY, …) on Hyperliquid." : "Forex off. Open forex trades are still watched until they close.") : undefined)} /> <span>{VN[v]}{!d.liveVenues.includes(v) ? " (practice only for now)" : ""}</span></label>
           ))}
         </div>
-        {s.venues.includes("forex") && (
+        {fxDesk && (
           <small className="muted">
             <b>💱 Forex</b> {d.fx?.open ? "· market open" : "· closed for the weekend (Fri 21:00 – Sun 21:00 UTC)"}<br />
             Currency pairs on trade.xyz, inside Hyperliquid: {d.fx?.pairs.length ? d.fx.pairs.map((x) => x.label).join(", ") : "loading…"}. Same wallet and the same money you fund from Solana; in Live the margin for each forex trade moves into the forex account and back by itself. It reads forex news (FXStreet, investingLive, US data and central banks) and only trades when the news and the chart agree, or on a strong chart setup. Every trade has a stop-loss resting on Hyperliquid, moves to break-even at +1R and trails after. Forex trades close before Friday&apos;s close so the weekend gap can&apos;t skip the stop.
@@ -437,7 +442,7 @@ export default function AIFutures() {
             {hint && <small className="muted">{hint}</small>}
           </div>
         ))}
-        {list("Coins", s.coins, "coins", "it trades these (Hyperliquid names)")}
+        {!fxDesk && list("Coins", s.coins, "coins", "it trades these (Hyperliquid names)")}
         {list("X accounts", s.x_handles, "x_handles", "fast news accounts it reads every minute (uses your X login from the AI trader page)")}
         {!live && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how many dollars? (closes all practice positions)", "1000"); if (v && Number(v) >= 100) act("reset", "reset", { usd: Number(v) }); }}>Reset practice account</button>}
       </section>
