@@ -888,6 +888,8 @@ export async function futStatus() {
   return {
     settings: s, equity: eq, wallet, liveVenues: LIVE_VENUES, perf, transfers: transfers || [],
     earn: isEarnDesk() ? await earnState() : null,
+    // Turbo: the part of the shared Solana wallet that is Sniper's budget (can't be sent to Hyperliquid).
+    sharedReserve: isTurboDesk() ? await (await import("@/lib/ai-sniper")).sniperReserve(solId()).catch(() => 0) : null,
     snipe: isSnipeDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null), reserve: await sn.sniperReserve(T()).catch(() => 0) }; })() : null,
     fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
