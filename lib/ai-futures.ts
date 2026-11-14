@@ -106,7 +106,7 @@ export async function flog(kind: string, text: string) { await fq("ai_futures_lo
 export async function getF(): Promise<FSettings> {
   const first = isCopyDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false, snipe_usd: 20, snipe_sl: 50, snipe_tp: 1000 }
     : isSnipeDesk() ? { id: T(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }
-    : isMadDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 50, no_liq: false, risk_pct: 3, max_loss_pct: 25, max_positions: 3, max_hold_hours: 6, daily_loss_pct: 25, use_ta: true, use_news: true }
+    : isMadDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 50, no_liq: true, risk_pct: 3, max_loss_pct: 25, max_positions: 3, max_hold_hours: 6, daily_loss_pct: 25, use_ta: true, use_news: true }
     : isTurboDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 15, no_liq: false, risk_pct: 3, max_loss_pct: 40, max_positions: 4, max_hold_hours: 12, daily_loss_pct: 25 }
     : isEarnDesk() ? { id: T(), venues: [], coins: [], enabled: false } : isFxDesk() ? { id: T(), venues: ["forex"], coins: [] } : { id: T() };
   const made = await sb().from("ai_futures_settings").upsert(first, { onConflict: "id", ignoreDuplicates: true });
@@ -122,7 +122,7 @@ export async function getF(): Promise<FSettings> {
   if (isEarnDesk()) { s.venues = []; s.coins = []; s.enabled = false; }
   else if (isSpotDesk()) { s.venues = []; s.coins = []; }
   else if (isTurboDesk()) s.venues = ["hyperliquid"];
-  else if (isMadDesk()) { s.venues = ["hyperliquid"]; s.no_liq = false; }
+  else if (isMadDesk()) s.venues = ["hyperliquid"]; // its "Never get liquidated" switch is kept as you set it
   else if (isFxDesk()) { s.venues = ["forex"]; s.coins = []; }
   else s.venues = (s.venues || []).filter((v: string) => v !== "forex");
   return s as FSettings;
@@ -758,7 +758,10 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   if (isMadDesk() && !fx) {
     stopPct = Math.min(0.006, Math.max(0.0025, (ta?.atrPct ?? 0.002) * 1.5));
     const coinMax = (assetOn(m, venue, coin) ?? m.hl.get(coin))?.maxLev ?? 10;
-    lev = Math.max(1, Math.min(coinMax, s.max_lev, Math.floor(1 / (3 * stopPct + 0.005))));
+    // "Never get liquidated" on: liquidation at least 8x further away than the stop (still high leverage, e.g. ~40x
+    // with a 0.25% stop, ~18x with 0.6%). Off: 3x further away (the most leverage).
+    const gap = s.no_liq ? 8 : 3;
+    lev = Math.max(1, Math.min(coinMax, s.max_lev, Math.floor(1 / (gap * stopPct + 0.005))));
     stopPct = Math.min(stopPct, s.max_loss_pct / 100 / lev);
   }
   // Judgment: what recent results say, then the AI's second opinion; together they set the bet size.
@@ -786,7 +789,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   const target = long ? price * (1 + stopPct * rr) : price * (1 - stopPct * rr);
   const liq = long ? price * (1 - 1 / lev + 0.005) : price * (1 + 1 / lev - 0.005);
   // Always: the stop must sit far before liquidation (at least 8x nearer), or no trade.
-  if (Math.abs(price - liq) / price < stopPct * (isMadDesk() ? 3 : 8)) return `${fxLabel(coin, price)}: liquidation too close to the stop at ${lev}x`;
+  if (Math.abs(price - liq) / price < stopPct * (isMadDesk() && !s.no_liq ? 3 : 8)) return `${fxLabel(coin, price)}: liquidation too close to the stop at ${lev}x`;
   let entry = price, size: number | null = null, sl_oid: number | null = null, tx: string | null = null;
   if (s.mode === "live") {
     const a = await futAccount(), asset = assetOn(m, venue, coin);
