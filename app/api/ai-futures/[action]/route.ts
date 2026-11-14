@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, isSnipeDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, isSnipeDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -127,6 +127,11 @@ export async function POST(req: Request, { params }: { params: { action: string 
           return json({ ok: true, ...r, note: b.quote === true ? `You'd receive about $${got} (fee about $${(r.feeUsd ?? 0).toFixed(2)}).` : to === "arbitrum" ? `Withdrawal sent: about $${got} USDC arrives on Arbitrum in ~5 minutes.` : to === "hyperliquid" ? `Sent $${got} to that Hyperliquid account.` : `Withdrawal sent: about $${got} arrives on Solana in about a minute. Track it in Money in & out.` });
         }
         case "run": return json({ ok: true, note: await runFutures() });
+        case "move": {
+          const dest = ["futures", "forex", "turbo", "sniper"].includes(b.dest) ? b.dest : null;
+          if (!dest) return json({ error: "Pick where to move it." }, 400);
+          return json({ ok: true, note: await moveToDesk(dest, Number(b.usd)) });
+        }
         case "earn": {
           const usd = Number(b.usd);
           if (!(usd > 0) || usd > 1_000_000) return json({ error: "Type a dollar amount, like 50." }, 400);
