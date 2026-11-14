@@ -937,3 +937,41 @@ export async function earnMove(isDeposit: boolean, usd: number) {
   await flog(isDeposit ? "transfer" : "transfer", isDeposit ? `💰 Put $${usd.toFixed(2)} into HLP (Hyperliquid's market-making vault). It can come out 4 days after this deposit.` : `💰 Took $${usd.toFixed(2)} out of HLP back to the wallet's Hyperliquid balance.`);
   return isDeposit ? `Put $${usd.toFixed(2)} into HLP.` : `Took $${usd.toFixed(2)} out of HLP.`;
 }
+
+// ---------------------------------------------------------------- Move money between your traders
+
+export type DeskKey = "futures" | "forex" | "turbo" | "sniper";
+const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex", turbo: "Turbo", sniper: "Sniper" };
+
+/**
+ * One tap: move free money from this trader's Hyperliquid account to another of your traders.
+ *  - Futures / Forex / Turbo: Hyperliquid → that trader's Hyperliquid account (instant, free).
+ *  - Sniper: Hyperliquid → USDT in the Solana wallet Turbo and Sniper share (about a minute), added to Sniper's budget.
+ */
+export async function moveToDesk(dest: DeskKey, usd: number): Promise<string> {
+  const owner = T() % FX_DESK;
+  const ids: Record<DeskKey, number> = { futures: owner, forex: FX_DESK + owner, turbo: TURBO_DESK + owner, sniper: SNIPE_DESK + owner };
+  const destId = ids[dest];
+  if (!destId || destId === T()) throw new Error("That's this trader.");
+  if (isSnipeDesk() || isEarnDesk()) throw new Error("Move money from Futures, Forex or Turbo.");
+  if (!(usd >= 1)) throw new Error("Type an amount of $1 or more.");
+  const { withTrader } = await import("@/lib/ai-trader-ctx");
+  const me = deskName();
+  if (dest === "sniper") {
+    const addr = await withTrader(destId, async () => { await getF(); return (await futSolAccount())?.publicKey.toBase58() ?? null; });
+    if (!addr) throw new Error("Create or import the Sniper's Solana wallet first (Sniper page).");
+    const r: any = await withdrawFut({ usd, to: "solana", address: addr, symbol: "USDT" });
+    const got = Math.max(0, Number(r?.receive ?? usd) || usd);
+    await withTrader(destId, async () => {
+      const { data } = await sb().from("ai_futures_settings").select("snipe_budget").eq("id", destId).single();
+      await sb().from("ai_futures_settings").update({ snipe_budget: n(data?.snipe_budget) + got }).eq("id", destId);
+      await flog("transfer", `🔁 ~$${got.toFixed(2)} USDT on its way from ${me} (Hyperliquid) to the shared Solana wallet; Sniper's budget +$${got.toFixed(2)}.`);
+    });
+    return `Moving $${usd.toFixed(2)} to Sniper: ~$${got.toFixed(2)} USDT lands in the shared Solana wallet in about a minute and is added to Sniper's budget.`;
+  }
+  const addr = await withTrader(destId, async () => { await getF(); return (await futAccount())?.address ?? null; });
+  if (!addr) throw new Error(`${DESK_NAMES[dest]} has no wallet yet: open its page and tap Create wallet first.`);
+  await withdrawFut({ usd, to: "hyperliquid", address: addr });
+  await withTrader(destId, () => flog("transfer", `🔁 Received $${usd.toFixed(2)} from ${me} (Hyperliquid, instant).`));
+  return `Moved $${usd.toFixed(2)} to ${DESK_NAMES[dest]}'s Hyperliquid account. It's there now.`;
+}

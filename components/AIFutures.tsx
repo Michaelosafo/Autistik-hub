@@ -134,7 +134,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
  * Your real money, always on top (Practice or Live): the Solana wallet (USDT, USDC, SOL), the Hyperliquid account
  * (total and free), anything waiting on Arbitrum, and a one-tap send from Solana to Hyperliquid.
  */
-function WalletCard({ d, busy, act, turbo }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean }) {
+function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean; here: "futures" | "forex" | "turbo" }) {
   const w = d.wallet, s = d.settings;
   const sol = w?.sol, solUsd = sol ? (sol.usdt || 0) + (sol.usdc || 0) : null;
   const reserve = turbo ? Number(d.sharedReserve || 0) : 0;
@@ -159,6 +159,20 @@ function WalletCard({ d, busy, act, turbo }: { d: D; busy: string; act: (n: stri
         }}>{busy === "wc-send" ? "Sending…" : `Send to Hyperliquid (up to ${usd(maxOne)})`}</button>
       )}
       {sol && (sol.sol ?? 0) < 0.005 && <small className="down">The Solana wallet needs a little SOL (~0.01) to pay network fees.</small>}
+      {w && (w.hlFree || 0) >= 1 && (
+        <div className="stack" style={{ gap: 6 }}>
+          <small><b>🔁 Move money to another trader</b> <span className="muted">from this Hyperliquid account ({usd(w.hlFree)} free). To Futures / Forex / Turbo: instant and free. To Sniper: arrives as USDT in the shared Solana wallet in about a minute and is added to Sniper&apos;s budget.</span></small>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {(([["futures", "📊 Futures"], ["forex", "💱 Forex"], ["turbo", "🚀 Turbo"], ["sniper", "🎯 Sniper"]] as const).filter(([k]) => k !== here)).map(([k, label]) => (
+              <button key={k} type="button" className="btn small" disabled={!!busy} onClick={() => {
+                const free = Math.floor((w.hlFree || 0) * 100) / 100;
+                const v = prompt(`Move how many $ to ${label}? (free here: $${free.toFixed(2)})`, String(free));
+                if (v && Number(v) >= 1 && confirm(`Move $${Number(v).toFixed(2)} to ${label}?`)) act(`mv-${k}`, "move", { dest: k, usd: Number(v) });
+              }}>{busy === `mv-${k}` ? "Moving…" : `→ ${label}`}</button>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -393,7 +407,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
         </section>
       )}
 
-      {!snipeDesk && !earnDesk && <WalletCard d={d} busy={busy} act={act} turbo={turboDesk} />}
+      {!snipeDesk && !earnDesk && <WalletCard d={d} busy={busy} act={act} turbo={turboDesk} here={turboDesk ? "turbo" : fxDesk ? "forex" : "futures"} />}
 
       {!snipeDesk && <MoneyFlow d={d} busy={busy} act={act} set={set} />}
 
