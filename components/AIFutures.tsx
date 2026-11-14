@@ -14,7 +14,7 @@ const lbl = (p: { venue?: string; coin: string; entry?: number; why?: string | n
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; max_loss_pct: number; risk_pct: number;
   max_positions: number; daily_loss_pct: number; max_hold_hours: number; use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[];
-  last_run: string | null; last_note: string | null; no_liq?: boolean; auto_fund?: boolean;
+  last_run: string | null; last_note: string | null; no_liq?: boolean; auto_fund?: boolean; extra_coins?: string[]; stop_pct?: number;
 };
 type Trade = { id: number; coin: string; side: string; lev: number; venue: string; entry: number; exit: number; pnl: number; fees: number; impactPct: number | null; r: number | null; holdMin: number; opened: string; closed: string; driver: string; at: string };
 type Group = { key: string; trades: number; wins: number; pnl: number };
@@ -335,12 +335,12 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
   if (!d) return <div className="card"><small className="muted">Loading {NAME}…</small></div>;
   const s = d.settings, live = s.mode === "live";
   const set = (b: Partial<S>, done?: string) => act("set", "settings", b, done);
-  const list = (label: string, cur: string[], key: "coins" | "x_handles", hint: string) => (
+  const list = (label: string, cur: string[], key: "coins" | "x_handles" | "extra_coins", hint: string) => (
     <div className="stack" style={{ gap: 4 }}>
       <small><b>{label}</b> <span className="muted">{hint}</span></small>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         {cur.map((c) => <span key={c} className="chip">{key === "x_handles" ? "@" : ""}{c} <button type="button" className="aic-addr" aria-label={`Remove ${c}`} disabled={!!busy} onClick={() => set({ [key]: cur.filter((x) => x !== c) } as any)}>×</button></span>)}
-        <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt(key === "coins" ? "Coin to trade (e.g. AVAX, LINK, PEPE):" : "X account to watch (e.g. WatcherGuru):"); if (v?.trim()) set({ [key]: [...cur, v.trim().replace(/^@/, "")] } as any); }}>+ Add</button>
+        <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt(key === "x_handles" ? "X account to watch (e.g. WatcherGuru):" : "Coin to trade, as Hyperliquid names it (e.g. AVAX, LINK, HYPE, kPEPE, FARTCOIN):"); if (v?.trim()) set({ [key]: [...cur, v.trim().replace(/^@/, "")] } as any); }}>+ Add</button>
       </div>
     </div>
   );
@@ -514,7 +514,25 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
               {p.liq && p.price ? <><br /><small className="up">🛡 The stop is {Math.max(1, Math.round(Math.abs(p.price - p.liq) / Math.max(1e-9, Math.abs(p.price - p.stop))))}× closer than liquidation{p.mode === "live" ? " and rests on Hyperliquid itself" : ""}.</small></> : null}
               {p.why && <><br /><small className="muted">{p.why}</small></>}
             </span>
-            <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${lbl(p)} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
+            <div className="stack" style={{ gap: 4 }}>
+              <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Close ${p.side} ${lbl(p)} now at the market price?`)) act(`c${p.id}`, "close", { id: p.id }); }}>{busy === `c${p.id}` ? "Closing…" : "Close"}</button>
+              <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => {
+                const long = p.side === "long", now = p.price || p.entry;
+                const v = prompt(`New stop-loss price for ${lbl(p)} (now ${px(now)}, stop ${px(p.stop)}${p.liq ? `, liquidation ~${px(p.liq)}` : ""}). It must be ${long ? "below" : "above"} the current price. Or type a % like 2% for 2% from the current price:`, String(p.stop));
+                if (!v?.trim()) return;
+                const t = v.trim(), pc = /%$/.test(t) ? Number(t.slice(0, -1)) : NaN;
+                const price = isFinite(pc) ? now * (long ? 1 - pc / 100 : 1 + pc / 100) : Number(t);
+                if (isFinite(price) && price > 0) act(`st${p.id}`, "stop", { id: p.id, stop: price });
+              }}>{busy === `st${p.id}` ? "Saving…" : "Edit stop"}</button>
+              <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => {
+                const long = p.side === "long", now = p.price || p.entry;
+                const v = prompt(`New take-profit price for ${lbl(p)} (now ${px(now)}, target ${px(p.target)}). It must be ${long ? "above" : "below"} the current price. Or type a % like 5% for 5% from the current price:`, String(p.target));
+                if (!v?.trim()) return;
+                const t = v.trim(), pc = /%$/.test(t) ? Number(t.slice(0, -1)) : NaN;
+                const price = isFinite(pc) ? now * (long ? 1 + pc / 100 : 1 - pc / 100) : Number(t);
+                if (isFinite(price) && price > 0) act(`tp${p.id}`, "stop", { id: p.id, target: price });
+              }}>{busy === `tp${p.id}` ? "Saving…" : "Edit take profit"}</button>
+            </div>
           </div>
         ))}
       </section>
@@ -615,15 +633,18 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
           ["daily_loss_pct", "Daily loss limit", "%", "Down this much today: no new trades until tomorrow (UTC)."],
           ["max_hold_hours", "Max hold", "hours", ""],
           ["profit_lock_pct", "Daily profit lock", "%", "Up this much today: it keeps the profit and opens no new trades until tomorrow (UTC). 0 = off."],
-        ].filter(([k]) => !snipeDesk || ["max_positions", "daily_loss_pct", "max_hold_hours", "profit_lock_pct"].includes(k)).map(([k, label, unit, hint]) => (
+          ["stop_pct", "My stop-loss", "% from entry", "Your own stop for new trades, e.g. 1 = 1% away. 0 = the AI sets it. Leverage is lowered by itself if needed so liquidation stays far past your stop. Change one open trade's stop with Edit stop on it."],
+        ].filter(([k]) => (!snipeDesk || ["max_positions", "daily_loss_pct", "max_hold_hours", "profit_lock_pct"].includes(k)) && !(k === "stop_pct" && (snipeDesk || fxDesk))).map(([k, label, unit, hint]) => (
           <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <small><b>{label}:</b> {String((s as any)[k])}{unit ? ` ${unit}` : ""}</small>
             <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt(`${label}${hint ? ` (${hint})` : ""}:`, String((s as any)[k])); if (v != null && v.trim() !== "" && isFinite(Number(v))) set({ [k]: Number(v) } as any); }}>Change</button>
             {hint && <small className="muted">{hint}</small>}
           </div>
         ))}
-        {!fxDesk && !turboDesk && !snipeDesk && list("Coins", s.coins, "coins", "it trades these (Hyperliquid names)")}
-        {turboDesk && <small className="muted">Coins: the 15 most-traded on Hyperliquid right now, picked fresh every minute.</small>}
+        {!fxDesk && !turboDesk && !madDesk && !snipeDesk && list("Coins", s.coins, "coins", "it trades these: add any coin Hyperliquid lists")}
+        {turboDesk && <small className="muted">Coins: the 15 most-traded on Hyperliquid right now, picked fresh every minute, plus your coins below.</small>}
+        {madDesk && <small className="muted">Coins: the 8 most-traded Hyperliquid coins that allow 20x or more, picked fresh every minute, plus your coins below (each at the highest safe leverage it allows).</small>}
+        {(turboDesk || madDesk) && list("My coins", s.extra_coins || [], "extra_coins", "always watched too: add any coin Hyperliquid lists")}
         {!snipeDesk && list("X accounts", s.x_handles, "x_handles", "fast news accounts it reads every minute (uses your X login from the AI trader page)")}
         {!live && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => { const v = prompt("Reset the practice account to how many dollars? (closes all practice positions)", "1000"); if (v && Number(v) >= 100) act("reset", "reset", { usd: Number(v) }); }}>Reset practice account</button>}
       </section>
