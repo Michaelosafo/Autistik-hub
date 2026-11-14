@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { FX_DESK, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,7 +27,7 @@ export async function GET(req: Request, { params }: { params: { action: string }
     const out = await Promise.all(ids.map((id) => withTrader(id, () => runFutures()).then((r) => ({ id, r }), (e) => ({ id, r: `error: ${(e as Error).message}` }))));
     return json({ ok: true, ran: out });
   }
-  const id = await mine();
+  const id = desk(req, await mine());
   if (!id) return json({ error: "Admins only." }, 403);
   if (params.action === "status") return withTrader(id, async () => json(await futStatus()));
   return json({ error: "Unknown." }, 404);
@@ -43,10 +43,13 @@ async function mine(): Promise<number | null> {
   return data?.id ? Number(data.id) : null;
 }
 
+/** ?desk=fx: the admin's Forex trader (its own id), otherwise their Futures trader. */
+const desk = (req: Request, id: number | null) => (id && new URL(req.url).searchParams.get("desk") === "fx" ? FX_DESK + id : id);
+
 const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : undefined; };
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
-  const id = await mine();
+  const id = desk(req, await mine());
   if (!id) return json({ error: "Open the AI Trader page once first (Admin → AI trader), then come back." }, 403);
   const b = await req.json().catch(() => ({}));
   return withTrader(id, async () => {

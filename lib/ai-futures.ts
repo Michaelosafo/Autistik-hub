@@ -35,7 +35,14 @@ export const VENUES = ["hyperliquid", "aster", "forex"] as const;
 export const LIVE_VENUES = ["hyperliquid", "forex"];
 export const VENUE_NAME: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster", forex: "Forex (trade.xyz)" };
 const FEE = { hyperliquid: 0.00045, aster: 0.00035, forex: 0.0009 } as Record<string, number>; // taker fee per side
-const MAX_LEV = 50; // the most anyone can set (each coin's own exchange maximum still applies)
+const MAX_LEV = 50;
+/**
+ * The Forex trader is a third trader of its own (next to the copy bot and Futures): same engine, but its own id
+ * (FX_DESK + the admin's trader id), so its own wallet, Solana wallet, settings, money, trades and log. It only
+ * trades forex; the Futures trader only trades crypto.
+ */
+export const FX_DESK = 100000;
+export const isFxDesk = () => T() >= FX_DESK; // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
@@ -69,6 +76,8 @@ export async function getF(): Promise<FSettings> {
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   s.no_liq = s.no_liq !== false;
   s.auto_fund = s.auto_fund !== false;
+  if (isFxDesk()) { s.venues = ["forex"]; s.coins = []; }
+  else s.venues = (s.venues || []).filter((v: string) => v !== "forex");
   return s as FSettings;
 }
 
@@ -477,7 +486,7 @@ const FX_FEEDS = [
 type Item = { key: string; source: string; title: string; url: string; at: number };
 const tag = (x: string, t: string) => (x.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`, "i"))?.[1] || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').trim();
 async function rss(fx = false): Promise<Item[]> {
-  const all = await Promise.all([...FEEDS, ...(fx ? FX_FEEDS : [])].map(async ([name, url]) => {
+  const all = await Promise.all((fx ? FX_FEEDS : FEEDS).map(async ([name, url]) => {
     const x = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(6000), headers: { "user-agent": "Mozilla/5.0 AUTISTIK-Hub" } }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
     return (x.match(/<item[\s>][\s\S]*?<\/item>/gi) || []).slice(0, 15).map((it) => {
       const link = tag(it, "link") || tag(it, "guid");
@@ -502,7 +511,7 @@ async function readNews(s: FSettings, m: Mkt): Promise<number> {
   const keys = new Set((fresh || []).map((r: any) => r.key));
   const todo = items.filter((i) => keys.has(i.key)).slice(0, 20);
   if (!todo.length || !process.env.ANTHROPIC_API_KEY) return 0;
-  const coins = s.coins.join(", ");
+  const coins = s.coins.join(", ") || "none (forex only)";
   // Forex markets, with what "up" means for each (dir 1 = this market's price rises).
   const fxList = fx.map((c) => `${c} (${fxLabel(c, m.fx.get(c)?.mark)}: price up = ${fxLabel(c, m.fx.get(c)?.mark).startsWith("USD/") ? "dollar stronger" : c.endsWith("DXY") ? "dollar stronger" : `${c.slice(4)} stronger`})`).join(", ");
   const fxRule = fx.length ? ` Forex markets: ${fxList}. Use "USD" for news that moves the US dollar against everything (Fed decisions and speeches, US CPI, jobs/NFP, GDP, Treasury yields): dir 1 = dollar stronger. For news about one currency (ECB, BoE, BoJ, RBA decisions, that country's data), use that market's exact name and dir for ITS price. Scheduled data only counts once the actual number is out (beat or miss vs forecast), never previews.` : "";
@@ -782,8 +791,8 @@ export async function runFutures(): Promise<string> {
       notes.push(`${fxLabel(c.coin, m.fx.get(c.coin)?.mark)} ${c.side}: ${r}`);
       if (/^failed/.test(r)) await flog("error", `${fxLabel(c.coin, m.fx.get(c.coin)?.mark)}: ${r}`);
     }
-    const fxNote = fxCoins.length ? (fxOpen() ? ` and ${fxCoins.length} forex pairs` : " (forex closed for the weekend)") : "";
-    return note(notes.length ? notes.join(" · ") : `Watching ${s.coins.length} coins${fxNote}; no setup strong enough. Account $${eq.total.toFixed(2)}.`);
+    const watching = isFxDesk() ? (fxOpen() ? `Watching ${fxCoins.length} forex pairs` : "Forex is closed for the weekend (opens Sunday 21:00 UTC)") : `Watching ${s.coins.length} coins`;
+    return note(notes.length ? notes.join(" · ") : `${watching}; no setup strong enough. Account $${eq.total.toFixed(2)}.`);
   } finally {
     await sb().from("ai_futures_settings").update({ lease_until: null, last_run: new Date().toISOString() }).eq("id", T());
   }
