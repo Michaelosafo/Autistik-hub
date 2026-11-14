@@ -56,7 +56,16 @@ export default function TypeText({ text, speed = 24, delay = 0, sound = false, h
     io.observe(el);
     const onLang = (e: Event) => { if ((e as CustomEvent).detail !== "en") finish(); };
     window.addEventListener("site-lang", onLang);
-    return () => { io.disconnect(); clearTimeout(timer); window.removeEventListener("site-lang", onLang); };
+    // Sound just got allowed (first tap): a sounding heading that's on screen types again, now with its clicks.
+    const onSound = () => {
+      if (!sound || stopped) return;
+      const r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) return;
+      clearTimeout(timer); i = 0; setN(0); setTyping(true); armed = false;
+      timer = setTimeout(tick, 150);
+    };
+    window.addEventListener("type-sound-ready", onSound);
+    return () => { io.disconnect(); clearTimeout(timer); window.removeEventListener("site-lang", onLang); window.removeEventListener("type-sound-ready", onSound); };
   }, [text, speed, delay, sound, human]);
 
   return (
