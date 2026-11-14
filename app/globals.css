@@ -6803,3 +6803,23 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .tik-send:disabled { opacity: .4; cursor: default; }
 .tik-send svg { width: 18px; height: 18px; }
 .tik-chatbox .tik-msg { width: 100%; }
+
+/* Homepage hero on phones: a calmer, more polished layout. */
+@media (max-width: 640px) {
+  .lp .lp-hero { gap: 18px; padding: 18px 18px 24px; }
+  .lp .lp-hero-art { max-height: 200px; border-radius: 22px; }
+  .lp .lp-hero .lp-eyebrow { font-size: .7em; letter-spacing: .18em; opacity: .9; }
+  .lp .lp-hero h1 { font-size: clamp(2.05em, 9.4vw, 2.6em); line-height: 1.08; letter-spacing: -.04em; margin: 8px 0 12px; }
+  .lp .lp-hero h1 .lp-punch { display: block; color: var(--ink); }
+  .lp .lp-hero h1 .lp-punch .tt-caret { background: #F0B90B; }
+  .lp .lp-hero h1 .lp-loop { font-size: .62em; font-weight: 500; letter-spacing: -.015em; margin-top: 8px; background: linear-gradient(90deg, #FFD84D, #FF9F5A 45%, #FF6B9A); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+  .lp .lp-hero h1 .lp-loop .tt-caret { background: #FF9F5A; }
+  .lp .lp-hero p { font-size: 1.02em; line-height: 1.65; }
+  .lp .lp-hero p.lp-why { margin-top: 12px; padding: 14px 16px; border-left: 0; border-radius: 16px; background: rgba(240,185,11,.07); border: 1px solid rgba(240,185,11,.22); font-size: .95em; }
+  .lp .lp-hero .lp-ctas { gap: 10px; }
+  .lp .lp-hero .lp-ctas .lp-btn { flex: 1 1 0; justify-content: center; }
+}
+@media (max-width: 640px) {
+  .lp .lp-hero h1 .lp-punch span { color: inherit; }
+  .lp .lp-hero h1 .lp-loop span { color: inherit; -webkit-text-fill-color: inherit; }
+}

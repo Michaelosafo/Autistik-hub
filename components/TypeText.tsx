@@ -12,7 +12,11 @@ import { typeTick } from "@/lib/type-sound";
 
 const useIsoLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export default function TypeText({ text, speed = 24, delay = 0, sound = false }: { text: string; speed?: number; delay?: number; sound?: boolean }) {
+/**
+ * human: types like a person at a keyboard, one letter at a time with an uneven rhythm: quick runs inside a word, a
+ * small pause between words, a longer one after a full stop or comma, and now and then a short hesitation.
+ */
+export default function TypeText({ text, speed = 24, delay = 0, sound = false, human = false }: { text: string; speed?: number; delay?: number; sound?: boolean; human?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [n, setN] = useState(text.length);
   const [typing, setTyping] = useState(false);
@@ -27,10 +31,14 @@ export default function TypeText({ text, speed = 24, delay = 0, sound = false }:
     const finish = () => { stopped = true; clearTimeout(timer); setN(text.length); setTyping(false); io.disconnect(); };
     const tick = () => {
       // A few letters at a time on long lines, so every heading takes about the same short time.
-      i = Math.min(text.length, i + Math.max(1, Math.round(text.length / 45)));
+      i = Math.min(text.length, i + (human ? 1 : Math.max(1, Math.round(text.length / 45))));
       setN(i);
       if (sound) typeTick(text[i - 1] === " "); // soft key clicks, only on the key headings (lib/type-sound.ts)
-      if (i < text.length) timer = setTimeout(tick, speed + (text[i - 1] === " " ? 0 : Math.random() * 30));
+      const ch = text[i - 1];
+      const wait = human
+        ? 55 + Math.random() * 70 + (ch === " " ? 70 + Math.random() * 60 : 0) + (/[.,!?]/.test(ch) ? 260 : 0) + (Math.random() < 0.08 ? 180 : 0)
+        : speed + (ch === " " ? 0 : Math.random() * 30);
+      if (i < text.length) timer = setTimeout(tick, wait);
       else timer = setTimeout(() => setTyping(false), 900);
     };
     const io = new IntersectionObserver(([e]) => {
@@ -49,7 +57,7 @@ export default function TypeText({ text, speed = 24, delay = 0, sound = false }:
     const onLang = (e: Event) => { if ((e as CustomEvent).detail !== "en") finish(); };
     window.addEventListener("site-lang", onLang);
     return () => { io.disconnect(); clearTimeout(timer); window.removeEventListener("site-lang", onLang); };
-  }, [text, speed, delay, sound]);
+  }, [text, speed, delay, sound, human]);
 
   return (
     <span ref={ref} className="tt">
