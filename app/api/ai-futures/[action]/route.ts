@@ -65,7 +65,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const up: Record<string, unknown> = {};
           if (typeof b.enabled === "boolean") up.enabled = b.enabled;
           for (const k of ["use_ta", "use_news", "use_x", "no_liq", "auto_fund"]) if (typeof b[k] === "boolean") up[k] = b[k];
-          const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90] };
+          const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90], snipe_budget: [0, 1_000_000] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
           if (Array.isArray(b.coins)) up.coins = [...new Set(b.coins.map((c: unknown) => String(c).trim().toUpperCase()).filter((c: string) => /^[A-Z0-9]{1,12}$/.test(c)))].slice(0, 15);
@@ -76,6 +76,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
               if (isSnipeDesk()) {
                 const sw = await (await import("@/lib/ai-sniper")).snipeWallet().catch(() => null);
                 if (!sw) return json({ error: "Create or import the Sniper's Solana wallet first." }, 400);
+                if (!(Number((s as any).snipe_budget ?? b.snipe_budget) > 0)) return json({ error: "Set the Sniper budget first: how much of the shared Solana wallet it may trade with." }, 400);
                 if (sw.usdt + sw.usdc < 5 && sw.sol * sw.solUsd < 5) return json({ error: `The Solana wallet has about $${sw.total.toFixed(2)}. Send at least $5 of USDT / USDC (plus ~0.02 SOL for fees) to ${sw.address} first.` }, 400);
                 if (open?.length) await closeAllNow("paper");
                 up.mode = b.mode; up.day = null; up.day_start_usd = null;
