@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { markSeen } from "./seen";
+import { countView, markSeen } from "./seen";
 import Avatar from "@/components/Avatar";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -18,6 +19,8 @@ type CardProps = {
   t: Tik; me: string | null; onRemoved?: (id: string) => void; compact?: boolean; hot?: Hot | null;
   /** In a thread: who the Tik being replied to is by, and "Reply" to this person. */
   parentAlias?: string;
+  /** The Tik opened on its own (X-style post page): bigger, full date, comments open, counts the open as a view. */
+  detail?: boolean;
 };
 export default function TikCard(props: CardProps) {
   const { t, me, onRemoved } = props;
@@ -38,17 +41,44 @@ export default function TikCard(props: CardProps) {
 }
 
 /** 950 → "950", 1234 → "1.2K", 2500000 → "2.5M". */
+/**
+ * The view counter's icon: an eye whose iris is a small gradient "signal", pulsing once when the number grows.
+ */
+function ViewIcon({ grew }: { grew: boolean }) {
+  const id = useId().replace(/:/g, "");
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={"tik-eye" + (grew ? " grew" : "")}>
+      <defs><linearGradient id={`ve${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFD84D" /><stop offset=".55" stopColor="#FF6B9A" /><stop offset="1" stopColor="#B57CFF" /></linearGradient></defs>
+      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3.6" fill={`url(#ve${id})`} stroke="none" />
+      <path d="M10.4 12.9l1-1.3.9.8 1.3-1.7" fill="none" stroke="#fff" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const views = (v: number | null | undefined) => { const n = v ?? 0; return n < 1000 ? String(n) : n < 1e6 ? `${(n / 1e3).toFixed(n < 1e4 ? 1 : 0).replace(/\.0$/, "")}K` : `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M`; };
 
-function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
+function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardProps) {
   const box = useRef<HTMLElement>(null);
+  const router = useRouter();
   const [viewers, setViewers] = useState(false);
+  // Views like X: every look (impressions), and never below the members who saw it.
+  const [seenN, setSeenN] = useState(Math.max(t.views ?? 0, t.impressions ?? 0));
+  const [grew, setGrew] = useState(false);
+  useEffect(() => { const v = Math.max(t.views ?? 0, t.impressions ?? 0); setSeenN((o) => { if (v > o) { setGrew(true); setTimeout(() => setGrew(false), 900); } return Math.max(o, v); }); }, [t.views, t.impressions]);
+  // Opened on its own: that open is a view (every time), shown straight away.
+  useEffect(() => {
+    if (!detail || me === t.author_id) return;
+    countView(t.id, true);
+    setSeenN((n) => n + 1); setGrew(true); const g = setTimeout(() => setGrew(false), 900);
+    return () => clearTimeout(g);
+  }, [detail, t.id, me, t.author_id]);
   // Counts as seen once it's at least half on screen for a second (the author's own looks don't count).
   useEffect(() => {
-    if (!me || me === t.author_id || !box.current) return;
+    if (me === t.author_id || !box.current) return;
     let tm: ReturnType<typeof setTimeout> | null = null;
     const io = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) tm = setTimeout(() => { markSeen(t.id, me); io.disconnect(); }, 1000);
+      if (e.isIntersecting) tm = setTimeout(() => { if (me) markSeen(t.id, me); if (!detail) countView(t.id); io.disconnect(); }, 1000);
       else if (tm) { clearTimeout(tm); tm = null; }
     }, { threshold: 0.5 });
     io.observe(box.current);
@@ -60,7 +90,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   const [copied, setCopied] = useState(false);
   const [likes, setLikes] = useState(t.likes);
   const [replies, setReplies] = useState(t.replies);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!detail);
   const [zoom, setZoom] = useState(false);
   const [menu, setMenu] = useState(false);
   // A heart that bursts on the picture when you double-tap it (and the like button pops).
@@ -104,6 +134,13 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
     try { await navigator.clipboard.writeText(url); } catch { window.prompt("Copy this link:", url); }
     setCopied(true); setTimeout(() => setCopied(false), 1800);
   }
+  /** Tapping the post (not a button, link or picture) opens it on its own, like X. */
+  function openPost(e: React.MouseEvent) {
+    if (detail || compact) return;
+    if ((e.target as HTMLElement).closest("a,button,textarea,input,label,.tik-replies,.tik-img,.tik-menu,[role=dialog]")) return;
+    if (window.getSelection()?.toString()) return; // selecting text, not opening
+    router.push(`/mood?tik=${t.id}`, { scroll: true });
+  }
   async function remove() {
     if (!confirm("Delete this Tik?")) return;
     const { error } = await supabaseBrowser().from("tiks").delete().eq("id", t.id);
@@ -111,7 +148,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
   }
 
   return (
-    <article ref={box} style={{ ["--ac" as any]: a?.color || "#B57CFF" }} className={"tik" + (compact ? " compact" : "") + (mine ? " mine" : "") + (t.image_url ? " has-img" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
+    <article ref={box} style={{ ["--ac" as any]: a?.color || "#B57CFF" }} onClick={openPost} className={"tik" + (detail ? " detail" : "") + (compact ? " compact" : "") + (!detail && !compact ? " tappable" : "") + (mine ? " mine" : "") + (t.image_url ? " has-img" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
       {hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
@@ -140,7 +177,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
             )}
           </div>
         </div>
-        {t.reply_to && (t.to?.alias || parentAlias) && <small className="tik-replying">Replying to <b>@{t.to?.handle || t.to?.alias || parentAlias}</b></small>}
+        {t.reply_to && !compact && (t.to?.alias || parentAlias) && <small className="tik-replying">Replying to <b>@{t.to?.handle || t.to?.alias || parentAlias}</b></small>}
         {t.style && !t.reply_to && canStyle(t.body, !!t.image_url)
           ? <div className={`tik-style s-${t.style}`}><p><RichText text={t.body} /></p></div>
           : <p className="tik-body"><RichText text={t.body} /></p>}
@@ -150,6 +187,15 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
             <img src={t.image_url} alt="" loading="lazy" />
             {burst > 0 && <span key={burst} className="tik-burst" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg></span>}
           </button>
+        )}
+        {detail && (
+          <div className="tik-detail-meta">
+            <time dateTime={t.created_at}>{new Date(t.created_at).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", day: "numeric", month: "short", year: "numeric" })}</time>
+            <span><b>{views(seenN)}</b> {seenN === 1 ? "view" : "views"}</span>
+            {likes > 0 && <span><b>{likes}</b> {likes === 1 ? "like" : "likes"}</span>}
+            {tickles > 0 && <span><b>{tickles}</b> {tickles === 1 ? "tickle" : "tickles"}</span>}
+            {replies > 0 && <span><b>{replies}</b> {replies === 1 ? "comment" : "comments"}</span>}
+          </div>
         )}
         <div className="tik-actions">
           <button type="button" className={"tik-act reply" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${replies} replies`} title="Reply">
@@ -167,22 +213,22 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
             <span>{likes > 0 ? likes : ""}</span>
           </button>
           {!t.reply_to && (me === t.author_id
-            ? <button type="button" className="tik-act views" onClick={() => setViewers(true)} aria-label={`${t.views ?? 0} views: see who`} title="See who viewed">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
-                <span className="tik-vn"><b>{views(t.views)}</b> {(t.views ?? 0) === 1 ? "view" : "views"}</span>
+            ? <button type="button" className="tik-act views" onClick={() => setViewers(true)} aria-label={`${seenN} views: see who`} title="Views: see who saw it">
+                <ViewIcon grew={grew} />
+                <span className="tik-vn"><b>{views(seenN)}</b></span>
               </button>
-            : <span className="tik-act views static" aria-label={`${t.views ?? 0} views`} title="Views">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
-                <span className="tik-vn"><b>{views(t.views)}</b> {(t.views ?? 0) === 1 ? "view" : "views"}</span>
+            : <span className="tik-act views static" aria-label={`${seenN} views`} title="Views">
+                <ViewIcon grew={grew} />
+                <span className="tik-vn"><b>{views(seenN)}</b></span>
               </span>)}
           <button type="button" className={"tik-act share" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik" title="Copy link">
             <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg>
             <span>{copied ? "Copied" : ""}</span>
           </button>
         </div>
-        {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}><i aria-hidden="true" />Show {replies} {replies === 1 ? "reply" : "replies"}</button>}
+        {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}>View {replies} {replies === 1 ? "comment" : "comments"}</button>}
         {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
-        {viewers && typeof document !== "undefined" && createPortal(<Viewers tikId={t.id} count={t.views ?? 0} onClose={() => setViewers(false)} />, document.body)}
+        {viewers && typeof document !== "undefined" && createPortal(<Viewers tikId={t.id} count={t.views ?? 0} total={seenN} onClose={() => setViewers(false)} />, document.body)}
       </div>
       {zoom && t.image_url && (
         <div className="tik-zoom" role="dialog" aria-modal="true" aria-label="Picture" onClick={() => setZoom(false)}>
@@ -207,7 +253,6 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias }: CardProps) {
 /** The replies under one Tik or one comment; each reply can have its own replies underneath (a thread). */
 function Replies({ tik, me, onCount }: { tik: Tik; me: string | null; onCount: (d: number) => void }) {
   const [k, setK] = useState(0);
-  const owner = tik.author?.alias || "them";
   const { tiks, setTiks, more, loadMore } = useTiks({ replyTo: tik.id, limit: 20, refreshKey: k });
   return (
     <div className="tik-replies">
@@ -217,7 +262,7 @@ function Replies({ tik, me, onCount }: { tik: Tik; me: string | null; onCount: (
       ))}
       {more && <button type="button" className="tik-more" onClick={loadMore}>More replies</button>}
       {me && <QuickReplies tikId={tik.id} onSent={() => { setK((n) => n + 1); onCount(1); }} />}
-      {me ? <TikComposer replyTo={tik.id} compact placeholder={`Reply to ${owner}…`} onPosted={() => { setK((n) => n + 1); onCount(1); }} /> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
+      {me ? <TikComposer replyTo={tik.id} compact placeholder="Write a comment…" onPosted={() => { setK((n) => n + 1); onCount(1); }} /> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
     </div>
   );
 }
@@ -241,7 +286,7 @@ function QuickReplies({ tikId, onSent }: { tikId: string; onSent: () => void }) 
 }
 
 /** Who has seen your Tik (only you, the author, can see this list). */
-function Viewers({ tikId, count, onClose }: { tikId: string; count: number; onClose: () => void }) {
+function Viewers({ tikId, count, total, onClose }: { tikId: string; count: number; total: number; onClose: () => void }) {
   const [list, setList] = useState<{ id: string; alias: string; color: string | null; avatar_url: string | null; at: string }[] | null>(null);
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -256,7 +301,7 @@ function Viewers({ tikId, count, onClose }: { tikId: string; count: number; onCl
   return (
     <div className="tik-viewers-bg" role="dialog" aria-modal="true" aria-label="Seen by" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="tik-viewers">
-        <div className="tik-viewers-h"><b>Seen by {count}</b><button type="button" onClick={onClose} aria-label="Close">✕</button></div>
+        <div className="tik-viewers-h"><b>{views(total)} views · seen by {count} {count === 1 ? "member" : "members"}</b><button type="button" onClick={onClose} aria-label="Close">✕</button></div>
         {list === null ? <small className="muted">Loading…</small> : list.length === 0 ? <small className="muted">No views yet.</small> : (
           <ul>{list.map((v) => (
             <li key={v.id}><Link href={`/members/${v.id}`} onClick={onClose}><Avatar className="me-av" alias={v.alias} color={v.color} url={v.avatar_url} /><b>{v.alias}</b><small>{ago(v.at)}</small></Link></li>

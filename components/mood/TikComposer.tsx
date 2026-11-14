@@ -1,6 +1,21 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import Avatar from "@/components/Avatar";
+
+/** The signed-in member's picture for the post box (looked up once per page). */
+type MeP = { alias: string; color: string | null; avatar_url: string | null } | null;
+let meP: Promise<MeP> | null = null;
+function myProfile(): Promise<MeP> {
+  if (!meP) meP = (async () => {
+    const sb = supabaseBrowser();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return null;
+    const { data } = await sb.from("profiles").select("alias,color,avatar_url").eq("id", user.id).maybeSingle();
+    return (data as MeP) || null;
+  })().catch(() => null);
+  return meP;
+}
 import { TIK_STYLES, canStyle, type TikStyle } from "./tik-styles";
 
 /** Shrinks a picture to at most 1280px and saves it as WebP (smaller, strips location data). */
@@ -20,7 +35,13 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [style, setStyle] = useState<TikStyle | null>(null);
+  const [designs, setDesigns] = useState(false);
+  const [mine, setMine] = useState<MeP>(null);
   const file = useRef<HTMLInputElement>(null);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { myProfile().then(setMine); }, []);
+  // The box grows with what you write (up to about 10 lines), like X.
+  useEffect(() => { const el = ta.current; if (!el) return; el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 260)}px`; }, [body]);
 
   async function pick(f: File | undefined) {
     if (!f) return;
@@ -47,19 +68,32 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
     const { error } = await sb.from("tiks").insert({ body: text.slice(0, 500), image_url, ...(useStyle ? { style: useStyle } : {}), reply_to: replyTo ?? null, ...(replyTo && replyUser ? { reply_user: replyUser } : {}) });
     setBusy(false);
     if (error) { setMsg(/slow down/i.test(error.message) ? error.message : "Couldn't post. Try again."); return; }
-    setBody(""); setStyle(null); if (pic) URL.revokeObjectURL(pic.url); setPic(null);
+    setBody(""); setStyle(null); setDesigns(false); if (pic) URL.revokeObjectURL(pic.url); setPic(null);
     onPosted?.();
   }
 
   const styled = !replyTo && !!style && canStyle(body, !!pic);
+  if (replyTo) return (
+    <div className="tik-chatbox">
+      <textarea ref={ta} value={body} maxLength={500} rows={1} onChange={(e) => setBody(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !busy && body.trim()) { e.preventDefault(); post(); } }}
+        placeholder={placeholder || "Write a comment…"} aria-label="Your comment" />
+      <button type="button" className="tik-send" disabled={busy || !body.trim()} onClick={post} aria-label="Send comment">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l16-8-6 16-2.5-6.5z" /><path d="M11.5 13.5L20 4" /></svg>
+      </button>
+      {msg && <small className="tik-msg" role="status">{msg}</small>}
+    </div>
+  );
   return (
-    <div className={"tik-new" + (compact ? " compact" : "") + (replyTo ? " reply" : "")}>
+    <div className={"tik-new x" + (compact ? " compact" : "")}>
+      <span className="tik-new-av" aria-hidden="true"><Avatar className="me-av" alias={mine?.alias || "Me"} color={mine?.color ?? undefined} url={mine?.avatar_url ?? null} /></span>
+      <div className="tik-new-col">
       <div className={"tik-new-box" + (styled ? ` tik-style s-${style}` : "")}>
-      <textarea value={body} maxLength={500} rows={compact ? 2 : 3} onChange={(e) => setBody(e.target.value)}
+      <textarea ref={ta} value={body} maxLength={500} rows={2} onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !busy && body.trim()) { e.preventDefault(); post(); } }}
         placeholder={placeholder || (replyTo ? "Write a reply…" : "What's happening?")} aria-label={replyTo ? "Your reply" : "Your Tik"} />
       </div>
-      {!replyTo && !pic && (
+      {!pic && designs && (
         <div className="tik-styles" role="radiogroup" aria-label="Post design">
           <button type="button" role="radio" aria-checked={!style} className={"none" + (!style ? " on" : "")} onClick={() => setStyle(null)} title="No design">Aa</button>
           {TIK_STYLES.map((s) => <button key={s} type="button" role="radio" aria-checked={style === s} aria-label={`${s} design`} title={s} className={`s-${s}` + (style === s ? " on" : "")} onClick={() => setStyle(s)} />)}
@@ -73,19 +107,17 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
         </div>
       )}
       <div className="tik-new-row">
-        {!replyTo && (
-          <>
-            <button type="button" className="tik-attach" onClick={() => file.current?.click()} aria-label="Add a picture">
-              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></svg>
-              Picture
-            </button>
-            <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
-          </>
-        )}
+        <button type="button" className="tik-tool" onClick={() => file.current?.click()} aria-label="Add a picture" title="Picture">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></svg>
+        </button>
+        <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+        {!pic && <button type="button" className={"tik-tool aa" + (designs || style ? " on" : "")} onClick={() => setDesigns(!designs)} aria-pressed={designs} aria-label="Post designs" title="Designs">Aa</button>}
+        <span className="tik-grow" />
         <span className="tik-ring" style={{ ["--p" as any]: `${Math.min(100, body.length / 5)}%` }} data-warn={body.length > 450 || undefined} title={`${body.length}/500`} aria-label={`${500 - body.length} letters left`}>{body.length > 450 ? 500 - body.length : ""}</span>
-        <button type="button" className="tik-post" disabled={busy || !body.trim()} onClick={post}>{busy ? "Posting…" : replyTo ? "Reply" : "Post"}</button>
+        <button type="button" className="tik-post" disabled={busy || !body.trim()} onClick={post}>{busy ? "Posting…" : "Post"}</button>
       </div>
       {msg && <small className="tik-msg" role="status">{msg}</small>}
+      </div>
     </div>
   );
 }

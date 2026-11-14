@@ -117,7 +117,7 @@ export default async function Home() {
       <section className="lp-hero">
         <div className="lp-hero-copy">
           <div className="lp-eyebrow"><TypeText text="A global autism community, powered by crypto" speed={16} /></div>
-          <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={650} /></span><span className="lp-loop"><TypeLoop intro delay={1450} words={HERO_LOOP} /></span></h1>
+          <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={650} sound /></span><span className="lp-loop"><TypeLoop intro delay={1450} words={HERO_LOOP} /></span></h1>
           <p><Words delay={1500} text="AUTISTIK brings autistic people, their families and supporters together in one global community, with simple, secure crypto tools built in. A share of all trading activity funds real-world support for autistic people." /></p>
           <p className="lp-why"><b>How it works:</b> <Words delay={1900} text="every swap, stake and token launch on AUTISTIK contributes to the AUTISTIK Fund, set up to cover therapy, equipment, education and everyday essentials. Plain language throughout, and never any pressure." /></p>
           <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "2300ms" }}>
@@ -232,7 +232,7 @@ export default async function Home() {
         <div className="lp-fund">
           <div>
             <div className="lp-eyebrow"><TypeText text="AUTISTIK Fund" /></div>
-            <h2><TypeText delay={350} text="Community-funded. Individually focused." /></h2>
+            <h2><TypeText delay={350} text="Community-funded. Individually focused." sound /></h2>
             <p><Words delay={1000} text="A share of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon. Register your interest today, for yourself or for someone you care for." /></p>
             <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
           </div>

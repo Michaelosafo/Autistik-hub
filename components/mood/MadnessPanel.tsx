@@ -127,7 +127,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
           </div>
           <nav className="tik-nav" role="tablist" aria-orientation="vertical">
             {NAV.map(([t, l, , d]) => (
-              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+              <button key={t} type="button" role="tab" aria-selected={!focus && tab === t} onClick={() => { setTab(t); if (focus) window.location.href = "/mood"; }}>
                 <span className="tik-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: d }} /></span>
                 <span className="tik-nl">{l}</span>
                 {t === "alerts" && unread > 0 && <em className="tik-badge">{unread > 9 ? "9+" : unread}</em>}
@@ -144,19 +144,19 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
           {side && <div className="tik-live"><div className="tik-cap"><span className="tik-dot" aria-hidden="true" />Live now</div>{side}</div>}
         </aside>
         <div className="tik-main">
-          <header className="tik-top">
+          {!focus && <header className="tik-top">
             <div><h2>{cur[1]}</h2><small>{cur[2]}</small></div>
             <span className="tik-status"><span className="tik-dot" aria-hidden="true" />Live feed</span>
-          </header>
+          </header>}
           {focus}
-          {(tab === "home" || tab === "everyone" || tab === "following") && <TrendingStrip me={me} onAll={() => setTab("trending")} />}
-          {(tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
-          {tab === "home" && <TikHome admin={admin} />}
-          {tab === "trending" && <TrendingFeed me={me} />}
-          {tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
-          {tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
-          {tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
-          {tab === "people" && <FindPeople />}
+          {!focus && (tab === "home" || tab === "everyone" || tab === "following") && <TrendingStrip me={me} onAll={() => setTab("trending")} />}
+          {!focus && (tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
+          {!focus && tab === "home" && <TikHome admin={admin} />}
+          {!focus && tab === "trending" && <TrendingFeed me={me} />}
+          {!focus && tab === "following" && <Following me={me} follows={follows} refreshKey={k} onFind={() => setTab("people")} limit={20} />}
+          {!focus && tab === "everyone" && <Feed me={me} authors={null} refreshKey={k} limit={20} />}
+          {!focus && tab === "alerts" && <Alerts me={me} onRead={() => setUnread(0)} />}
+          {!focus && tab === "people" && <FindPeople />}
         </div>
       </section>
     );

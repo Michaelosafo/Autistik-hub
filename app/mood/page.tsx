@@ -26,14 +26,9 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
           <h1>Welcome to the <b>TIK</b> Board</h1>
           <p>Say what&apos;s on your mind, cheer each other on, and find your people. No pressure, no noise: just your corner of AUTISTIK.</p>
         </div>
-        <nav className="tik-welcome-go" aria-label="Get started on TIK">
-          <a href="#tik-post">Post a Tik</a>
-          <Link href="/mood?tab=streams">Livestreams</Link>
-          <Link href="/mood?tab=videos">Videos</Link>
-          <Link href="/members?tab=find">Find people</Link>
-        </nav>
       </section>
       <WatchTabs tab={tab} />
+      {user && !tab && !searchParams.tik && <a href="#tik-post" className="tik-fab" aria-label="Post a Tik"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg></a>}
       {tab === "live" ? (
         <section className="stack" aria-label="Live rooms">
           <div className="wv-head"><b><i className="wv-dot" aria-hidden="true" />Live rooms</b><Link className="btn primary small" href="/spaces?host=1">🎙️ Start a room</Link></div>

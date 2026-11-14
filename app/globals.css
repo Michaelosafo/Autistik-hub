@@ -6733,3 +6733,73 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
   .lp-bar .lp-openapp { padding: 0 10px; font-size: .85em; }
 }
 .sq-on [data-sq="up"].sq-in > * { animation-duration: .5s; animation-delay: calc(var(--sd, 0ms) * .6 + var(--k, 0) * 70ms); }
+
+/* ---------------- TIK, cleaner (X-style post page, post box, chat comments, top tabs, views) ---------------- */
+/* Top tabs: one simple row with icons, stays at the top while you scroll. */
+.wv-tabs.clean { position: sticky; top: 0; z-index: 20; gap: 4px; padding: 6px; border-radius: 18px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(10px); border: 1px solid var(--line); }
+.wv-tabs.clean a { gap: 7px; padding: 9px 14px; border-radius: 13px; background: transparent; color: var(--muted); font-weight: 700; font-size: .88em; }
+.wv-tabs.clean a svg { width: 18px; height: 18px; flex: none; }
+.wv-tabs.clean a.on { background: var(--ink); color: var(--bg); }
+.wv-tabs.clean a:not(.on):hover { color: var(--ink); background: rgba(var(--wc), .06); }
+.tik-welcome { padding: 14px 16px; }
+.tik-welcome-t p { display: none; }
+@media (min-width: 700px) { .tik-welcome-t p { display: block; } }
+/* Floating ＋ to write a Tik (phones). */
+.tik-fab { position: fixed; right: 18px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 45; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B 55%, #FF9F5A); box-shadow: 0 10px 28px rgba(240,185,11,.45); }
+.tik-fab svg { width: 26px; height: 26px; }
+@media (min-width: 900px) { .tik-fab { display: none; } }
+
+/* Post box like X: your picture on the left, the box grows, icon tools under it. */
+.tik-new.x { flex-direction: row; align-items: flex-start; gap: 12px; }
+.tik-new-av .me-av { width: 42px; height: 42px; }
+.tik-new-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.tik-new.x textarea { min-height: 48px; max-height: 260px; overflow-y: auto; background: transparent; padding: 8px 2px; font-size: 1.08em; resize: none; }
+.tik-new.x .tik-new-box:not(.tik-style) { border-bottom: 1px solid var(--line); }
+.tik-new.x .tik-new-row { gap: 4px; }
+.tik-tool { all: unset; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: #B57CFF; font-weight: 800; font-size: .9em; }
+.tik-tool svg { width: 20px; height: 20px; }
+.tik-tool:hover, .tik-tool.on { background: rgba(181,124,255,.14); }
+.tik-tool:focus-visible { outline: 2px solid #F0B90B; }
+.tik-grow { flex: 1; }
+.tik-new.x .tik-post { border-radius: 99px; padding: 9px 20px; }
+
+/* Tapping a post opens it. */
+.tik.tappable { cursor: pointer; }
+.tik.tappable:hover { border-color: rgba(181,124,255,.35); }
+
+/* The post page (X-style). */
+.tik-post-page { display: flex; flex-direction: column; gap: 10px; }
+.tik-post-bar { display: flex; align-items: center; gap: 14px; position: sticky; top: 0; z-index: 5; padding: 6px 2px; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(8px); }
+.tik-post-bar button { all: unset; cursor: pointer; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; }
+.tik-post-bar button:hover { background: rgba(var(--wc), .08); }
+.tik-post-bar svg { width: 22px; height: 22px; }
+.tik-post-bar b { font-size: 1.15em; }
+.tik.detail { padding: 16px; }
+.tik.detail .tik-body { font-size: 1.2em; line-height: 1.5; }
+.tik.detail .tik-av .me-av { width: 48px; height: 48px; }
+.tik-detail-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 0; margin-top: 4px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--muted); font-size: .88em; }
+.tik-detail-meta b { color: var(--ink); }
+.tik-detail-meta time { width: 100%; }
+
+/* Views: a gradient eye that pulses when the number grows. */
+.tik-eye { width: 19px !important; height: 19px !important; }
+.tik-eye.grew { animation: tikEye .9s ease; }
+@keyframes tikEye { 0% { transform: scale(1); } 35% { transform: scale(1.3); filter: drop-shadow(0 0 6px rgba(255,107,154,.7)); } 100% { transform: scale(1); } }
+.tik-act.views .tik-vn b { font-weight: 700; }
+@media (prefers-reduced-motion: reduce) { .tik-eye.grew { animation: none; } }
+
+/* Comments like a chat: bubbles, no names in the box, no thread lines. */
+.tik-replies, .tik-replies .tik-replies { border: 0 !important; margin-left: 0; padding-left: 0; }
+.tik-replies::before, .tik-replies > .tik::before { display: none !important; }
+.tik-replies .tik-replies { margin-left: 34px; }
+.tik-show i { display: none; }
+.tik-replies > .tik.compact .tik-handle, .tik-replies > .tik.compact .tik-dotsep { display: none; }
+.tik-replies > .tik.compact .tik-head { font-size: .82em; gap: 6px; }
+.tik-replies > .tik.compact .tik-body { padding: 9px 14px; border-radius: 6px 18px 18px 18px; }
+.tik-chatbox { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 24px; background: rgba(var(--wc), .06); border: 1px solid var(--line); flex-wrap: wrap; }
+.tik-chatbox:focus-within { border-color: rgba(181,124,255,.6); }
+.tik-chatbox textarea { all: unset; flex: 1; min-width: 0; box-sizing: border-box; padding: 8px 0; max-height: 140px; overflow-y: auto; font: inherit; font-size: 16px; line-height: 1.4; white-space: pre-wrap; color: var(--ink); }
+.tik-send { all: unset; cursor: pointer; width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #B57CFF, #FF6B9A); }
+.tik-send:disabled { opacity: .4; cursor: default; }
+.tik-send svg { width: 18px; height: 18px; }
+.tik-chatbox .tik-msg { width: 100%; }

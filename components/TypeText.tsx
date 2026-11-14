@@ -12,7 +12,7 @@ import { typeTick } from "@/lib/type-sound";
 
 const useIsoLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export default function TypeText({ text, speed = 24, delay = 0 }: { text: string; speed?: number; delay?: number }) {
+export default function TypeText({ text, speed = 24, delay = 0, sound = false }: { text: string; speed?: number; delay?: number; sound?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [n, setN] = useState(text.length);
   const [typing, setTyping] = useState(false);
@@ -29,7 +29,7 @@ export default function TypeText({ text, speed = 24, delay = 0 }: { text: string
       // A few letters at a time on long lines, so every heading takes about the same short time.
       i = Math.min(text.length, i + Math.max(1, Math.round(text.length / 45)));
       setN(i);
-      typeTick(text[i - 1] === " "); // a soft key click per step (lib/type-sound.ts)
+      if (sound) typeTick(text[i - 1] === " "); // soft key clicks, only on the key headings (lib/type-sound.ts)
       if (i < text.length) timer = setTimeout(tick, speed + (text[i - 1] === " " ? 0 : Math.random() * 30));
       else timer = setTimeout(() => setTyping(false), 900);
     };
@@ -49,7 +49,7 @@ export default function TypeText({ text, speed = 24, delay = 0 }: { text: string
     const onLang = (e: Event) => { if ((e as CustomEvent).detail !== "en") finish(); };
     window.addEventListener("site-lang", onLang);
     return () => { io.disconnect(); clearTimeout(timer); window.removeEventListener("site-lang", onLang); };
-  }, [text, speed, delay]);
+  }, [text, speed, delay, sound]);
 
   return (
     <span ref={ref} className="tt">
