@@ -12,7 +12,7 @@ import { typeTick } from "@/lib/type-sound";
 
 const useIsoLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-export default function TypeText({ text, speed = 34, delay = 0 }: { text: string; speed?: number; delay?: number }) {
+export default function TypeText({ text, speed = 24, delay = 0 }: { text: string; speed?: number; delay?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [n, setN] = useState(text.length);
   const [typing, setTyping] = useState(false);
@@ -37,7 +37,7 @@ export default function TypeText({ text, speed = 34, delay = 0 }: { text: string
       if (!e.isIntersecting || started) return;
       started = true; io.disconnect(); setTyping(true);
       timer = setTimeout(tick, delay);
-    }, { threshold: 0.5, rootMargin: "0px 0px -8% 0px" });
+    }, { threshold: 0.2, rootMargin: "0px 0px -4% 0px" });
     io.observe(el);
     const onLang = (e: Event) => { if ((e as CustomEvent).detail !== "en") finish(); };
     window.addEventListener("site-lang", onLang);
