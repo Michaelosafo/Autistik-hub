@@ -40,6 +40,43 @@ export function toFlow(p: any): Flow {
   };
 }
 
+/**
+ * A brand-new Solana coin still on its launch curve (pump.fun, letsbonk, …) has no DexScreener pool yet, so it would
+ * look untradeable. Jupiter (which can also buy it) and pump.fun price it anyway: price, market cap, curve liquidity,
+ * age and the last 5 minutes / hour of buys and sells. pool is "curve:<mint>" so it's clear it isn't a DEX pool.
+ */
+export async function launchFlow(mint: string): Promise<Flow | null> {
+  const j = await get(`https://lite-api.jup.ag/tokens/v2/search?query=${mint}`).catch(() => null);
+  const t = (Array.isArray(j) ? j : []).find((x: any) => String(x?.id || x?.address || "") === mint);
+  if (t && n(t.usdPrice) > 0) {
+    const created = Date.parse(t.firstPool?.createdAt || t.createdAt || "") || 0;
+    const st = (k: string) => t[k] || {};
+    return {
+      chain: "solana", token: mint, pool: `curve:${mint}`, symbol: String(t.symbol || "?"), name: String(t.name || ""), image: t.icon || null,
+      price: n(t.usdPrice), liquidity: n(t.liquidity), mcap: n(t.mcap) || n(t.fdv), ageHours: created ? (Date.now() - created) / 36e5 : 0,
+      ch: { m5: n(st("stats5m").priceChange), h1: n(st("stats1h").priceChange), h6: n(st("stats6h").priceChange), h24: n(st("stats24h").priceChange) },
+      buys5: n(st("stats5m").numBuys), sells5: n(st("stats5m").numSells), buys1h: n(st("stats1h").numBuys), sells1h: n(st("stats1h").numSells),
+      vol5: n(st("stats5m").buyVolume) + n(st("stats5m").sellVolume), vol1h: n(st("stats1h").buyVolume) + n(st("stats1h").sellVolume),
+      x: !!t.twitter, tg: !!t.telegram,
+    };
+  }
+  for (const base of ["https://frontend-api-v3.pump.fun", "https://frontend-api.pump.fun"]) {
+    const c = await get(`${base}/coins/${mint}`).catch(() => null);
+    if (!c?.mint || !(n(c.usd_market_cap) > 0)) continue;
+    const supply = n(c.total_supply) / 1e6 || 1e9, solUsd = n(c.market_cap) > 0 ? n(c.usd_market_cap) / n(c.market_cap) : 0;
+    return {
+      chain: "solana", token: mint, pool: `curve:${mint}`, symbol: String(c.symbol || "?"), name: String(c.name || ""), image: c.image_uri || null,
+      price: n(c.usd_market_cap) / supply, liquidity: (n(c.virtual_sol_reserves) / 1e9) * solUsd * 2, mcap: n(c.usd_market_cap),
+      ageHours: c.created_timestamp ? (Date.now() - Number(c.created_timestamp)) / 36e5 : 0,
+      ch: { m5: 0, h1: 0, h6: 0, h24: 0 }, buys5: 0, sells5: 0, buys1h: 0, sells1h: 0, vol5: 0, vol1h: 0,
+      x: !!c.twitter, tg: !!c.telegram,
+    };
+  }
+  return null;
+}
+
+const SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+
 /** The deepest pool for a token on one of the chains (by address), or for a $TICKER (by search). */
 export async function resolve(ref: { chain?: string; token?: string; ticker?: string }, chains: string[]): Promise<Flow | null> {
   let pairs: any[] = [];
@@ -58,7 +95,10 @@ export async function resolve(ref: { chain?: string; token?: string; ticker?: st
   }
   const ok = (pairs || []).filter((p: any) => chains.includes(String(p?.chainId)) && (!ref.token || String(p?.baseToken?.address || "").toLowerCase() === ref.token.toLowerCase()));
   ok.sort((a: any, b: any) => (ref.ticker ? n(b?.volume?.h24) - n(a?.volume?.h24) : n(b?.liquidity?.usd) - n(a?.liquidity?.usd)));
-  return ok[0] ? toFlow(ok[0]) : null;
+  if (ok[0]) return toFlow(ok[0]);
+  // No DEX pool yet: a Solana coin still on its launch curve (pump.fun etc.) can still be bought through Jupiter.
+  if (ref.token && (!ref.chain || ref.chain === "solana") && chains.includes("solana") && SOL_ADDR.test(ref.token)) return launchFlow(ref.token).catch(() => null);
+  return null;
 }
 
 /** Contract addresses and $TICKERS in a post. */
