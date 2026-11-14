@@ -279,6 +279,7 @@ export async function tgaStatus(): Promise<{ ready: boolean; signedIn: boolean; 
  * source, so the chat can be read again without listing every chat first.
  */
 function peerOf(ref: string): any {
+  if (ref.startsWith("@")) return ref.slice(1); // a public group / channel by @username (read without joining)
   const [k, id, hash] = ref.split(":");
   if (k === "c") return new Api.InputPeerChannel({ channelId: bigInt(id), accessHash: bigInt(hash) });
   if (k === "g") return new Api.InputPeerChat({ chatId: bigInt(id) });
@@ -425,4 +426,74 @@ export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string
   } catch (e) { await loginDied(e); errors.push(friendly(e)); }
   finally { await close(c); await giveTurn(turn); }
   return { posts, errors };
+}
+
+// ---------------------------------------------------------------- Caller scout (lib/ai-trader-scout.ts)
+
+/** The chat list saved at the last refresh (every group / channel the account is in), without connecting. */
+export async function tgaSavedChats(): Promise<MyChat[]> {
+  const { data } = await auth().select("chats").eq("id", T()).maybeSingle();
+  return (((data as any)?.chats || []) as MyChat[]).filter((c) => c.kind === "group" || c.kind === "channel");
+}
+
+export type ScoutRead = { ref: string; top: number | null; posts: ChatPost[]; error?: string };
+
+/**
+ * The scout's turn: reads a few chats it's learning from (any group / channel the account is in, or a public one by
+ * @username, even without joining). The first read of a chat takes its last 100 messages, so old calls count at once;
+ * after that only new ones. Stops at `budgetMs`, and steps aside if the live watch needs the connection.
+ */
+export async function tgaScoutRead(chats: { ref: string; username: string | null; title: string | null; last_msg_id: number | null }[], budgetMs = 8_000): Promise<ScoutRead[]> {
+  if (!chats.length) return [];
+  const s = await sessionGet().catch(() => "");
+  if (!s) return [];
+  const turn = await takeTurn("scout", Math.ceil(budgetMs / 1000) + 10, 0);
+  if (!turn) return [];
+  const out: ScoutRead[] = [];
+  let c: TelegramClient | null = null;
+  const end = Date.now() + budgetMs;
+  try {
+    c = await client(s);
+    for (const ch of chats) {
+      if (Date.now() > end) break;
+      try {
+        const peer = peerOf(ch.ref);
+        const first = ch.last_msg_id == null;
+        const msgs: any[] = await c.getMessages(peer, first ? { limit: 100 } : { limit: 60, minId: Number(ch.last_msg_id) });
+        const top = msgs.reduce((m, x) => Math.max(m, Number(x.id) || 0), Number(ch.last_msg_id) || 0) || null;
+        const posts: ChatPost[] = [];
+        for (const m of msgs) {
+          const text = String(m.message || "");
+          if (!text) continue;
+          const snd: any = m.sender;
+          posts.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: ch.username ? `https://t.me/${ch.username}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from: { id: m.senderId != null ? String(m.senderId) : null, username: snd?.username ? String(snd.username).toLowerCase() : null }, isBot: snd?.bot === true });
+        }
+        out.push({ ref: ch.ref, top, posts });
+      } catch (e) {
+        if (DEAD.test(String((e as any)?.errorMessage || (e as Error)?.message || e))) { await loginDied(e); break; }
+        out.push({ ref: ch.ref, top: ch.last_msg_id, posts: [], error: friendly(e) });
+        if (/FLOOD_WAIT/i.test(String((e as any)?.message || ""))) break; // Telegram asked to slow down
+      }
+    }
+  } catch (e) { await loginDied(e); }
+  finally { await close(c); await giveTurn(turn); }
+  return out;
+}
+
+/** A public group / channel by link or @username: its title, to add to the scout (works without joining). */
+export async function tgaPublicChat(raw: string): Promise<{ ref: string; title: string; username: string; kind: "group" | "channel" }> {
+  const u = String(raw).trim().replace(/^https?:\/\/(t\.me|telegram\.me)\//i, "").replace(/^@/, "").split(/[/?]/)[0];
+  if (!/^[A-Za-z0-9_]{4,32}$/.test(u)) throw new Error("Paste a public link like t.me/name or @name.");
+  const s = await sessionGet();
+  if (!s) throw new Error("Log in with your Telegram account first.");
+  const turn = await takeTurn("scout", 25, 8_000);
+  if (!turn) throw new Error("The bot is busy reading your groups. Try again in a few seconds.");
+  let c: TelegramClient | null = null;
+  try {
+    c = await client(s);
+    const e: any = await c.getEntity(u);
+    if (e?.className !== "Channel") throw new Error("That isn't a public group or channel.");
+    return { ref: `@${e.username || u}`, title: String(e.title || u), username: String(e.username || u), kind: e.broadcast ? "channel" : "group" };
+  } catch (e) { throw new Error(friendly(e)); }
+  finally { await close(c); await giveTurn(turn); }
 }

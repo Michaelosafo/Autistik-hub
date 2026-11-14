@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
 import AITraderCopy, { type CopyData } from "@/components/AITraderCopy";
 import TraderTabs from "@/components/TraderTabs";
-import { BuyHours, JustBought, StableMode, TrackedBoard, TradeActions, WalletCoins, WalletPanel } from "@/components/AITraderExtras";
+import { BuyHours, JustBought, ScoutCard, StableMode, TrackedBoard, TradeActions, WalletCoins, WalletPanel } from "@/components/AITraderExtras";
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_cash: number; paper_start: number; per_trade: number; max_positions: number; min_liquidity: number;
@@ -175,6 +175,7 @@ export default function AITrader() {
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Scanning…" : "Scan now"}</button>}
       </section>
 
+      <ScoutCard s={s as any} busy={!!busy} onAct={act} />
       <StableMode on={!!(s as any).stable_on} live={live} wallets={d.copy.wallets || []} busy={!!busy} onAct={act} />
       <BuyHours s={s} busy={!!busy} onAct={act} />
 

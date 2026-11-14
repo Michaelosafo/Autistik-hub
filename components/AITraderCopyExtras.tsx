@@ -6,7 +6,7 @@
 import { useState } from "react";
 
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
-export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number; chat: string; chat_title: string | null; sl?: number | null; tp?: number | null };
+export type Caller = { id: number; platform: "tg" | "x"; who: string; usd: number; chat: string; chat_title: string | null; sl?: number | null; tp?: number | null; scout?: boolean; trusted?: boolean };
 
 /** One caller: their size, stop-loss and take profit, editable in place. */
 function CallerRow({ c, label, busy, onAct, dsl, dtp }: { c: Caller; label: string; busy: boolean; onAct: Act; dsl: number; dtp: number }) {

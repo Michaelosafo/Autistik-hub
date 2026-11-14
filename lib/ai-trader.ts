@@ -16,6 +16,7 @@ import { createWalletClient, erc20Abi, getAddress, http, isAddress } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
+import { scoutAvailable, scoutFollow, scoutScore, scoutTick, scoutX } from "@/lib/ai-trader-scout";
 import { IMPOSTOR, aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
 import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
@@ -45,6 +46,7 @@ export type Settings = {
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
   live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; callers_only: boolean;
   buy_hours_on: boolean; buy_from: string; buy_to: string; buy_tz: string; stable_on: boolean;
+  scout_on: boolean; scout_budget: number; scout_trade_usd: number; scout_trust_skip: boolean; scout_honeypot_trusted: boolean;
 };
 export type Position = {
   id: string; mode: "paper" | "live"; chain: string; token: string; symbol: string | null; name: string | null; logo: string | null;
@@ -310,6 +312,8 @@ export async function getSettings(): Promise<Settings> {
   s.need_socials = s.need_socials !== false;
   s.buy_hours_on = s.buy_hours_on === true;
   s.stable_on = s.stable_on === true;
+  s.scout_on = s.scout_on === true; s.scout_trust_skip = s.scout_trust_skip !== false; s.scout_honeypot_trusted = s.scout_honeypot_trusted !== false;
+  s.scout_budget = n(s.scout_budget); s.scout_trade_usd = n(s.scout_trade_usd) || 5;
   s.buy_from = /^\d{2}:\d{2}$/.test(String(s.buy_from || "")) ? s.buy_from : "00:00";
   s.buy_to = /^\d{2}:\d{2}$/.test(String(s.buy_to || "")) ? s.buy_to : "23:59";
   s.buy_tz = typeof s.buy_tz === "string" && s.buy_tz ? s.buy_tz : "UTC";
@@ -751,7 +755,7 @@ async function adoptPending() {
         spent: +spent.toFixed(6), qty, amount_raw: bal.raw.toString(), decimals: bal.decimals,
         entry_usd: entry, high_usd: Math.max(entry, now), last_usd: now, low_usd: Math.min(entry, now), stop_loss: n(q.sl), take_profit: n(q.tp), trail: 0,
         why: `Recovered: the buy went through after it was marked failed. ${q.why || ""}`.slice(0, 500), buy_tx: "unconfirmed", strategy: q.strategy || "copy", wallet: q.wallet === 2 ? 2 : 1,
-        source_group: q.source_group, source_who: q.source_who,
+        source_group: q.source_group, source_who: q.source_who, pot: q.pot ?? null,
       });
       if (error) { await log("error", `Found ${q.symbol || q.token} in the wallet but couldn't record it: ${error.message}`); continue; }
       await tq("ai_trader_pending").delete().eq("id", q.id);
@@ -1028,7 +1032,7 @@ async function setupBuy(s: Settings, cash: number, held: Set<string>) {
 
 /** Buys one coin (practice or live) and records it with its own stop and target. */
 async function executeBuy(s: Settings, cash: number, c: { chain: string; token: string; symbol: string; name: string; image: string | null; price: number; liquidity: number; mcap: number; buyTax?: number; pool?: string },
-  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null; sharedAt?: number }; slot?: number }) {
+  o: { sl: number; tp: number; why: string; strategy: string; trail?: number; usd?: number | null; newProject?: boolean; src?: { group: string; who: string | null; sharedAt?: number }; slot?: number; pot?: string | null }) {
   const slot = o.slot === 2 ? 2 : 1;
   const sb = supabaseService();
   const bnb = await bnbUsd();
@@ -1057,7 +1061,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
       if (!/failed on-chain|No Solana route|Couldn't build|Not enough|Create the|no answer|didn't answer/i.test((e as Error).message)) {
         await tq("ai_trader_pending").upsert({
           chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, wallet: slot, entry_usd: c.price, entry_mcap: c.mcap || null,
-          spent_native: amount, native: stable ? stable.symbol : NATIVE[chain], sl: o.sl, tp: o.tp, why: o.why, strategy: o.strategy,
+          spent_native: amount, native: stable ? stable.symbol : NATIVE[chain], sl: o.sl, tp: o.tp, why: o.why, strategy: o.strategy, pot: o.pot ?? null,
           source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null, created_at: new Date().toISOString(),
         }, { onConflict: "trader_id,chain,token,wallet" }).then(() => {}, () => {});
       }
@@ -1076,7 +1080,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   const { error } = await tq("ai_trader_positions").insert({
     mode: live ? "live" : "paper", native, spent_native: spentNative, chain: c.chain, token: c.token, symbol: c.symbol, name: c.name, logo: c.image, spent: spend, qty, amount_raw: raw, decimals,
     entry_usd: c.price, high_usd: c.price, last_usd: c.price, stop_loss: o.sl, take_profit: o.tp, trail: o.trail ?? 25, why: `${o.why} (mcap $${Math.round(c.mcap).toLocaleString("en-US")})`, buy_tx: tx,
-    strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject, wallet: slot,
+    strategy: o.strategy, pool: c.pool || null, new_project: !!o.newProject, wallet: slot, pot: o.pot ?? null,
     low_usd: c.price, source_group: o.src?.group?.slice(0, 120) ?? null, source_who: o.src?.who?.slice(0, 60) ?? null,
     shared_at: o.src?.sharedAt ? new Date(o.src.sharedAt).toISOString() : null, coin_age_hours: (c as any).ageHours ?? null, pump_1h: (c as any).ch?.h1 ?? null,
   });
@@ -1106,6 +1110,8 @@ export async function runTrader({ force = false } = {}) {
     if (go !== true) return { skipped: "ran recently" };
   }
   const s = await getSettings();
+  // Caller scout: score the calls it has seen, then follow / drop callers and groups (keeps learning while paused).
+  if (s.scout_on) { await scoutScore().catch((e) => log("error", `Scout scoring failed: ${(e as Error).message}`)); await scoutFollow().catch((e) => log("error", `Scout follow failed: ${(e as Error).message}`)); }
   if (!s.enabled && !force) return { skipped: "paused" };
   const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", T()); return { note: t }; };
   if (s.mode === "live" && !(await traderAccount())) return note("Live mode needs a trading wallet (create one on the AI trader page). Nothing was traded.");
@@ -1243,7 +1249,7 @@ export async function runFast() {
   const general = s.use_general;
   if (s.enabled && general) await recheckWatch(s).catch((e) => log("error", `Watch list check failed: ${(e as Error).message}`));
   if (s.enabled && s.copy_on && s.rebuy_on) await rebuyCheck(s).catch((e) => log("error", `Re-buy check failed: ${(e as Error).message}`));
-  if (!s.enabled) { await guard; return { ok: true, buys: "stopped" }; }
+  if (!s.enabled) { if (s.scout_on) await scoutTick(8_000).catch(() => {}); await guard; return { ok: true, buys: "stopped" }; }
   const chains = s.mode === "live" ? ["bsc"] : s.chains;
   const out: string[] = [];
   // Copy trades from what you follow, depending on the trading mode.
@@ -1251,17 +1257,20 @@ export async function runFast() {
     if (s.use_x) {
       const { posts, errors } = await xFollowedPosts().catch((e) => ({ posts: [], errors: [(e as Error).message] }));
       if (errors.length) await sb.from("ai_trader_settings").update({ last_note: `X: ${errors[0]}`.slice(0, 300) }).eq("id", T());
+      if (s.scout_on) await scoutX(posts).catch(() => {});
       for (const post of posts.slice(0, 10)) out.push(...(await copyPost({ text: post.text, user: post.user, url: post.url, at: post.at, from: { username: post.user } }, "x", post.label).catch(() => [])));
     }
     if (s.use_tg) {
       // Groups, channels and chats read through the admin's own Telegram account.
       // Kept open for most of the minute, checking every chat every ~2 seconds: buys land seconds after the call.
       // Watch until ~50 seconds after this run started (the next run takes over a few seconds later).
-      const watchMs = Math.max(8_000, 50_000 - (Date.now() - started));
+      const watchMs = Math.max(8_000, (s.scout_on ? 41_000 : 50_000) - (Date.now() - started));
       const errs = await tgaWatch(async (post) => out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel, isBot: post.isBot }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => []))), watchMs).catch((e) => [(e as Error).message]);
       if (errs.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${errs[0]}`.slice(0, 300) }).eq("id", T());
     }
   }
+  // Caller scout: the last few seconds of the minute read a few more groups to learn who calls winners.
+  if (s.scout_on) await scoutTick(Math.max(3_000, 51_000 - (Date.now() - started))).catch(() => {});
   // General mode only: X callers and DexScreener signals.
   if (general && s.signals_on) {
     if (xReady() && s.callers.length) {
@@ -1317,6 +1326,24 @@ async function copyCheckFor(s: Settings, chain: string, token: string): Promise<
 }
 
 /**
+ * Scout trades' coin check. A trusted caller (consistent winner, or one you marked trusted): no rug check, only the
+ * honeypot check if "still block honeypots" is on. Anyone else: the full rug check (honeypot, extreme tax, freeze /
+ * balance traps, pool of at least $5K, no danger flags).
+ */
+async function scoutCheck(s: Settings, f: Flow, trusted: boolean): Promise<{ ok: true; buyTax: number; sellTax: number } | { ok: false; reason: string }> {
+  if (trusted && s.scout_trust_skip) {
+    if (s.scout_honeypot_trusted) return copyGate(f.chain, f.token);
+    return { ok: true, buyTax: 0, sellTax: 0 };
+  }
+  const g = await copyGate(f.chain, f.token);
+  if (!g.ok) return g;
+  if (f.liquidity < 5000) return { ok: false, reason: `rug check: pool only $${Math.round(f.liquidity).toLocaleString("en-US")} (needs $5K)` };
+  const risk = await riskFor(f.chain, f.token).catch(() => null);
+  if (risk?.level === "danger") return { ok: false, reason: `rug check: ${(risk.notes[0] || "danger flags").replace(/\.$/, "")}` };
+  return g;
+}
+
+/**
  * A post from a followed Telegram group or X account / List / Community: every contract address in it is bought
  * (no market-cap, liquidity, socials or momentum rules), as long as it isn't a honeypot, with the copy target and
  * stop-loss. $TICKERS alone are ignored, since many coins share a ticker and copycats use them.
@@ -1336,12 +1363,12 @@ export const chatKey = (ref: string | number | null | undefined): string => {
  * group is skipped); a group with nobody picked buys every call. Callers picked for "all groups" set their own size
  * wherever they post. Returns skip: true when the group has its own callers and the poster isn't one of them.
  */
-export type CallerRule = { usd: number; who: string; sl?: number | null; tp?: number | null };
+export type CallerRule = { usd: number; who: string; sl?: number | null; tp?: number | null; scout?: boolean; trusted?: boolean };
 async function callerFor(platform: "tg" | "x", from: From, chat: string): Promise<{ skip: true } | { skip: false; caller: CallerRule | null }> {
   const keys = [from?.username?.replace(/^@/, "").toLowerCase(), from?.id ? String(from.id) : null].filter(Boolean) as string[];
-  const { data } = await tq("ai_trader_callers").select("who,usd,chat,sl,tp").eq("platform", platform).in("chat", chat ? [chat, ""] : [""]);
-  const rows = (data || []) as { who: string; usd: number; chat: string; sl: number | null; tp: number | null }[];
-  const rule = (r: (typeof rows)[number]): CallerRule => ({ usd: n(r.usd), who: String(r.who), sl: r.sl != null ? n(r.sl) : null, tp: r.tp != null ? n(r.tp) : null });
+  const { data } = await tq("ai_trader_callers").select("who,usd,chat,sl,tp,scout,trusted").eq("platform", platform).in("chat", chat ? [chat, ""] : [""]);
+  const rows = (data || []) as { who: string; usd: number; chat: string; sl: number | null; tp: number | null; scout: boolean; trusted: boolean }[];
+  const rule = (r: (typeof rows)[number]): CallerRule => ({ usd: n(r.usd), who: String(r.who), sl: r.sl != null ? n(r.sl) : null, tp: r.tp != null ? n(r.tp) : null, scout: !!r.scout, trusted: !!r.trusted });
   const mine = chat ? rows.filter((r) => r.chat === chat) : [];
   const hit = (list: typeof rows) => list.find((r) => keys.includes(String(r.who)));
   if (mine.length) {
@@ -1383,8 +1410,13 @@ export async function squadFor(post: { text: string; user: string; from?: From; 
 
 /** The $ buy size set for one Telegram channel / group (0 = none set). */
 async function chatSize(ref: string): Promise<number> {
-  const { data } = await tq("ai_trader_sources").select("usd").eq("kind", "tg_chat").eq("ref", ref).limit(1);
-  return n((data as any)?.[0]?.usd);
+  return (await chatInfo(ref)).usd;
+}
+/** A followed chat's own buy size, and whether the scout follows it (and why). */
+async function chatInfo(ref: string): Promise<{ usd: number; scoutKind: string | null }> {
+  const { data } = await tq("ai_trader_sources").select("usd,scout,scout_kind").eq("kind", "tg_chat").eq("ref", ref).limit(1);
+  const r = (data as any)?.[0];
+  return { usd: n(r?.usd), scoutKind: r?.scout ? String(r.scout_kind || "group") : null };
 }
 
 /** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
@@ -1438,12 +1470,17 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   const squad = await squadFor(post, source).catch(() => null);
   // This group has its own callers and the poster isn't one of them (and isn't in a squad): not bought.
   if (who.skip && !squad) return [];
+  // A group the scout follows because its calls pump fast: every call there is bought (from the scout budget).
+  const ci = source === "telegram" && post.chat ? await chatInfo(post.chat).catch(() => ({ usd: 0, scoutKind: null })) : { usd: 0, scoutKind: null };
+  const scoutGroup = ci.scoutKind === "group";
+  // A chat the scout reads only for a top caller: just that caller's calls.
+  if (ci.scoutKind === "caller" && !squad && !who.caller) return [];
   // "Only my callers" (on): in a Telegram group, only your picked callers' (and squads') calls are bought, never other
   // people's. Channels still buy every call, since their posts come from the channel itself.
-  if (source === "telegram" && !post.isChannel && s.callers_only && !squad && !who.caller) return [];
+  if (source === "telegram" && !post.isChannel && s.callers_only && !squad && !who.caller && !scoutGroup) return [];
   const base = who.skip ? null : who.caller;
   // The channel's / group's own buy size (set next to it in the Telegram list), used when the caller or squad has none.
-  const chatUsd = source === "telegram" && post.chat ? await chatSize(post.chat).catch(() => 0) : 0;
+  const chatUsd = ci.usd;
   let caller: CallerRule | null = squad
     ? { usd: squad.usd > 0 ? squad.usd : base?.usd ?? 0, who: `${squad.member} (squad ${squad.name})`, sl: squad.sl ?? base?.sl ?? null, tp: squad.tp ?? base?.tp ?? null }
     : base;
@@ -1489,19 +1526,21 @@ export async function copyPost(post: { text: string; user: string; url: string; 
     const sig: Signal = { source, who: post.user, body: post.text.slice(0, 280), url: post.url, chain: f?.chain || r.chain || "bsc", token: f ? (f.chain === "solana" ? f.token : f.token.toLowerCase()) : r.token, at: post.at };
     const { data } = await tq("ai_trader_signals").upsert({ source: sig.source, who: sig.who, body: sig.body, url: sig.url, chain: sig.chain, token: sig.token, at: new Date(sig.at).toISOString() }, { onConflict: "trader_id,source,chain,token,url", ignoreDuplicates: true }).select("id");
     if (!data?.length) continue; // already handled this post
+    // From the scout budget: a caller the scout found, or a group it follows (not your own picks or squads).
+    const scoutPot = !squad && (base?.scout || (scoutGroup && !base)) ? { trusted: !!base?.trusted } : null;
     out.push(await actOnCopy(s, sig, f, label, caller, scan, {
       group: source === "telegram" ? post.user : `X · ${post.user}`,
       who: post.from?.username ? `@${post.from.username}` : source === "x" ? null : null,
-    }));
+    }, scoutPot));
   }
   return out;
 }
 
-async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, scan: Scan | undefined, src0?: { group: string; who: string | null }): Promise<string> {
+async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string, caller: CallerRule | null = null, scan: Scan | undefined, src0?: { group: string; who: string | null }, scoutPot: { trusted: boolean } | null = null): Promise<string> {
   const src = src0 ? { ...src0, sharedAt: sig.at } : undefined;
   // This caller's own stop-loss / take profit (set on Callers or Squads), else the copy-trading ones.
   const sl = caller?.sl && caller.sl > 0 ? caller.sl : s.copy_sl, tp = caller?.tp && caller.tp > 0 ? caller.tp : s.copy_tp;
-  const usdSize = caller && caller.usd > 0 ? caller.usd : null;
+  let usdSize = caller && caller.usd > 0 ? caller.usd : null;
   const sb = supabaseService();
   const done = async (r: string) => {
     await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
@@ -1524,11 +1563,20 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   if (!(scan && scan !== "none") && f.ageHours > maxAge) return done(`skipped: old coin (launched ${ageTxt(f.ageHours * 3600)} ago, limit ${maxAge}h): a reshare, not a new call`);
   const maxPump = s.copy_max_pump > 0 ? s.copy_max_pump : 150;
   if (f.ch.h1 >= maxPump || f.ch.h6 >= maxPump * 1.5) return done(`skipped: already pumped (+${Math.round(Math.max(f.ch.h1, 0))}% in 1h, +${Math.round(Math.max(f.ch.h6, 0))}% in 6h)`);
+  // Scout trades: from the scout budget only, never past it; rug-checked unless the caller is trusted.
+  if (scoutPot) {
+    if (!s.scout_on) return done("skipped: the caller scout is off");
+    const b = await scoutAvailable(s.scout_budget, await bnbUsd());
+    const size = Math.min(s.scout_trade_usd || 5, b.avail);
+    if (size < 2) return done(`skipped: scout budget used up ($${b.inTrades.toFixed(2)} in trades of $${(s.scout_budget + b.pnl).toFixed(2)})`);
+    usdSize = +size.toFixed(2);
+    label = `${label} · scout${scoutPot.trusted ? " (trusted caller)" : ""}`;
+  }
   // Money check (both wallets) and coin check side by side: every second counts on a fresh call.
   const [room, room2, g] = await Promise.all([
     buyRoom(s, f.chain),
-    s.mode === "live" ? buyRoom(s, f.chain, 2) : Promise.resolve("no Wallet 2"),
-    copyCheckFor(s, f.chain, f.token),
+    scoutPot ? Promise.resolve("no Wallet 2") : s.mode === "live" ? buyRoom(s, f.chain, 2) : Promise.resolve("no Wallet 2"),
+    scoutPot ? scoutCheck(s, f, scoutPot.trusted) : copyCheckFor(s, f.chain, f.token),
   ]);
   const key = f.token.toLowerCase();
   // Why each wallet can't buy ("" = it can). Wallet 2 not added for this network = nothing to report.
@@ -1539,7 +1587,7 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const newProject = f.ageHours < 24;
   const why = `📡 Copy: ${label}.${usdSize ? ` Buy size $${usdSize}.` : ""} Sells at +${tp}% or -${sl}%${caller && (caller.sl || caller.tp) ? " (this caller's own)" : ""}.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
   const coin = { ...f, mcap: f.mcap, buyTax: g.buyTax };
-  const tryBuy = (cash: number, slot: number) => executeBuy(s, cash, coin, { sl, tp, why: slot === 2 ? `${why} (Wallet 2)` : why, strategy: "copy", trail: 0, usd: usdSize, newProject, src, slot })
+  const tryBuy = (cash: number, slot: number) => executeBuy(s, cash, coin, { sl, tp, why: slot === 2 ? `${why} (Wallet 2)` : why, strategy: "copy", trail: 0, usd: usdSize, newProject, src, slot, pot: scoutPot ? "scout" : null })
     .then((r) => ({ ok: true as const, r }), (e) => ({ ok: false as const, r: (e as Error).message.slice(0, 80) }));
   // Both wallets buy at the same moment, each with its own money.
   const [one, two] = await Promise.all([
