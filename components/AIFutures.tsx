@@ -33,6 +33,7 @@ type D = {
   snipe?: { cfg: { usd: number; tp: number; sl: number; budget: number }; reserve?: number; wallet: { address: string; usdt: number; usdc: number; sol: number; solUsd: number; total: number } | null } | null;
   earn?: { free: number; inHlp: number; lockedUntil: number | null; apr: number | null; vault: string } | null;
   fx?: { pairs: { coin: string; label: string; price: number; maxLev: number }[]; open: boolean };
+  sharedReserve?: number | null;
   wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
   open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[];
   news: { key: string; at: string; source: string; title: string; url: string; coin: string; direction: number; strength: number }[];
@@ -125,6 +126,39 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+
+/**
+ * Your real money, always on top (Practice or Live): the Solana wallet (USDT, USDC, SOL), the Hyperliquid account
+ * (total and free), anything waiting on Arbitrum, and a one-tap send from Solana to Hyperliquid.
+ */
+function WalletCard({ d, busy, act, turbo }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean }) {
+  const w = d.wallet, s = d.settings;
+  const sol = w?.sol, solUsd = sol ? (sol.usdt || 0) + (sol.usdc || 0) : null;
+  const reserve = turbo ? Number(d.sharedReserve || 0) : 0;
+  const sendable = solUsd == null ? 0 : Math.max(0, solUsd - reserve);
+  const sym: "USDT" | "USDC" = (sol?.usdt || 0) >= (sol?.usdc || 0) ? "USDT" : "USDC";
+  const maxOne = Math.min(sendable, sym === "USDT" ? sol?.usdt || 0 : sol?.usdc || 0);
+  return (
+    <section className="card stack" aria-label="Your real money">
+      <b>💼 Your real money{s.mode !== "live" ? <small className="muted"> · you&apos;re in Practice: none of this is used until you switch to Live</small> : null}</b>
+      {!w ? <small className="muted">No wallet yet: create or import one below.</small> : (
+        <div className="ait-stats">
+          <div><small>Solana wallet</small><b>{usd(solUsd)}</b><em>{sol ? `${usd(sol.usdt)} USDT · ${usd(sol.usdc)} USDC · ${(sol.sol ?? 0).toFixed(4)} SOL` : "not set up"}</em></div>
+          <div><small>On Hyperliquid (trading money)</small><b>{usd(w.hlValue)}</b><em>{usd(w.hlFree)} free{w.hlValue != null && w.hlValue < 10 ? " · Live needs $10+" : ""}</em></div>
+          {(w.arbUsdc || 0) > 0 && <div><small>Waiting on Arbitrum</small><b>{usd(w.arbUsdc)}</b><em>USDC · {(w.arbEth ?? 0).toFixed(5)} ETH</em></div>}
+          {turbo && <div><small>Sniper&apos;s budget (stays put)</small><b>{usd(reserve)}</b><em>{usd(sendable)} of the wallet can go to Turbo</em></div>}
+        </div>
+      )}
+      {sol && maxOne >= 5 && (
+        <button type="button" className="btn small primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => {
+          const v = prompt(`Send how many $ ${sym} from the Solana wallet to ${turbo ? "Turbo's" : "the"} Hyperliquid account? (up to $${maxOne.toFixed(2)}; arrives in about a minute)`, String(Math.floor(maxOne)));
+          if (v && Number(v) >= 5) act("wc-send", "fund-sol", { usd: Number(v), symbol: sym, from: "perps" }, "Sending to Hyperliquid: it shows here in about a minute.");
+        }}>{busy === "wc-send" ? "Sending…" : `Send to Hyperliquid (up to ${usd(maxOne)})`}</button>
+      )}
+      {sol && (sol.sol ?? 0) < 0.005 && <small className="down">The Solana wallet needs a little SOL (~0.01) to pay network fees.</small>}
     </section>
   );
 }
@@ -357,6 +391,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
           ))}
         </section>
       )}
+
+      {!snipeDesk && !earnDesk && <WalletCard d={d} busy={busy} act={act} turbo={turboDesk} />}
 
       {!snipeDesk && <MoneyFlow d={d} busy={busy} act={act} set={set} />}
 

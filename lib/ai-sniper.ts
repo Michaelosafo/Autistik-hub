@@ -71,6 +71,8 @@ async function candidates(skip: Set<string>): Promise<Pick[]> {
     const mcap = n(t.mcap) || n(t.fdv), buys = n(st.numBuys), sells = n(st.numSells), ch5 = n(st.priceChange);
     const top = n(t.audit?.topHoldersPercentage);
     const onPad = LAUNCHPAD.test(String(t.launchpad || "")) || /pump$|bonk$/i.test(mint);
+    // Copycats named like real money (a fake "USDC", "SOL") are never bought.
+    if (/^(w?sol|usdc|usdt|usd1|pyusd|usds|jup|bonk|wif)$/i.test(String(t.symbol || "").trim())) continue;
     if (!onPad || ageMin > 60 || mcap < 8_000 || mcap > 150_000 || !(n(t.usdPrice) > 0)) continue;
     if (ch5 < 15 || buys < 25 || buys < sells * 1.5 || n(st.buyVolume) < n(st.sellVolume) * 1.3) continue;
     if (n(t.holderCount) < 40 || top > 35) continue;
