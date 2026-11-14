@@ -27,6 +27,7 @@ import { arbitrum } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
+import { coinHistory, confidenceSize, lessons, profitLocked, secondOpinion } from "@/lib/ai-judge";
 import { accountPosts } from "@/lib/ai-trader-copy";
 import { FX_DEX, HLP_VAULT, hlVaultApr, hlVaultEquity, hlVaultTransfer, hlAccount, hlCancel, hlCandles, hlDexTransfer, hlFxMarket, hlMarket, hlMarketOrder, hlSetLeverage, hlStopLoss, type Candle, type HlAsset } from "@/lib/hyperliquid";
 import { fxLabel, fxOpen, fxWeekendSoon, isFx, usdSign } from "@/lib/fx";
@@ -71,6 +72,7 @@ export type FSettings = {
   max_lev: number; max_loss_pct: number; risk_pct: number; max_positions: number; daily_loss_pct: number; max_hold_hours: number;
   use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[]; last_run: string | null; last_note: string | null;
   day_start_usd: number | null; day: string | null; no_liq: boolean; auto_fund: boolean; fund_at: string | null;
+  profit_lock_pct?: number | null;
 };
 export type FPos = {
   id: number; mode: string; venue: string; coin: string; side: "long" | "short"; lev: number; margin_usd: number; notional_usd: number;
@@ -733,8 +735,22 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   // Currencies move far less, so their stop is 0.15%–1% away instead.
   const stopPct = fx ? Math.min(0.01, Math.max(0.0015, (ta?.atrPct ?? 0.0008) * 3), s.max_loss_pct / 100 / lev)
     : Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev);
-  // Size: a stop-loss costs risk_pct of the account; margin never more than a third of the account or 90% of free cash.
-  let notional = (eq.total * (s.risk_pct / 100)) / stopPct;
+  // Judgment: what recent results say, then the AI's second opinion; together they set the bet size.
+  const label = fxLabel(coin, price);
+  const les = await lessons(s.mode, coin, newsDriven);
+  if (les.stop) return `${label}: ${les.stop}`;
+  const style = isTurboDesk() ? "aggressive high-leverage momentum on the most-traded crypto perps; accepts more risk but still needs a real edge"
+    : isFxDesk() ? "conservative forex: news and chart must agree; avoid trading into big scheduled releases" : "careful crypto futures: news and chart together, protect the account first";
+  const v = await secondOpinion(`${coin}:${side}`, style, {
+    market: label, side, price, leverage: lev, stopPct: +(stopPct * 100).toFixed(2), targetPct: +(stopPct * (newsDriven ? 250 : 220)).toFixed(2),
+    signal: why, chartScore: ta?.score ?? null, chart: ta?.notes ?? [], fundingPerHour: f, recentTradesOnThisMarket: await coinHistory(s.mode, coin),
+    account: Math.round(eq.total), mode: s.mode,
+  });
+  if (!v.go) { await flog("skip", `🧠 Turned down ${side} ${label}: ${v.why}`); return `AI said no (${v.why})`; }
+  why = `${why} · 🧠 AI ${Math.round(v.confidence * 100)}%: ${v.why}${les.size !== 1 ? ` · size x${les.size} from recent results` : ""}`;
+  const sizeK = les.size * confidenceSize(v.confidence);
+  // Size: a stop-loss costs risk_pct of the account (scaled by judgment); margin never more than a third of the account or 90% of free cash.
+  let notional = (eq.total * (s.risk_pct / 100) * sizeK) / stopPct;
   notional = Math.min(notional, eq.total * 0.33 * lev, eq.free * 0.9 * lev);
   if (notional < 11) return "not enough money for a minimum-size position";
   const margin = notional / lev;
@@ -814,6 +830,10 @@ export async function runFutures(): Promise<string> {
     const today = new Date().toISOString().slice(0, 10);
     if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total }).eq("id", T()); s.day_start_usd = eq.total; }
     if (eq.total < n(s.day_start_usd) * (1 - s.daily_loss_pct / 100)) return note(`Paused for today: down ${(100 - (eq.total / n(s.day_start_usd)) * 100).toFixed(1)}% (limit ${s.daily_loss_pct}%).`);
+    const locked = profitLocked(s, eq.total);
+    if (locked) return note(`${locked}. Open trades are still managed.`);
+    const brk = await lessons(s.mode);
+    if (brk.stop) return note(`${brk.stop}. Open trades are still managed.`);
     const { data: openRows } = await fq("ai_futures_positions").select("coin").in("status", ["open", "closing"]);
     const held = new Set((openRows || []).map((r: any) => r.coin));
     if (held.size >= s.max_positions) return note(`Holding ${held.size} of ${s.max_positions}. Account $${eq.total.toFixed(2)}.`);
