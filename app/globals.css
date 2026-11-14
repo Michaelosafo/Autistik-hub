@@ -6857,3 +6857,37 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .tik-new.x.big .tik-new-av .me-av { width: 58px; height: 58px; border: 3px solid var(--surface); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
 .tik-new.x.big .tik-new-col { padding-top: 10px; }
 .tik-new.x.big textarea { font-size: 1.12em; min-height: 64px; }
+
+/* ---------- TIK feed like X, with AUTISTIK touches ---------- */
+/* Each post is a clean row: picture left, name at the top, text, media, an even action row. */
+.tik-pro.simple .tik, .tik-post-page .tik { background: transparent !important; border-radius: 0 !important; padding: 14px 6px 10px; gap: 12px; position: relative; }
+.tik-pro.simple .tik:not(.compact)::after { content: ""; position: absolute; left: 6px; right: 6px; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--wc), .1) 15%, rgba(var(--wc), .1) 85%, transparent); }
+.tik-pro.simple .tik:hover { background: rgba(var(--wc), .025) !important; }
+.tik-pro.simple .tik .tik-av .me-av, .tik-post-page .tik .tik-av .me-av { width: 46px; height: 46px; box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px color-mix(in srgb, var(--ac, #B57CFF) 70%, transparent); }
+.tik-pro.simple .tik .tik-head, .tik-post-page .tik .tik-head { gap: 5px; align-items: baseline; flex-wrap: nowrap; min-width: 0; }
+.tik-pro.simple .tik-name, .tik-post-page .tik-name { font-weight: 700; font-size: 1.02em; max-width: 55%; }
+.tik-pro.simple .tik-handle, .tik-post-page .tik-handle { font-size: .95em; }
+.tik-pro.simple .tik-head .tik-time { color: var(--muted); font-size: .92em; }
+.tik-pro.simple .tik-menu-wrap { margin-left: auto; }
+.tik-pro.simple .tik-body, .tik-post-page .tik:not(.compact) .tik-body { font-size: 1.04em; line-height: 1.5; }
+.tik-pro.simple .tik-img, .tik-post-page .tik-img { border-radius: 18px; border: 1px solid rgba(var(--wc), .1); margin-top: 8px; }
+/* Action row: spread across like X, colour-coded, lights up on tap. */
+.tik-pro.simple .tik:not(.compact) > .tik-main > .tik-actions, .tik-post-page .tik.detail > .tik-main > .tik-actions { display: flex; justify-content: space-between; max-width: none; margin: 6px 0 0 -6px; gap: 0; flex-wrap: nowrap; }
+.tik-pro.simple .tik-act, .tik-post-page .tik-act { min-width: 0; padding: 6px 8px; font-size: .86em; font-weight: 600; color: var(--muted); border-radius: 99px; }
+.tik-pro.simple .tik-act svg, .tik-post-page .tik-act svg { width: 19px; height: 19px; }
+.tik-act.reply:hover, .tik-act.reply.on { color: #3B9EFF; background: rgba(59,158,255,.1); }
+.tik-act.tickle:hover, .tik-act.tickle.on { color: #2EBD85; background: rgba(46,189,133,.1); }
+.tik-act.like:hover, .tik-act.like.on { color: #FF4F8B; background: rgba(255,79,139,.1); }
+.tik-act.like.on svg { fill: currentColor; }
+.tik-act.views:hover, .tik-act.views.on { color: #B57CFF; background: rgba(181,124,255,.12); }
+.tik-act.share:hover, .tik-act.share.on { color: #F0B90B; background: rgba(240,185,11,.1); }
+
+/* Top: X-style tabs with a gradient underline instead of boxed buttons. */
+.tik-hello { position: sticky; top: 0; z-index: 20; padding: 8px 2px 0; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(12px); }
+.tik-hello h1 { text-align: center; font-size: 1.25rem; }
+.tik-hello-go { display: flex; gap: 0; border-bottom: 1px solid rgba(var(--wc), .08); }
+.tik-hello-go a { flex: 1 1 0; position: relative; padding: 12px 4px 14px; border-radius: 0; background: none !important; color: var(--muted); font-size: .9em; font-weight: 600; white-space: nowrap; }
+.tik-hello-go a.on { color: var(--ink); font-weight: 700; }
+.tik-hello-go a.on::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: -1px; height: 4px; border-radius: 4px; background: linear-gradient(90deg, #FFD84D, #FF6B9A 55%, #B57CFF); }
+.tik-hello-go a:hover { color: var(--ink); background: rgba(var(--wc), .04) !important; }
+@media (max-width: 520px) { .tik-hello-go { display: flex; } .tik-hello-go a { font-size: .82em; padding: 11px 2px 13px; } }
