@@ -11,6 +11,8 @@ import TypeLoop from "@/components/TypeLoop";
 import TypeSoundToggle from "@/components/TypeSoundToggle";
 import { SeqReveal, Words } from "@/components/Sequence";
 import { LogoBadge } from "@/components/LogoMark";
+import Wordmark from "@/components/Wordmark";
+import { CrewHero, CrewMarquee } from "@/components/Crew";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { GROUPS, TOKEN_ADDRESS } from "@/lib/groups";
@@ -116,6 +118,7 @@ export default async function Home() {
 
       <section className="lp-hero">
         <div className="lp-hero-copy">
+          <Wordmark className="lp-wordmark" />
           <div className="lp-eyebrow"><TypeText text="A global autism community, powered by crypto" speed={16} /></div>
           <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={650} sound human /></span><span className="lp-loop"><TypeLoop intro delay={1450} words={HERO_LOOP} /></span></h1>
           <p><Words delay={1500} text="AUTISTIK brings autistic people, their families and supporters together in one global community, with simple, secure crypto tools built in. A share of all trading activity funds real-world support for autistic people." /></p>
@@ -126,8 +129,9 @@ export default async function Home() {
           </div>
           {!user && <p className="lp-member">Part of the community? <Link href="/login?next=/">Sign in</Link> or <Link href="/login?mode=join&amp;next=/">join free</Link> to chat in the groups and save your settings.</p>}
         </div>
-        <div className="lp-hero-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
+        <div className="lp-hero-art crew-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><CrewHero /></div>
       </section>
+      <CrewMarquee />
 
       <section data-sq="up" style={{ ["--sd" as string]: "150ms" }} className="lp-stats" aria-label="AUTISTIK in numbers">
         <div><b>{usd(m?.priceUsd)}</b><span>$AUTISTIK price</span></div>
