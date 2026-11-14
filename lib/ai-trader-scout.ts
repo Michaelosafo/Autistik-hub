@@ -133,7 +133,7 @@ export async function scoutScore() {
 
 // ---------------------------------------------------------------- 3. Rank, 4. follow the best
 
-export type Row = { key: string; platform: "tg" | "x"; who: string; chats: string[]; calls: number; wins: number; winRate: number; medianPeak: number; rugRate: number; fastRate: number; following: boolean };
+export type Row = { key: string; platform: "tg" | "x"; who: string; chats: string[]; calls: number; wins: number; winRate: number; medianPeak: number; rugRate: number; fastRate: number; following: boolean; rugs: number; priced: number };
 
 /** The scoreboard: callers (people / X accounts) and groups, from scored calls of the last 30 days. */
 export async function scoutBoard(): Promise<{ callers: Row[]; groups: Row[]; calls: number; scored: number; chats: number }> {
@@ -149,6 +149,14 @@ export async function scoutBoard(): Promise<{ callers: Row[]; groups: Row[]; cal
   // Scored: 24h passed (or already hit the target, which can't un-happen).
   const mult = s.scout_multiple > 1 ? s.scout_multiple : 3, fastMs = (s.scout_fast_min || 30) * 60_000;
   const scored = all.filter((c) => n(c.price0) > 0 && (Date.now() - Date.parse(c.called_at) > 24 * 36e5 || n(c.peak) >= n(c.price0) * mult));
+  // Rugs over EVERY priced call in the 30 days (not only scored ones): a caller whose coin rugged an hour ago counts.
+  const rugsBy = new Map<string, { rugs: number; priced: number }>();
+  for (const c of all) {
+    if (!(n(c.price0) > 0) || !c.who) continue;
+    const k = `${c.platform}:${c.who}`, r = rugsBy.get(k) || { rugs: 0, priced: 0 };
+    r.priced++; if (c.rugged) r.rugs++;
+    rugsBy.set(k, r);
+  }
   const followC = new Set(((fc || []) as any[]).map((r) => `${r.platform}:${r.who}`)), followG = new Set(((fs || []) as any[]).map((r) => r.ref));
   const agg = (list: any[], key: (c: any) => string | null, label: (c: any) => { platform: "tg" | "x"; who: string }, follow: (k: string) => boolean): Row[] => {
     const m = new Map<string, any[]>();
@@ -162,6 +170,7 @@ export async function scoutBoard(): Promise<{ callers: Row[]; groups: Row[]; cal
         rugRate: (cs.filter((c) => c.rugged).length / cs.length) * 100,
         fastRate: (cs.filter((c) => c.x2_at && Date.parse(c.x2_at) - Date.parse(c.called_at) <= fastMs).length / cs.length) * 100,
         following: follow(k),
+        rugs: rugsBy.get(k)?.rugs ?? cs.filter((c) => c.rugged).length, priced: rugsBy.get(k)?.priced ?? cs.length,
       };
     }).sort((a, b) => b.winRate - a.winRate || b.calls - a.calls);
   };
@@ -180,7 +189,8 @@ export async function scoutFollow() {
   if (!s.scout_on) return;
   const b = await scoutBoard();
   const minCalls = Math.max(3, s.scout_min_calls || 5);
-  const goodC = b.callers.filter((r) => r.calls >= minCalls && r.winRate >= s.scout_min_win && r.rugRate < 34);
+  // Callers must have a clean record: not a single rugged coin in the last 30 days, as well as the win rate.
+  const goodC = b.callers.filter((r) => r.calls >= minCalls && r.winRate >= s.scout_min_win && r.rugs === 0);
   const goodG = b.groups.filter((r) => r.calls >= minCalls && r.fastRate >= s.scout_group_rate && r.rugRate < 34);
   const { data: mineC } = await tq("ai_trader_callers").select("id,platform,who,scout");
   const have = new Map(((mineC || []) as any[]).map((r) => [`${r.platform}:${r.who}`, r]));
@@ -191,7 +201,8 @@ export async function scoutFollow() {
   }
   for (const [k, row] of have) if (row.scout && !goodC.some((r) => r.key === k)) {
     await tq("ai_trader_callers").delete().eq("id", row.id);
-    await log("settings", `🔎 Scout: stopped following @${row.who} (no longer clears the bar).`);
+    const r = b.callers.find((x) => x.key === k);
+    await log("settings", `🔎 Scout: stopped following @${row.who} (${r?.rugs ? `${r.rugs} of ${r.priced} calls rugged` : "no longer clears the bar"}).`);
   }
   // Groups: watch them live (every call there is bought from the scout budget). Also the chats top callers post in.
   const { data: srcs } = await tq("ai_trader_sources").select("id,ref,enabled,scout,scout_kind").eq("kind", "tg_chat");

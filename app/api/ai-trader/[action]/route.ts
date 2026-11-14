@@ -354,7 +354,9 @@ async function postMine(action: string, b: any) {
       if (b.op === "edit") {
         const usd = Number(b.usd);
         if (!isFinite(usd) || usd <= 0 || usd > 100_000) return json({ error: "Type a dollar amount, like 50." }, 400);
-        const { data, error } = await tq("ai_trader_callers").update({ usd, sl: pct(b.sl, 95), tp: pct(b.tp, 10000) }).eq("id", Number(b.id)).select("who");
+        // Setting an amount makes the caller yours: it buys from your money at that amount (not the scout's budget)
+        // and the scout never drops it.
+        const { data, error } = await tq("ai_trader_callers").update({ usd, sl: pct(b.sl, 95), tp: pct(b.tp, 10000), scout: false }).eq("id", Number(b.id)).select("who");
         if (error || !data?.length) return json({ error: "That caller isn't there any more." }, 400);
         return json({ ok: true, note: `Saved @${data[0].who}: $${usd}${pct(b.sl, 95) ? `, stop-loss ${pct(b.sl, 95)}%` : ""}${pct(b.tp, 10000) ? `, take profit ${pct(b.tp, 10000)}%` : ""}.` });
       }
@@ -367,7 +369,7 @@ async function postMine(action: string, b: any) {
       // Which group they're picked for ('' = every group). A group with callers of its own buys only their calls.
       const chat = platform === "tg" ? String(b.chat || "").replace(/[^0-9]/g, "").slice(0, 24) : "";
       const chatTitle = chat ? String(b.chatTitle || "").slice(0, 80) || null : null;
-      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd, chat, chat_title: chatTitle, sl: pct(b.sl, 95), tp: pct(b.tp, 10000) })), { onConflict: "trader_id,platform,who,chat" });
+      const { error } = await tq("ai_trader_callers").upsert(ok.map((who) => ({ platform, who, usd, chat, chat_title: chatTitle, sl: pct(b.sl, 95), tp: pct(b.tp, 10000), scout: false })), { onConflict: "trader_id,platform,who,chat" });
       if (error) return json({ error: error.message }, 400);
       await log("settings", `Caller $${usd} for ${ok.map((w) => (/^\d+$/.test(w) ? w : `@${w}`)).join(", ")} (${platform === "x" ? "X" : chatTitle ? `only in ${chatTitle}` : "Telegram, all groups"}).`);
       return json({ ok: true, note: `Saved: posts by ${ok.length === 1 ? (/^\d+$/.test(ok[0]) ? ok[0] : `@${ok[0]}`) : `${ok.length} callers`} buy $${usd}.` });

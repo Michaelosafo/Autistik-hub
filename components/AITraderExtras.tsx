@@ -461,7 +461,7 @@ export function StableMode({ on, live, wallets, busy, onAct, bridge = true }: { 
   );
 }
 
-type ScoutRow = { key: string; platform: "tg" | "x"; who: string; chats: string[]; calls: number; wins: number; winRate: number; medianPeak: number; rugRate: number; fastRate: number; following: boolean };
+type ScoutRow = { key: string; platform: "tg" | "x"; who: string; chats: string[]; calls: number; wins: number; winRate: number; medianPeak: number; rugRate: number; fastRate: number; following: boolean; rugs?: number; priced?: number };
 type ScoutData = { board: { callers: ScoutRow[]; groups: ScoutRow[]; calls: number; scored: number; chats: number }; money: { avail: number; inTrades: number; pnl: number }; chats: { ref: string; title: string; kind: string; enabled: boolean; scanned_at: string | null }[] };
 type ScoutS = { scout_on?: boolean; scout_budget?: number; scout_trade_usd?: number; scout_min_win?: number; scout_min_calls?: number; scout_multiple?: number; scout_fast_min?: number; scout_group_rate?: number; scout_trust_skip?: boolean; scout_honeypot_trusted?: boolean };
 
@@ -526,7 +526,13 @@ export function ScoutCard({ s, busy, onAct }: { s: ScoutS; busy: boolean; onAct:
             <div key={r.key} className="aitx-li wrap">
               <span className={"aitx-plat " + (r.platform === "x" ? "x" : "tg")}>{r.platform === "x" ? "X" : "TG"}</span>
               <span className="grow"><b>{tab === "callers" ? `@${r.who}` : r.who}</b>{r.following && <small className="up"> · following</small>}<br />
-                <small className="muted">{tab === "callers" ? `${r.chats.join(", ")} · ` : ""}{r.calls} calls · median peak {r.medianPeak.toFixed(1)}x · rugs {Math.round(r.rugRate)}%</small></span>
+                <small className="muted">{tab === "callers" ? `${r.chats.join(", ")} · ` : ""}{r.calls} calls · median peak {r.medianPeak.toFixed(1)}x · {tab === "callers" && r.rugs != null ? (r.rugs ? <span className="down">{r.rugs} of {r.priced} rugged</span> : <span className="up">no rugs</span>) : `rugs ${Math.round(r.rugRate)}%`}</small>
+                {tab === "callers" && (
+                  <><br /><button type="button" className="btn small" disabled={busy} onClick={() => {
+                    const v = prompt(`Buy how many $ each time @${r.who} posts a coin? (from your own money; any chain, bridged from Solana if needed)`, "50");
+                    if (v && Number(v) > 0) onAct(`cf${r.key}`, "caller", { platform: r.platform, who: r.who, usd: Number(v) }).then(load);
+                  }}>{r.following ? "Set my $ amount" : "+ Follow with my $"}</button></>
+                )}</span>
               <span className="n"><b className={(tab === "callers" ? r.winRate : r.fastRate) >= (tab === "callers" ? Number(s.scout_min_win ?? 97) : Number(s.scout_group_rate ?? 60)) ? "up" : ""}>{Math.round(tab === "callers" ? r.winRate : r.fastRate)}%</b><br /><small className="muted">{tab === "callers" ? `hit ${s.scout_multiple ?? 3}x` : `2x in ${s.scout_fast_min ?? 30}m`}</small></span>
             </div>
           ))}
