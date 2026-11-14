@@ -243,12 +243,28 @@ async function refreshTransfers(limit = 5) {
  *  - USDC on Arbitrum in its EVM wallet (at least 5, with a little ETH for gas) is deposited to Hyperliquid.
  */
 const SOL_KEEP = 0.015;
+/** The address of the Solana wallet Turbo and Sniper share (this admin's), if there is one. */
+async function sharedSolAddress(): Promise<string | null> {
+  const { data } = await sb().rpc("ai_futures_sol_key_get", { p_id: SNIPE_DESK + (T() % FX_DESK) });
+  if (typeof data !== "string" || !data.startsWith("[")) return null;
+  try { return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(data))).publicKey.toBase58(); } catch { return null; }
+}
+
 async function autoFund(s: FSettings) {
   if (!s.auto_fund || (s.fund_at && Date.now() - Date.parse(s.fund_at) < 4 * 60_000)) return;
   const a = await futAccount();
   if (!a) return;
   const kp = await futSolAccount();
   const stamp = () => sb().from("ai_futures_settings").update({ fund_at: new Date().toISOString() }).eq("id", T());
+  // Never sweep the wallet Turbo and Sniper share (even if it's also imported here): money there only moves when you
+  // send it. Without this, Futures emptied the shared wallet into its own Hyperliquid account.
+  if (kp && (await sharedSolAddress()) === kp.publicKey.toBase58()) {
+    if (s.auto_fund) {
+      await sb().from("ai_futures_settings").update({ auto_fund: false }).eq("id", T());
+      await flog("settings", "Auto-fund switched off: this Solana wallet is also the one Turbo and Sniper share, so nothing is swept from it any more. Send to Hyperliquid by hand when you want.");
+    }
+    return;
+  }
   if (kp) {
     const b = await futSolBalances(kp).catch((e) => { throw new Error(`couldn't read the Solana wallet (${(e as Error).message})`); });
     const sym = b.usdt >= b.usdc ? "USDT" : "USDC";
