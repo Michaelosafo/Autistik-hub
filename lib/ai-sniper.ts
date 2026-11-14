@@ -6,7 +6,8 @@
  *
  * Every minute it reads Jupiter's trending and newest coins and buys at most a couple that are:
  *   - under an hour old, $8K–$150K market cap, on a launchpad (still on its curve or just graduated),
- *   - pumping right now: +15% or more in 5 minutes, at least 25 buys and clearly more buys than sells,
+ *   - on pump.fun (other launchpads only with a clean RugCheck report), rug-scanned before every buy,
+ *   - pumping right now with real volume: +15% in 5 minutes, $5K+ traded (and 20%+ of its cap), buyers well ahead,
  *   - spread out: 40+ holders, top holders under 35%, and not bought by this sniper before.
  * Each buy is a fixed $ amount. It sells at the take profit, the stop-loss, a trailing stop once it's up 50%
  * (gives back at most 20% from the high and always keeps +10%), a liquidity collapse (rug) or the time limit.
@@ -24,7 +25,40 @@ const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const sb = () => supabaseService();
 const pos = () => sb().from("ai_futures_positions");
 const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
-const LAUNCHPAD = /pump|bonk|launchlab|moonshot|believe|bags|meteora|dbc/i;
+/** pump.fun: the main, trusted launchpad. Other known launchpads are allowed only after a full rug scan passes. */
+const isPumpFun = (t: any, mint: string) => /pump\.?fun/i.test(String(t?.launchpad || "")) || /pump$/.test(mint);
+const OTHER_PADS = /bonk|launchlab|moonshot|believe|bags|met-dbc|meteora|heaven/i;
+
+/**
+ * Rug scan (RugCheck) before every buy: no freeze / mint power, no danger flags, no creator with a rug history, no
+ * bundled / insider / single-wallet supply. pump.fun coins too new for RugCheck can pass on Jupiter's own audit;
+ * every other launchpad must have a clean RugCheck report.
+ */
+async function rugScan(mint: string, strict: boolean): Promise<string | null> {
+  const j = await get(`https://api.rugcheck.xyz/v1/tokens/${mint}/report/summary`).catch(() => null);
+  if (!j) return strict ? "rug scan: no RugCheck report yet (only pump.fun coins can go without one)" : null;
+  const risks: any[] = Array.isArray(j.risks) ? j.risks : [];
+  const bad = risks.find((r) => r?.level === "danger") || risks.find((r) => /rug|creator.*(histor|sold)|bundl|insider|single holder|top 10|freeze|mint authority|mutable/i.test(String(r?.name || "")) && r?.level !== "info");
+  if (bad) return `rug scan: ${String(bad.name || "danger flag").slice(0, 70)}`;
+  const norm = Number(j.score_normalised);
+  if (isFinite(norm) && norm > (strict ? 40 : 60)) return `rug scan: risk score ${norm}/100`;
+  return null;
+}
+
+/**
+ * Exits, checked every 2.5 seconds: the stop-loss; break-even (+2%) once it's been up 20%; +15% locked once it's been
+ * up 40%; and past +50% a trailing stop 15% under the high (never below +15%). Plus the take profit.
+ */
+function exitFor(p: FPos, price: number, best: number): { why: string | null; stop: number } {
+  const entry = n(p.entry), peak = (best / entry - 1) * 100, up = (price / entry - 1) * 100;
+  let stop = n(p.stop);
+  if (peak >= 20) stop = Math.max(stop, entry * 1.02);
+  if (peak >= 40) stop = Math.max(stop, entry * 1.15);
+  if (peak >= 50) stop = Math.max(stop, best * 0.85, entry * 1.15);
+  const why = price <= stop ? (stop > entry ? `${peak >= 50 ? "Trailing stop" : "Profit lock"} (+${up.toFixed(0)}%, high was +${peak.toFixed(0)}%)` : `Stop-loss (${up.toFixed(0)}%)`)
+    : price >= n(p.target) ? `Take profit (+${up.toFixed(0)}%)` : null;
+  return { why, stop };
+}
 
 export type SnipeCfg = { usd: number; tp: number; sl: number; budget: number };
 export const snipeCfg = (s: FSettings): SnipeCfg => {
@@ -53,7 +87,7 @@ async function get(url: string) {
   return r.json();
 }
 
-type Pick = { mint: string; symbol: string; mcap: number; price: number; why: string; score: number; facts: Record<string, unknown> };
+type Pick = { mint: string; symbol: string; mcap: number; price: number; why: string; score: number; facts: Record<string, unknown>; pump: boolean };
 
 /** Coins pumping right now that pass every filter, best first. */
 async function candidates(skip: Set<string>): Promise<Pick[]> {
@@ -71,16 +105,22 @@ async function candidates(skip: Set<string>): Promise<Pick[]> {
     const ageMin = created ? (Date.now() - created) / 60_000 : 9e9;
     const mcap = n(t.mcap) || n(t.fdv), buys = n(st.numBuys), sells = n(st.numSells), ch5 = n(st.priceChange);
     const top = n(t.audit?.topHoldersPercentage);
-    const onPad = LAUNCHPAD.test(String(t.launchpad || "")) || /pump$|bonk$/i.test(mint);
+    const pump = isPumpFun(t, mint);
+    const onPad = pump || OTHER_PADS.test(String(t.launchpad || ""));
     // Copycats named like real money (a fake "USDC", "SOL") are never bought.
     if (/^(w?sol|usdc|usdt|usd1|pyusd|usds|jup|bonk|wif)$/i.test(String(t.symbol || "").trim())) continue;
     if (!onPad || ageMin > 60 || mcap < 8_000 || mcap > 150_000 || !(n(t.usdPrice) > 0)) continue;
-    if (ch5 < 15 || buys < 25 || buys < sells * 1.5 || n(st.buyVolume) < n(st.sellVolume) * 1.3) continue;
+    if (ch5 < 15 || buys < 25 || buys < sells * 1.5 || n(st.buyVolume) < n(st.sellVolume) * 1.5) continue;
+    // Real volume to get in and out: $5K+ traded in 5 minutes and at least 20% of its market cap, $4K+ liquidity.
+    const vol5 = n(st.buyVolume) + n(st.sellVolume);
+    if (vol5 < Math.max(5_000, mcap * 0.2) || n(t.liquidity) < 4_000) continue;
     if (n(t.holderCount) < 40 || top > 35) continue;
-    if (t.audit?.mintAuthorityDisabled === false || t.audit?.freezeAuthorityDisabled === false) continue;
+    if (t.audit?.mintAuthorityDisabled === false || t.audit?.freezeAuthorityDisabled === false || t.audit?.isSus === true) continue;
+    if (n(t.audit?.devBalancePercentage) > 10 || (t.organicScore != null && n(t.organicScore) < 5)) continue;
     out.push({
       mint, symbol: String(t.symbol || "?"), mcap, price: n(t.usdPrice),
-      why: `${t.symbol || "?"}: +${ch5.toFixed(0)}% in 5 min, ${buys} buys vs ${sells} sells, ${n(t.holderCount)} holders, $${Math.round(mcap).toLocaleString("en-US")} cap, ${Math.round(ageMin)} min old${t.launchpad ? ` (${t.launchpad})` : ""}`,
+      pump,
+      why: `${t.symbol || "?"}: +${ch5.toFixed(0)}% in 5 min, $${Math.round(vol5).toLocaleString("en-US")} volume, ${buys} buys vs ${sells} sells, ${n(t.holderCount)} holders, $${Math.round(mcap).toLocaleString("en-US")} cap, ${Math.round(ageMin)} min old${t.launchpad ? ` (${t.launchpad})` : ""}`,
       score: ch5 * Math.min(4, buys / Math.max(1, sells)),
       facts: {
         symbol: t.symbol, name: t.name, launchpad: t.launchpad, ageMinutes: Math.round(ageMin), marketCap: Math.round(mcap), liquidity: Math.round(n(t.liquidity)),
@@ -129,6 +169,9 @@ async function buy(s: FSettings, c: Pick, cfg: SnipeCfg): Promise<string> {
   // Judgment: the AI's second opinion on the coin (fake / exhausted / bot-pumped?) and recent results set the size.
   const les = await lessons(s.mode);
   if (les.stop) return les.stop;
+  // Rug scan first (pump.fun coins may be too new for a RugCheck report; other launchpads must have a clean one).
+  const rug = await rugScan(c.mint, !c.pump);
+  if (rug) { await flog("skip", `🛡 Skipped ${c.symbol}: ${rug}`); return rug; }
   const v = await secondOpinion(`snipe:${c.mint}`, "high-risk sniper of brand-new Solana launch coins: wants early, organic momentum with real buyers; rejects bundled / bot-pumped coins, copycats, dev-heavy supply and pumps that already ran", c.facts, true);
   if (!v.go) { await flog("skip", `🧠 Skipped ${c.symbol}: ${v.why}`); return `AI said no (${v.why})`; }
   const want = Math.max(1, +(cfg.usd * les.size * confidenceSize(v.confidence)).toFixed(2));
@@ -206,26 +249,23 @@ async function manage(s: FSettings) {
     if (!f?.price) continue;
     const price = f.price, entry = n(p.entry), best = Math.max(n(p.best) || entry, price);
     await pos().update({ last: price, best }).eq("id", p.id);
-    const up = (price / entry - 1) * 100, peak = (best / entry - 1) * 100;
-    // Trailing stop once it's been up 50%: gives back at most 20% from the high, and keeps at least +10%.
-    const trail = peak >= 50 ? Math.max(best * 0.8, entry * 1.1) : null;
+    const up = (price / entry - 1) * 100;
+    const ex = exitFor(p, price, best);
+    if (ex.stop > n(p.stop)) await pos().update({ stop: ex.stop }).eq("id", p.id);
     const old = Date.now() - Date.parse(p.opened_at) > s.max_hold_hours * 3600e3;
     const why = f.liquidity > 0 && f.liquidity < 1500 ? "Liquidity collapsed (possible rug)"
-      : price <= n(p.stop) ? `Stop-loss (${up.toFixed(0)}%)`
-      : price >= n(p.target) ? `Take profit (+${up.toFixed(0)}%)`
-      : trail && price <= trail ? `Trailing stop (+${up.toFixed(0)}%, high was +${peak.toFixed(0)}%)`
-      : old ? `Time limit (${s.max_hold_hours}h, ${up >= 0 ? "+" : ""}${up.toFixed(0)}%)` : null;
-    if (why) await closeSnipe(s, { ...p, best, last: price }, why, price);
+      : ex.why || (old ? `Time limit (${s.max_hold_hours}h, ${up >= 0 ? "+" : ""}${up.toFixed(0)}%)` : null);
+    if (why) await closeSnipe(s, { ...p, best, last: price, stop: ex.stop }, why, price);
   }
 }
 
 /**
- * Fast exits: for the rest of the minute, every 5 seconds, re-price every open trade (one Jupiter price call) and
+ * Fast exits: for the rest of the minute, every 2.5 seconds, re-price every open trade (one Jupiter price call) and
  * sell at once on the stop-loss, take profit or trailing stop. New coins can crash 50%+ inside a minute.
  */
 async function guard(s: FSettings, untilMs: number) {
   while (Date.now() < untilMs) {
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, 2500));
     const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open");
     const open = (data || []) as FPos[];
     if (!open.length) return;
@@ -233,11 +273,10 @@ async function guard(s: FSettings, untilMs: number) {
     for (const p of open) {
       const price = n(px?.[p.coin]?.usdPrice);
       if (!price) continue;
-      const entry = n(p.entry), best = Math.max(n(p.best) || entry, price), peak = (best / entry - 1) * 100, up = (price / entry - 1) * 100;
-      const trail = peak >= 50 ? Math.max(best * 0.8, entry * 1.1) : null;
-      const why = price <= n(p.stop) ? `Stop-loss (${up.toFixed(0)}%)` : price >= n(p.target) ? `Take profit (+${up.toFixed(0)}%)` : trail && price <= trail ? `Trailing stop (+${up.toFixed(0)}%, high was +${peak.toFixed(0)}%)` : null;
-      if (why) await closeSnipe(s, { ...p, best, last: price }, why, price);
-      else if (best > n(p.best)) await pos().update({ best, last: price }).eq("id", p.id);
+      const entry = n(p.entry), best = Math.max(n(p.best) || entry, price);
+      const ex = exitFor(p, price, best);
+      if (ex.why) await closeSnipe(s, { ...p, best, last: price, stop: ex.stop }, ex.why, price);
+      else if (best > n(p.best) || ex.stop > n(p.stop)) await pos().update({ best, last: price, stop: ex.stop }).eq("id", p.id);
     }
   }
 }
