@@ -75,7 +75,7 @@ export function MadnessLink({ onGo }: { onGo?: () => void }) {
 
 export default function MadnessPanel({ full, side, focus }: { full?: boolean; side?: ReactNode; focus?: ReactNode }) {
   const [open, setOpen] = useState(!!full);
-  const [tab, setTab] = useState<Tab>(full ? "home" : "following");
+  const [tab, setTab] = useState<Tab>(full ? "everyone" : "following");
   // "Post a Tik" links (…/mood#tik-post) open the feed with the post box, not Home.
   useEffect(() => {
     if (full && typeof location !== "undefined" && location.hash === "#tik-post") {
@@ -111,13 +111,11 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
   if (full) {
     const NAV: [Tab, string, string, string][] = [
       ["home", "Home", "News, activity, tokens people are watching, clean scans and people to follow", '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>'],
-      ["trending", "Trending", "Posts people are replying to and liking right now", '<path d="M12 3c1 3.5 4.5 5 4.5 9.2A4.5 4.5 0 0 1 12 17a4.5 4.5 0 0 1-4.5-4.8C7.5 10 9 9 9 7c1.6 1 2.3 2.2 2.5 3.4C12.6 8.4 12.7 5.8 12 3z"/><path d="M6 20h12"/>'],
       ["following", "Following", "Posts from people you follow", '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 11l2 2 4-4"/>'],
-      ["everyone", "Everyone", "The whole TIK feed", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>'],
+      ["everyone", "What's happening", "The whole TIK feed", '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>'],
       ["alerts", "Alerts", "Replies, follows and likes", '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>'],
       ["people", "Find people", "Search and follow members", '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'],
     ];
-    const cur = NAV.find((n) => n[0] === tab)!;
     return (
       <section className="tik-pro" aria-label="TIK">
         <aside className="tik-side" aria-label="TIK menu">
@@ -144,12 +142,8 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
           {side && <div className="tik-live"><div className="tik-cap"><span className="tik-dot" aria-hidden="true" />Live now</div>{side}</div>}
         </aside>
         <div className="tik-main">
-          {!focus && <header className="tik-top">
-            <div><h2>{cur[1]}</h2><small>{cur[2]}</small></div>
-            <span className="tik-status"><span className="tik-dot" aria-hidden="true" />Live feed</span>
-          </header>}
+          
           {focus}
-          {!focus && (tab === "home" || tab === "everyone" || tab === "following") && <TrendingStrip me={me} onAll={() => setTab("trending")} />}
           {!focus && (tab === "following" || tab === "everyone") && me && <div id="tik-post" style={{ scrollMarginTop: 90 }}><TikComposer onPosted={() => setK((n) => n + 1)} placeholder="What's happening?" /></div>}
           {!focus && tab === "home" && <TikHome admin={admin} />}
           {!focus && tab === "trending" && <TrendingFeed me={me} />}
@@ -175,7 +169,7 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
       {open && (
         <div className="mad-body">
           <div className="mad-tabs" role="tablist">
-            {([["following", "Following"], ["everyone", "Everyone"], ["alerts", unread ? `Alerts (${unread})` : "Alerts"], ["people", "Find people"]] as [Tab, string][]).map(([t, l]) => (
+            {([["everyone", "What's happening"], ["following", "Following"], ["alerts", unread ? `Alerts (${unread})` : "Alerts"], ["people", "Find people"]] as [Tab, string][]).map(([t, l]) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{l}</button>
             ))}
           </div>
@@ -193,7 +187,6 @@ export default function MadnessPanel({ full, side, focus }: { full?: boolean; si
 
 function Feed({ me, authors, refreshKey, limit = 5 }: { me: string | null; authors: string[] | null; refreshKey: number; limit?: number }) {
   const { tiks, setTiks, more, loadMore } = useTiks({ limit, refreshKey, authors });
-  const { map: hot } = useTrending();
   if (tiks === null) return <small className="mp-dim">Loading…</small>;
   if (!tiks.length) return <small className="mp-dim">{authors ? "No Tiks from people you follow yet." : "No Tiks yet. Be the first."}</small>;
   // Who's in the conversation: the newest voices in this feed, stacked like a group chat header.
@@ -206,7 +199,7 @@ function Feed({ me, authors, refreshKey, limit = 5 }: { me: string | null; autho
           <span className="tk-talk-t"><b>{voices.length}{voices.length === 7 ? "+" : ""} people talking</b><small><i className="tik-dot" aria-hidden="true" />Jump in: reply, react or post a picture</small></span>
         </div>
       )}
-      {tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={limit <= 5} hot={hot.get(t.id)} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
+      {tiks.map((t) => <TikCard key={t.id} t={t} me={me} compact={limit <= 5} onRemoved={(id) => setTiks((x) => x?.filter((y) => y.id !== id) ?? null)} />)}
       {limit > 5 && more && <button type="button" className="tik-more" onClick={loadMore}>Load more</button>}
     </div>
   );
