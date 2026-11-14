@@ -2,7 +2,7 @@ import Link from "next/link";
 import { TOKEN_ADDRESS } from "@/lib/groups";
 import { buyLink } from "@/lib/listings";
 import TokenLogo from "@/components/TokenLogo";
-import TikHome from "@/components/mood/TikHome";
+import TikPreview from "@/components/mood/TikPreview";
 import { adminState } from "@/lib/admin";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { getBoard, trending, type BoardToken } from "@/lib/board";
@@ -67,7 +67,7 @@ export default async function AppHome() {
           <h2><span className="ah-tik-dot" aria-hidden="true" />What&apos;s happening</h2>
           <span className="ah-tik-go"><Link href="/mood#tik-post" className="ah-tik-post">✍️ Post a Tik</Link><Link href="/mood">Open TIK →</Link></span>
         </div>
-        <TikHome admin={!!adm?.staff} />
+        <TikPreview />
       </section>
       <nav className="ah-actions ah-actions-slim" aria-label="Quick actions">
         {ACTIONS.map((a) => (
