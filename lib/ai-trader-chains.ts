@@ -32,7 +32,7 @@ const ELYSIUM = defineChain({ id: 99901, name: "Elysium", nativeCurrency: { name
 const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
 /** Chain ids as Relay knows them (Solana has its own Relay id). */
 export const RELAY_ID: Record<LiveChain, number> = { bsc: 56, ethereum: 1, robinhood: 4663, elysium: 99901, solana: 792703809 };
-const SOL_NATIVE_RELAY = "11111111111111111111111111111111";
+export const SOL_NATIVE_RELAY = "11111111111111111111111111111111";
 type EvmKey = Exclude<LiveChain, "solana">;
 const solConn = () => new Connection(WCHAINS.solana.rpc, "confirmed");
 
@@ -314,6 +314,21 @@ async function solRelayTo(kp: Keypair, recipient: string, token: string, raw: bi
     }
   }
   return { ...info, requestId, sigs };
+}
+/**
+ * A swap on Solana through Relay (same chain: one coin in, another out, both in the Solana wallet). Used by the Copy
+ * trader. Returns the signatures sent; the caller checks the coins arrived and falls back to Jupiter if not.
+ */
+export async function relaySolSwap(kp: Keypair, inToken: string, outToken: string, raw: bigint): Promise<string[]> {
+  const me = kp.publicKey.toBase58();
+  const q = await relayQuote({ user: me, recipient: me, originChainId: RELAY_ID.solana, destinationChainId: RELAY_ID.solana, originCurrency: inToken, destinationCurrency: outToken, amount: raw.toString(), slippageTolerance: "500" });
+  const sigs: string[] = [];
+  for (const step of q.steps) {
+    if (step.kind !== "transaction") throw new Error("Relay asked for a signature step, which can't be done here.");
+    for (const it of step.items || []) { if (it.status !== "complete") sigs.push(await relaySolStep(kp, it.data)); }
+  }
+  if (!sigs.length) throw new Error("Relay returned nothing to send.");
+  return sigs;
 }
 function relayInfo(q: any) {
   const fees = q.fees || {};

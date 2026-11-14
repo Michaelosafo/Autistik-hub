@@ -9,7 +9,7 @@ import TraderTabs from "@/components/TraderTabs";
 import { fxLabel } from "@/lib/fx";
 
 /** A trade's name: the coin's symbol for Sniper trades (kept at the start of its reason), else the market / pair. */
-const lbl = (p: { venue?: string; coin: string; entry?: number; why?: string | null }) => (p.venue === "pumpfun" ? (p.why?.split(":")[0] || `${p.coin.slice(0, 6)}…`) : fxLabel(p.coin, p.entry));
+const lbl = (p: { venue?: string; coin: string; entry?: number; why?: string | null }) => (p.venue === "pumpfun" || p.venue === "copy" ? (p.why?.split(":")[0] || `${p.coin.slice(0, 6)}…`) : fxLabel(p.coin, p.entry));
 
 type S = {
   enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[]; max_lev: number; max_loss_pct: number; risk_pct: number;
@@ -134,7 +134,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
  * Your real money, always on top (Practice or Live): the Solana wallet (USDT, USDC, SOL), the Hyperliquid account
  * (total and free), anything waiting on Arbitrum, and a one-tap send from Solana to Hyperliquid.
  */
-function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean; here: "futures" | "forex" | "turbo" }) {
+function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean; here: "futures" | "forex" | "turbo" | "madness" }) {
   const w = d.wallet, s = d.settings;
   const sol = w?.sol, solUsd = sol ? (sol.usdt || 0) + (sol.usdc || 0) : null;
   const reserve = turbo ? Number(d.sharedReserve || 0) : 0;
@@ -161,9 +161,9 @@ function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n
       {sol && (sol.sol ?? 0) < 0.005 && <small className="down">The Solana wallet needs a little SOL (~0.01) to pay network fees.</small>}
       {w && (w.hlFree || 0) >= 1 && (
         <div className="stack" style={{ gap: 6 }}>
-          <small><b>🔁 Move money to another trader</b> <span className="muted">from this Hyperliquid account ({usd(w.hlFree)} free). To Futures / Forex / Turbo: instant and free. To Sniper: arrives as USDT in the shared Solana wallet in about a minute and is added to Sniper&apos;s budget.</span></small>
+          <small><b>🔁 Move money to another trader</b> <span className="muted">from this Hyperliquid account ({usd(w.hlFree)} free). To Futures / Forex / Turbo: instant and free. To Sniper or Copy: arrives as USDT in the shared Solana wallet in about a minute and is added to that one&apos;s budget.</span></small>
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            {(([["futures", "📊 Futures"], ["forex", "💱 Forex"], ["turbo", "🚀 Turbo"], ["sniper", "🎯 Sniper"]] as const).filter(([k]) => k !== here)).map(([k, label]) => (
+            {(([["futures", "📊 Futures"], ["forex", "💱 Forex"], ["turbo", "🚀 Turbo"], ["madness", "🔥 Madness"], ["sniper", "🎯 Sniper"], ["copy", "👥 Copy"]] as const).filter(([k]) => k !== here)).map(([k, label]) => (
               <button key={k} type="button" className="btn small" disabled={!!busy} onClick={() => {
                 const free = Math.floor((w.hlFree || 0) * 100) / 100;
                 const v = prompt(`Move how many $ to ${label}? (free here: $${free.toFixed(2)})`, String(free));
@@ -296,10 +296,11 @@ async function call(action: string, body: unknown) {
   return d;
 }
 
-export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "snipe" } = {}) {
-  const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", snipeDesk = desk === "snipe";
+export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "snipe" | "copy" | "mad" } = {}) {
+  const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", copyDesk = desk === "copy", madDesk = desk === "mad";
+  const snipeDesk = desk === "snipe" || copyDesk; // Sniper and Copy: spot coins from the shared Solana wallet
   DESK = desk ? `?desk=${desk}` : "";
-  const NAME = snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
+  const NAME = copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
@@ -339,8 +340,10 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       <TraderTabs />
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
-        <h1>{snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
-        {snipeDesk ? <p className="muted">⚠️ High risk. Its own Solana wallet and money. Every minute it scans brand-new coins on pump.fun (other launchpads such as letsbonk or Meteora only with a clean RugCheck report) and buys the ones pumping hard with real volume: under an hour old, $8K–$150K market cap, +15% in 5 minutes, $5K+ traded, buyers well ahead of sellers, 40+ holders, no whale or creator holding most of it. Every buy is rug-scanned and checked by the AI first. ${d.snipe?.cfg.usd ?? 10} a buy; checks its trades every 2.5 seconds: sells at +{d.snipe?.cfg.tp ?? 100}% or -{d.snipe?.cfg.sl ?? 25}%, locks break-even after +20%, +15% after +40%, trails 15% under the high past +50%, sells on a rug or after {s.max_hold_hours}h. Most new coins go to zero: a few big wins have to pay for many small losses.</p>
+        <h1>{copyDesk ? "👥 Copy" : madDesk ? "🔥 Madness" : snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
+        {copyDesk ? <p className="muted">Copies the Solana wallets you add below. It checks them about every second: when one buys a coin, Copy buys it too (through Relay, with Jupiter as backup), ${d.snipe?.cfg.usd ?? 20} a buy unless you set an amount for that wallet; when that wallet sells, Copy sells the same share right away (they sell half, it sells half; they sell it all, it sells it all). Each copy waits a random moment and buys a slightly different amount, so it doesn&apos;t mirror the wallet exactly (everything on Solana is public, so this lowers the chance of being noticed, not a promise). Safety: stop-loss at -{d.snipe?.cfg.sl ?? 50}%, its own budget in the wallet shared with Sniper and Turbo, at most {s.max_positions} coins at once, and coins Jupiter flags as scams are skipped. Sells always follow the wallet, even when Copy is stopped.</p>
+        : madDesk ? <p className="muted">⚠️ Highest risk. Its own wallet and money, funded from Solana like Futures. It trades the 8 most-traded Hyperliquid coins that allow 20x or more, long or short, only when fresh news and the chart agree (or on a very strong chart setup with no news against it), and the AI must approve each trade. Very tight stop-loss (0.25%–0.6% away, resting on Hyperliquid itself and checked every 2 seconds), then the highest leverage the coin allows (up to {s.max_lev}x) that keeps liquidation at least 3 times further away than the stop, so the stop always fires first. Takes profit at 3× the risk, moves to break-even early and trails tightly. {s.risk_pct}% of the account at risk a trade; it pauses after a {s.daily_loss_pct}% losing day. A gap past the stop in a sudden crash is still possible: expect fast wins and fast losses.</p>
+        : snipeDesk ? <p className="muted">⚠️ High risk. Its own Solana wallet and money. Every minute it scans brand-new coins on pump.fun (other launchpads such as letsbonk or Meteora only with a clean RugCheck report) and buys the ones pumping hard with real volume: under an hour old, $8K–$150K market cap, +15% in 5 minutes, $5K+ traded, buyers well ahead of sellers, 40+ holders, no whale or creator holding most of it. Every buy is rug-scanned and checked by the AI first. ${d.snipe?.cfg.usd ?? 10} a buy; checks its trades every 2.5 seconds: sells at +{d.snipe?.cfg.tp ?? 100}% or -{d.snipe?.cfg.sl ?? 25}%, locks break-even after +20%, +15% after +40%, trails 15% under the high past +50%, sells on a rug or after {s.max_hold_hours}h. Most new coins go to zero: a few big wins have to pay for many small losses.</p>
         : turboDesk ? <p className="muted">⚠️ High risk. Its own wallet and money, funded from Solana like Futures. Every minute it trades the 15 most-traded coins on Hyperliquid right now, long or short, at up to {s.max_lev}x with {s.risk_pct}% of the account at risk a trade, and jumps in on weaker signals than Futures (charts and breaking news). Strong stops: never more than 1.5% away, resting on Hyperliquid itself and also checked every 4 seconds; break-even as soon as it&apos;s 0.6× the risk in profit, then it trails tightly. It can grow fast and lose fast: a bad day can cost {s.daily_loss_pct}% before it pauses.</p>
         : earnDesk ? <p className="muted">The fourth one, for slow and steady growth: no picking coins. Its own wallet; fund it from Solana like the others, then put the money into HLP, Hyperliquid&apos;s own market-making vault. HLP earns from making markets and liquidations on every Hyperliquid market, and your share grows (or shrinks) with it every day. Each deposit can be taken out 4 days after it was made. It&apos;s not a savings account: in bad weeks HLP can lose money too.</p> : fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
       </div>
@@ -349,13 +352,13 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
         <div className="ait-state">
           <span className={"ait-dot" + (s.enabled ? " on" : "")} aria-hidden="true" />
-          <div><b>{s.enabled ? "Started: looking for trades" : "Stopped: not opening trades"}</b> · {live ? "LIVE (real money, Hyperliquid)" : "Practice (pretend dollars, real prices)"}<br /><small className="muted">{s.last_note || "Hasn't run yet."} {s.last_run ? `· ${ago(s.last_run)}` : ""}</small></div>
+          <div><b>{s.enabled ? "Started: looking for trades" : "Stopped: not opening trades"}</b> · {live ? (snipeDesk ? "LIVE (real money, Solana)" : "LIVE (real money, Hyperliquid)") : "Practice (pretend dollars, real prices)"}<br /><small className="muted">{s.last_note || "Hasn't run yet."} {s.last_run ? `· ${ago(s.last_run)}` : ""}</small></div>
         </div>
         <button type="button" className={"ait-go" + (s.enabled ? " stop" : "")} disabled={!!busy} onClick={() => set({ enabled: !s.enabled })}>{s.enabled ? "■ STOP" : "▶ START"}</button>
         <div className="ait-seg" role="radiogroup" aria-label="Mode">
           <button type="button" role="radio" aria-checked={!live} className={!live ? "on" : ""} disabled={!!busy || !live} onClick={() => set({ mode: "paper" })}>Practice</button>
           <button type="button" role="radio" aria-checked={live} className={live ? "on" : ""} disabled={!!busy || live}
-            onClick={() => { if (confirm(`Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
+            onClick={() => { if (confirm(snipeDesk ? `Go LIVE? ${NAME} will buy real coins with its budget in the shared Solana wallet. You can lose money. Only use money you can afford to lose.` : `Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${madDesk ? "up to " : ""}${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
         </div>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
         {msg && <small className="aic-note" role="status">{msg}</small>}
@@ -380,8 +383,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
 
       {snipeDesk && (
         <section className="card stack">
-          <b>◎ Solana wallet (shared by Sniper and Turbo)</b>
-          <small className="muted">One wallet for both, create it here or on Turbo, or import your own. Nothing is swept out of it: Turbo only gets what you tap Send on (its page), and Sniper only trades its budget below. The rest stays put.</small>
+          <b>◎ Solana wallet (shared by Sniper, Copy and Turbo)</b>
+          <small className="muted">One wallet for all three: create it here, or import your own. Nothing is swept out of it: Turbo only gets what you tap Send on (its page), and Sniper and Copy each only trade their own budget below. The rest stays put.</small>
           {!d.snipe?.wallet ? (
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
               <button type="button" className="btn" disabled={!!busy} onClick={() => act("sw", "sol-wallet", {})}>Create Solana wallet</button>
@@ -397,17 +400,49 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
               </div>
             </>
           )}
-          <b>🎯 Each buy</b>
-          {([["snipe_budget", "Sniper budget", `$ of the wallet it may trade (free now: ${usd(d.snipe?.reserve ?? 0)})`, d.snipe?.cfg.budget], ["snipe_usd", "Buy", "$ per coin", d.snipe?.cfg.usd], ["snipe_tp", "Take profit at", "% up", d.snipe?.cfg.tp], ["snipe_sl", "Stop-loss at", "% down", d.snipe?.cfg.sl]] as const).map(([k, label, unit, v]) => (
+          {copyDesk && (() => {
+            const ws: { address: string; label?: string; usd?: number; on?: boolean }[] = (s as any).copy_wallets || [];
+            const save = (next: typeof ws) => set({ copy_wallets: next } as any);
+            return (
+              <div className="stack" style={{ gap: 6 }}>
+                <b>👥 Wallets it copies</b>
+                {!ws.length && <small className="muted">None yet. Add a Solana wallet address: from then on, Copy buys what it buys and sells when it sells (its older trades are never copied).</small>}
+                {ws.map((w, i) => (
+                  <div key={w.address} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <span className="chip">{w.on === false ? "⏸" : "🟢"} {w.label || `${w.address.slice(0, 4)}…${w.address.slice(-4)}`}{w.usd ? ` · $${w.usd}` : ""}</span>
+                    <a className="muted" href={`https://solscan.io/account/${w.address}`} target="_blank" rel="noreferrer"><small>view</small></a>
+                    <button type="button" className="btn small" disabled={!!busy} onClick={() => save(ws.map((x, j) => (j === i ? { ...x, on: x.on === false } : x)))}>{w.on === false ? "Resume" : "Pause"}</button>
+                    <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt("$ per buy for this wallet (empty = the default below):", w.usd ? String(w.usd) : ""); if (v != null) save(ws.map((x, j) => (j === i ? { ...x, usd: Number(v) > 0 ? Number(v) : undefined } : x))); }}>Amount</button>
+                    <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { if (confirm("Stop copying this wallet? Coins already bought from it stay open until the safety stop-loss or take profit, or until you close them.")) save(ws.filter((_, j) => j !== i)); }}>Remove</button>
+                  </div>
+                ))}
+                <button type="button" className="btn small primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => {
+                  const a = prompt("Solana wallet address to copy:")?.trim();
+                  if (!a) return;
+                  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) { alert("That doesn't look like a Solana address."); return; }
+                  const label = prompt("A name for it (optional):", "")?.trim() || undefined;
+                  save([...ws.filter((x) => x.address !== a), { address: a, label, on: true }]);
+                }}>+ Add wallet</button>
+              </div>
+            );
+          })()}
+          <b>{copyDesk ? "💵 Money and each buy" : "🎯 Each buy"}</b>
+          {([["snipe_budget", copyDesk ? "Copy budget" : "Sniper budget", `$ of the wallet it may trade (free now: ${usd(d.snipe?.reserve ?? 0)})`, d.snipe?.cfg.budget], ["snipe_usd", "Buy", "$ per coin", d.snipe?.cfg.usd], ["snipe_tp", copyDesk ? "Safety take profit at" : "Take profit at", "% up", d.snipe?.cfg.tp], ["snipe_sl", copyDesk ? "Safety stop-loss at" : "Stop-loss at", "% down", d.snipe?.cfg.sl]] as const).map(([k, label, unit, v]) => (
             <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <small><b>{label}:</b> {String(v ?? "")} {unit}</small>
               <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${label} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) >= 0) set({ [k]: Number(x) } as any); }}>Change</button>
             </div>
           ))}
+          <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy || !((d.snipe?.reserve ?? 0) >= 1)} onClick={() => {
+            const other = copyDesk ? "sniper" : "copy", label = copyDesk ? "🎯 Sniper" : "👥 Copy", free = Math.floor((d.snipe?.reserve ?? 0) * 100) / 100;
+            const v = prompt(`Move how many $ of budget to ${label}? Instant: same wallet. (free: $${free.toFixed(2)})`, String(free));
+            if (v && Number(v) > 0) act("mv-b", "move", { dest: other, usd: Number(v) });
+          }}>{busy === "mv-b" ? "Moving…" : `🔁 Move budget to ${copyDesk ? "Sniper" : "Copy"}`}</button>
+          <small className="muted">To add money: send USDT / USDC to the wallet above and raise the budget, or on Futures / Forex / Turbo / Madness tap &quot;→ {copyDesk ? "Copy" : "Sniper"}&quot; (it arrives here in about a minute and the budget goes up by itself).</small>
         </section>
       )}
 
-      {!snipeDesk && !earnDesk && <WalletCard d={d} busy={busy} act={act} turbo={turboDesk} here={turboDesk ? "turbo" : fxDesk ? "forex" : "futures"} />}
+      {!snipeDesk && !earnDesk && <WalletCard d={d} busy={busy} act={act} turbo={turboDesk} here={madDesk ? "madness" : turboDesk ? "turbo" : fxDesk ? "forex" : "futures"} />}
 
       {!snipeDesk && <MoneyFlow d={d} busy={busy} act={act} set={set} />}
 
