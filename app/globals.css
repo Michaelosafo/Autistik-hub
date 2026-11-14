@@ -6823,3 +6823,25 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
   .lp .lp-hero h1 .lp-punch span { color: inherit; }
   .lp .lp-hero h1 .lp-loop span { color: inherit; -webkit-text-fill-color: inherit; }
 }
+
+/* TIK top: just "Welcome to TIK" and four simple buttons. */
+.tik-hello { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px; }
+.tik-hello h1 { margin: 0; font: 700 clamp(1.4rem, 5vw, 1.9rem)/1.1 var(--f-display); letter-spacing: -.02em; color: var(--ink); }
+.tik-hello h1 b { background: linear-gradient(90deg, #FFD84D, #FF6B9A 55%, #B57CFF); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.tik-hello-go { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tik-hello-go a { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px 8px; border-radius: 14px; text-decoration: none; font-weight: 700; font-size: .86em; color: var(--ink); background: rgba(var(--wc), .06); text-align: center; }
+.tik-hello-go a.on { color: #191326; background: linear-gradient(135deg, #FFD84D, #F0B90B 55%, #FF9F5A); }
+.tik-hello-go a:focus-visible { outline: 2px solid #F0B90B; outline-offset: 2px; }
+@media (max-width: 520px) { .tik-hello-go { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* No lines around posts: clean cards separated by space, like a chat feed. */
+.tik-pro .tik, .tik-pro .tik-new, .tik-focus .tik, .tik-post-page .tik { border: 0 !important; box-shadow: none !important; background: rgba(var(--wc), .035); }
+.tik-pro .tik:hover, .tik.tappable:hover { border: 0 !important; background: rgba(var(--wc), .06); transform: none !important; }
+.tik-new.x .tik-new-box:not(.tik-style) { border-bottom: 0; }
+.tik-detail-meta { border: 0; background: rgba(var(--wc), .04); border-radius: 12px; padding: 10px 12px; }
+.tik-side { border: 0 !important; }
+
+/* Tapping the eye: a small bubble with the views. */
+.tik-act.views { position: relative; }
+.tik-peek { position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 6px 10px; border-radius: 10px; font-size: .9em; font-weight: 700; color: #fff; background: linear-gradient(135deg, #B57CFF, #FF6B9A); box-shadow: 0 8px 20px rgba(0,0,0,.25); animation: tikPeek .2s ease; }
+@keyframes tikPeek { from { opacity: 0; transform: translate(-50%, 4px); } }

@@ -65,6 +65,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
   // Views like X: every look (impressions), and never below the members who saw it.
   const [seenN, setSeenN] = useState(Math.max(t.views ?? 0, t.impressions ?? 0));
   const [grew, setGrew] = useState(false);
+  const [peek, setPeek] = useState(false);
   useEffect(() => { const v = Math.max(t.views ?? 0, t.impressions ?? 0); setSeenN((o) => { if (v > o) { setGrew(true); setTimeout(() => setGrew(false), 900); } return Math.max(o, v); }); }, [t.views, t.impressions]);
   // Opened on its own: that open is a view (every time), shown straight away.
   useEffect(() => {
@@ -149,7 +150,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
 
   return (
     <article ref={box} style={{ ["--ac" as any]: a?.color || "#B57CFF" }} onClick={openPost} className={"tik" + (detail ? " detail" : "") + (compact ? " compact" : "") + (!detail && !compact ? " tappable" : "") + (mine ? " mine" : "") + (t.image_url ? " has-img" : "") + (hot ? " hot" : "") + (hot && hot.rank <= 3 ? " top" : "")}>
-      {hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
+      {false && hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
       </Link>
@@ -217,10 +218,11 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
                 <ViewIcon grew={grew} />
                 <span className="tik-vn"><b>{views(seenN)}</b></span>
               </button>
-            : <span className="tik-act views static" aria-label={`${seenN} views`} title="Views">
+            : <button type="button" className={"tik-act views" + (peek ? " on" : "")} onClick={() => { setPeek(true); setTimeout(() => setPeek(false), 2200); }} aria-label={`${seenN} views`} title="Views">
                 <ViewIcon grew={grew} />
                 <span className="tik-vn"><b>{views(seenN)}</b></span>
-              </span>)}
+                {peek && <span className="tik-peek" role="status">👁 {seenN.toLocaleString()} {seenN === 1 ? "view" : "views"}</span>}
+              </button>)}
           <button type="button" className={"tik-act share" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik" title="Copy link">
             <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v13M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" /></svg>
             <span>{copied ? "Copied" : ""}</span>

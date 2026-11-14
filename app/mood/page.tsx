@@ -2,9 +2,7 @@ import Link from "next/link";
 import MadnessPanel from "@/components/mood/MadnessPanel";
 import FocusTik from "@/components/mood/FocusTik";
 import LiveNow from "@/components/rooms/LiveNow";
-import { currentUser, supabaseServer } from "@/lib/supabase/server";
-import LogoMark from "@/components/LogoMark";
-import WatchTabs from "@/components/watch/WatchTabs";
+import { currentUser } from "@/lib/supabase/server";
 import { FunTab, StreamsTab, VideosTab } from "@/components/watch/VideoTabs";
 
 export const dynamic = "force-dynamic";
@@ -13,21 +11,17 @@ export const metadata = { title: "TIK · AUTISTIK Hub", description: "Post anyth
 export default async function MadnessPage({ searchParams }: { searchParams: { tik?: string; tab?: string } }) {
   const tab = ["live", "streams", "videos", "fun"].includes(searchParams.tab || "") ? searchParams.tab! : "";
   const user = await currentUser();
-  const { data: me } = user ? await supabaseServer().from("profiles").select("alias").eq("id", user.id).maybeSingle() : { data: null };
-  // A friendly welcome at the top of TIK. The hour is UTC (AUTISTIK is run from Accra, which is UTC); it is only a greeting.
-  const hour = new Date().getUTCHours();
-  const hello = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   return (
     <div className="stack mood-page">
-      <section className="tik-welcome" aria-label="Welcome to TIK">
-        <span className="tik-welcome-logo" aria-hidden="true"><LogoMark size={52} /></span>
-        <div className="tik-welcome-t">
-          <small>{user ? `${hello}${me?.alias ? `, ${me.alias}` : ""} 👋` : "Different wavelength. Same channel."}</small>
-          <h1>Welcome to the <b>TIK</b> Board</h1>
-          <p>Say what&apos;s on your mind, cheer each other on, and find your people. No pressure, no noise: just your corner of AUTISTIK.</p>
-        </div>
+      <section className="tik-hello" aria-label="Welcome to TIK">
+        <h1>Welcome to <b>TIK</b></h1>
+        <nav className="tik-hello-go" aria-label="TIK">
+          <Link href="/mood#tik-post" className={!tab ? "on" : ""}>✏️ Post a Tik</Link>
+          <Link href="/mood?tab=live" className={tab === "live" ? "on" : ""} scroll={false}>🎙️ Live rooms</Link>
+          <Link href="/mood?tab=videos" className={tab === "videos" ? "on" : ""} scroll={false}>🎬 Videos</Link>
+          <Link href="/mood?tab=streams" className={tab === "streams" ? "on" : ""} scroll={false}>🔴 Livestreams</Link>
+        </nav>
       </section>
-      <WatchTabs tab={tab} />
       {user && !tab && !searchParams.tik && <a href="#tik-post" className="tik-fab" aria-label="Post a Tik"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg></a>}
       {tab === "live" ? (
         <section className="stack" aria-label="Live rooms">
