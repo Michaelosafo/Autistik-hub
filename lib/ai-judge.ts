@@ -14,7 +14,7 @@
  */
 import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
-import { anthropic, FAST_MODEL } from "@/lib/ai";
+import { anthropic, cheap, FAST_MODEL } from "@/lib/ai";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const sb = () => supabaseService();
@@ -24,26 +24,31 @@ export type Verdict = { go: boolean; confidence: number; why: string };
 // A setup the AI turned down isn't asked about again for 15 minutes (saves time and AI cost).
 const vetoed = new Map<string, number>();
 
-/** The AI's second opinion on one trade. If the AI can't answer, the trade goes ahead at a cautious size. */
-export async function secondOpinion(key: string, style: string, facts: Record<string, unknown>): Promise<Verdict> {
+/**
+ * The AI's second opinion on one trade. If the AI can't answer: the trade goes ahead at a cautious size, unless
+ * mustAnswer (Sniper: no answer on a brand-new coin means no buy).
+ */
+export async function secondOpinion(key: string, style: string, facts: Record<string, unknown>, mustAnswer = false): Promise<Verdict> {
   const k = `${T()}:${key}`;
   if ((vetoed.get(k) || 0) > Date.now()) return { go: false, confidence: 0, why: "turned down in the last 15 minutes" };
   try {
     const msg = await Promise.race([
       anthropic().messages.create({
-        model: FAST_MODEL, max_tokens: 160,
+        model: FAST_MODEL, max_tokens: 600, ...cheap(FAST_MODEL),
         system: `You are a disciplined senior trader reviewing a trade your bot wants to take. Style: ${style}. Approve only setups with a real edge: the signals agree, the move isn't already over, the risk/reward is sound and nothing in the facts screams danger (fake coin, exhausted pump, fighting a strong trend, news already priced in, a coin that keeps losing). Reply ONLY with JSON: {"go":true|false,"confidence":0..1,"why":"max 20 words"}.`,
         messages: [{ role: "user", content: JSON.stringify(facts).slice(0, 3500) }],
       }),
       new Promise<never>((_, no) => setTimeout(() => no(new Error("timeout")), 9000)),
     ]);
-    const text = (msg as any).content?.map((c: any) => c.text || "").join("") || "";
+    const text = (msg as any).content?.filter((c: any) => c.type === "text").map((c: any) => c.text || "").join("") || "";
+    if (!text.includes("{")) throw new Error(`no JSON in reply (stop: ${(msg as any).stop_reason})`);
     const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
     const v: Verdict = { go: j.go === true, confidence: Math.max(0, Math.min(1, n(j.confidence))), why: String(j.why || "").slice(0, 160) };
     if (!v.go || v.confidence < 0.45) { vetoed.set(k, Date.now() + 15 * 60_000); return { ...v, go: false }; }
     return v;
-  } catch {
-    return { go: true, confidence: 0.5, why: "AI check unavailable, cautious size" };
+  } catch (e) {
+    console.error(`AI second opinion failed: ${(e as Error).message}`);
+    return mustAnswer ? { go: false, confidence: 0, why: "AI check unavailable, so no buy" } : { go: true, confidence: 0.5, why: "AI check unavailable, cautious size" };
   }
 }
 
