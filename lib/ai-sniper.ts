@@ -129,7 +129,7 @@ async function buy(s: FSettings, c: Pick, cfg: SnipeCfg): Promise<string> {
   // Judgment: the AI's second opinion on the coin (fake / exhausted / bot-pumped?) and recent results set the size.
   const les = await lessons(s.mode);
   if (les.stop) return les.stop;
-  const v = await secondOpinion(`snipe:${c.mint}`, "high-risk sniper of brand-new Solana launch coins: wants early, organic momentum with real buyers; rejects bundled / bot-pumped coins, copycats, dev-heavy supply and pumps that already ran", c.facts);
+  const v = await secondOpinion(`snipe:${c.mint}`, "high-risk sniper of brand-new Solana launch coins: wants early, organic momentum with real buyers; rejects bundled / bot-pumped coins, copycats, dev-heavy supply and pumps that already ran", c.facts, true);
   if (!v.go) { await flog("skip", `🧠 Skipped ${c.symbol}: ${v.why}`); return `AI said no (${v.why})`; }
   const want = Math.max(1, +(cfg.usd * les.size * confidenceSize(v.confidence)).toFixed(2));
   cfg = { ...cfg, usd: Math.min(want, Math.max(1, eq.free)) };
