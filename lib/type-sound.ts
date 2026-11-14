@@ -43,19 +43,23 @@ function unlock() {
       const d = noise.getChannelData(0);
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
     }
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    if (!unlocked) {
+    // Only "ready" once the browser really lets it play (Android allows it on finger-up, not finger-down).
+    const ready = () => {
+      if (unlocked || !ctx || ctx.state !== "running") return;
       unlocked = true;
       // The headline typed before sound was allowed: tell it to type again, now with its key clicks.
       setTimeout(() => window.dispatchEvent(new Event("type-sound-ready")), 60);
       subs.forEach((f) => f(prefOn()));
-    }
+    };
+    if (ctx.state === "running") ready();
+    else ctx.resume().then(ready, () => {});
   } catch { /* no audio on this device */ }
 }
 
 if (typeof window !== "undefined") {
   const first = () => { if (prefOn()) unlock(); };
-  for (const ev of ["pointerdown", "touchend", "keydown", "click"]) window.addEventListener(ev, first, { passive: true });
+  // Events browsers count as "the visitor chose this" (finger-up / click / key), so sound may start.
+  for (const ev of ["touchend", "pointerup", "click", "keydown"]) window.addEventListener(ev, first, { passive: true });
 }
 
 /** One key press. space: a softer, lower key (the space bar). */
@@ -74,7 +78,7 @@ export function typeTick(space = false) {
     bp.frequency.value = space ? 900 + Math.random() * 200 : 1900 + Math.random() * 1400;
     bp.Q.value = 1.4;
     const g = ctx.createGain();
-    const vol = (space ? 0.03 : 0.042) * (0.8 + Math.random() * 0.4); // soft: background texture, not a noise
+    const vol = (space ? 0.04 : 0.06) * (0.8 + Math.random() * 0.4); // soft, but loud enough for phone speakers
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
     src.connect(bp).connect(g).connect(ctx.destination);
