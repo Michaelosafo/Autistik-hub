@@ -23,3 +23,20 @@ export function markSeen(id: string, me: string | null) {
   sent.add(id); who = me; queue.push(id);
   if (!timer) timer = setTimeout(flush, 3000);
 }
+
+/**
+ * Views like X: every look counts. In the feed once per page visit (after a second half on screen); opening a Tik
+ * counts every time. Never the author's own. Batched into one call every 2 seconds (tik_seen).
+ */
+const looked = new Set<string>();
+let vq: string[] = [];
+let vt: ReturnType<typeof setTimeout> | null = null;
+export function countView(id: string, opened = false) {
+  if (!opened) { if (looked.has(id)) return; looked.add(id); }
+  vq.push(id);
+  if (!vt) vt = setTimeout(() => {
+    vt = null;
+    const ids = [...new Set(vq)]; vq = [];
+    if (ids.length) supabaseBrowser().rpc("tik_seen", { ids: ids.slice(0, 50) }).then(() => {}, () => {});
+  }, 2000);
+}

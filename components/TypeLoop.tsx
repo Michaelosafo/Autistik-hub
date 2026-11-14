@@ -6,7 +6,6 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { currentLang } from "@/lib/i18n-client";
-import { typeTick } from "@/lib/type-sound";
 
 export default function TypeLoop({ words, delay = 0, speed = 55, hold = 2200, intro = false }: { words: string[]; delay?: number; speed?: number; hold?: number; intro?: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -24,7 +23,7 @@ export default function TypeLoop({ words, delay = 0, speed = 55, hold = 2200, in
       clearTimeout(timer);
       if (!seen || document.hidden) return; // paused; resumes when it's back in view
       const word = words[w];
-      if (!back && n < word.length) { n++; setText(word.slice(0, n)); if (rounds < 1) typeTick(word[n - 1] === " "); timer = setTimeout(run, speed + Math.random() * 40); }
+      if (!back && n < word.length) { n++; setText(word.slice(0, n));  timer = setTimeout(run, speed + Math.random() * 40); }
       else if (!back) { back = true; timer = setTimeout(run, hold); }
       else if (n > 0) { n--; setText(word.slice(0, n)); timer = setTimeout(run, speed * 0.55); }
       else { back = false; w = (w + 1) % words.length; if (w === 0) rounds++; timer = setTimeout(run, 380); }
