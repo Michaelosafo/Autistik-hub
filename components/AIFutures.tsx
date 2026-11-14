@@ -47,6 +47,28 @@ const XS: Record<string, [string, string]> = {
   sending: ["⏳ Sending…", "muted"], pending: ["🚚 On the way", "muted"], waiting: ["🚚 On the way", "muted"], depositing: ["🚚 On the way", "muted"], submitted: ["🚚 On the way", "muted"], delayed: ["🐢 Delayed", "muted"],
   arrived: ["✅ Arrived", "up"], refunded: ["↩️ Refunded", "down"], refund: ["↩️ Refunded", "down"], failed: ["❌ Failed", "down"], failure: ["❌ Failed", "down"],
 };
+/** Every trader money can be moved to (key → button label). */
+const DESKS = [["futures", "📊 Futures"], ["forex", "💱 Forex"], ["turbo", "🚀 Turbo"], ["madness", "🔥 Madness"], ["earn", "💰 Earn"], ["sniper", "🎯 Sniper"], ["copy", "👥 Copy"]] as const;
+type DeskK = (typeof DESKS)[number][0];
+
+/** "Move money to another trader": one button per trader, asks the amount, confirms, moves. */
+function MoveMoney({ here, free, busy, act, note }: { here: DeskK; free: number; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; note: string }) {
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      <small><b>🔁 Move money to another trader</b> <span className="muted">{note}</span></small>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        {DESKS.filter(([k]) => k !== here).map(([k, label]) => (
+          <button key={k} type="button" className="btn small" disabled={!!busy || !(free >= 1)} onClick={() => {
+            const f = Math.floor(free * 100) / 100;
+            const v = prompt(`Move how many $ to ${label}? (free here: $${f.toFixed(2)})`, String(f));
+            if (v && Number(v) > 0 && confirm(`Move $${Number(v).toFixed(2)} to ${label}?`)) act(`mv-${k}`, "move", { dest: k, usd: Number(v) });
+          }}>{busy === `mv-${k}` ? "Moving…" : `→ ${label}`}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const VN: Record<string, string> = { hyperliquid: "Hyperliquid", aster: "Aster", forex: "Forex" };
 const usd = (x: number | null | undefined, d = 2) => (x == null || !isFinite(x) ? "–" : `${x < 0 ? "-" : ""}$${Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })}`);
 const px = (x: number | null | undefined) => (x == null || !isFinite(x) ? "–" : `$${x >= 100 ? x.toLocaleString("en-US", { maximumFractionDigits: 2 }) : x.toPrecision(5)}`);
@@ -135,7 +157,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
  * Your real money, always on top (Practice or Live): the Solana wallet (USDT, USDC, SOL), the Hyperliquid account
  * (total and free), anything waiting on Arbitrum, and a one-tap send from Solana to Hyperliquid.
  */
-function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean; here: "futures" | "forex" | "turbo" | "madness" }) {
+function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; turbo: boolean; here: DeskK }) {
   const w = d.wallet, s = d.settings;
   const sol = w?.sol, solUsd = sol ? (sol.usdt || 0) + (sol.usdc || 0) : null;
   const reserve = turbo ? Number(d.sharedReserve || 0) : 0;
@@ -160,20 +182,7 @@ function WalletCard({ d, busy, act, turbo, here }: { d: D; busy: string; act: (n
         }}>{busy === "wc-send" ? "Sending…" : `Send to Hyperliquid (up to ${usd(maxOne)})`}</button>
       )}
       {sol && (sol.sol ?? 0) < 0.005 && <small className="down">The Solana wallet needs a little SOL (~0.01) to pay network fees.</small>}
-      {w && (w.hlFree || 0) >= 1 && (
-        <div className="stack" style={{ gap: 6 }}>
-          <small><b>🔁 Move money to another trader</b> <span className="muted">from this Hyperliquid account ({usd(w.hlFree)} free). To Futures / Forex / Turbo: instant and free. To Sniper or Copy: arrives as USDT in the shared Solana wallet in about a minute and is added to that one&apos;s budget.</span></small>
-          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            {(([["futures", "📊 Futures"], ["forex", "💱 Forex"], ["turbo", "🚀 Turbo"], ["madness", "🔥 Madness"], ["sniper", "🎯 Sniper"], ["copy", "👥 Copy"]] as const).filter(([k]) => k !== here)).map(([k, label]) => (
-              <button key={k} type="button" className="btn small" disabled={!!busy} onClick={() => {
-                const free = Math.floor((w.hlFree || 0) * 100) / 100;
-                const v = prompt(`Move how many $ to ${label}? (free here: $${free.toFixed(2)})`, String(free));
-                if (v && Number(v) >= 1 && confirm(`Move $${Number(v).toFixed(2)} to ${label}?`)) act(`mv-${k}`, "move", { dest: k, usd: Number(v) });
-              }}>{busy === `mv-${k}` ? "Moving…" : `→ ${label}`}</button>
-            ))}
-          </div>
-        </div>
-      )}
+      {w && (w.hlFree || 0) >= 1 && <MoveMoney here={here} free={w.hlFree || 0} busy={busy} act={act} note={`from this Hyperliquid account (${usd(w.hlFree)} free). To Futures / Forex / Turbo / Madness / Earn: instant and free. To Sniper or Copy: arrives as USDT in the shared Solana wallet in about a minute and is added to its budget.`} />}
     </section>
   );
 }
@@ -379,6 +388,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
             <button type="button" className="btn small" disabled={!!busy || !(d.earn.inHlp >= 1) || !!(d.earn.lockedUntil && d.earn.lockedUntil > Date.now())} onClick={() => { const v = prompt(`Take how many $ out of HLP? (in: $${d.earn!.inHlp.toFixed(2)})`, String(Math.floor(d.earn!.inHlp))); if (v && Number(v) > 0) act("earn-out", "earn", { op: "withdraw", usd: Number(v) }); }}>{busy === "earn-out" ? "Taking out…" : "Take out"}</button>
           </div>
           <small className="muted">Money you take out lands back on the wallet&apos;s Hyperliquid balance; withdraw it to Solana below (Money in &amp; out). {msg}</small>
+          <MoveMoney here="earn" free={d.earn.free} busy={busy} act={act} note={`from Earn's free Hyperliquid balance (${usd(d.earn.free)}; money inside HLP has to come out first). To Hyperliquid traders: instant. To Sniper or Copy: about a minute.`} />
         </section>
       )}
 
@@ -459,11 +469,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
               <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${label} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) >= 0) set({ [k]: Number(x) } as any); }}>Change</button>
             </div>
           ))}
-          <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy || !((d.snipe?.reserve ?? 0) >= 1)} onClick={() => {
-            const other = copyDesk ? "sniper" : "copy", label = copyDesk ? "🎯 Sniper" : "👥 Copy", free = Math.floor((d.snipe?.reserve ?? 0) * 100) / 100;
-            const v = prompt(`Move how many $ of budget to ${label}? Instant: same wallet. (free: $${free.toFixed(2)})`, String(free));
-            if (v && Number(v) > 0) act("mv-b", "move", { dest: other, usd: Number(v) });
-          }}>{busy === "mv-b" ? "Moving…" : `🔁 Move budget to ${copyDesk ? "Sniper" : "Copy"}`}</button>
+          <MoveMoney here={copyDesk ? "copy" : "sniper"} free={d.snipe?.reserve ?? 0} busy={busy} act={act} note={`from ${copyDesk ? "Copy" : "Sniper"}'s free budget (${usd(d.snipe?.reserve ?? 0)}). To ${copyDesk ? "Sniper" : "Copy"}: instant (same wallet). To Futures / Forex / Turbo / Madness / Earn: sent from the Solana wallet to its Hyperliquid account through Relay, about a minute, $5 or more.`} />
           <small className="muted">To add money: send USDT / USDC to the wallet above and raise the budget, or on Futures / Forex / Turbo / Madness tap &quot;→ {copyDesk ? "Copy" : "Sniper"}&quot; (it arrives here in about a minute and the budget goes up by itself).</small>
         </section>
       )}

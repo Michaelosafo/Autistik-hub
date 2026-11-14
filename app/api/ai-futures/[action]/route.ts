@@ -137,7 +137,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
         }
         case "run": return json({ ok: true, note: await runFutures() });
         case "move": {
-          const dest = ["futures", "forex", "turbo", "sniper", "copy", "madness"].includes(b.dest) ? b.dest : null;
+          const dest = ["futures", "forex", "turbo", "sniper", "copy", "madness", "earn"].includes(b.dest) ? b.dest : null;
           if (!dest) return json({ error: "Pick where to move it." }, 400);
           return json({ ok: true, note: await moveToDesk(dest, Number(b.usd)) });
         }

@@ -1026,8 +1026,8 @@ export async function earnMove(isDeposit: boolean, usd: number) {
 
 // ---------------------------------------------------------------- Move money between your traders
 
-export type DeskKey = "futures" | "forex" | "turbo" | "sniper" | "copy" | "madness";
-const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex", turbo: "Turbo", sniper: "Sniper", copy: "Copy", madness: "Madness" };
+export type DeskKey = "futures" | "forex" | "turbo" | "sniper" | "copy" | "madness" | "earn";
+const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex", turbo: "Turbo", sniper: "Sniper", copy: "Copy", madness: "Madness", earn: "Earn" };
 
 /**
  * One tap: move free money from this trader's Hyperliquid account to another of your traders.
@@ -1036,16 +1036,36 @@ const DESK_NAMES: Record<DeskKey, string> = { futures: "Futures", forex: "Forex"
  */
 export async function moveToDesk(dest: DeskKey, usd: number): Promise<string> {
   const owner = T() % FX_DESK;
-  const ids: Record<DeskKey, number> = { futures: owner, forex: FX_DESK + owner, turbo: TURBO_DESK + owner, sniper: SNIPE_DESK + owner, copy: COPY_DESK + owner, madness: MAD_DESK + owner };
+  const ids: Record<DeskKey, number> = { futures: owner, forex: FX_DESK + owner, turbo: TURBO_DESK + owner, sniper: SNIPE_DESK + owner, copy: COPY_DESK + owner, madness: MAD_DESK + owner, earn: EARN_DESK + owner };
   const destId = ids[dest];
   if (!destId || destId === T()) throw new Error("That's this trader.");
   if (isSpotDesk()) {
-    // Sniper ⇄ Copy: same Solana wallet, so only the budgets change (instant, free).
-    if (dest !== "sniper" && dest !== "copy") throw new Error("From here, money can go to Sniper or Copy (same Solana wallet). To send it to Turbo, use Send on the Turbo page.");
     if (!(usd > 0)) throw new Error("Type an amount.");
     const { sniperReserve } = await import("@/lib/ai-sniper");
     const free = await sniperReserve(T());
     if (usd > free + 0.01) throw new Error(`Only $${free.toFixed(2)} of ${deskName()}'s budget is free (the rest is in open trades).`);
+    if (dest !== "sniper" && dest !== "copy") {
+      // To a Hyperliquid trader (Futures, Forex, Turbo, Madness, Earn): USDT / USDC from the shared Solana wallet,
+      // through Relay, straight into that trader's Hyperliquid account (about a minute). The budget goes down by it.
+      if (usd < 5) throw new Error("Send at least $5 to a Hyperliquid trader.");
+      const { withTrader } = await import("@/lib/ai-trader-ctx");
+      const addr = await withTrader(destId, async () => { await getF(); return (await futAccount())?.address ?? null; });
+      if (!addr) throw new Error(`${DESK_NAMES[dest]} has no wallet yet: open its page and tap Create wallet first.`);
+      const kp = await futSolAccount();
+      if (!kp) throw new Error("There's no shared Solana wallet.");
+      const b = await futSolBalances(kp);
+      const symbol: "USDT" | "USDC" = b.usdt >= usd ? "USDT" : b.usdc >= usd ? "USDC" : b.usdt >= b.usdc ? "USDT" : "USDC";
+      const have = symbol === "USDT" ? b.usdt : b.usdc;
+      if (usd > have + 0.01) throw new Error(`The Solana wallet has only $${have.toFixed(2)} ${symbol} free to send in one go.`);
+      const r: any = await sendSolToHl(kp, addr, { usd, symbol }, "manual", `${deskName()} budget`);
+      const { data: a } = await sb().from("ai_futures_settings").select("snipe_budget").eq("id", T()).single();
+      await sb().from("ai_futures_settings").update({ snipe_budget: Math.max(0, n(a?.snipe_budget) - usd) }).eq("id", T());
+      const got = Math.max(0, Number(r?.receive ?? usd) || usd);
+      await flog("transfer", `🔁 Sent $${usd.toFixed(2)} of ${deskName()}'s budget to ${DESK_NAMES[dest]} (Hyperliquid, ~$${got.toFixed(2)} arrives in about a minute).`);
+      await withTrader(destId, () => flog("transfer", `🔁 ~$${got.toFixed(2)} on its way from ${deskName()} (Solana → Hyperliquid, about a minute).`));
+      return `Sending $${usd.toFixed(2)} to ${DESK_NAMES[dest]}: about $${got.toFixed(2)} lands in its Hyperliquid account in about a minute.`;
+    }
+    // Sniper ⇄ Copy: same Solana wallet, so only the budgets change (instant, free).
     const [{ data: a }, { data: b }] = await Promise.all([sb().from("ai_futures_settings").select("snipe_budget").eq("id", T()).single(), sb().from("ai_futures_settings").select("snipe_budget").eq("id", destId).maybeSingle()]);
     if (!b) throw new Error(`Open the ${DESK_NAMES[dest]} page once first.`);
     await sb().from("ai_futures_settings").update({ snipe_budget: Math.max(0, n(a?.snipe_budget) - usd) }).eq("id", T());
@@ -1054,7 +1074,6 @@ export async function moveToDesk(dest: DeskKey, usd: number): Promise<string> {
     await withTraderLazy(destId, () => flog("transfer", `🔁 Received $${usd.toFixed(2)} of budget from ${deskName()} (same Solana wallet).`));
     return `Moved $${usd.toFixed(2)} to ${DESK_NAMES[dest]}. Instant: it's the same Solana wallet.`;
   }
-  if (isEarnDesk()) throw new Error("Move money from Futures, Forex or Turbo.");
   if (!(usd >= 1)) throw new Error("Type an amount of $1 or more.");
   const { withTrader } = await import("@/lib/ai-trader-ctx");
   const me = deskName();
