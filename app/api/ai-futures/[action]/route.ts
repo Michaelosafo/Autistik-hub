@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, COPY_DESK, MAD_DESK, isCopyDesk, isSpotDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures } from "@/lib/ai-futures";
+import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, COPY_DESK, MAD_DESK, isCopyDesk, isSpotDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures, setStopTarget } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -65,7 +65,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const up: Record<string, unknown> = {};
           if (typeof b.enabled === "boolean") up.enabled = b.enabled;
           for (const k of ["use_ta", "use_news", "use_x", "no_liq", "auto_fund"]) if (typeof b[k] === "boolean") up[k] = b[k];
-          const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90], snipe_budget: [0, 1_000_000], profit_lock_pct: [0, 500] };
+          const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90], snipe_budget: [0, 1_000_000], profit_lock_pct: [0, 500], stop_pct: [0, 50] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
             const seen = new Set<string>();
@@ -76,7 +76,18 @@ export async function POST(req: Request, { params }: { params: { action: string 
             }).filter((w: any) => (w.chain === "solana" ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.address) : true) && !seen.has(`${w.chain}:${w.address.toLowerCase()}`) && seen.add(`${w.chain}:${w.address.toLowerCase()}`)).slice(0, 25);
           }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
-          if (Array.isArray(b.coins)) up.coins = [...new Set(b.coins.map((c: unknown) => String(c).trim().toUpperCase()).filter((c: string) => /^[A-Z0-9]{1,12}$/.test(c)))].slice(0, 15);
+          if (Array.isArray(b.coins) || Array.isArray(b.extra_coins)) {
+            // Only coins Hyperliquid really lists, with its exact name (e.g. "kPEPE"), whatever case you typed.
+            const { hlMarket } = await import("@/lib/hyperliquid");
+            const names = new Map([...(await hlMarket()).keys()].map((k) => [k.toLowerCase(), k] as const));
+            for (const key of ["coins", "extra_coins"] as const) {
+              if (!Array.isArray(b[key])) continue;
+              const want = b[key].map((c: unknown) => String(c).trim()).filter(Boolean);
+              const bad = want.filter((c: string) => !names.has(c.toLowerCase()) && !names.has(("k" + c).toLowerCase()));
+              if (bad.length) return json({ error: `Hyperliquid doesn't list ${bad.join(", ")}. Use the name Hyperliquid shows (e.g. BTC, SOL, HYPE, kPEPE).` }, 400);
+              up[key] = [...new Set(want.map((c: string) => names.get(c.toLowerCase()) || names.get(("k" + c).toLowerCase())!))].slice(0, 20);
+            }
+          }
           if (Array.isArray(b.x_handles)) up.x_handles = [...new Set(b.x_handles.map((h: unknown) => String(h).trim().replace(/^@/, "")).filter((h: string) => /^[A-Za-z0-9_]{1,15}$/.test(h)))].slice(0, 20);
           if (b.mode === "paper" || b.mode === "live") {
             if (b.mode === "live") {
@@ -136,6 +147,12 @@ export async function POST(req: Request, { params }: { params: { action: string 
           return json({ ok: true, ...r, note: b.quote === true ? `You'd receive about $${got} (fee about $${(r.feeUsd ?? 0).toFixed(2)}).` : to === "arbitrum" ? `Withdrawal sent: about $${got} USDC arrives on Arbitrum in ~5 minutes.` : to === "hyperliquid" ? `Sent $${got} to that Hyperliquid account.` : `Withdrawal sent: about $${got} arrives on Solana in about a minute. Track it in Money in & out.` });
         }
         case "run": return json({ ok: true, note: await runFutures() });
+        case "stop": {
+          const num = (v: unknown) => (v == null || v === "" ? null : Number(v));
+          const st = num(b.stop), tg = num(b.target);
+          if ((st != null && !isFinite(st)) || (tg != null && !isFinite(tg))) return json({ error: "Type a price, like 64250." }, 400);
+          return json({ ok: true, note: await setStopTarget(Number(b.id), st, tg) });
+        }
         case "move": {
           const dest = ["futures", "forex", "turbo", "sniper", "copy", "madness", "earn"].includes(b.dest) ? b.dest : null;
           if (!dest) return json({ error: "Pick where to move it." }, 400);

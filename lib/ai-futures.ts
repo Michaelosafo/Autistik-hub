@@ -85,6 +85,10 @@ export type FSettings = {
   use_ta: boolean; use_news: boolean; use_x: boolean; x_handles: string[]; last_run: string | null; last_note: string | null;
   day_start_usd: number | null; day: string | null; no_liq: boolean; auto_fund: boolean; fund_at: string | null;
   profit_lock_pct?: number | null;
+  /** Your own coins, added to the ones Turbo / Madness pick by themselves. */
+  extra_coins?: string[];
+  /** Your own stop-loss distance in % of price (0 = the AI sets it). */
+  stop_pct?: number | null;
 };
 export type FPos = {
   id: number; mode: string; venue: string; coin: string; side: "long" | "short"; lev: number; margin_usd: number; notional_usd: number;
@@ -113,7 +117,8 @@ export async function getF(): Promise<FSettings> {
   const { data } = await sb().from("ai_futures_settings").select("*").eq("id", T()).single();
   if (!data) throw new Error(`Couldn't set up this ${deskName()} trader${made.error ? `: ${made.error.message}` : ""}.`);
   const s = data as any;
-  for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd"]) s[k] = s[k] == null ? s[k] : n(s[k]);
+  s.extra_coins = Array.isArray(s.extra_coins) ? s.extra_coins : [];
+  for (const k of ["paper_usd", "paper_start", "max_lev", "max_loss_pct", "risk_pct", "max_positions", "daily_loss_pct", "max_hold_hours", "day_start_usd", "stop_pct"]) s[k] = s[k] == null ? s[k] : n(s[k]);
   s.max_lev = Math.min(MAX_LEV, Math.max(1, s.max_lev));
   s.max_loss_pct = s.max_loss_pct > 0 ? s.max_loss_pct : 5;
   s.no_liq = s.no_liq !== false;
@@ -764,6 +769,14 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
     lev = Math.max(1, Math.min(coinMax, s.max_lev, Math.floor(1 / (gap * stopPct + 0.005))));
     stopPct = Math.min(stopPct, s.max_loss_pct / 100 / lev);
   }
+  // Your own stop-loss (set on the page): used instead of the AI's. Leverage comes down if needed so liquidation
+  // stays well past it (8x, or 3x on Madness with "Never get liquidated" off) and the auto-sell doesn't fire first.
+  const myStop = n(s.stop_pct) / 100;
+  if (myStop > 0 && !fx) {
+    stopPct = myStop;
+    const gap = isMadDesk() && !s.no_liq ? 3 : 8;
+    lev = Math.max(1, Math.min(lev, Math.floor(1 / (gap * stopPct + 0.005)), Math.floor(s.max_loss_pct / 100 / stopPct) || 1));
+  }
   // Judgment: what recent results say, then the AI's second opinion; together they set the bet size.
   const label = fxLabel(coin, price);
   const les = await lessons(s.mode, coin, newsDriven);
@@ -876,8 +889,11 @@ export async function runFutures(): Promise<string> {
     const { hl } = m;
     // Turbo: the 15 most-traded Hyperliquid coins right now (plus any it holds), picked fresh every minute.
     // Madness: the 8 most-traded coins that allow 20x or more (the high-leverage majors).
+    const mine = (s.extra_coins || []).filter((c) => hl.has(c));
     if (isMadDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0 && (a.maxLev ?? 0) >= 20).sort((a, b) => b.dayVol - a.dayVol).slice(0, 8).map((a) => a.name);
     if (isTurboDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0).sort((a, b) => b.dayVol - a.dayVol).slice(0, 15).map((a) => a.name);
+    // Your own coins (added on the page) are always watched too.
+    if ((isMadDesk() || isTurboDesk()) && mine.length) s.coins = [...new Set([...s.coins, ...mine])];
     // Forex markets it trades (when Forex is switched on and the forex market is open).
     const fxCoins = s.venues.includes("forex") ? [...m.fx.keys()] : [];
     if (s.enabled && (s.use_news || s.use_x)) await readNews(s, m).catch((e) => flog("error", `News: ${(e as Error).message}`));
@@ -955,6 +971,50 @@ export async function closeNow(id: number) {
   const { data } = await fq("ai_futures_positions").select("*").eq("id", id).eq("status", "open").maybeSingle();
   if (!data) throw new Error("That position isn't open.");
   await closePos(s, await market(s, true), data as FPos, "Closed by admin");
+}
+
+/**
+ * Change an open trade's stop-loss and/or take profit by hand. The stop must stay on the losing side of the current
+ * price and before liquidation. Live Hyperliquid trades also move the stop order resting on Hyperliquid.
+ */
+export async function setStopTarget(id: number, stop: number | null, target: number | null): Promise<string> {
+  const s = await getF();
+  const { data } = await fq("ai_futures_positions").select("*").eq("id", id).eq("status", "open").maybeSingle();
+  if (!data) throw new Error("That trade isn't open.");
+  const p = data as FPos, long = p.side === "long";
+  const spot = p.venue === "pumpfun" || p.venue === "copy";
+  const m = spot ? null : await market(s, true);
+  const cur = (m && priceOn(m, p.venue, p.coin)) || n(p.last) || n(p.entry);
+  const f = (x: number) => (x >= 100 ? x.toFixed(2) : x.toPrecision(5));
+  const up: Record<string, unknown> = {};
+  const notes: string[] = [];
+  if (stop != null) {
+    if (!(stop > 0)) throw new Error("Type a price above 0.");
+    if (long ? stop >= cur : stop <= cur) throw new Error(`For a ${spot ? "buy" : p.side}, the stop-loss must be ${long ? "below" : "above"} the current price ($${f(cur)}).`);
+    if (p.liq && (long ? stop <= n(p.liq) : stop >= n(p.liq))) throw new Error(`That's past the liquidation price (~$${f(n(p.liq))}): the stop has to come before it.`);
+    up.stop = stop;
+    if (!spot) {
+      const lossPct = (Math.abs(n(p.entry) - stop) / n(p.entry)) * n(p.lev) * 100;
+      if (lossPct > s.max_loss_pct) notes.push(`Note: the auto-sell at -${s.max_loss_pct}% of margin comes first (at about ${(s.max_loss_pct / n(p.lev)).toFixed(2)}% from entry); raise "Auto-sell every trade at" if you want this stop to be the exit.`);
+    }
+  }
+  if (target != null) {
+    if (!(target > 0)) throw new Error("Type a price above 0.");
+    if (long ? target <= cur : target >= cur) throw new Error(`For a ${spot ? "buy" : p.side}, the take profit must be ${long ? "above" : "below"} the current price ($${f(cur)}).`);
+    up.target = target;
+  }
+  if (!Object.keys(up).length) throw new Error("Nothing to change.");
+  if (!spot && p.mode === "live" && up.stop != null && m) {
+    const a = await futAccount(), asset = assetOn(m, p.venue, p.coin);
+    if (!a || !asset || !p.size) throw new Error("Couldn't reach this trade on Hyperliquid.");
+    const fresh = await hlStopLoss(a, asset, !long, n(p.size), stop!);
+    if (p.sl_oid) await hlCancel(a, asset.index, Number(p.sl_oid)).catch(() => {});
+    up.sl_oid = fresh;
+  }
+  await fq("ai_futures_positions").update(up).eq("id", p.id);
+  const name = spot ? (p.why?.split(":")[0] || p.coin.slice(0, 6)) : fxLabel(p.coin, n(p.entry));
+  await flog("settings", `✋ You changed ${name}: ${up.stop != null ? `stop-loss → $${f(stop!)}` : ""}${up.stop != null && up.target != null ? ", " : ""}${up.target != null ? `take profit → $${f(target!)}` : ""}.`);
+  return [`Saved${p.mode === "live" && !spot && up.stop != null ? ": the stop on Hyperliquid was moved too" : ""}.`, ...notes].join(" ");
 }
 
 /** Close every open trade now (current mode first, then any other), at the market price. */
