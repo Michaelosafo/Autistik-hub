@@ -324,6 +324,20 @@ export async function tgaChats(): Promise<MyChat[]> {
   finally { await close(c); await giveTurn(turn); }
 }
 
+/**
+ * Everything in a message that can hold a contract address: the text, plus the links hidden behind words
+ * ("Chart", "Buy here"), the link buttons under it (pump.fun / DexScreener / bot buttons) and a link preview.
+ * Call channels often put the address only in a link, so reading the plain text alone missed their calls.
+ */
+function msgText(m: any): string {
+  const parts: string[] = [String(m?.message || "")];
+  for (const e of (m?.entities || []) as any[]) if (e?.url) parts.push(String(e.url));
+  for (const row of (m?.replyMarkup?.rows || []) as any[]) for (const b of (row?.buttons || []) as any[]) if (b?.url) parts.push(String(b.url));
+  const wp = m?.media?.webpage;
+  if (wp?.url) parts.push(String(wp.url));
+  return parts.filter(Boolean).join("\n");
+}
+
 export type ChatPost = { text: string; chat: string; chatRef: string; isChannel: boolean; url: string; at: number; from: { id: string | null; username: string | null }; isBot?: boolean };
 
 /**
@@ -366,7 +380,7 @@ export async function tgaWatch(onPost: (p: ChatPost) => Promise<unknown>, ms = 4
           }
           if (prev == null) return;
           for (const m of [...msgs].sort((a, b) => Number(a.id) - Number(b.id))) {
-            const text = String(m.message || "");
+            const text = msgText(m);
             if (!text) continue;
             const snd: any = m.sender;
             const from = { id: m.senderId != null ? String(m.senderId) : null, username: snd?.username ? String(snd.username).toLowerCase() : null };
@@ -414,7 +428,7 @@ export async function tgaNewPosts(): Promise<{ posts: ChatPost[]; errors: string
         if (first) continue;
         const user = ch.handle;
         for (const m of msgs) {
-          const text = String(m.message || "");
+          const text = msgText(m);
           if (!text) continue;
           // Who posted it (for caller sizes): the sender's user id and @username when Telegram includes them.
           const snd: any = m.sender;
@@ -463,7 +477,7 @@ export async function tgaScoutRead(chats: { ref: string; username: string | null
         const top = msgs.reduce((m, x) => Math.max(m, Number(x.id) || 0), Number(ch.last_msg_id) || 0) || null;
         const posts: ChatPost[] = [];
         for (const m of msgs) {
-          const text = String(m.message || "");
+          const text = msgText(m);
           if (!text) continue;
           const snd: any = m.sender;
           posts.push({ text, chat: ch.title || "Telegram", chatRef: ch.ref, isChannel: m.post === true, url: ch.username ? `https://t.me/${ch.username}/${m.id}` : `tga:${ch.ref.split(":")[1]}:${m.id}`, at: (Number(m.date) || Date.now() / 1000) * 1000, from: { id: m.senderId != null ? String(m.senderId) : null, username: snd?.username ? String(snd.username).toLowerCase() : null }, isBot: snd?.bot === true });
