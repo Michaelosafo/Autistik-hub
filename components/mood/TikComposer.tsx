@@ -29,7 +29,8 @@ async function shrink(file: File): Promise<Blob> {
 }
 
 /** Write a Tik: just type and post, with an optional picture. Also used for replies. Ctrl/Cmd+Enter posts. */
-export default function TikComposer({ replyTo, replyUser, onPosted, compact, placeholder }: { replyTo?: string; replyUser?: string | null; onPosted?: () => void; compact?: boolean; placeholder?: string }) {
+/** big: the "What's happening" box on TIK's page, a large card with a colour cover like a member's profile. */
+export default function TikComposer({ replyTo, replyUser, onPosted, compact, placeholder, big }: { replyTo?: string; replyUser?: string | null; onPosted?: () => void; compact?: boolean; placeholder?: string; big?: boolean }) {
   const [body, setBody] = useState("");
   const [pic, setPic] = useState<{ blob: Blob; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -85,7 +86,8 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
     </div>
   );
   return (
-    <div className={"tik-new x" + (compact ? " compact" : "")}>
+    <div className={"tik-new x" + (compact ? " compact" : "") + (big ? " big" : "")}>
+      {big && <div className="tik-new-cover" aria-hidden="true"><b>What&apos;s happening?</b></div>}
       <span className="tik-new-av" aria-hidden="true"><Avatar className="me-av" alias={mine?.alias || "Me"} color={mine?.color ?? undefined} url={mine?.avatar_url ?? null} /></span>
       <div className="tik-new-col">
       <div className={"tik-new-box" + (styled ? ` tik-style s-${style}` : "")}>

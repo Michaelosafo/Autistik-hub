@@ -16,10 +16,10 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
       <section className="tik-hello" aria-label="Welcome to TIK">
         <h1>Welcome to <b>TIK</b></h1>
         <nav className="tik-hello-go" aria-label="TIK">
-          <Link href="/mood#tik-post" className={!tab ? "on" : ""}>✏️ Post a Tik</Link>
-          <Link href="/mood?tab=live" className={tab === "live" ? "on" : ""} scroll={false}>🎙️ Live rooms</Link>
-          <Link href="/mood?tab=videos" className={tab === "videos" ? "on" : ""} scroll={false}>🎬 Videos</Link>
-          <Link href="/mood?tab=streams" className={tab === "streams" ? "on" : ""} scroll={false}>🔴 Livestreams</Link>
+          <Link href="/mood" className={!tab ? "on" : ""} scroll={false}>💬 Tik</Link>
+          <Link href="/mood?tab=live" className={tab === "live" ? "on" : ""} scroll={false}>🎙️ Live</Link>
+          <Link href="/mood?tab=streams" className={tab === "streams" ? "on" : ""} scroll={false}>🔴 Livestream</Link>
+          <Link href="/mood?tab=videos" className={tab === "videos" ? "on" : ""} scroll={false}>🎬 Tik videos</Link>
         </nav>
       </section>
       {user && !tab && !searchParams.tik && <a href="#tik-post" className="tik-fab" aria-label="Post a Tik"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg></a>}
@@ -38,7 +38,7 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
           <Link className="btn primary" href="/login?next=/mood">Sign in / Join</Link>
         </div>
       ) : (
-        <MadnessPanel full side={<LiveNow max={6} />} focus={/^[0-9a-f-]{36}$/i.test(searchParams.tik || "") ? <FocusTik id={searchParams.tik!} /> : null} />
+        <MadnessPanel full focus={/^[0-9a-f-]{36}$/i.test(searchParams.tik || "") ? <FocusTik id={searchParams.tik!} /> : null} />
       )}
     </div>
   );
