@@ -24,7 +24,7 @@ export function Words({ text, delay = 0 }: { text: string; delay?: number }) {
     if (calm() || !ref.current) return;
     setSplit(true);
     const el = ref.current;
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }, { threshold: 0.3, rootMargin: "0px 0px -6% 0px" });
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setShown(true); io.disconnect(); } }, { threshold: 0.15, rootMargin: "0px 0px -4% 0px" });
     io.observe(el);
     const onLang = (e: Event) => { if ((e as CustomEvent).detail !== "en") setSplit(false); };
     window.addEventListener("site-lang", onLang);
@@ -48,7 +48,7 @@ export function SeqReveal() {
     const blocks = Array.from(document.querySelectorAll<HTMLElement>('[data-sq="up"]'));
     blocks.forEach((b) => Array.from(b.children).forEach((c, k) => (c as HTMLElement).style.setProperty("--k", String(k))));
     root.classList.add("sq-on");
-    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("sq-in"); io.unobserve(e.target); } }), { threshold: 0.15, rootMargin: "0px 0px -6% 0px" });
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("sq-in"); io.unobserve(e.target); } }), { threshold: 0.1, rootMargin: "0px 0px -4% 0px" });
     blocks.forEach((b) => io.observe(b));
     const showAll = () => { blocks.forEach((b) => b.classList.add("sq-in")); io.disconnect(); };
     const onLang = (e: Event) => { if ((e as CustomEvent).detail !== "en") showAll(); };

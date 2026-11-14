@@ -117,10 +117,10 @@ export default async function Home() {
       <section className="lp-hero">
         <div className="lp-hero-copy">
           <div className="lp-eyebrow"><TypeText text="A global autism community, powered by crypto" speed={16} /></div>
-          <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={1309} /></span><span className="lp-loop"><TypeLoop intro delay={2534} words={HERO_LOOP} /></span></h1>
-          <p><Words delay={3874} text="AUTISTIK brings autistic people, their families and supporters together in one global community, with simple, secure crypto tools built in. A share of all trading activity funds real-world support for autistic people." /></p>
-          <p className="lp-why"><b>How it works:</b> <Words delay={4574} text="every swap, stake and token launch on AUTISTIK contributes to the AUTISTIK Fund, set up to cover therapy, equipment, education and everyday essentials. Plain language throughout, and never any pressure." /></p>
-          <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "5474ms" }}>
+          <h1><span className="lp-punch"><TypeText text="Autism is not a disease." delay={650} /></span><span className="lp-loop"><TypeLoop intro delay={1450} words={HERO_LOOP} /></span></h1>
+          <p><Words delay={1500} text="AUTISTIK brings autistic people, their families and supporters together in one global community, with simple, secure crypto tools built in. A share of all trading activity funds real-world support for autistic people." /></p>
+          <p className="lp-why"><b>How it works:</b> <Words delay={1900} text="every swap, stake and token launch on AUTISTIK contributes to the AUTISTIK Fund, set up to cover therapy, equipment, education and everyday essentials. Plain language throughout, and never any pressure." /></p>
+          <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "2300ms" }}>
             <Link href="/app?menu=1" className="lp-btn gold xl">Open menu <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg></Link>
             <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn">Buy $AUTISTIK</Link>
           </div>
@@ -140,7 +140,7 @@ export default async function Home() {
 
       <section id="why" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={738} text="Our mission" /></h2><p><Words delay={1277} text="Who we are, who we serve and how everyday activity on AUTISTIK becomes real support. No crypto experience needed." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Why AUTISTIK" /></div><h2><TypeText delay={350} text="Our mission" /></h2><p><Words delay={700} text="Who we are, who we serve and how everyday activity on AUTISTIK becomes real support. No crypto experience needed." /></p></div>
           <Link href="/start" className="lp-more">New here? Start here <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-why-grid">
@@ -159,7 +159,7 @@ export default async function Home() {
 
       <section id="products" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={493} text="Everything you need, in one place" /></h2><p><Words delay={2110} text="Trade, earn, launch and stay protected from one app. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or create a wallet with just your email." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="The App" /></div><h2><TypeText delay={300} text="Everything you need, in one place" /></h2><p><Words delay={900} text="Trade, earn, launch and stay protected from one app. Connect MetaMask, Trust Wallet, Binance Wallet, OKX or any WalletConnect wallet, or create a wallet with just your email." /></p></div>
           <Link href="/app" className="lp-more">Open the App <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-tools">
@@ -177,7 +177,7 @@ export default async function Home() {
 
       <section id="markets" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={493} text="Live markets on AUTISTIK" /></h2><p><Words delay={1669} text="Real-time prices for every token listed or launched on AUTISTIK. Select any token to view its chart, holders and safety report." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Markets" /></div><h2><TypeText delay={300} text="Live markets on AUTISTIK" /></h2><p><Words delay={800} text="Real-time prices for every token listed or launched on AUTISTIK. Select any token to view its chart, holders and safety report." /></p></div>
           <Link href="/launchpad" className="lp-more">All tokens <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-mkts">
@@ -191,8 +191,8 @@ export default async function Home() {
         <div className="lp-token">
           <div className="lp-token-copy">
             <div className="lp-eyebrow"><TypeText text="The token" /></div>
-            <h2><TypeText delay={591} text="$AUTISTIK on BNB Chain" /></h2>
-            <p><Words delay={1669} text="Holders support the platform and help shape what we build next. Stake $AUTISTIK to earn a share of platform trading fees, paid in BNB." /></p>
+            <h2><TypeText delay={300} text="$AUTISTIK on BNB Chain" /></h2>
+            <p><Words delay={800} text="Holders support the platform and help shape what we build next. Stake $AUTISTIK to earn a share of platform trading fees, paid in BNB." /></p>
             <CopyAddress address={TOKEN_ADDRESS} />
             <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}>
               <Link href={`/swap?chain=bsc&buy=${TOKEN_ADDRESS}`} className="lp-btn gold">Buy $AUTISTIK</Link>
@@ -213,7 +213,7 @@ export default async function Home() {
 
       <section id="community" className="lp-sec">
         <div className="lp-head">
-          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeLoop intro delay={591} words={["Built with autistic people.", "Led by autistic people.", "Made for autistic people."]} /></h2><p><Words delay={2481} text="Nothing about us without us. Autistic people lead this community, with families, supporters and practitioners alongside them." /></p></div>
+          <div><div className="lp-eyebrow"><TypeText text="Community" /></div><h2><TypeLoop intro delay={300} words={["Built with autistic people.", "Led by autistic people.", "Made for autistic people."]} /></h2><p><Words delay={1000} text="Nothing about us without us. Autistic people lead this community, with families, supporters and practitioners alongside them." /></p></div>
           <Link href="/community" className="lp-more">Join the groups <Arrow /></Link>
         </div>
         <div data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-tools four">
@@ -232,8 +232,8 @@ export default async function Home() {
         <div className="lp-fund">
           <div>
             <div className="lp-eyebrow"><TypeText text="AUTISTIK Fund" /></div>
-            <h2><TypeText delay={787} text="Community-funded. Individually focused." /></h2>
-            <p><Words delay={2698} text="A share of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon. Register your interest today, for yourself or for someone you care for." /></p>
+            <h2><TypeText delay={350} text="Community-funded. Individually focused." /></h2>
+            <p><Words delay={1000} text="A share of $AUTISTIK trading activity is set aside to support people on the autism spectrum. The Fund opens soon. Register your interest today, for yourself or for someone you care for." /></p>
             <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/fund" className="lp-btn gold">About the Fund</Link><Link href="/fund#register" className="lp-btn ghost">Register interest</Link></div>
           </div>
           <ul data-sq="up" style={{ ["--sd" as string]: "300ms" }} className="lp-fund-list">
@@ -244,7 +244,7 @@ export default async function Home() {
 
       <section className="lp-sec">
         <div className="lp-band">
-          <div><h2><TypeLoop intro words={["Ready to start?", "Ready to swap?", "Ready to stake?", "Ready to belong?"]} /></h2><p><Words delay={1050} text="Swap, stake and scan in a few taps. New to crypto? We'll guide you through every step." /></p></div>
+          <div><h2><TypeLoop intro words={["Ready to start?", "Ready to swap?", "Ready to stake?", "Ready to belong?"]} /></h2><p><Words delay={600} text="Swap, stake and scan in a few taps. New to crypto? We'll guide you through every step." /></p></div>
           <div className="lp-ctas" data-sq="up" style={{ ["--sd" as string]: "400ms" }}><Link href="/app?menu=1" className="lp-btn gold xl">Open menu <Arrow /></Link><Link href="/start" className="lp-btn ghost">New here? Start here</Link></div>
         </div>
       </section>

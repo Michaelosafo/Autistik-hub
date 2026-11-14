@@ -67,7 +67,7 @@ export function typeTick(space = false) {
     bp.frequency.value = space ? 900 + Math.random() * 200 : 1900 + Math.random() * 1400;
     bp.Q.value = 1.4;
     const g = ctx.createGain();
-    const vol = (space ? 0.05 : 0.07) * (0.8 + Math.random() * 0.4);
+    const vol = (space ? 0.03 : 0.042) * (0.8 + Math.random() * 0.4); // soft: background texture, not a noise
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
     src.connect(bp).connect(g).connect(ctx.destination);
