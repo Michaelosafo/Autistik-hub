@@ -6987,3 +6987,16 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .lp .lp-hero-mark { grid-column: 1 / -1; order: -2; display: flex; justify-content: center; margin: 0 0 -6px; }
 .lp .lp-hero-mark .lp-wordmark { margin: 0; }
 @media (max-width: 900px) { .lp .lp-hero-mark { margin: 0 0 4px; } }
+
+/* TIK everywhere (App preview, profiles, feeds): no coloured line beside posts, and all actions on one clean row */
+.tik:not(.compact)::before { display: none !important; }
+.tik-prev .tik + .tik::before { display: block !important; }
+.tik:not(.compact) > .tik-main > .tik-actions { display: flex; flex-wrap: nowrap; justify-content: space-between; align-items: center; max-width: none; gap: 0; margin: 6px 0 0 -6px; }
+.tik:not(.compact) > .tik-main > .tik-actions .tik-act { flex: 0 1 auto; min-width: 0; padding: 6px 8px; background: transparent; border-radius: 99px; font-size: .86em; font-weight: 600; color: var(--muted); box-shadow: none; }
+.tik:not(.compact) > .tik-main > .tik-actions .tik-act svg { width: 19px; height: 19px; }
+.tik:not(.compact) > .tik-main > .tik-actions .tik-act span:empty { display: none; }
+.tik-act.like.on { color: #FF4F8B; }
+
+/* Wordmark a little smaller, sitting on the left */
+.lp .lp-wordmark { font-size: clamp(2.6rem, 10vw, 5.4rem); }
+.lp .lp-hero-mark { justify-content: flex-start; padding-left: 2px; }
