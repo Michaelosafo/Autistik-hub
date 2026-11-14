@@ -936,8 +936,8 @@ const TRAIL_STEPS: [number, number, number][] = [[100, 8, 70], [60, 10, 35], [30
 const TRAIL_START = 5; // once any buy is up 5%, it can no longer close at a loss (it sells by +2% at worst, after fees)
 
 /** The price the trailing stop sells at, or null while it is off or not yet armed. */
-function trailStop(p: Position, high: number): number | null {
-  const entry = n(p.entry_usd), t = n(p.trail);
+function trailStop(p: Position, high: number, trail = n(p.trail)): number | null {
+  const entry = n(p.entry_usd), t = trail;
   if (t <= 0 || !entry) return null;
   const peak = (high / entry - 1) * 100;
   if (peak < TRAIL_START) return null;
@@ -969,10 +969,13 @@ async function manage(s: Settings) {
     // Small-coin trades judge a pulled pool against their own size, not the big-coin minimum.
     const rugLine = p.strategy ? Math.max(500, s.micro_min_liq / 2) : s.min_liquidity / 3;
     const rug = m?.liquidity != null && m.liquidity < rugLine;
-    // Copy trades (coins posted in the groups you follow) always sell at their own target or stop-loss, even when
-    // you're in control: nothing else (trailing stop, sellers taking over, max hold) closes them.
+    // Copy trades (coins posted in the groups you follow) always sell at their own target, stop-loss or profit lock,
+    // even when you're in control: nothing else (sellers taking over, max hold) closes them. They are saved with no
+    // trail of their own, so the profit lock uses the main trailing stop setting (0 there turns it off for them too).
     if (p.strategy === "copy" || p.strategy === "rebuy") {
-      const cw = rug ? "Liquidity dropped sharply (possible rug)" : ch <= -n(p.stop_loss) ? `Stop-loss (${ch.toFixed(1)}%)` : ch >= n(p.take_profit) ? `Take profit (+${ch.toFixed(1)}%)` : null;
+      const lock = trailStop(p, high, n(p.trail) || n(s.trail));
+      const cw = rug ? "Liquidity dropped sharply (possible rug)" : ch <= -n(p.stop_loss) ? `Stop-loss (${ch.toFixed(1)}%)` : ch >= n(p.take_profit) ? `Take profit (+${ch.toFixed(1)}%)`
+        : lock != null && price <= lock ? `Trailing stop (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%, ${((price / high - 1) * 100).toFixed(1)}% from the high of +${((high / n(p.entry_usd) - 1) * 100).toFixed(1)}%)` : null;
       if (cw) await closePosition({ ...p, high_usd: high }, cw, price);
       continue;
     }
