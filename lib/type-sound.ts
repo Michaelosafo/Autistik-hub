@@ -27,6 +27,8 @@ export function setTypeSound(on: boolean) {
   subs.forEach((f) => f(on));
 }
 export function onTypeSound(f: (on: boolean) => void) { subs.add(f); return () => { subs.delete(f); }; }
+/** True once the browser allows sound (after the visitor's first tap / click / key). */
+export const typeSoundReady = () => unlocked;
 
 function unlock() {
   if (typeof window === "undefined") return;
@@ -42,7 +44,12 @@ function unlock() {
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
     }
     if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    unlocked = true;
+    if (!unlocked) {
+      unlocked = true;
+      // The headline typed before sound was allowed: tell it to type again, now with its key clicks.
+      setTimeout(() => window.dispatchEvent(new Event("type-sound-ready")), 60);
+      subs.forEach((f) => f(prefOn()));
+    }
   } catch { /* no audio on this device */ }
 }
 
