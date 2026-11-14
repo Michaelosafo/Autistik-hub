@@ -486,24 +486,69 @@ async function jupSwap(kp: Keypair, inputMint: string, outputMint: string, amoun
   throw new Error(`Solana swap not confirmed (${sig.slice(0, 12)}…)`);
 }
 
+/**
+ * Buy a Solana coin with SOL or USDT / USDC. Brand-new coins (still on pump.fun's launch curve) often have no direct
+ * stablecoin route, so it tries, in order, stopping at the first that works:
+ *   1. Jupiter Ultra straight from what you pay with (Ultra reaches launch curves and lands the swap itself)
+ *   2. Jupiter's normal route from it
+ *   3. paying with a stablecoin: stablecoin → SOL, then SOL → the coin (Ultra, then the normal route)
+ * After any failure it checks the wallet: if the coins arrived anyway it's a buy (tracked, so it's sold at TP/SL).
+ */
 async function solBuy(kp: Keypair, mint: string, amountIn: number, tax: number, stable: Stable | null = null) {
   const before = await solTokenRaw(kp.publicKey, mint);
-  const input = stable ? stable.token : WSOL, inDec = stable ? stable.decimals : 9;
-  let sig: string;
-  try { sig = await jupSwap(kp, input, mint, BigInt(Math.floor(amountIn * 10 ** inDec)), Math.min(1500, SLIP_BPS + Math.ceil(tax * 100))); }
-  catch (e) {
-    // Not confirmed in time: if the coins arrived anyway, it's a buy (so it's tracked and sold at TP/SL, never lost).
-    // A busy network can land it 10-30s later, so keep looking for a while (before, one look after 3s missed them).
-    if (/failed on-chain|No Solana route|Couldn't build/.test((e as Error).message)) throw e;
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 3000));
+  const slip = Math.min(1500, SLIP_BPS + Math.ceil(tax * 100));
+  const arrived = async (tries: number) => {
+    for (let i = 0; i < tries; i++) {
       const got = await solTokenRaw(kp.publicKey, mint).catch(() => before);
-      if (got.raw > before.raw) return { hash: "unconfirmed", raw: got.raw - before.raw, decimals: got.decimals || before.decimals || 6 };
+      if (got.raw > before.raw) return { raw: got.raw - before.raw, decimals: got.decimals || before.decimals || 6 };
+      if (i < tries - 1) await new Promise((r) => setTimeout(r, 3000));
     }
-    throw e;
+    return null;
+  };
+  const done = async (hash: string) => { const a = await arrived(4); return { hash, raw: a?.raw ?? 0n, decimals: a?.decimals ?? (before.decimals || 6) }; };
+  /** One route; true = the coins are in the wallet. A route that sent something and then went quiet is watched before moving on. */
+  const errs: string[] = [];
+  const attempt = async (name: string, run: () => Promise<string>) => {
+    try { return { hash: await run() }; }
+    catch (e) {
+      const m = (e as Error).message;
+      errs.push(`${name}: ${m.slice(0, 70)}`);
+      if (/failed on-chain/.test(m)) return null;
+      // Sent but not confirmed: give it time to land before trying anything else (never buy twice).
+      if (/not confirmed|expired|timeout/i.test(m)) { const a = await arrived(10); if (a) return { hash: "unconfirmed", ...a }; }
+      else { const a = await arrived(1); if (a) return { hash: "unconfirmed", ...a }; }
+      return null;
+    }
+  };
+  const input = stable ? stable.token : WSOL, inDec = stable ? stable.decimals : 9;
+  const amt = BigInt(Math.floor(amountIn * 10 ** inDec));
+  let r = await attempt("Ultra", async () => (await ultraSwap(kp, input, mint, amt)).sig);
+  if (!r) r = await attempt("Jupiter", () => jupSwap(kp, input, mint, amt, slip));
+  if (!r && stable) {
+    // Two steps through SOL: launch-curve coins trade against SOL only.
+    const solBefore = await solConn().getBalance(kp.publicKey).catch(() => null);
+    let lamports: bigint | null = null;
+    try {
+      const x = await ultraSwap(kp, stable.token, WSOL, amt);
+      lamports = x.out;
+    } catch (e) {
+      errs.push(`${stable.symbol}→SOL: ${(e as Error).message.slice(0, 70)}`);
+      await new Promise((ok) => setTimeout(ok, 2500));
+    }
+    if (lamports == null && solBefore != null) {
+      const now = await solConn().getBalance(kp.publicKey).catch(() => null);
+      if (now != null && now > solBefore) lamports = BigInt(now - solBefore);
+    }
+    if (lamports && lamports > 0n) {
+      const use = (lamports * 99n) / 100n; // a hair less, so fees never make it fail
+      r = await attempt("SOL→coin (Ultra)", async () => (await ultraSwap(kp, WSOL, mint, use)).sig);
+      if (!r) r = await attempt("SOL→coin", () => jupSwap(kp, WSOL, mint, use, slip));
+      if (!r) throw new Error(`Couldn't buy it: the ${stable.symbol} was changed to SOL, which stays in the wallet (${errs.slice(-2).join(" · ")})`);
+    }
   }
-  const after = await solTokenRaw(kp.publicKey, mint);
-  return { hash: sig, raw: after.raw - before.raw, decimals: after.decimals || before.decimals || 6 };
+  if (!r) throw new Error(`No Solana route: ${errs.join(" · ")}`);
+  if ("raw" in r && r.raw) return { hash: r.hash, raw: r.raw as bigint, decimals: (r as any).decimals as number };
+  return done(r.hash);
 }
 
 async function solSell(kp: Keypair, mint: string, raw: bigint, tax: number, extra = 0, stable: Stable | null = null) {

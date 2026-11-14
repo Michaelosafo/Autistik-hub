@@ -16,7 +16,7 @@ import { createWalletClient, erc20Abi, getAddress, http, isAddress } from "viem"
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
-import { scoutAvailable, scoutFollow, scoutScore, scoutTick, scoutX } from "@/lib/ai-trader-scout";
+import { followCallerChats, scoutAvailable, scoutFollow, scoutScore, scoutTick, scoutX } from "@/lib/ai-trader-scout";
 import { IMPOSTOR, aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
 import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
@@ -1123,6 +1123,10 @@ export async function runTrader({ force = false } = {}) {
   }
   const s = await getSettings();
   // Caller scout: score the calls it has seen, then follow / drop callers and groups (keeps learning while paused).
+  if (s.copy_on && s.use_tg) {
+    const added = await followCallerChats().catch(() => [] as string[]);
+    if (added.length) await log("settings", `👥 Now also reading ${added.join(", ")}: your callers post there (only their calls are bought).`);
+  }
   if (s.scout_on) { await scoutScore().catch((e) => log("error", `Scout scoring failed: ${(e as Error).message}`)); await scoutFollow().catch((e) => log("error", `Scout follow failed: ${(e as Error).message}`)); }
   if (!s.enabled && !force) return { skipped: "paused" };
   const note = async (t: string) => { await sb.from("ai_trader_settings").update({ last_note: t.slice(0, 300) }).eq("id", T()); return { note: t }; };
@@ -1428,7 +1432,8 @@ async function chatSize(ref: string): Promise<number> {
 async function chatInfo(ref: string): Promise<{ usd: number; scoutKind: string | null }> {
   const { data } = await tq("ai_trader_sources").select("usd,scout,scout_kind").eq("kind", "tg_chat").eq("ref", ref).limit(1);
   const r = (data as any)?.[0];
-  return { usd: n(r?.usd), scoutKind: r?.scout ? String(r.scout_kind || "group") : null };
+  // "follow": a chat added because one of your callers posts there: only your callers' calls in it are bought.
+  return { usd: n(r?.usd), scoutKind: r?.scout ? String(r.scout_kind || "group") : r?.scout_kind === "follow" ? "caller" : null };
 }
 
 /** CAs this server has already acted on (stops two chats posting the same coin at the same moment both buying it). */
@@ -1600,14 +1605,23 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const why = `📡 Copy: ${label}.${usdSize ? ` Buy size $${usdSize}.` : ""} Sells at +${tp}% or -${sl}%${caller && (caller.sl || caller.tp) ? " (this caller's own)" : ""}.${newProject ? " New project: watched for a dump re-buy after a 2x." : ""}`;
   const coin = { ...f, mcap: f.mcap, buyTax: g.buyTax };
   const tryBuy = (cash: number, slot: number) => executeBuy(s, cash, coin, { sl, tp, why: slot === 2 ? `${why} (Wallet 2)` : why, strategy: "copy", trail: 0, usd: usdSize, newProject, src, slot, pot: scoutPot ? "scout" : null })
-    .then((r) => ({ ok: true as const, r }), (e) => ({ ok: false as const, r: (e as Error).message.slice(0, 80) }));
+    .then((r) => ({ ok: true as const, r }), (e) => ({ ok: false as const, r: (e as Error).message.slice(0, 220) }));
   // Both wallets buy at the same moment, each with its own money.
   const [one, two] = await Promise.all([
     why1 ? Promise.resolve({ ok: false as const, r: why1 }) : tryBuy((room as { cash: number }).cash, 1),
     why2 ? Promise.resolve({ ok: false as const, r: why2 }) : tryBuy((room2 as { cash: number }).cash, 2),
   ]);
   const w2txt = why2 === "none" ? "" : two.ok ? "Wallet 2 bought too" : `Wallet 2: ${two.r}`;
-  if (!one.ok && !two.ok) return done(`skipped: buy failed (${one.r})${w2txt ? ` · ${w2txt}` : ""}`);
+  if (!one.ok && !two.ok) {
+    // Nothing was bought (no route / couldn't build): free the coin so the next post of it, from any chat, tries again.
+    if (/No Solana route|no route|Couldn't build|Couldn't buy it|didn't answer|no answer/i.test(one.r)) {
+      await tq("ai_trader_ca_seen").delete().eq("token", sig.token);
+      claimed.delete(`${T()}:${sig.token}`);
+    }
+    await tgNotify(`⚠️ Couldn't buy ${f.symbol} (${label}): ${one.r}. It will try again if it's posted again.`);
+    await log("error", `Buy failed: ${f.symbol} from ${label}: ${one.r}`);
+    return done(`skipped: buy failed (${one.r})${w2txt ? ` · ${w2txt}` : ""}`);
+  }
   const spend = usdSize ? usdSize / (await bnbUsd()) : await tradeSize(s).catch(() => s.per_trade);
   const who = one.ok && two.ok ? " (both wallets)" : two.ok ? " (Wallet 2)" : "";
   label = `${label} · shared ${ageTxt(postMin * 60)} ago · coin ${ageTxt(f.ageHours * 3600)} old`;

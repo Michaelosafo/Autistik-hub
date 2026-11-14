@@ -231,3 +231,40 @@ export async function scoutAvailable(budget: number, bnbUsd: number): Promise<{ 
   const pnl = ((closed || []) as any[]).reduce((a, p) => a + n(p.pnl), 0) * bnbUsd;
   return { avail: Math.max(0, budget + pnl - inTrades), inTrades, pnl };
 }
+
+/**
+ * Your callers, wherever they post: every chat the account is in where one of your active Telegram callers (set for
+ * "all groups") has posted a coin in the last 14 days is read for buys, but only for your callers' calls (never anyone
+ * else's). Up to 4 chats per caller, 12 in all, most recent first. Chats you switched off yourself stay off; chats
+ * added this way are removed again when the caller is removed or stops posting there.
+ */
+export async function followCallerChats(): Promise<string[]> {
+  const { data: cs } = await tq("ai_trader_callers").select("who,chat,usd,scout,platform").eq("platform", "tg");
+  const names = [...new Set(((cs || []) as any[]).filter((c) => !c.scout && Number(c.usd) > 0 && !String(c.chat || "")).map((c) => String(c.who).replace(/^@/, "").toLowerCase()).filter(Boolean))];
+  const want = new Map<string, string>();
+  if (names.length) {
+    const { data: calls } = await tq("ai_scout_calls").select("chat_ref,chat_title,who,called_at").eq("platform", "tg").in("who", names).gte("called_at", new Date(Date.now() - 14 * 86400_000).toISOString()).order("called_at", { ascending: false }).limit(1000);
+    const per = new Map<string, number>();
+    for (const c of (calls || []) as any[]) {
+      const ref = String(c.chat_ref || "");
+      if (!ref || want.has(ref) || want.size >= 12) continue;
+      const k = (per.get(c.who) || 0);
+      if (k >= 4) continue;
+      per.set(c.who, k + 1);
+      want.set(ref, String(c.chat_title || ref));
+    }
+  }
+  const saved = new Map((await tgaSavedChats().catch(() => [])).map((c) => [c.ref, c]));
+  const { data: srcs } = await tq("ai_trader_sources").select("id,ref,enabled,scout,scout_kind").eq("kind", "tg_chat");
+  const have = new Map(((srcs || []) as any[]).map((r) => [String(r.ref), r]));
+  const added: string[] = [];
+  for (const [ref, title] of want) {
+    const cur = have.get(ref);
+    if (cur) continue; // already listed: enabled stays enabled, and one you switched off stays off
+    const i = saved.get(ref);
+    await tq("ai_trader_sources").insert({ kind: "tg_chat", ref, title: i?.title || title, handle: (i as any)?.username || null, enabled: true, scout: false, scout_kind: "follow" });
+    added.push(i?.title || title);
+  }
+  for (const r of (srcs || []) as any[]) if (r.scout_kind === "follow" && !r.scout && !want.has(String(r.ref))) await tq("ai_trader_sources").delete().eq("id", r.id);
+  return added;
+}
