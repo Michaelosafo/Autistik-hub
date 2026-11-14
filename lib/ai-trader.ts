@@ -18,7 +18,7 @@ import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
 import { followCallerChats, scoutAvailable, scoutFollow, scoutScore, scoutTick, scoutX } from "@/lib/ai-trader-scout";
 import { IMPOSTOR, aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
-import { dexSignals, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
+import { dexSignals, launchFlow, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
@@ -778,6 +778,12 @@ async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
         if (best) out.set(`${chain}:${t.toLowerCase()}`, toFlow(best));
       }
     }
+    // Solana coins bought while still on their launch curve have no DEX pool until they graduate: price them from
+    // Jupiter / pump.fun so their stop-loss and take profit still work.
+    if (chain === "solana") await Promise.all(toks.filter((t) => !out.has(`solana:${t.toLowerCase()}`)).slice(0, 10).map(async (t) => {
+      const f = await launchFlow(t).catch(() => null);
+      if (f) out.set(`solana:${t.toLowerCase()}`, f);
+    }));
   }));
   return out;
 }
@@ -799,7 +805,8 @@ async function adoptPending() {
       if (bal.raw <= 0n) { if (old) await tq("ai_trader_pending").delete().eq("id", q.id); continue; }
       // Today's price and market cap: the buy price is the one it was bought at, or worked out from the market cap then.
       const d = await fetch(`https://api.dexscreener.com/tokens/v1/${q.chain}/${q.token}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => []);
-      const pair = (Array.isArray(d) ? d : []).sort((a: any, b: any) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd))[0];
+      let pair = (Array.isArray(d) ? d : []).sort((a: any, b: any) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd))[0];
+      if (!pair && q.chain === "solana") { const lf = await launchFlow(q.token).catch(() => null); if (lf) pair = { priceUsd: lf.price, marketCap: lf.mcap, baseToken: { symbol: lf.symbol, name: lf.name }, info: { imageUrl: lf.image } }; }
       const now = n(pair?.priceUsd), capNow = n(pair?.marketCap) || n(pair?.fdv);
       if (!now) continue;
       const entry = n(q.entry_usd) || (n(q.entry_mcap) && capNow ? (now * n(q.entry_mcap)) / capNow : now);
