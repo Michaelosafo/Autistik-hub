@@ -6699,3 +6699,7 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 @media (max-width: 380px) {
   .ait-tabs a { flex-basis: calc(50% - 6px); }
 }
+
+/* Front page: the typing sound's 🔊 / 🔇 button (components/TypeSoundToggle.tsx). */
+.type-sound { position: fixed; left: 14px; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); z-index: 40; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: inherit; font-size: 1.05rem; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.18); display: grid; place-items: center; }
+.type-sound:focus-visible { outline: 3px solid #F0B90B; outline-offset: 2px; }
