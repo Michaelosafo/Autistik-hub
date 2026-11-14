@@ -42,7 +42,7 @@ export type Settings = {
   manual_active: boolean; away_take_profit: number; admin_seen_at: string | null;
   hype_on: boolean; dip_on: boolean; mcap_min: number; mcap_max: number; micro_min_liq: number; target_profit: number; strat_stop: number;
   signals_on: boolean; callers: string[]; caller_mcap_max: number; x_since: string | null; per_trade_usd: number;
-  copy_on: boolean; copy_tp: number; copy_sl: number; copy_fresh_min: number; copy_max_age_h: number; copy_max_pump: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
+  bridge_on?: boolean; copy_on: boolean; copy_tp: number; copy_sl: number; copy_fresh_min: number; copy_max_age_h: number; copy_max_pump: number; tg_user_id: number | null; tg_username: string | null; x_username: string | null;
   trade_mode: "telegram" | "both" | "x" | "general"; rebuy_on: boolean; rebuy_dump: number; rebuy_tp: number;
   live_chains: LiveChain[]; copy_check: boolean; use_tg: boolean; use_x: boolean; use_general: boolean; callers_only: boolean;
   buy_hours_on: boolean; buy_from: string; buy_to: string; buy_tz: string; stable_on: boolean;
@@ -230,6 +230,50 @@ export async function liveWallets2(s: Settings) {
 }
 /** The chains this trader buys on: in live mode the ones switched on for live trading, in practice all its chains. */
 export const tradeChains = (s: Settings): string[] => (s.mode === "live" ? s.live_chains : s.chains);
+/** Networks a call from your callers / channels can be bought on: your live ones, plus BNB Chain and Ethereum
+ * when "Bridge for calls on other chains" is on (the money is moved there from Solana with Relay first). */
+const BRIDGE_CHAINS = ["bsc", "ethereum"] as const;
+export const copyChains = (s: Settings): string[] => (s.mode === "live" && s.bridge_on !== false && s.live_chains.includes("solana") ? [...new Set([...s.live_chains, ...BRIDGE_CHAINS])] : tradeChains(s));
+const bridgeable = (s: Settings, chain: string) => s.mode === "live" && s.bridge_on !== false && s.live_chains.includes("solana") && (BRIDGE_CHAINS as readonly string[]).includes(chain) && !s.live_chains.includes(chain);
+
+/**
+ * A call on BNB Chain / Ethereum with too little money there: moves the buy amount from the Solana wallet's USDT /
+ * USDC (Relay), plus a little BNB / ETH for network fees if the wallet has too little, and waits for it (up to 90 s).
+ * "" = ready to buy; otherwise why it can't.
+ */
+async function bridgeForCall(s: Settings, chain: LiveChain, usd: number, symbol: string): Promise<string> {
+  if (chain === "solana") return "";
+  const w = await myWallets(1);
+  if (!w.evm) return "there's no trading wallet for BNB Chain / Ethereum yet (create it on the AI trader page)";
+  if (!w.sol) return "there's no Solana wallet to move money from";
+  const [destSt, destGas, gasPx] = await Promise.all([
+    bestStable(chain, w).catch(() => null),
+    chainBalance(chain, w).catch(() => 0),
+    nativeUsd(chain).catch(() => 0),
+  ]);
+  const needStable = Math.max(0, +(usd * 1.03 - (destSt?.balance ?? 0)).toFixed(2));
+  const needGas = destGas < CHAIN_GAS[chain] && gasPx > 0 ? Math.max(1, +(CHAIN_GAS[chain] * 1.6 * gasPx).toFixed(2)) : 0;
+  if (!needStable && !needGas) return "";
+  const src = await bestStable("solana", w).catch(() => null);
+  const from = src ? stableBySymbol("solana", src.symbol) : null;
+  const sendStable = needStable > 0 ? Math.max(needStable, 2) : 0;
+  if (!from || (src?.balance ?? 0) < sendStable + needGas) return `not enough USDT / USDC on Solana to move to ${CHAIN_NAME[chain]} ($${(src?.balance ?? 0).toFixed(2)}, needs $${(sendStable + needGas).toFixed(2)})`;
+  const { solFundChain } = await import("@/lib/ai-trader-chains");
+  // One Relay order at a time from the same Solana wallet (each is its own Solana transaction).
+  try {
+    if (sendStable) await solFundChain(w.sol, w.evm.address, from, sendStable, chain, "stable");
+    if (needGas) await solFundChain(w.sol, w.evm.address, from, needGas, chain, "native");
+  } catch (e) { return `couldn't move money to ${CHAIN_NAME[chain]}: ${(e as Error).message.slice(0, 120)}`; }
+  await log("settings", `🌉 Moving $${(sendStable + needGas).toFixed(2)} ${from.symbol} from Solana to ${CHAIN_NAME[chain]} with Relay to buy ${symbol}${needGas ? ` ($${needGas} of it as ${NATIVE[chain]} for fees)` : ""}.`);
+  // Wait for it to land.
+  const wantSt = (destSt?.balance ?? 0) + sendStable * 0.9, wantGas = needGas ? CHAIN_GAS[chain] / 2 : 0;
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    const [st, gas] = await Promise.all([bestStable(chain, w).catch(() => null), chainBalance(chain, w).catch(() => 0)]);
+    if ((st?.balance ?? 0) >= wantSt && gas >= wantGas) return "";
+  }
+  return `the money sent to ${CHAIN_NAME[chain]} hadn't arrived after 90 seconds (it will be there for the next call)`;
+}
 
 /** Each live chain: wallet address and balance in its own coin (for the page). */
 export async function liveWallets(s: Settings) {
@@ -1048,7 +1092,7 @@ async function executeBuy(s: Settings, cash: number, c: { chain: string; token: 
   const slot = o.slot === 2 ? 2 : 1;
   const sb = supabaseService();
   const bnb = await bnbUsd();
-  const live = s.mode === "live" && isLiveChain(c.chain) && s.live_chains.includes(c.chain);
+  const live = s.mode === "live" && isLiveChain(c.chain) && (s.live_chains.includes(c.chain) || bridgeable(s, c.chain));
   // A caller with their own size buys that many dollars' worth; everyone else uses the normal trade size.
   let spend = Math.min(o.usd && o.usd > 0 ? +(o.usd / bnb).toFixed(6) : await tradeSize(s), live ? Infinity : cash);
   let qty: number, raw: string | null = null, tx: string | null = null, decimals = 18, native: string | null = null, spentNative: number | null = null;
@@ -1174,7 +1218,7 @@ async function buyRoom(s: Settings, chain = "bsc", slot = 1): Promise<{ cash: nu
     if (cash < (await tradeSize(s)) * 0.5) return `Not enough practice BNB (${cash.toFixed(4)}).`;
     return { cash, held };
   }
-  if (!isLiveChain(chain) || !s.live_chains.includes(chain)) return `${CHAIN_NAME[chain] || chain} isn't switched on for live trading`;
+  if (!isLiveChain(chain) || !(s.live_chains.includes(chain) || bridgeable(s, chain))) return `${CHAIN_NAME[chain] || chain} isn't switched on for live trading`;
   const w = await myWallets(slot);
   if (!walletAddress(chain, w)) return slot === 2 ? "no Wallet 2 on this network" : chain === "solana" ? "there's no Solana wallet yet" : "there's no trading wallet yet";
   const needUsd = (s.per_trade_usd > 0 ? s.per_trade_usd : s.per_trade * (await bnbUsd())) * 0.5;
@@ -1505,7 +1549,7 @@ export async function copyPost(post: { text: string; user: string; url: string; 
   // first (set and edited per person); the group's amount is used for anyone without one.
   if (chatUsd > 0 && (post.isChannel || !(caller && caller.usd > 0))) caller = { usd: chatUsd, who: caller?.who || "channel size", sl: caller?.sl ?? null, tp: caller?.tp ?? null };
   if (squad) label = `${label} · squad "${squad.name}"`;
-  const chains = tradeChains(s);
+  const chains = copyChains(s);
   const { evm, sol } = extract(post.text);
   const refs: { token: string; chain?: string }[] = [...evm.map((token) => ({ token })), ...(chains.includes("solana") ? sol.map((token) => ({ token, chain: "solana" })) : [])].slice(0, 3);
   // A picked caller (or squad member) in a group: wait for the group's token scanner to say when it was first shared.
@@ -1563,8 +1607,8 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
     await tq("ai_trader_signals").update({ result: r.slice(0, 300), symbol: f?.symbol ?? null, mcap: f?.mcap ?? null }).eq("source", sig.source).eq("chain", sig.chain).eq("token", sig.token).eq("url", sig.url);
     return r;
   };
-  const chains = tradeChains(s);
-  if (!f || !f.price) return done(`skipped: no trading pool found for it yet (too new to trade, or not on your ticked chains: ${tradeChains(s).join(", ")})`);
+  const chains = copyChains(s);
+  if (!f || !f.price) return done(`skipped: no trading pool found for it yet (too new to trade, or not on your ticked chains: ${chains.join(", ")})`);
   if (!chains.includes(f.chain)) return done(`skipped: ${CHAIN_NAME[f.chain] || f.chain} isn't switched on`);
   // Only brand-new calls: the post itself must be fresh (seconds / a few minutes), the coin must be new (not one that's
   // been around for hours or days and is being shared again), and it mustn't have already pumped.
@@ -1588,6 +1632,13 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
     if (size < 2) return done(`skipped: scout budget used up ($${b.inTrades.toFixed(2)} in trades of $${(s.scout_budget + b.pnl).toFixed(2)})`);
     usdSize = +size.toFixed(2);
     label = `${label} · scout${scoutPot.trusted ? " (trusted caller)" : ""}`;
+  }
+  // A call on another network (BNB Chain / Ethereum): move the money there from Solana first (Relay), then buy.
+  if (bridgeable(s, f.chain)) {
+    const size = usdSize ?? (s.per_trade_usd > 0 ? s.per_trade_usd : 5);
+    const why = await bridgeForCall(s, f.chain as LiveChain, size, f.symbol);
+    if (why) { await tgNotify(`⚠️ Couldn't buy ${f.symbol} on ${CHAIN_NAME[f.chain] || f.chain} (${label}): ${why}.`); return done(`skipped: ${why}`); }
+    label = `${label} · bridged from Solana`;
   }
   // Money check (both wallets) and coin check side by side: every second counts on a fresh call.
   const [room, room2, g] = await Promise.all([

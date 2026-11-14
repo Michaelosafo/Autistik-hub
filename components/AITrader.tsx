@@ -176,7 +176,7 @@ export default function AITrader() {
       </section>
 
       <ScoutCard s={s as any} busy={!!busy} onAct={act} />
-      <StableMode on={!!(s as any).stable_on} live={live} wallets={d.copy.wallets || []} busy={!!busy} onAct={act} />
+      <StableMode on={!!(s as any).stable_on} bridge={(s as any).bridge_on !== false} live={live} wallets={d.copy.wallets || []} busy={!!busy} onAct={act} />
       <BuyHours s={s} busy={!!busy} onAct={act} />
 
       <AITraderCopy c={d.copy} s={s} owner={d.owner} busy={!!busy} onAct={act} reload={load} />
