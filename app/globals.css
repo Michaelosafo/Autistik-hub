@@ -6900,3 +6900,14 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .lp .lp-hero h1 .lp-loop, .lp .lp-hero h1 .lp-loop span { background: none !important; color: var(--ink) !important; -webkit-text-fill-color: currentColor !important; }
 :root[data-theme="light"] .lp .lp-hero h1 .lp-loop, :root[data-theme="light"] .lp .lp-hero h1 .lp-loop span { color: #111 !important; }
 .lp .lp-hero h1 .lp-loop .tt-caret { background: #F0B90B !important; }
+
+/* App: the small TIK preview (2 posts, View more, Open TIK). */
+.tik-prev { display: flex; flex-direction: column; gap: 4px; padding: 6px 12px 12px; border-radius: 20px; background: var(--surface); }
+.tik-prev-cap { color: var(--muted); font-size: .78em; font-weight: 600; padding: 6px 4px 0; }
+.tik-prev .tik { background: transparent !important; border: 0 !important; border-radius: 0 !important; padding: 12px 4px 8px; position: relative; }
+.tik-prev .tik + .tik::before { content: ""; position: absolute; left: 4px; right: 4px; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--wc), .1) 15%, rgba(var(--wc), .1) 85%, transparent); }
+.tik-prev-go { display: flex; gap: 8px; margin-top: 6px; }
+.tik-prev-more, .tik-prev-open { flex: 1 1 0; display: inline-flex; justify-content: center; align-items: center; padding: 11px 14px; border-radius: 14px; font-weight: 700; font-size: .9em; text-decoration: none; cursor: pointer; }
+.tik-prev-more { all: unset; flex: 1 1 0; text-align: center; padding: 11px 14px; border-radius: 14px; font-weight: 700; font-size: .9em; cursor: pointer; color: var(--ink); background: rgba(var(--wc), .06); }
+.tik-prev-open { color: #191326 !important; background: linear-gradient(135deg, #FFD84D, #F0B90B 55%, #FF9F5A); }
+.tik-prev-more:focus-visible, .tik-prev-open:focus-visible { outline: 2px solid #F0B90B; outline-offset: 2px; }
