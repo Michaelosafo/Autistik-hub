@@ -34,6 +34,7 @@ type D = {
   earn?: { free: number; inHlp: number; lockedUntil: number | null; apr: number | null; vault: string } | null;
   fx?: { pairs: { coin: string; label: string; price: number; maxLev: number }[]; open: boolean };
   sharedReserve?: number | null;
+  copyEvm?: { address: string; bnb: number | null; eth: number | null } | null;
   wallet: { address: string; hlValue: number | null; hlFree: number | null; arbUsdc: number | null; arbEth: number | null; sol: { address: string; usdt: number | null; usdc: number | null; sol: number | null } | null } | null;
   open: P[]; closed: P[]; log: { id: number; at: string; kind: string; text: string }[];
   news: { key: string; at: string; source: string; title: string; url: string; coin: string; direction: number; strength: number }[];
@@ -341,7 +342,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       <div className="page-head">
         <Link href="/admin" className="muted">← Admin</Link>
         <h1>{copyDesk ? "👥 Copy" : madDesk ? "🔥 Madness" : snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
-        {copyDesk ? <p className="muted">Copies the Solana wallets you add below. It checks them about every second: when one buys a coin, Copy buys it too (through Relay, with Jupiter as backup), ${d.snipe?.cfg.usd ?? 20} a buy unless you set an amount for that wallet; when that wallet sells, Copy sells the same share right away (they sell half, it sells half; they sell it all, it sells it all). Each copy waits a random moment and buys a slightly different amount, so it doesn&apos;t mirror the wallet exactly (everything on Solana is public, so this lowers the chance of being noticed, not a promise). Safety: stop-loss at -{d.snipe?.cfg.sl ?? 50}%, its own budget in the wallet shared with Sniper and Turbo, at most {s.max_positions} coins at once, and coins Jupiter flags as scams are skipped. Sells always follow the wallet, even when Copy is stopped.</p>
+        {copyDesk ? <p className="muted">Copies the wallets you add below, on Solana, BNB Chain and Ethereum. It checks them about every second: when one buys a coin, Copy buys it too (through Relay, with Jupiter as backup), ${d.snipe?.cfg.usd ?? 20} a buy unless you set an amount for that wallet; when that wallet sells, Copy sells the same share right away (they sell half, it sells half; they sell it all, it sells it all). Each copy waits a random moment and buys a slightly different amount, so it doesn&apos;t mirror the wallet exactly (everything on Solana is public, so this lowers the chance of being noticed, not a promise). Safety: stop-loss at -{d.snipe?.cfg.sl ?? 50}%, its own budget in the wallet shared with Sniper and Turbo, at most {s.max_positions} coins at once, and coins Jupiter flags as scams are skipped. Sells always follow the wallet, even when Copy is stopped.</p>
         : madDesk ? <p className="muted">⚠️ Highest risk. Its own wallet and money, funded from Solana like Futures. It trades the 8 most-traded Hyperliquid coins that allow 20x or more, long or short, only when fresh news and the chart agree (or on a very strong chart setup with no news against it), and the AI must approve each trade. Very tight stop-loss (0.25%–0.6% away, resting on Hyperliquid itself and checked every 2 seconds), then the highest leverage the coin allows (up to {s.max_lev}x) that keeps liquidation at least 3 times further away than the stop, so the stop always fires first. Takes profit at 3× the risk, moves to break-even early and trails tightly. {s.risk_pct}% of the account at risk a trade; it pauses after a {s.daily_loss_pct}% losing day. A gap past the stop in a sudden crash is still possible: expect fast wins and fast losses.</p>
         : snipeDesk ? <p className="muted">⚠️ High risk. Its own Solana wallet and money. Every minute it scans brand-new coins on pump.fun (other launchpads such as letsbonk or Meteora only with a clean RugCheck report) and buys the ones pumping hard with real volume: under an hour old, $8K–$150K market cap, +15% in 5 minutes, $5K+ traded, buyers well ahead of sellers, 40+ holders, no whale or creator holding most of it. Every buy is rug-scanned and checked by the AI first. ${d.snipe?.cfg.usd ?? 10} a buy; checks its trades every 2.5 seconds: sells at +{d.snipe?.cfg.tp ?? 100}% or -{d.snipe?.cfg.sl ?? 25}%, locks break-even after +20%, +15% after +40%, trails 15% under the high past +50%, sells on a rug or after {s.max_hold_hours}h. Most new coins go to zero: a few big wins have to pay for many small losses.</p>
         : turboDesk ? <p className="muted">⚠️ High risk. Its own wallet and money, funded from Solana like Futures. Every minute it trades the 15 most-traded coins on Hyperliquid right now, long or short, at up to {s.max_lev}x with {s.risk_pct}% of the account at risk a trade, and jumps in on weaker signals than Futures (charts and breaking news). Strong stops: never more than 1.5% away, resting on Hyperliquid itself and also checked every 4 seconds; break-even as soon as it&apos;s 0.6× the risk in profit, then it trails tightly. It can grow fast and lose fast: a bad day can cost {s.daily_loss_pct}% before it pauses.</p>
@@ -401,28 +402,53 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
             </>
           )}
           {copyDesk && (() => {
-            const ws: { address: string; label?: string; usd?: number; on?: boolean }[] = (s as any).copy_wallets || [];
+            const ws: { address: string; chain?: string; label?: string; usd?: number; on?: boolean }[] = (s as any).copy_wallets || [];
+            const CH: Record<string, string> = { solana: "◎ Solana", bsc: "🟡 BNB", ethereum: "⟠ ETH" };
+            const scan = (w: { address: string; chain?: string }) => (w.chain === "bsc" ? `https://bscscan.com/address/${w.address}` : w.chain === "ethereum" ? `https://etherscan.io/address/${w.address}` : `https://solscan.io/account/${w.address}`);
             const save = (next: typeof ws) => set({ copy_wallets: next } as any);
             return (
               <div className="stack" style={{ gap: 6 }}>
                 <b>👥 Wallets it copies</b>
-                {!ws.length && <small className="muted">None yet. Add a Solana wallet address: from then on, Copy buys what it buys and sells when it sells (its older trades are never copied).</small>}
+                {!ws.length && <small className="muted">None yet. Add a Solana, BNB Chain or Ethereum wallet address: from then on, Copy buys what it buys and sells when it sells (its older trades are never copied).</small>}
                 {ws.map((w, i) => (
                   <div key={w.address} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    <span className="chip">{w.on === false ? "⏸" : "🟢"} {w.label || `${w.address.slice(0, 4)}…${w.address.slice(-4)}`}{w.usd ? ` · $${w.usd}` : ""}</span>
-                    <a className="muted" href={`https://solscan.io/account/${w.address}`} target="_blank" rel="noreferrer"><small>view</small></a>
+                    <span className="chip">{w.on === false ? "⏸" : "🟢"} {CH[w.chain || "solana"]} · {w.label || `${w.address.slice(0, 4)}…${w.address.slice(-4)}`}{w.usd ? ` · $${w.usd}` : ""}</span>
+                    <a className="muted" href={scan(w)} target="_blank" rel="noreferrer"><small>view</small></a>
                     <button type="button" className="btn small" disabled={!!busy} onClick={() => save(ws.map((x, j) => (j === i ? { ...x, on: x.on === false } : x)))}>{w.on === false ? "Resume" : "Pause"}</button>
                     <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt("$ per buy for this wallet (empty = the default below):", w.usd ? String(w.usd) : ""); if (v != null) save(ws.map((x, j) => (j === i ? { ...x, usd: Number(v) > 0 ? Number(v) : undefined } : x))); }}>Amount</button>
                     <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { if (confirm("Stop copying this wallet? Coins already bought from it stay open until the safety stop-loss or take profit, or until you close them.")) save(ws.filter((_, j) => j !== i)); }}>Remove</button>
                   </div>
                 ))}
                 <button type="button" className="btn small primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => {
-                  const a = prompt("Solana wallet address to copy:")?.trim();
+                  const a = prompt("Wallet address to copy (Solana, or 0x… for BNB Chain / Ethereum):")?.trim();
                   if (!a) return;
-                  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) { alert("That doesn't look like a Solana address."); return; }
+                  const evm = /^0x[0-9a-fA-F]{40}$/.test(a);
+                  if (!evm && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a)) { alert("That doesn't look like a Solana or EVM (0x…) address."); return; }
+                  let chain = "solana";
+                  if (evm) {
+                    const c = prompt("Which network? Type bsc (BNB Chain) or eth (Ethereum):", "bsc")?.trim().toLowerCase();
+                    if (!c) return;
+                    chain = /^e/.test(c) ? "ethereum" : "bsc";
+                    if (!d.copyEvm) alert("Tip: create Copy's EVM wallet (button below) so it can buy on " + (chain === "bsc" ? "BNB Chain." : "Ethereum."));
+                  }
                   const label = prompt("A name for it (optional):", "")?.trim() || undefined;
-                  save([...ws.filter((x) => x.address !== a), { address: a, label, on: true }]);
+                  save([...ws.filter((x) => !(x.address.toLowerCase() === a.toLowerCase() && (x.chain || "solana") === chain)), { address: a, chain, label, on: true }]);
                 }}>+ Add wallet</button>
+                <div className="stack" style={{ gap: 4 }}>
+                  <b>⛓ EVM wallet (BNB Chain and Ethereum copies)</b>
+                  {!d.copyEvm ? (
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      <button type="button" className="btn small" disabled={!!busy} onClick={() => act("ew", "wallet", {}, "Copy's EVM wallet is ready.")}>Create EVM wallet</button>
+                      <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { const k = prompt("Paste the EVM wallet's private key (0x…):"); if (k?.trim()) act("ei", "key-import", { key: k.trim() }, "Copy now uses your EVM wallet."); }}>Import my wallet</button>
+                    </div>
+                  ) : (
+                    <>
+                      <code style={{ wordBreak: "break-all" }}>{d.copyEvm.address}</code>
+                      <small className="muted">Gas: {d.copyEvm.bnb == null ? "–" : d.copyEvm.bnb.toFixed(4)} BNB · {d.copyEvm.eth == null ? "–" : d.copyEvm.eth.toFixed(5)} ETH. Buys there are paid from the Solana wallet&apos;s USDT / USDC and arrive through Relay; sells go back to USDT on Solana. Gas is topped up from Solana by itself ($2 on BNB Chain, $8 on Ethereum when low). Ethereum gas is expensive: small copies there can lose most of their value to fees.</small>
+                      <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={async () => { if (!confirm("Show the EVM wallet's private key? Anyone who sees it can take the money.")) return; try { const r = await call("key-reveal", {}); prompt("EVM private key (keep it secret):", r.key); } catch (e) { alert((e as Error).message); } }}>Show private key</button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })()}

@@ -330,6 +330,19 @@ export async function relaySolSwap(kp: Keypair, inToken: string, outToken: strin
   if (!sigs.length) throw new Error("Relay returned nothing to send.");
   return sigs;
 }
+/** Copy trader: USDT / USDC in the Solana wallet → a coin on BNB Chain / Ethereum, delivered straight to the EVM wallet (Relay). */
+export async function solRelayToToken(kp: Keypair, evmAddr: string, from: Stable, usd: number, chain: Exclude<LiveChain, "solana">, token: string) {
+  return solRelayTo(kp, evmAddr, from.token, parseUnits(usd.toFixed(6), from.decimals), RELAY_ID[chain], token, false);
+}
+/** Copy trader: a coin on BNB Chain / Ethereum → USDT in the Solana wallet (Relay; gas paid in the chain's own coin). */
+export async function evmRelayToSol(account: PrivateKeyAccount, chain: Exclude<LiveChain, "solana">, token: string, raw: bigint, solRecipient: string, toToken: string) {
+  const q = await relayQuote({ user: account.address, recipient: solRecipient, refundTo: account.address, originChainId: RELAY_ID[chain], destinationChainId: RELAY_ID.solana, originCurrency: token, destinationCurrency: toToken, amount: raw.toString(), slippageTolerance: "800" });
+  const info = relayInfo(q);
+  const r = await relayRun(q, account);
+  return { ...info, ...r };
+}
+/** Read-only client for an EVM chain (logs, transactions, balances). */
+export const evmClient = (chain: Exclude<LiveChain, "solana">) => pub(chain as any);
 function relayInfo(q: any) {
   const fees = q.fees || {};
   const feeUsd = ["gas", "relayer", "app"].reduce((a, k) => a + (Number(fees[k]?.amountUsd) || 0), 0);

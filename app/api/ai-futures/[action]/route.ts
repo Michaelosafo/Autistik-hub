@@ -69,10 +69,11 @@ export async function POST(req: Request, { params }: { params: { action: string 
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
             const seen = new Set<string>();
-            up.copy_wallets = b.copy_wallets.map((w: any) => ({
-              address: String(w?.address || "").trim(), label: String(w?.label || "").trim().slice(0, 24) || undefined,
-              usd: clamp(w?.usd, 1, 10000), on: w?.on !== false,
-            })).filter((w: any) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.address) && !seen.has(w.address) && seen.add(w.address)).slice(0, 25);
+            up.copy_wallets = b.copy_wallets.map((w: any) => {
+              const address = String(w?.address || "").trim();
+              const evm = /^0x[0-9a-fA-F]{40}$/.test(address);
+              return { address, chain: evm ? (w?.chain === "ethereum" ? "ethereum" : "bsc") : "solana", label: String(w?.label || "").trim().slice(0, 24) || undefined, usd: clamp(w?.usd, 1, 10000), on: w?.on !== false };
+            }).filter((w: any) => (w.chain === "solana" ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.address) : true) && !seen.has(`${w.chain}:${w.address.toLowerCase()}`) && seen.add(`${w.chain}:${w.address.toLowerCase()}`)).slice(0, 25);
           }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
           if (Array.isArray(b.coins)) up.coins = [...new Set(b.coins.map((c: unknown) => String(c).trim().toUpperCase()).filter((c: string) => /^[A-Z0-9]{1,12}$/.test(c)))].slice(0, 15);
