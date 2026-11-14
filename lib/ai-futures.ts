@@ -685,8 +685,10 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
     const gainR = ((long ? best - p.entry : p.entry - best) / risk);
     let stop = n(p.stop);
     // At +1R the stop moves to break-even (plus fees); past +1.5R it trails 0.8R behind the best price.
-    if (gainR >= 1) stop = long ? Math.max(stop, p.entry * 1.001) : Math.min(stop, p.entry * 0.999);
-    if (gainR >= 1.5) stop = long ? Math.max(stop, best - 0.8 * risk) : Math.min(stop, best + 0.8 * risk);
+    // Turbo (high leverage) protects sooner: break-even at +0.6R, trailing 0.6R behind from +1R.
+    const tb = isTurboDesk();
+    if (gainR >= (tb ? 0.6 : 1)) stop = long ? Math.max(stop, p.entry * 1.001) : Math.min(stop, p.entry * 0.999);
+    if (gainR >= (tb ? 1 : 1.5)) stop = long ? Math.max(stop, best - (tb ? 0.6 : 0.8) * risk) : Math.min(stop, best + (tb ? 0.6 : 0.8) * risk);
     const hit = (long ? price <= stop : price >= stop) ? "Stop-loss" : (long ? price >= p.target : price <= p.target) ? "Take profit" : null;
     const liqHit = p.liq && (long ? price <= p.liq : price >= p.liq);
     const ns = news.get(p.coin)?.score ?? 0;
@@ -734,7 +736,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   // leverage of price). Liquidation is about 1 ÷ leverage away, so the stop always comes first.
   // Currencies move far less, so their stop is 0.15%–1% away instead.
   const stopPct = fx ? Math.min(0.01, Math.max(0.0015, (ta?.atrPct ?? 0.0008) * 3), s.max_loss_pct / 100 / lev)
-    : Math.min(0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev);
+    : Math.min(isTurboDesk() ? 0.015 : 0.04, Math.max(0.006, (ta?.atrPct ?? 0.004) * 3), s.max_loss_pct / 100 / lev); // Turbo: never more than 1.5% away
   // Judgment: what recent results say, then the AI's second opinion; together they set the bet size.
   const label = fxLabel(coin, price);
   const les = await lessons(s.mode, coin, newsDriven);
@@ -802,10 +804,35 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
 
 // ---------------------------------------------------------------- One run
 
+/**
+ * Turbo's fast stop check: for the rest of the minute, every 4 seconds, re-price its open trades and close at once on
+ * the stop-loss, the take profit or the auto-sell loss. (In Live the stop also rests on Hyperliquid itself.)
+ */
+async function turboGuard(s: FSettings, untilMs: number) {
+  while (Date.now() < untilMs) {
+    await new Promise((r) => setTimeout(r, 4000));
+    const { data } = await fq("ai_futures_positions").select("*").eq("status", "open");
+    const open = (data || []) as FPos[];
+    if (!open.length) return;
+    const hl = await hlMarket().catch(() => null);
+    if (!hl) continue;
+    const m: Mkt = { hl, aster: new Map(), fx: new Map() };
+    for (const p of open) {
+      const price = priceOn(m, p.venue, p.coin);
+      if (!price) continue;
+      const long = p.side === "long", roe = (pnlOf(p, price) / n(p.margin_usd)) * 100;
+      const hit = (long ? price <= n(p.stop) : price >= n(p.stop)) ? (long ? n(p.stop) >= p.entry : n(p.stop) <= p.entry) ? "Break-even / trailing stop (fast check)" : "Stop-loss (fast check)"
+        : (long ? price >= p.target : price <= p.target) ? "Take profit" : roe <= -s.max_loss_pct ? `Auto-sell at -${s.max_loss_pct}%` : null;
+      if (hit) await closePos(s, m, p, hit, price);
+    }
+  }
+}
+
 export async function runFutures(): Promise<string> {
   const s = await getF();
   const { data: go } = await sb().rpc("ai_futures_lease", { p_id: T(), p_seconds: 55 });
   if (!go) return "busy";
+  const t0 = Date.now();
   try {
     // Sniper: its own engine, money stays in its Solana wallet (nothing goes to Hyperliquid).
     if (isSnipeDesk()) return note(await (await import("@/lib/ai-sniper")).runSniper(s));
@@ -876,6 +903,7 @@ export async function runFutures(): Promise<string> {
     const watching = isFxDesk() ? (fxOpen() ? `Watching ${fxCoins.length} forex pairs` : "Forex is closed for the weekend (opens Sunday 21:00 UTC)") : `Watching ${s.coins.length} coins`;
     return note(notes.length ? notes.join(" · ") : `${watching}; no setup strong enough. Account $${eq.total.toFixed(2)}.`);
   } finally {
+    if (isTurboDesk()) await turboGuard(s, t0 + 45_000).catch(() => {});
     await sb().from("ai_futures_settings").update({ lease_until: null, last_run: new Date().toISOString() }).eq("id", T());
   }
   async function note(t: string) { await sb().from("ai_futures_settings").update({ last_note: t.slice(0, 400) }).eq("id", T()); return t; }
