@@ -10,7 +10,7 @@
  * Relay (relayBridge), which needs RELAY_API_KEY. Each buy reports exactly how many tokens arrived
  * and each sell exactly how much of the chain's coin came back.
  */
-import { createPublicClient, createWalletClient, defineChain, erc20Abi, getAddress, http, parseUnits, type PrivateKeyAccount } from "viem";
+import { createPublicClient, createWalletClient, defineChain, encodeFunctionData, erc20Abi, getAddress, http, parseAbi, parseUnits, type PrivateKeyAccount } from "viem";
 import { Connection, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction, type AddressLookupTableAccount } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { WCHAINS, WSOL } from "@/lib/wallet-chains";
@@ -137,6 +137,57 @@ async function sendEvm(chain: Exclude<LiveChain, "solana">, account: PrivateKeyA
   const r = await pc.waitForTransactionReceipt({ hash, timeout: 90_000 });
   if (r.status !== "success") throw new Error("The swap transaction failed on-chain.");
   return { hash: hash as string, gas: BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice ?? 0n) };
+}
+
+// ---------------------------------------------------------------- four.meme (BNB Chain launch curve)
+
+/**
+ * four.meme coins trade on its own launch curve (a contract, not a DEX pool) until they "graduate" to PancakeSwap.
+ * Swap routers can't trade them there (the swap fails on-chain), so while a coin is on the curve it's bought and sold
+ * straight through four.meme's TokenManager2, like four.meme's own site does. BNB-priced curves only.
+ */
+const FOUR_HELPER = "0xF251F83e40a78868FcfA3FA4599Dad6494E46034";
+const FOUR_TM2 = "0x5c952063c7fc8610FFDB798152D69F0B9550762b";
+const FOUR_ABI = parseAbi([
+  "function getTokenInfo(address token) view returns (uint256 version, address tokenManager, address quote, uint256 lastPrice, uint256 tradingFeeRate, uint256 minTradingFee, uint256 launchTime, uint256 offers, uint256 maxOffers, uint256 funds, uint256 maxFunds, bool liquidityAdded)",
+  "function tryBuy(address token, uint256 amount, uint256 funds) view returns (address tokenManager, address quote, uint256 estimatedAmount, uint256 estimatedCost, uint256 estimatedFee, uint256 amountMsgValue, uint256 amountApproval, uint256 amountFunds)",
+  "function buyTokenAMAP(address token, uint256 funds, uint256 minAmount) payable",
+  "function sellToken(address token, uint256 amount)",
+]);
+
+/** A four.meme coin still on its BNB launch curve (null if it isn't a four.meme coin, has graduated, or isn't BNB-priced). */
+export async function fourCurve(token: string): Promise<{ lastPrice: bigint; funds: bigint; launchTime: number } | null> {
+  try {
+    const r = await pub("bsc").readContract({ address: FOUR_HELPER, abi: FOUR_ABI, functionName: "getTokenInfo", args: [getAddress(token)] });
+    const [, manager, quoteTok, lastPrice, , , launchTime, , , funds, , added] = r as any[];
+    if (added || String(manager).toLowerCase() !== FOUR_TM2.toLowerCase() || String(quoteTok).toLowerCase() !== ZERO) return null;
+    return { lastPrice: BigInt(lastPrice), funds: BigInt(funds), launchTime: Number(launchTime) };
+  } catch { return null; }
+}
+
+/** Price, market cap and curve money for a four.meme coin with no DEX pool yet (all four.meme coins have 1B supply). */
+export async function fourFlow(token: string) {
+  const c = await fourCurve(token);
+  if (!c || c.lastPrice <= 0n) return null;
+  const bnb = await nativeUsd("bsc");
+  const price = (Number(c.lastPrice) / 1e18) * bnb;
+  return { price, mcap: price * 1e9, liquidity: (Number(c.funds) / 1e18) * bnb * 2, ageHours: c.launchTime ? (Date.now() / 1000 - c.launchTime) / 3600 : 0 };
+}
+
+async function fourBuy(account: PrivateKeyAccount, token: string, wei: bigint, slipBps: number) {
+  const tok = getAddress(token);
+  const t = (await pub("bsc").readContract({ address: FOUR_HELPER, abi: FOUR_ABI, functionName: "tryBuy", args: [tok, 0n, wei] })) as any[];
+  const est = BigInt(t[2]), msgValue = BigInt(t[5]) || wei, funds = BigInt(t[7]) || wei;
+  if (est <= 0n) throw new Error("four.meme quoted nothing for this buy.");
+  const minAmount = (est * BigInt(10000 - Math.min(slipBps, 4900))) / 10000n;
+  const data = encodeFunctionData({ abi: FOUR_ABI, functionName: "buyTokenAMAP", args: [tok, funds, minAmount] });
+  return sendEvm("bsc", account, { to: FOUR_TM2, data, value: msgValue });
+}
+
+async function fourSell(account: PrivateKeyAccount, token: string, amount: bigint) {
+  const tok = getAddress(token);
+  const data = encodeFunctionData({ abi: FOUR_ABI, functionName: "sellToken", args: [tok, amount] });
+  return sendEvm("bsc", account, { to: FOUR_TM2, data, value: 0n }, { token: tok, spender: FOUR_TM2, amount });
 }
 
 /** A swap route on Robinhood Chain from LI.FI (native ETH is the zero address there). */
@@ -382,6 +433,8 @@ async function evmBuy(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAc
   } else if (chain === "robinhood") {
     const q = await lifiQuote(ZERO, tok, wei, account.address, slip / 100);
     hash = (await sendEvm(chain, account, q.tx)).hash;
+  } else if (chain === "bsc" && (await fourCurve(tok))) {
+    hash = (await fourBuy(account, tok, wei, slip)).hash; // still on four.meme's launch curve
   } else {
     const c = evmChain(chain);
     const q = await quote(c, c.native.address, tok, wei, 0);
@@ -410,6 +463,8 @@ async function evmSell(chain: Exclude<LiveChain, "solana">, account: PrivateKeyA
   } else if (chain === "robinhood") {
     const q = await lifiQuote(tok, ZERO, amount, account.address, slip / 100);
     res = await sendEvm(chain, account, q.tx, { token: tok, spender: q.spender, amount });
+  } else if (chain === "bsc" && (await fourCurve(tok))) {
+    res = await fourSell(account, tok, amount); // still on four.meme's launch curve
   } else {
     const c = evmChain(chain);
     const q = await quote(c, tok, c.native.address, amount, 0);
@@ -648,6 +703,20 @@ async function evmBuyStable(chain: Exclude<LiveChain, "solana">, account: Privat
   const amt = parseUnits(usd.toFixed(Math.min(6, st.decimals)), st.decimals);
   const before: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
   const c = evmChain(chain);
+  if (chain === "bsc" && (await fourCurve(tok))) {
+    // four.meme launch curves take BNB only: stablecoin → BNB first, then buy on the curve with exactly what came in.
+    const bnb0: bigint = await pc.getBalance({ address: account.address });
+    const q1 = await quote(c, getAddress(st.token), c.native.address, amt, 0);
+    const t1 = (await build(c, q1, account.address, SLIP_BPS, true)) as EvmTx;
+    const r1 = await sendEvm(chain, account, { to: t1.to, data: t1.data, value: BigInt(t1.value || 0) }, { token: getAddress(st.token), spender: t1.spender || t1.to, amount: amt });
+    const got = (await pc.getBalance({ address: account.address })) - bnb0 + r1.gas;
+    const use = got - got / 100n; // a hair less, so gas never makes it fail
+    if (use <= 0n) throw new Error("The stablecoin → BNB step returned nothing.");
+    const hash = (await fourBuy(account, tok, use, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)))).hash;
+    const after: bigint = await pc.readContract({ address: tok, abi: erc20Abi, functionName: "balanceOf", args: [account.address] });
+    const decimals = Number(await pc.readContract({ address: tok, abi: erc20Abi, functionName: "decimals" }).catch(() => 18));
+    return { hash, raw: after - before, decimals };
+  }
   const q = await quote(c, getAddress(st.token), tok, amt, 0);
   const tx = (await build(c, q, account.address, Math.min(1500, SLIP_BPS + Math.ceil(tax * 100)), true)) as EvmTx;
   const hash = (await sendEvm(chain, account, { to: tx.to, data: tx.data, value: BigInt(tx.value || 0) }, { token: getAddress(st.token), spender: tx.spender || tx.to, amount: amt })).hash;
@@ -664,6 +733,23 @@ async function evmSellStable(chain: Exclude<LiveChain, "solana">, account: Priva
   if (amount <= 0n) throw new Error("The wallet holds none of this coin any more.");
   const before = await evmStableBal(chain, account.address, st);
   const c = evmChain(chain);
+  if (chain === "bsc" && (await fourCurve(tok))) {
+    // On four.meme's curve it sells for BNB, then the BNB goes back into the stablecoin.
+    const bnb0: bigint = await pc.getBalance({ address: account.address });
+    const r1 = await fourSell(account, tok, amount);
+    const got = (await pc.getBalance({ address: account.address })) - bnb0 + r1.gas;
+    if (got <= 0n) throw new Error("The four.meme sell returned no BNB.");
+    try {
+      const q2 = await quote(c, c.native.address, getAddress(st.token), got, 0);
+      const t2 = (await build(c, q2, account.address, SLIP_BPS, true)) as EvmTx;
+      await sendEvm(chain, account, { to: t2.to, data: t2.data, value: BigInt(t2.value || 0) });
+      const after = await evmStableBal(chain, account.address, st);
+      return { hash: r1.hash, receivedNative: Number(after > before ? after - before : 0n) / 10 ** st.decimals };
+    } catch {
+      // Sold, but kept as BNB: count it in dollars.
+      return { hash: r1.hash, receivedNative: (Number(got) / 1e18) * (await nativeUsd("bsc")) };
+    }
+  }
   const q = await quote(c, tok, getAddress(st.token), amount, 0);
   const tx = (await build(c, q, account.address, sellSlip(tax, extra), true)) as EvmTx;
   const res = await sendEvm(chain, account, { to: tx.to, data: tx.data, value: BigInt(tx.value || 0) }, { token: tok, spender: tx.spender || tx.to, amount });

@@ -98,7 +98,21 @@ export async function resolve(ref: { chain?: string; token?: string; ticker?: st
   if (ok[0]) return toFlow(ok[0]);
   // No DEX pool yet: a Solana coin still on its launch curve (pump.fun etc.) can still be bought through Jupiter.
   if (ref.token && (!ref.chain || ref.chain === "solana") && chains.includes("solana") && SOL_ADDR.test(ref.token)) return launchFlow(ref.token).catch(() => null);
+  // BNB Chain: a four.meme coin still on its launch curve, before any DEX lists it.
+  if (ref.token && (!ref.chain || ref.chain === "bsc") && chains.includes("bsc") && /^0x[a-fA-F0-9]{40}$/.test(ref.token)) return fourLaunchFlow(ref.token).catch(() => null);
   return null;
+}
+
+/** A four.meme coin with no DexScreener pool yet, priced from its launch curve. */
+export async function fourLaunchFlow(token: string): Promise<Flow | null> {
+  const { fourFlow } = await import("@/lib/ai-trader-chains");
+  const c = await fourFlow(token);
+  if (!c) return null;
+  return {
+    chain: "bsc", token: token.toLowerCase(), pool: `curve:${token.toLowerCase()}`, symbol: "?", name: "", image: null,
+    price: c.price, liquidity: c.liquidity, mcap: c.mcap, ageHours: c.ageHours,
+    ch: { m5: 0, h1: 0, h6: 0, h24: 0 }, buys5: 0, sells5: 0, buys1h: 0, sells1h: 0, vol5: 0, vol1h: 0, x: false, tg: false,
+  };
 }
 
 /** Contract addresses and $TICKERS in a post. */
