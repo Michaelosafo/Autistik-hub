@@ -18,7 +18,7 @@ import { anthropic, FAST_MODEL } from "@/lib/ai";
 import { discover } from "@/lib/momentum-server";
 import { followCallerChats, scoutAvailable, scoutFollow, scoutScore, scoutTick, scoutX } from "@/lib/ai-trader-scout";
 import { IMPOSTOR, aiPick, chartOk, readChart, scanSetups, type SCand } from "@/lib/ai-strategy";
-import { dexSignals, launchFlow, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
+import { dexSignals, fourLaunchFlow, launchFlow, postSignals, resolve, toFlow, xPosts, xReady, type Flow, type Signal } from "@/lib/ai-signals";
 import { WCHAINS } from "@/lib/wallet-chains";
 import { build, market, quote, riskOf, walletChainClient, type EvmTx } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
@@ -780,9 +780,9 @@ async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
     }
     // Solana coins bought while still on their launch curve have no DEX pool until they graduate: price them from
     // Jupiter / pump.fun so their stop-loss and take profit still work.
-    if (chain === "solana") await Promise.all(toks.filter((t) => !out.has(`solana:${t.toLowerCase()}`)).slice(0, 10).map(async (t) => {
-      const f = await launchFlow(t).catch(() => null);
-      if (f) out.set(`solana:${t.toLowerCase()}`, f);
+    if (chain === "solana" || chain === "bsc") await Promise.all(toks.filter((t) => !out.has(`${chain}:${t.toLowerCase()}`)).slice(0, 10).map(async (t) => {
+      const f = await (chain === "solana" ? launchFlow(t) : fourLaunchFlow(t)).catch(() => null);
+      if (f) out.set(`${chain}:${t.toLowerCase()}`, f);
     }));
   }));
   return out;
