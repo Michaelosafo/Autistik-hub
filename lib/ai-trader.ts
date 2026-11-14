@@ -932,16 +932,15 @@ export async function adoptCoin(chain: LiveChain, token: string, slot: number, s
  * [best gain so far %, widest trail allowed %, smallest gain it may sell at %]. The trade's own trail % is used when
  * it is tighter than the step's cap; 0 turns the trailing stop off.
  */
-const TRAIL_STEPS: [number, number, number][] = [[100, 8, 70], [60, 10, 35], [30, 12, 15], [0, Infinity, 3]];
-const TRAIL_START = 10; // normal picks start trailing once up 10%
-const TRAIL_START_SMALL = 25; // small-coin setup trades swing harder, so they start once up 25%
+const TRAIL_STEPS: [number, number, number][] = [[100, 8, 70], [60, 10, 35], [30, 12, 15], [10, Infinity, 5], [0, Infinity, 2]];
+const TRAIL_START = 5; // once any buy is up 5%, it can no longer close at a loss (it sells by +2% at worst, after fees)
 
 /** The price the trailing stop sells at, or null while it is off or not yet armed. */
 function trailStop(p: Position, high: number): number | null {
   const entry = n(p.entry_usd), t = n(p.trail);
   if (t <= 0 || !entry) return null;
   const peak = (high / entry - 1) * 100;
-  if (peak < (p.strategy ? TRAIL_START_SMALL : TRAIL_START)) return null;
+  if (peak < TRAIL_START) return null;
   const [, cap, floor] = TRAIL_STEPS.find(([g]) => peak >= g)!;
   return Math.max(high * (1 - Math.min(t, cap) / 100), entry * (1 + floor / 100));
 }
