@@ -12,7 +12,6 @@ import TypeSoundToggle from "@/components/TypeSoundToggle";
 import { SeqReveal, Words } from "@/components/Sequence";
 import { LogoBadge } from "@/components/LogoMark";
 import Wordmark from "@/components/Wordmark";
-import { CrewHero } from "@/components/Crew";
 import TokenLogo from "@/components/TokenLogo";
 import ToolIcon, { type IconName } from "@/components/ToolIcon";
 import { GROUPS, TOKEN_ADDRESS } from "@/lib/groups";
@@ -129,7 +128,7 @@ export default async function Home() {
           </div>
           {!user && <p className="lp-member">Part of the community? <Link href="/login?next=/">Sign in</Link> or <Link href="/login?mode=join&amp;next=/">join free</Link> to chat in the groups and save your settings.</p>}
         </div>
-        <div className="lp-hero-art crew-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><CrewHero /></div>
+        <div className="lp-hero-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
       </section>
 
       <section data-sq="up" style={{ ["--sd" as string]: "150ms" }} className="lp-stats" aria-label="AUTISTIK in numbers">

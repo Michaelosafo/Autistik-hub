@@ -1,7 +1,7 @@
 "use client";
 /**
- * The AUTISTIK wordmark: the name in heavy display letters with the infinity logo standing in for the first "I".
- * The two loops of the infinity sign are a pair of eyes: the pupils follow the pointer and blink now and then.
+ * The AUTISTIK wordmark: the name in heavy display letters, the first "I" drawn as a rainbow stem with one eye that
+ * follows the pointer and blinks now and then (so it still reads AUTISTIK).
  * Screen readers read "AUTISTIK".
  */
 import { useEffect, useRef } from "react";
@@ -17,8 +17,8 @@ function EyeLogo() {
       const r = svg.getBoundingClientRect();
       const dx = x - (r.left + r.width / 2), dy = y - (r.top + r.height / 2);
       const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 260);
-      svg.style.setProperty("--px", ((dx / d) * 4.2 * k).toFixed(2) + "px");
-      svg.style.setProperty("--py", ((dy / d) * 3.2 * k).toFixed(2) + "px");
+      svg.style.setProperty("--px", ((dx / d) * 2.6 * k).toFixed(2) + "px");
+      svg.style.setProperty("--py", ((dy / d) * 2.6 * k).toFixed(2) + "px");
     };
     const onMove = (e: PointerEvent) => move(e.clientX, e.clientY);
     window.addEventListener("pointermove", onMove, { passive: true });
@@ -32,26 +32,22 @@ function EyeLogo() {
     }, 1800);
     return () => { window.removeEventListener("pointermove", onMove); window.clearInterval(t); };
   }, []);
+  // The letter "I" of AUTISTIK: a rounded rainbow stem with one eye near the top (the pupil follows the pointer).
   return (
-    <svg ref={ref} className="eye-logo" viewBox="0 0 64 40" aria-hidden="true">
+    <svg ref={ref} className="eye-logo" viewBox="0 0 24 60" aria-hidden="true">
       <defs>
-        <linearGradient id="el-loop" x1="0" y1="0" x2="1" y2="0">
+        <linearGradient id="el-i" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#FF6B9A" />
-          <stop offset=".28" stopColor="#FFD84D" />
+          <stop offset=".3" stopColor="#FFD84D" />
           <stop offset=".55" stopColor="#5BE38F" />
           <stop offset=".78" stopColor="#4FD1FF" />
           <stop offset="1" stopColor="#B57CFF" />
         </linearGradient>
       </defs>
-      <ellipse cx="18" cy="20" rx="12.5" ry="13" fill="#fff" />
-      <ellipse cx="46" cy="20" rx="12.5" ry="13" fill="#fff" />
-      <g className="el-pupils">
-        <circle cx="18" cy="21" r="5.6" fill="#120C20" /><circle cx="20" cy="18.6" r="1.7" fill="#fff" />
-        <circle cx="46" cy="21" r="5.6" fill="#120C20" /><circle cx="48" cy="18.6" r="1.7" fill="#fff" />
-      </g>
-      <g className="el-lids"><rect x="4" y="5" width="28" height="30" rx="14" /><rect x="32" y="5" width="28" height="30" rx="14" /></g>
-      <path d="M18 6c-8 0-14 6.2-14 14s6 14 14 14c6.6 0 10.2-5.4 14-14 3.8-8.6 7.4-14 14-14 8 0 14 6.2 14 14s-6 14-14 14c-6.6 0-10.2-5.4-14-14-3.8-8.6-7.4-14-14-14z"
-        fill="none" stroke="url(#el-loop)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="2" y="1" width="20" height="58" rx="10" fill="url(#el-i)" />
+      <circle cx="12" cy="13" r="7.4" fill="#fff" />
+      <g className="el-pupils"><circle cx="12" cy="14" r="3.7" fill="#120C20" /><circle cx="13.3" cy="12.4" r="1.2" fill="#fff" /></g>
+      <g className="el-lids"><rect x="4.6" y="5.6" width="14.8" height="14.8" rx="7.4" /></g>
     </svg>
   );
 }
