@@ -33,8 +33,9 @@ export const BADGES: { name: string; colors: [string, string, string?]; shape: s
 export default function VerifiedBadge({ n, size = 16, title = "Verified by AUTISTIK", className }: { n?: number | null; size?: number; title?: string; className?: string }) {
   const id = useId().replace(/:/g, "");
   // 11–20: the AUTISTIK mood stickers, with a small check so it still reads as verified.
-  if (n && n >= 11 && n <= 20) {
-    const st = STICKERS[n - 11];
+  // Every badge is an AUTISTIK sticker now (older picks 1–10 map onto the same 10 stickers).
+  {
+    const st = STICKERS[((n && n >= 11 && n <= 20 ? n - 11 : (n && n >= 1 && n <= 10 ? n - 1 : 0)) + 10) % 10];
     return (
       <span className={"vbadge vsticker" + (className ? ` ${className}` : "")} role="img" aria-label={`${title} · ${st.label}`} title={`${title} · ${st.label}`} style={{ width: size * 1.25, height: size * 1.25 }}>
         <MoodSticker k={st.key} size={size * 1.25} />

@@ -7403,3 +7403,21 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .mytik-more { all: unset; cursor: pointer; align-self: stretch; text-align: center; padding: 7px; border-radius: 10px; font-size: .78em; font-weight: 800; color: #B57CFF; background: rgba(181,124,255,.1); }
 .mytik-more:hover { background: rgba(181,124,255,.18); }
 .mytik-more:focus-visible { outline: 2px solid #F0B90B; }
+
+/* Your panel: goofy AUTISTIK icons + a brighter dashboard */
+.goofy-tile { width: 42px !important; height: 42px !important; border-radius: 14px !important; display: grid !important; place-items: center; background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--c) 55%, #fff), var(--c) 60%, color-mix(in srgb, var(--c) 70%, #000)) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 0 color-mix(in srgb, var(--c) 60%, #000), 0 8px 14px -10px var(--c) !important; transform: rotate(-3deg); transition: transform .18s; }
+.goofy { overflow: visible; }
+.goofy-eyes { transform-box: fill-box; transform-origin: center; animation: goofyBlink 5s infinite; }
+@keyframes goofyBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.15); } }
+.yp-row:hover .goofy-tile { transform: rotate(6deg) scale(1.08); }
+.yp-row:nth-child(2n) .goofy-tile { transform: rotate(3deg); }
+.yp-row:nth-child(2n) .goofy-eyes { animation-delay: 1.3s; }
+.yp-row:nth-child(3n) .goofy-eyes { animation-delay: 2.6s; }
+@media (prefers-reduced-motion: reduce) { .goofy-eyes { animation: none; } .goofy-tile { transition: none; } }
+.yp-group { border-radius: 22px !important; background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 92%, #B57CFF)) !important; border: 1px solid color-mix(in srgb, var(--line) 70%, #B57CFF) !important; box-shadow: 0 10px 24px -20px rgba(90,50,160,.6); overflow: hidden; }
+.yp-row { gap: 12px !important; padding-top: 10px !important; padding-bottom: 10px !important; transition: background .15s; }
+.yp-row:hover { background: rgba(181,124,255,.08) !important; }
+.yp-row:active { background: rgba(181,124,255,.14) !important; }
+.yp-l { font-weight: 800 !important; letter-spacing: -.01em; }
+.yp-v { font-weight: 800; font-variant-numeric: tabular-nums; }
+.yp-chev { color: #B57CFF !important; font-weight: 900; }
