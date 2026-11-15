@@ -7078,3 +7078,13 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
   .lp .lp-hero h1 { font-size: clamp(1.7em, 8vw, 2.2em); margin: 4px 0 8px; }
   .lp .lp-hero h1 .lp-loop { margin-top: 4px; }
 }
+
+/* Homepage, round 2: the AUTISTIK letters (Anton, very tall) squashed to a shorter height, and
+   "Autism is not a disease." kept on one line in a slimmer box */
+.lp .lp-hero-mark .lp-wordmark { display: inline-block; font-size: clamp(2.2rem, 8vw, 4.6rem); line-height: 1; transform: scaleY(.72); transform-origin: left center; margin: -.16em 0 -.18em; }
+.lp .lp-hero h1 .lp-punch { white-space: nowrap; font-size: clamp(.78em, 1em, 1em); line-height: 1; padding: .02em .18em .05em; }
+.lp .lp-hero h1 { font-size: clamp(1.5em, 3.4vw, 2.4em); line-height: 1.02; }
+@media (max-width: 640px) {
+  .lp .lp-hero h1 { font-size: clamp(1.25em, 6.4vw, 1.9em); }
+  .lp .lp-hero h1 .lp-punch { display: inline-block; }
+}
