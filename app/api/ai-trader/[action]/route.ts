@@ -8,6 +8,8 @@ import { tgaChats, tgaCode, tgaLogout, tgaPassword, tgaQrCheck, tgaQrStart, tgaR
 import { cronDenied } from "@/lib/cron-auth";
 import { chatKey, runAll, tradeSize } from "@/lib/ai-trader";
 import { xReady } from "@/lib/ai-signals";
+import { stablesHome } from "@/lib/ai-trader";
+import { stableBalances, type LiveChain } from "@/lib/ai-trader-chains";
 import { COPY_MAX_TAX, createSolWallet, importSolKey, liveWallets, liveWallets2, removeWallet2, revealSolKey, relayMove, relayMoveQuote, setWallet2 } from "@/lib/ai-trader";
 import { relayReady, relayStatus } from "@/lib/ai-trader-chains";
 import { tgLinkStart, tgReady, tgSetHook, xAuthUrl, xCommunity, xFinish, xFollowing, xLoginReady, xMyLists, xReadReady, xSignOut } from "@/lib/ai-trader-copy";
@@ -67,6 +69,17 @@ async function getMine(_req: Request, action: string) {
     if (u.searchParams.get("error")) return back("x=cancelled");
     try { const name = await xFinish(u.searchParams.get("code") || "", u.searchParams.get("state") || ""); await log("settings", `Signed in with X as @${name}.`); return back(`x=ok&as=${encodeURIComponent(name)}`); }
     catch (e) { return back(`x=error&why=${encodeURIComponent((e as Error).message.slice(0, 120))}`); }
+  }
+  if (params.action === "traded") {
+    // Every coin bought in the last 14 days (open and sold), and the USDT / USDC left on other chains.
+    const { data } = await tq("ai_trader_positions").select("id,opened_at,closed_at,mode,status,chain,token,symbol,native,spent_native,received_native,spent,received,pnl,pnl_pct,why,close_reason,source_group,source_who,pot,wallet,buy_tx,sell_tx,entry_usd,last_usd")
+      .gte("opened_at", new Date(Date.now() - 14 * 864e5).toISOString()).order("opened_at", { ascending: false }).limit(150);
+    const { myWallets } = await import("@/lib/ai-trader");
+    const w = await myWallets(1).catch(() => null);
+    const away: { chain: string; symbol: string; balance: number }[] = [];
+    if (w?.evm) for (const chain of ["bsc", "ethereum"] as LiveChain[]) for (const st of await stableBalances(chain, w).catch(() => [])) if (st.balance >= 0.5) away.push({ chain, symbol: st.symbol, balance: st.balance });
+    const { data: st } = await tq("ai_trader_settings").select("return_home").eq("id", T()).maybeSingle();
+    return json({ ok: true, rows: data || [], away, returnHome: !!(st as any)?.return_home, evm: w?.evm?.address ?? null, sol: w?.sol?.publicKey.toBase58() ?? null });
   }
   if (params.action !== "status") return json({ error: "Not found." }, 404);
   const who = await adminState();
@@ -166,6 +179,7 @@ async function postMine(action: string, b: any) {
       if (typeof b.dip_on === "boolean") up.dip_on = b.dip_on;
       if (typeof b.stable_on === "boolean") up.stable_on = b.stable_on;
       if (typeof b.bridge_on === "boolean") up.bridge_on = b.bridge_on;
+      if (typeof b.return_home === "boolean") up.return_home = b.return_home;
       // Caller scout: on / off, budget and per-trade size, the bar a caller / group must clear, trust rules.
       for (const k of ["scout_on", "scout_trust_skip", "scout_honeypot_trusted"]) if (typeof b[k] === "boolean") up[k] = b[k];
       const scoutNums: Record<string, [number, number]> = { scout_budget: [0, 100_000], scout_trade_usd: [1, 10_000], scout_min_win: [1, 100], scout_min_calls: [3, 100], scout_multiple: [1.5, 100], scout_fast_min: [5, 1440], scout_group_rate: [1, 100] };
@@ -483,6 +497,9 @@ async function postMine(action: string, b: any) {
       if (openLive?.length) return json({ error: "Sell the open live coins first, then withdraw." }, 400);
       try { const r = await withdrawBnb(String(b.to || "")); return json({ ok: true, note: `Sent ${r.bnb.toFixed(5)} BNB. Transaction ${r.hash.slice(0, 10)}…` }); }
       catch (e) { return json({ error: (e as Error).message }, 400); }
+    }
+    case "send-home": {
+      try { return json({ ok: true, note: await stablesHome(undefined, !!b.force) }); } catch (e) { return json({ error: (e as Error).message }, 400); }
     }
     case "run":
       return json(await runTrader({ force: true }).catch((e) => ({ error: (e as Error).message })));
