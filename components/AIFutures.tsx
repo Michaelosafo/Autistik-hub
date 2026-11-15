@@ -3,6 +3,7 @@
  * Admin: AI Futures. A futures trader separate from the copy-trading bot: its own wallet, settings and trades.
  * Practice or Live (Hyperliquid), never above 3x, every trade with a stop-loss well before liquidation.
  */
+import Clamp from "@/components/Clamp";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import TraderTabs from "@/components/TraderTabs";
@@ -191,7 +192,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
       </div>
       <div className="stack" style={{ gap: 6 }}>
         <small><b>Every trade: why, and its effect</b> <span className="muted">tap one for the full reason</span></small>
-        {!p.journal.length ? <small className="muted">No closed trades yet.</small> : p.journal.map((t) => (
+        {!p.journal.length ? <small className="muted">No closed trades yet.</small> : <Clamp>{p.journal.map((t) => (
           <div key={t.id} className="fut-trade">
             <button type="button" className="fut-trade-h" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}>
               <b className={t.pnl >= 0 ? "up" : "down"}>{usd(t.pnl)}</b>
@@ -207,7 +208,7 @@ function Performance({ p, live }: { p: Perf; live: boolean }) {
               </div>
             )}
           </div>
-        ))}
+        ))}</Clamp>}
       </div>
     </section>
   );
@@ -567,7 +568,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
 
       <section className="card stack">
         <b>Open positions</b>
-        {!d.open.length ? <small className="muted">None right now.</small> : d.open.map((p) => (
+        {!d.open.length ? <small className="muted">None right now.</small> : <Clamp>{d.open.map((p) => (
           <div key={p.id} className="aic-row on" style={{ alignItems: "flex-start" }}>
             <span className="grow">
               <b className={p.side === "long" ? "up" : "down"}>{p.side === "long" ? "📈 LONG" : "📉 SHORT"} {lbl(p)}</b> <small className="muted">· {VN[p.venue] || p.venue} · {p.lev}x · {usd(p.notional_usd, 0)} position ({usd(p.margin_usd, 0)} margin){p.mode === "paper" ? " · practice" : ""}</small><br />
@@ -596,7 +597,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
               }}>{busy === `tp${p.id}` ? "Saving…" : "Edit take profit"}</button>
             </div>
           </div>
-        ))}
+        ))}</Clamp>}
       </section>
       </>)}
 
@@ -722,9 +723,9 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
 
       <section className="card stack">
         <b>Closed trades</b>
-        {!d.closed.length ? <small className="muted">None yet.</small> : d.closed.slice(0, 30).map((p) => (
+        {!d.closed.length ? <small className="muted">None yet.</small> : <Clamp>{d.closed.map((p) => (
           <small key={p.id}><b className={(p.pnl_usd || 0) >= 0 ? "up" : "down"}>{usd(p.pnl_usd)}</b> · {p.side} {lbl(p)} {p.lev}x on {VN[p.venue] || p.venue} · {px(p.entry)} → {px(p.exit)} · {p.reason}{p.mode === "paper" ? " · practice" : ""} · <span className="muted">{p.closed_at ? ago(p.closed_at) : ""}</span></small>
-        ))}
+        ))}</Clamp>}
       </section>
       </>)}
 
