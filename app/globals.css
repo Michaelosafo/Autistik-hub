@@ -7539,3 +7539,15 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .tik-actions .tik-act.like.on { color: #F91880 !important; }
 .tik-actions .tik-act.tickle.on { color: #00BA7C !important; }
 .tik-actions .tik-eye.grew { color: #1D9BF0; }
+
+/* Plain buttons, really: no fill, no coloured pill, no line under the heart; time line without a box */
+.tik .tik-actions .tik-act, .tik .tik-actions .tik-act.on, .tik .tik-actions .tik-act.reply.on, .tik .tik-actions .tik-act.tickle.on, .tik .tik-actions .tik-act.like.on, .tik .tik-actions .tik-act.share.on, .tik .tik-actions .tik-act.pop { background: transparent !important; border: 0 !important; box-shadow: none !important; outline: 0; }
+.tik .tik-actions .tik-act.reply.on { color: var(--muted) !important; }
+.tik .tik-actions .tik-act.reply.on svg { stroke: currentColor !important; }
+.tik .tik-actions .tik-act.share { color: var(--muted) !important; }
+.tik .tik-actions .tik-act:focus-visible { outline: 2px solid #F0B90B !important; }
+.tik .tik-actions svg.xi rect { fill: none; }
+.tik .tik-actions .tik-act.views b, .tik .tik-actions .tik-vn b { font-weight: 500 !important; color: var(--muted); }
+.tik .tik-when { background: transparent !important; border-radius: 0 !important; white-space: nowrap; flex-wrap: nowrap !important; overflow: hidden; }
+.tik .tik-when > * { flex: none; }
+.tik .tik-detail-meta { background: transparent !important; }
