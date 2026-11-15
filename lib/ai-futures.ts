@@ -1037,7 +1037,7 @@ export async function futStatus() {
   const m = await market(s, true);
   const [{ data: openP }, { data: closedP }, { data: logs }, { data: news }, wallet] = await Promise.all([
     fq("ai_futures_positions").select("*").in("status", ["open", "closing"]).order("opened_at", { ascending: false }),
-    fq("ai_futures_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(50),
+    fq("ai_futures_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(200),
     fq("ai_futures_log").select("*").order("at", { ascending: false }).limit(60),
     fq("ai_futures_news").select("*").not("direction", "is", null).neq("direction", 0).order("at", { ascending: false }).limit(20),
     futWallet().catch(() => null),
