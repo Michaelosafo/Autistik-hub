@@ -16,6 +16,9 @@ import { canStyle } from "./tik-styles";
 import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
 
+/** "8:43 AM · 15 Nov 26", like X. */
+const whenX = (iso: string) => { const d = new Date(iso); return `${d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })} · ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "2-digit" })}`; };
+
 /** Reactions: tap the heart to pick one; the count shows the total, tap it to see who reacted with what. */
 type RKind = "love" | "haha" | "fire" | "100" | "wow" | "sad" | "pray" | "clap" | "rocket" | "warning" | "thumbs" | StickerKey;
 /** The reactions you can pick now: the 10 AUTISTIK stickers (older emoji reactions still show). */
@@ -134,6 +137,13 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
   const [likes, setLikes] = useState(t.likes);
   const [replies, setReplies] = useState(t.replies);
   const [open, setOpen] = useState(!!detail);
+  // Comments open by themselves when a post with comments scrolls into view (no tapping needed), like X.
+  useEffect(() => {
+    if (detail || compact || open || !(t.replies > 0) || !box.current || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setOpen(true); io.disconnect(); } }, { rootMargin: "200px 0px" });
+    io.observe(box.current);
+    return () => io.disconnect();
+  }, [detail, compact, open, t.replies]);
   const [zoom, setZoom] = useState(false);
   const [menu, setMenu] = useState(false);
   // A heart that bursts on the picture when you double-tap it (and the like button pops).
@@ -249,10 +259,14 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
             {burst > 0 && <span key={burst} className="tik-burst" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg></span>}
           </button>
         )}
+        {!compact && (
+          <div className={"tik-detail-meta tik-when" + (detail ? " big" : "")}>
+            <time dateTime={t.created_at} title={new Date(t.created_at).toLocaleString()}>{whenX(t.created_at)}</time>
+            <span><b>{views(seenN)}</b> {seenN === 1 ? "View" : "Views"}</span>
+          </div>
+        )}
         {detail && (
           <div className="tik-detail-meta">
-            <time dateTime={t.created_at}>{new Date(t.created_at).toLocaleString(undefined, { hour: "numeric", minute: "2-digit", day: "numeric", month: "short", year: "numeric" })}</time>
-            <span><b>{views(seenN)}</b> {seenN === 1 ? "view" : "views"}</span>
             {likes > 0 && <span><b>{likes}</b> {likes === 1 ? "reaction" : "reactions"}</span>}
             {tickles > 0 && <span><b>{tickles}</b> {tickles === 1 ? "tickle" : "tickles"}</span>}
             {replies > 0 && <span><b>{replies}</b> {replies === 1 ? "comment" : "comments"}</span>}
@@ -309,7 +323,8 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
           )}
         </div>
         {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}>View {replies} {replies === 1 ? "comment" : "comments"}</button>}
-        {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
+        {open && <Replies tik={t} me={me} limit={detail ? 20 : 3} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
+        {open && !detail && !compact && replies > 3 && <Link href={`/mood?tik=${t.id}`} className="tik-show">See all {replies} comments →</Link>}
         {who && typeof document !== "undefined" && createPortal(<Reactors tikId={t.id} total={likes} first={whoTab} onClose={() => setWho(false)} />, document.body)}
         {viewers && typeof document !== "undefined" && createPortal(<Viewers tikId={t.id} count={t.views ?? 0} total={seenN} onClose={() => setViewers(false)} />, document.body)}
       </div>
@@ -334,16 +349,16 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
 }
 
 /** The replies under one Tik or one comment; each reply can have its own replies underneath (a thread). */
-function Replies({ tik, me, onCount }: { tik: Tik; me: string | null; onCount: (d: number) => void }) {
+function Replies({ tik, me, onCount, limit = 20 }: { tik: Tik; me: string | null; onCount: (d: number) => void; limit?: number }) {
   const [k, setK] = useState(0);
-  const { tiks, setTiks, more, loadMore } = useTiks({ replyTo: tik.id, limit: 20, refreshKey: k });
+  const { tiks, setTiks, more, loadMore } = useTiks({ replyTo: tik.id, limit, refreshKey: k });
   return (
     <div className="tik-replies">
       {tiks === null ? <small className="muted">Loading replies…</small> : tiks.map((r) => (
         <TikCard key={r.id} t={r} me={me} compact parentAlias={tik.author?.handle || tik.author?.alias}
           onRemoved={(id) => { setTiks((x) => x?.filter((y) => y.id !== id) ?? null); onCount(-1); }} />
       ))}
-      {more && <button type="button" className="tik-more" onClick={loadMore}>More replies</button>}
+      {more && limit > 3 && <button type="button" className="tik-more" onClick={loadMore}>More replies</button>}
       {me && <QuickReplies tikId={tik.id} onSent={() => { setK((n) => n + 1); onCount(1); }} />}
       {me ? <TikComposer replyTo={tik.id} compact placeholder="Write a comment…" onPosted={() => { setK((n) => n + 1); onCount(1); }} /> : <small className="muted"><Link href="/login">Sign in</Link> to reply.</small>}
     </div>
