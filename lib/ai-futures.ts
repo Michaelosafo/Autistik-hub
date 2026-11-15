@@ -781,7 +781,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   const label = fxLabel(coin, price);
   const les = await lessons(s.mode, coin, newsDriven);
   if (les.stop) return `${label}: ${les.stop}`;
-  const style = isMadDesk() ? "maximum-leverage futures with a very tight stop: only take trades where fresh news and a clean chart setup clearly agree and price should move fast in that direction now; skip chop, late moves and anything unclear"
+  const style = isMadDesk() ? "Madness desk: high leverage and a very tight stop are its FIXED design, chosen by the system so liquidation is always far past the stop, with the stop resting on the exchange and risk per trade capped by the account settings. Do NOT turn a trade down for its leverage, its stop size or its risk per trade. Judge only the direction: is price likely to move this way over the next minutes to an hour? A strong chart setup with no news against it is acceptable without fresh news; turn down only if the setup is weak, choppy, clearly late (already extended), or news points the other way"
     : isTurboDesk() ? "aggressive high-leverage momentum on the most-traded crypto perps; accepts more risk but still needs a real edge"
     : isFxDesk() ? "conservative forex: news and chart must agree; avoid trading into big scheduled releases" : "careful crypto futures: news and chart together, protect the account first";
   const v = await secondOpinion(`${coin}:${side}`, style, {
