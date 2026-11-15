@@ -6,6 +6,7 @@ import Toaster from "@/components/Toaster";
 import AppShell, { isAppPath } from "@/components/AppShell";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
+import DailyMood from "@/components/mood/DailyMood";
 import { applyTheme, currentTheme, type Theme } from "@/lib/theme";
 import RailShell from "@/components/RailShell";
 import HomeFeed from "@/components/HomeFeed";
@@ -272,7 +273,7 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
 
         <main>
           <div className={"topbar mini" + (path.startsWith("/companions") ? " ai-hide" : "")}>
-            <LangPicker />
+            <LangPicker /><DailyMood />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
             <div className={me ? "me-menu rail-dup" : "me-menu"} ref={menuRef}>

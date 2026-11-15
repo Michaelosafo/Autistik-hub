@@ -2,6 +2,7 @@
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker, { openLangPicker } from "@/components/LangPicker";
+import DailyMood from "@/components/mood/DailyMood";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Tracker from "@/components/Tracker";
@@ -197,7 +198,7 @@ export default function AppShell({ admin, me, onMe, children }: {
         <div className="ax-right">
           {/* The AI chat page keeps only the menu up here, so the chat gets the room. */}
           {!path.startsWith("/companions") && <>
-            <LangPicker />
+            <LangPicker /><DailyMood />
             <ThemeToggle />
             <Link href="/launchpad/new" className="ax-create" title="Create a coin on any network">Create</Link>
           </>}

@@ -7230,3 +7230,45 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .tik-replies > .tik.compact .tik-rchip { height: 28px; font-size: .74em; }
 .tik-replies > .tik.compact .tik-rchip-f .me-av { width: 20px; height: 20px; }
 @media (max-width: 560px) { .tik:not(.compact) > .tik-main > .tik-actions { gap: 5px; } .tik-actions .tik-act { padding: 0 9px !important; height: 34px; } }
+
+/* Daily mood check-in (after language): 10 TIK stickers, posts to your TIK */
+.dmood-bg { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 14px; background: rgba(18,12,32,.55); backdrop-filter: blur(6px); animation: tikIn .2s ease both; }
+.dmood { position: relative; width: min(440px, 100%); max-height: calc(100dvh - 28px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px 16px 14px; border-radius: 26px; background: radial-gradient(120% 80% at 0% 0%, rgba(255,216,77,.22), transparent 55%), radial-gradient(120% 80% at 100% 0%, rgba(181,124,255,.25), transparent 55%), var(--surface); border: 1px solid rgba(181,124,255,.35); box-shadow: 0 30px 60px -20px rgba(40,20,80,.6); }
+.dmood-x { all: unset; cursor: pointer; position: absolute; top: 10px; right: 12px; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.dmood-x:hover { background: rgba(var(--wc), .08); }
+.dmood-h { display: flex; flex-direction: column; gap: 2px; text-align: center; padding: 0 20px; }
+.dmood-h small { font-weight: 800; color: #B57CFF; letter-spacing: .04em; }
+.dmood-h b { font-family: var(--f-display); font-size: 1.35em; line-height: 1.15; }
+.dmood-h span { color: var(--muted); font-size: .86em; }
+.dmood-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.dmood-grid button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 2px 6px; border-radius: 16px; border: 2px solid transparent; background: rgba(var(--wc), .04); transition: transform .12s, border-color .12s, background .12s; text-align: center; }
+.dmood-grid button small { font-size: .62em; font-weight: 800; line-height: 1.15; color: var(--ink); }
+.dmood-grid button:hover .msticker { transform: rotate(-8deg) scale(1.08); }
+.dmood-grid button.on { border-color: var(--mc); background: color-mix(in srgb, var(--mc) 16%, transparent); transform: translateY(-2px); }
+.dmood-grid button.on .msticker { animation: msBounce .6s ease; }
+.dmood-grid button:focus-visible { outline: 2px solid #F0B90B; }
+.msticker { display: block; transition: transform .15s; overflow: visible; }
+.ms-spin { transform-origin: 32px 14px; animation: msSpin 1.2s linear infinite; }
+@keyframes msSpin { to { transform: rotate(360deg); } }
+@keyframes msBounce { 0% { transform: scale(.8); } 50% { transform: scale(1.18) rotate(6deg); } 100% { transform: scale(1); } }
+.dmood-extra { display: flex; flex-direction: column; gap: 8px; }
+.dmood-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.dmood-btn { all: unset; box-sizing: border-box; cursor: pointer; flex: 1; text-align: center; padding: 11px 12px; border-radius: 14px; font-weight: 800; font-size: .9em; background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 3px 0 color-mix(in srgb, #B57CFF 35%, var(--line)); }
+.dmood-btn.main { color: #fff; border: 0; background: linear-gradient(135deg, #B57CFF, #FF6B9A); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 #8a4fd6; }
+.dmood-btn:active { transform: translateY(2px); }
+.dmood-btn:disabled { opacity: .5; cursor: default; }
+.dmood-pic { position: relative; }
+.dmood-pic img { width: 52px; height: 52px; object-fit: cover; border-radius: 10px; display: block; }
+.dmood-pic button { all: unset; cursor: pointer; position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: .7em; background: #191326; color: #fff; }
+.dmood-msg { color: #E5484D; text-align: center; }
+.dmood-later { all: unset; cursor: pointer; align-self: center; font-size: .8em; color: var(--muted); padding: 4px 8px; }
+.dmood-done { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 10px 0 4px; }
+.dmood-done .msticker { animation: msBounce .7s ease; }
+.dmood-done b { font-family: var(--f-display); font-size: 1.3em; }
+.dmood-done small { color: var(--muted); }
+.dmood-done .dmood-row { width: 100%; }
+@media (max-width: 380px) { .dmood-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .ms-spin, .dmood-grid button.on .msticker, .dmood-done .msticker { animation: none; } }
+/* the sticker on a posted Tik */
+.tik-msticker { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 2px 10px 2px 2px; border-radius: 99px; background: rgba(var(--wc), .05); }
+.tik-msticker small { font-size: .74em; font-weight: 800; color: var(--muted); }
