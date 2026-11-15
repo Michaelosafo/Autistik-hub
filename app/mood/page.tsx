@@ -2,6 +2,7 @@ import Link from "next/link";
 import MadnessPanel from "@/components/mood/MadnessPanel";
 import FocusTik from "@/components/mood/FocusTik";
 import MyTikPanel from "@/components/mood/MyTikPanel";
+import { MoodSticker } from "@/components/mood/MoodStickers";
 import LiveNow from "@/components/rooms/LiveNow";
 import { currentUser } from "@/lib/supabase/server";
 import { FunTab, StreamsTab, VideosTab } from "@/components/watch/VideoTabs";
@@ -17,10 +18,10 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
       <section className="tik-hello" aria-label="Welcome to TIK">
         <h1>Welcome to <b>TIK</b></h1>
         <nav className="tik-hello-go" aria-label="TIK">
-          <Link href="/mood" className={!tab ? "on" : ""} scroll={false}>💬 Tik</Link>
-          <Link href="/mood?tab=live" className={tab === "live" ? "on" : ""} scroll={false}>🎙️ Live</Link>
-          <Link href="/mood?tab=streams" className={tab === "streams" ? "on" : ""} scroll={false}>🔴 Livestream</Link>
-          <Link href="/mood?tab=videos" className={tab === "videos" ? "on" : ""} scroll={false}>🎬 Tik videos</Link>
+          <Link href="/mood" className={!tab ? "on" : ""} scroll={false}><span>Tik</span><MoodSticker k="mainchar" size={26} /></Link>
+          <Link href="/mood?tab=live" className={tab === "live" ? "on" : ""} scroll={false}><span>Live</span><MoodSticker k="dnd" size={26} /></Link>
+          <Link href="/mood?tab=streams" className={tab === "streams" ? "on" : ""} scroll={false}><span>Livestream</span><MoodSticker k="stimmy" size={26} /></Link>
+          <Link href="/mood?tab=videos" className={tab === "videos" ? "on" : ""} scroll={false}><span>Videos</span><MoodSticker k="goblin" size={26} /></Link>
         </nav>
       </section>
       {user && !tab && !searchParams.tik && <a href="#tik-post" className="tik-fab" aria-label="Post a Tik"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg></a>}

@@ -16,10 +16,12 @@ type K = "posts" | "retikles" | "comments" | "videos" | "streams" | "reactions";
 type View = K | "followers" | "following" | "activity";
 type Row = { id: string; text: string; at: string; href: string; tag?: string; person?: { alias: string; color: string | null; avatar_url: string | null } };
 
-const TABS: [K, string, string][] = [
-  ["posts", "📝", "Posts"], ["retikles", "🔁", "Retikles"], ["comments", "💬", "Comments"],
-  ["videos", "🎬", "Videos"], ["streams", "🔴", "Streams"], ["reactions", "❤️", "Reactions"],
+/** The three tiles: [tab, sticker, label, colour]. Videos and lives have their own tabs at the top of TIK. */
+const TABS: [K, string, string, string][] = [
+  ["posts", "mainchar", "Posts", "#F5A70B"], ["retikles", "zoomies", "Retikles", "#14B8A6"], ["comments", "noodle", "Comments", "#FF6B9A"],
 ];
+/** Each kind of activity gets its sticker in the list. */
+const ICON: Record<string, string> = { "📝": "mainchar", "🔁": "zoomies", "💬": "noodle", "🎬": "goblin", "🔴": "stimmy" };
 const REMOJI: Record<string, string> = { love: "❤️", haha: "😂", fire: "🔥", "100": "💯", wow: "😮", sad: "😢", pray: "🙏", clap: "👏" };
 const cut = (s: string | null | undefined, n = 70) => { const t = (s || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n) + "…" : t || "(picture)"; };
 
@@ -118,25 +120,21 @@ export default function MyTikPanel() {
             <button type="button" className={tab === "following" ? "on" : ""} onClick={() => setTab(tab === "following" ? "activity" : "following")}><b>{n.following}</b> following</button>
           </small>
         </div>
-        <div className="mytik-go">
-          <a href="#tik-post" className="mytik-btn main">✏️ Post</a>
-          <Link href="/spaces?host=1" className="mytik-btn">🎙️ Go live</Link>
-          <Link href="/mood?tab=videos" className="mytik-btn">🎬 Video</Link>
-        </div>
       </div>
       <div className="mytik-tabs" role="tablist" aria-label="Your activity">
-        {TABS.map(([k, e, l]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(tab === k ? "activity" : k)}>
-            <i aria-hidden="true">{e}</i><b>{n[k]}</b><small>{l}</small>
+        {TABS.map(([k, st, l, c]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(tab === k ? "activity" : k)} style={{ ["--tc" as any]: c }}>
+            <span className="mytik-tt"><b>{n[k]}</b><small>{l}</small></span>
+            <MoodSticker k={st} size={34} />
           </button>
         ))}
       </div>
       {(
         <div className="mytik-list" role="tabpanel">
-          <div className="mytik-lh"><b>{tab === "activity" ? "⚡ Your recent activity" : tab === "followers" ? "👥 Your followers" : tab === "following" ? "➕ You follow" : TABS.find(([k]) => k === tab)?.slice(1).join(" ")}</b>{tab !== "activity" && <button type="button" onClick={() => setTab("activity")}>✕</button>}</div>
+          <div className="mytik-lh"><b>{tab === "activity" ? "⚡ Your recent activity" : tab === "followers" ? "👥 Your followers" : tab === "following" ? "➕ You follow" : TABS.find(([k]) => k === tab)?.[2]}</b>{tab !== "activity" && <button type="button" onClick={() => setTab("activity")}>✕</button>}</div>
           {rows === null ? <small className="muted">Loading…</small> : !rows.length ? <small className="muted">{tab === "activity" ? "No activity yet: post your first Tik!" : "Nothing here yet."}</small> : (
             <ul>{rows.map((r) => (
-              <li key={r.id}><Link href={r.href}>{r.person ? <Avatar className="me-av" alias={r.person.alias} color={r.person.color} url={r.person.avatar_url} /> : r.tag?.startsWith("rx:") ? <em>{stickerOf(r.tag.slice(3)) ? <MoodSticker k={r.tag.slice(3)} size={20} /> : REMOJI[r.tag.slice(3)] || "❤️"}</em> : r.tag && <em className={r.tag === "LIVE" ? "live" : ""}>{r.tag}</em>}<span>{r.text}{r.person && r.tag && <small> {r.tag}</small>}</span><small>{r.person ? "" : ago(r.at)}</small></Link></li>
+              <li key={r.id}><Link href={r.href}>{r.person ? <Avatar className="me-av" alias={r.person.alias} color={r.person.color} url={r.person.avatar_url} /> : r.tag?.startsWith("rx:") ? <em>{stickerOf(r.tag.slice(3)) ? <MoodSticker k={r.tag.slice(3)} size={20} /> : REMOJI[r.tag.slice(3)] || "❤️"}</em> : r.tag && ICON[r.tag] ? <em><MoodSticker k={ICON[r.tag]} size={22} /></em> : r.tag && <em className={r.tag === "LIVE" ? "live" : ""}>{r.tag}</em>}<span>{r.text}{r.person && r.tag && <small> {r.tag}</small>}</span><small>{r.person ? "" : ago(r.at)}</small></Link></li>
             ))}</ul>
           )}
           <Link href={`/members/${me.id}`} className="mytik-all">See everything on your profile →</Link>
