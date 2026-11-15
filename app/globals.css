@@ -7551,3 +7551,13 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .tik .tik-when { background: transparent !important; border-radius: 0 !important; white-space: nowrap; flex-wrap: nowrap !important; overflow: hidden; }
 .tik .tik-when > * { flex: none; }
 .tik .tik-detail-meta { background: transparent !important; }
+
+/* TIK: no background pictures or colour wash, just a clean plain page (like X) */
+body:has(.mood-page) .sbg { display: none !important; }
+body:has(.mood-page) { background: var(--surface) !important; }
+body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: transparent !important; }
+.mood-page .tik, .mood-page .mad, .mood-page .mad-body, .mood-page .tik-layout-feed, .mood-page .pubtik-card { background: var(--surface) !important; }
+.mood-page .tik::before, .mood-page .tik::after { background-image: none !important; }
+/* the TIK preview on the App page: a solid plain card, nothing showing through */
+.ah-tik, .ah-tik .tik, .ah-tik .tik-prev, .ah-tik .tik-replies .tik { background: var(--surface) !important; background-image: none !important; }
+.ah-tik { border: 1px solid var(--line); }
