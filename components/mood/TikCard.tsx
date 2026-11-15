@@ -130,7 +130,6 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
     })();
     return () => { gone = true; };
   }, [t.id, t.likes, me, rxKey]);
-  const pills = ALLKINDS.map((k) => ({ k, list: rx.filter((r) => r.kind === k) })).filter((g) => g.list.length).sort((x, y) => y.list.length - x.list.length);
   const [tickled, setTickled] = useState(!!t.tickled);
   const [tickles, setTickles] = useState(t.tickles ?? 0);
   const [copied, setCopied] = useState(false);
@@ -288,6 +287,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
               {liked ? <span className="tik-remoji" aria-hidden="true"><RIcon k={myKind} size={18} /></span>
                 : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>}
             </button>
+            {likes > 0 && <button type="button" className="tik-rcount" onClick={() => { setWhoTab("all"); setWho(true); }} aria-label={`${likes} reactions: see who`} title="See who reacted">{likes}</button>}
             {picker && <>
               <span className="tik-rbg" onClick={() => setPicker(false)} aria-hidden="true" />
               <span className="tik-rpick" role="menu" aria-label="Pick a reaction">
@@ -309,18 +309,6 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
             <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2.5 10.6 13.4M21.5 2.5l-6.8 19-4.1-8.1-8.1-4.1 19-6.8z" /></svg>
             <span>{copied ? "Copied" : ""}</span>
           </button>
-        {pills.length > 0 && (
-            <div className="tik-rchips" aria-label={`${likes} reactions`}>
-              {pills.map(({ k, list }) => (
-                <button key={k} type="button" className={"tik-rchip" + (liked && myKind === k ? " mine" : "")} onClick={() => { setWhoTab(k); setWho(true); }} aria-label={`${list.length} ${RNAME[k]}: see who`} title={`${RNAME[k]}: see who`}>
-                  <span className="tik-rchip-e" aria-hidden="true"><RIcon k={k} size={16} /></span>
-                  <span className="tik-rchip-f" aria-hidden="true">{list.slice(0, 4).map((r) => <Avatar key={r.user_id} className="me-av" alias={r.p?.alias || "?"} color={r.p?.color} url={r.p?.avatar_url} />)}</span>
-                  {list.length > 4 && <b>+{list.length - 4}</b>}
-                </button>
-              ))}
-              {likes > 4 && <button type="button" className="tik-rchip all" onClick={() => { setWhoTab("all"); setWho(true); }}>All {likes}</button>}
-            </div>
-          )}
         </div>
         {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}>View {replies} {replies === 1 ? "comment" : "comments"}</button>}
         {open && <Replies tik={t} me={me} limit={detail ? 20 : 3} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
