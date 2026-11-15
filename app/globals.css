@@ -7354,3 +7354,18 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .tik-hello-go a .msticker { transition: transform .15s; }
 .tik-hello-go a:hover .msticker, .tik-hello-go a.on .msticker { transform: rotate(-8deg) scale(1.08); }
 @media (max-width: 560px) { .tik-hello-go a .msticker { width: 22px; height: 22px; } .tik-hello-go a { gap: 4px; font-size: .92em; } }
+
+/* TIK for visitors (not signed in): read-only feed with a friendly join bar */
+.pubtik-join { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 12px; align-items: center; padding: 14px; border-radius: 18px; background: linear-gradient(135deg, rgba(181,124,255,.16), rgba(255,107,154,.1) 60%, var(--surface)); border: 1px solid rgba(181,124,255,.3); }
+.pubtik-stk { display: flex; }
+.pubtik-stk .msticker { margin-left: -10px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.15)); }
+.pubtik-stk .msticker:first-child { margin-left: 0; }
+.pubtik-t { display: flex; flex-direction: column; min-width: 0; }
+.pubtik-t b { font-family: var(--f-display); font-size: 1.05em; }
+.pubtik-t small { color: var(--muted); font-size: .8em; }
+.pubtik-btns { grid-column: 1 / -1; display: flex; gap: 8px; }
+.pubtik-btn { flex: 1; text-align: center; padding: 9px 14px; border-radius: 12px; font-weight: 800; font-size: .88em; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 3px 0 color-mix(in srgb, #B57CFF 35%, var(--line)); }
+.pubtik-btn.main { color: #fff; border: 0; background: linear-gradient(135deg, #B57CFF, #FF6B9A); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 #8a4fd6; }
+.pubtik-card .tik-actions .tik-act { text-decoration: none; }
+.pubtik-hint { margin-left: auto; font-size: .7em; color: var(--muted); font-weight: 700; }
+.pubtik-img img { width: 100%; max-height: 420px; object-fit: cover; border-radius: 14px; display: block; }
