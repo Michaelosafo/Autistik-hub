@@ -19,7 +19,7 @@ import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { resolve, type Flow } from "@/lib/ai-signals";
 import { flog, futSolAccount, type FPos, type FSettings } from "@/lib/ai-futures";
-import { confidenceSize, lessons, profitLocked, secondOpinion } from "@/lib/ai-judge";
+import { confidenceSize, lessons, profitLocked, trackPeak, secondOpinion } from "@/lib/ai-judge";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const sb = () => supabaseService();
@@ -317,8 +317,9 @@ async function tick(s: FSettings): Promise<string> {
   // Daily loss limit, from the day's starting value.
   const eq = await snipeEquity(s);
   const today = new Date().toISOString().slice(0, 10);
-  if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total }).eq("id", T()); s.day_start_usd = eq.total; }
+  if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total, day_peak_usd: eq.total }).eq("id", T()); s.day_start_usd = eq.total; (s as any).day_peak_usd = eq.total; }
   if (eq.total < n(s.day_start_usd) * (1 - s.daily_loss_pct / 100)) return `Paused for today: down ${(100 - (eq.total / n(s.day_start_usd)) * 100).toFixed(1)}% (limit ${s.daily_loss_pct}%).`;
+  await trackPeak(s as any, eq.total).catch(() => {});
   const locked = profitLocked(s, eq.total);
   if (locked) return locked;
   const { data: ever } = await pos().select("coin").eq("fut_id", T()).eq("venue", "pumpfun").limit(2000);

@@ -27,7 +27,7 @@ import { arbitrum } from "viem/chains";
 import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { anthropic, FAST_MODEL } from "@/lib/ai";
-import { coinHistory, confidenceSize, lessons, profitLocked, secondOpinion } from "@/lib/ai-judge";
+import { coinHistory, confidenceSize, lessons, profitLocked, trackPeak, secondOpinion } from "@/lib/ai-judge";
 import { accountPosts } from "@/lib/ai-trader-copy";
 import { FX_DEX, HLP_VAULT, hlVaultApr, hlVaultEquity, hlVaultTransfer, hlAccount, hlCancel, hlCandles, hlDexTransfer, hlFxMarket, hlMarket, hlMarketOrder, hlSetLeverage, hlStopLoss, type Candle, type HlAsset } from "@/lib/hyperliquid";
 import { fxLabel, fxOpen, fxWeekendSoon, isFx, usdSign } from "@/lib/fx";
@@ -903,8 +903,9 @@ export async function runFutures(): Promise<string> {
     const eq = await equity(s, m);
     // Daily loss limit: from the account value at the start of the day (UTC).
     const today = new Date().toISOString().slice(0, 10);
-    if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total }).eq("id", T()); s.day_start_usd = eq.total; }
+    if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total, day_peak_usd: eq.total }).eq("id", T()); s.day_start_usd = eq.total; (s as any).day_peak_usd = eq.total; }
     if (eq.total < n(s.day_start_usd) * (1 - s.daily_loss_pct / 100)) return note(`Paused for today: down ${(100 - (eq.total / n(s.day_start_usd)) * 100).toFixed(1)}% (limit ${s.daily_loss_pct}%).`);
+    await trackPeak(s as any, eq.total).catch(() => {});
     const locked = profitLocked(s, eq.total);
     if (locked) return note(`${locked}. Open trades are still managed.`);
     const brk = await lessons(s.mode);

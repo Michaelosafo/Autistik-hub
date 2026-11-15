@@ -25,7 +25,7 @@ import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { flog, futAccount, futSolAccount, type FPos, type FSettings } from "@/lib/ai-futures";
 import { resolve } from "@/lib/ai-signals";
-import { profitLocked } from "@/lib/ai-judge";
+import { profitLocked, trackPeak } from "@/lib/ai-judge";
 import { ownShare, snipeCfg, snipeEquity } from "@/lib/ai-sniper";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
@@ -468,8 +468,9 @@ export async function runCopy(s: FSettings): Promise<string> {
   if (!ws.length) { await stops(s).catch(() => {}); return "Add a wallet to copy."; }
   const eq = await snipeEquity(s).catch(() => ({ total: 0, free: 0 }));
   const today = new Date().toISOString().slice(0, 10);
-  if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total }).eq("id", T()); s.day = today; s.day_start_usd = eq.total; }
+  if (s.day !== today || s.day_start_usd == null) { await sb().from("ai_futures_settings").update({ day: today, day_start_usd: eq.total, day_peak_usd: eq.total }).eq("id", T()); s.day = today; s.day_start_usd = eq.total; (s as any).day_peak_usd = eq.total; }
   const down = eq.total < n(s.day_start_usd) * (1 - s.daily_loss_pct / 100);
+  await trackPeak(s as any, eq.total).catch(() => {});
   const locked = profitLocked(s, eq.total);
   const buying = s.enabled && !down && !locked;
   const until = Date.now() + 48_000;
