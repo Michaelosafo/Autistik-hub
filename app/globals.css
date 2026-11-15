@@ -7369,3 +7369,31 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .pubtik-card .tik-actions .tik-act { text-decoration: none; }
 .pubtik-hint { margin-left: auto; font-size: .7em; color: var(--muted); font-weight: 700; }
 .pubtik-img img { width: 100%; max-height: 420px; object-fit: cover; border-radius: 14px; display: block; }
+
+/* Mood on your picture for 5 hours: flashes in, holds, fades, repeats */
+.tik-av, .mytik-av, .pp-av-wrap, .pubtik-card .tik-av { position: relative; }
+.pp-av-wrap { display: inline-block; }
+.moodflash { position: absolute; right: -6px; bottom: -4px; z-index: 2; pointer-events: none; line-height: 0; animation: moodFlash 6s ease-in-out infinite; filter: drop-shadow(0 2px 4px rgba(0,0,0,.25)); }
+.pp-av-wrap .moodflash { right: -4px; bottom: 2px; }
+@keyframes moodFlash { 0% { opacity: 0; transform: scale(.3) rotate(-20deg); } 8% { opacity: 1; transform: scale(1.35) rotate(8deg); } 14% { transform: scale(1) rotate(0); } 55% { opacity: 1; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(.6) translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .moodflash { animation: none; } }
+button.mytik-av { all: unset; cursor: pointer; position: relative; display: inline-block; border-radius: 50%; }
+button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px; }
+.mytik-plus { position: absolute; right: -2px; bottom: -2px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 900; font-size: 13px; color: #fff; background: linear-gradient(135deg, #B57CFF, #FF6B9A); box-shadow: 0 0 0 2px var(--surface); }
+.mytik-mood { display: flex; flex-direction: column; gap: 4px; }
+.mytik-mood small { font-size: .74em; color: var(--muted); }
+.mytik-mood .st-tray button.on { background: rgba(181,124,255,.22); }
+.mytik-clear { all: unset; cursor: pointer; align-self: flex-start; font-size: .74em; font-weight: 700; color: #E5484D; padding: 2px 4px; }
+
+/* "What's happening?": just a clean white box, no colour banner */
+.tik-new.big { background: var(--surface) !important; border: 1.5px solid color-mix(in srgb, #B57CFF 28%, var(--line)) !important; border-radius: 22px !important; padding: 14px 14px 10px !important; box-shadow: 0 10px 28px -18px rgba(90,50,160,.45), 0 1px 0 rgba(255,255,255,.6) inset !important; overflow: hidden; }
+.tik-new.big .tik-new-cover { display: none !important; }
+.tik-new.big .tik-new-av { margin-top: 0 !important; }
+.tik-new.big .tik-new-av .me-av { width: 42px; height: 42px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px #B57CFF; }
+.tik-new.big .tik-new-box, .tik-new.big textarea { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.tik-new.big textarea { font-size: 1.05em; padding: 8px 2px !important; min-height: 52px; }
+.tik-new.big textarea::placeholder { color: color-mix(in srgb, var(--muted) 85%, #B57CFF); font-weight: 600; }
+.tik-new.big:focus-within { border-color: #B57CFF !important; box-shadow: 0 0 0 4px rgba(181,124,255,.14), 0 10px 28px -18px rgba(90,50,160,.45) !important; }
+.tik-new.big .tik-new-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.tik-new.big .tik-post { border-radius: 99px; padding: 8px 18px; background: linear-gradient(135deg, #B57CFF, #FF6B9A); color: #fff; border: 0; font-weight: 800; box-shadow: 0 3px 0 #8a4fd6; }
+.tik-new.big .tik-post:disabled { opacity: .45; box-shadow: none; }

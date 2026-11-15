@@ -33,7 +33,9 @@ async function postMood(key: string, note: string, blob: Blob | null): Promise<s
   }
   const body = (note.trim() ? `${s.say}\n${note.trim()}` : s.say).slice(0, 500);
   const { error } = await sb.from("tiks").insert({ body, mood: key, image_url });
-  return error ? "Couldn't post right now. Try again." : null;
+  if (error) return "Couldn't post right now. Try again.";
+  await sb.rpc("set_mood_status", { p_mood: key }); // and on your picture for 5 hours
+  return null;
 }
 
 export default function DailyMood() {
@@ -100,6 +102,7 @@ export default function DailyMood() {
           <div className="dmood-done">
             <MoodSticker k={chosen.key} size={96} />
             <b>Posted to your TIK!</b>
+            <small>It also flashes on your profile picture for the next 5 hours.</small>
             <small>“{chosen.say}”</small>
             <div className="dmood-row">
               <button type="button" className="dmood-btn main" onClick={() => { close(); router.push("/mood"); }}>See how everyone feels →</button>

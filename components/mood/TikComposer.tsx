@@ -108,7 +108,6 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
   );
   return (
     <div className={"tik-new x" + (compact ? " compact" : "") + (big ? " big" : "")}>
-      {big && <div className="tik-new-cover" aria-hidden="true"><b>What&apos;s happening?</b></div>}
       <span className="tik-new-av" aria-hidden="true"><Avatar className="me-av" alias={mine?.alias || "Me"} color={mine?.color ?? undefined} url={mine?.avatar_url ?? null} /></span>
       <div className="tik-new-col">
       <div className={"tik-new-box" + (styled ? ` tik-style s-${style}` : "")}>
