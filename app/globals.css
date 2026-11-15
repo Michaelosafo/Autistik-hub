@@ -7508,3 +7508,27 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .act-more[open] > summary { order: 2; }
 .act-more[open] { display: flex; flex-direction: column; }
 .act-more[open] > .activity { order: 1; }
+
+/* Action row like X: small plain outline icons with their numbers, spread evenly; no backgrounds, no 3D */
+.tik:not(.compact) > .tik-main > .tik-actions, .tik-actions { display: flex !important; flex-wrap: nowrap !important; justify-content: space-between !important; align-items: center; gap: 0 !important; margin: 8px 0 0 -6px !important; max-width: 440px; }
+.tik-actions .tik-act, .tik-replies > .tik.compact .tik-actions .tik-act { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex !important; align-items: center; gap: 5px; height: 30px !important; min-width: 0 !important; padding: 0 6px !important; border-radius: 99px !important; background: transparent !important; border: 0 !important; box-shadow: none !important; color: var(--muted) !important; font-size: .8em !important; font-weight: 500 !important; transform: none !important; transition: color .12s, background .12s; }
+.tik-actions .tik-act svg, .tik-replies > .tik.compact .tik-actions .tik-act svg { width: 17px !important; height: 17px !important; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.tik-actions .tik-act:hover { background: rgba(var(--wc), .06) !important; }
+.tik-actions .tik-act:active { transform: none !important; }
+.tik-actions .tik-act.reply:hover, .tik-actions .tik-act.reply.on { color: #1D9BF0 !important; }
+.tik-actions .tik-act.tickle:hover, .tik-actions .tik-act.tickle.on { color: #00BA7C !important; }
+.tik-actions .tik-act.tickle.on svg, .tik-actions .tik-act.reply.on svg { stroke: currentColor !important; }
+.tik-actions .tik-act.like:not(.on) svg { stroke: currentColor !important; }
+.tik-actions .tik-act.like:hover, .tik-actions .tik-act.like.on { color: #F91880 !important; }
+.tik-actions .tik-act.like.on { background: transparent !important; }
+.tik-actions .tik-act.share:hover, .tik-actions .tik-act.share.on { color: #1D9BF0 !important; }
+.tik-actions .tik-act.views:hover { color: #1D9BF0 !important; }
+.tik-actions .tik-remoji .msticker { width: 18px !important; height: 18px !important; }
+.tik-react-wrap { gap: 0 !important; }
+.tik-rcount { all: unset; cursor: pointer; font-size: .8em; color: var(--muted); padding: 4px 4px 4px 0; font-variant-numeric: tabular-nums; }
+.tik-rcount:hover { color: #F91880; text-decoration: underline; }
+.tik-rcount:focus-visible { outline: 2px solid #F0B90B; border-radius: 4px; }
+.tik-actions .tik-act span:empty { display: none; }
+/* comments: the same plain row, a little smaller */
+.tik-replies > .tik.compact .tik-actions { max-width: 340px; margin-top: 4px !important; }
+.tik-replies > .tik.compact .tik-actions .tik-act svg { width: 15px !important; height: 15px !important; }
