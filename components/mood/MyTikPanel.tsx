@@ -117,11 +117,11 @@ export default function MyTikPanel() {
             <button type="button" className={tab === "following" ? "on" : ""} onClick={() => setTab(tab === "following" ? "activity" : "following")}><b>{n.following}</b> following</button>
           </small>
         </div>
-      </div>
-      <div className="mytik-go">
-        <a href="#tik-post" className="mytik-btn main">✏️ Post</a>
-        <Link href="/spaces?host=1" className="mytik-btn">🎙️ Go live</Link>
-        <Link href="/mood?tab=videos" className="mytik-btn">🎬 Video</Link>
+        <div className="mytik-go">
+          <a href="#tik-post" className="mytik-btn main">✏️ Post</a>
+          <Link href="/spaces?host=1" className="mytik-btn">🎙️ Go live</Link>
+          <Link href="/mood?tab=videos" className="mytik-btn">🎬 Video</Link>
+        </div>
       </div>
       <div className="mytik-tabs" role="tablist" aria-label="Your activity">
         {TABS.map(([k, e, l]) => (
