@@ -11,7 +11,8 @@ import { createPortal } from "react-dom";
 import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import ShareProfile from "@/components/members/ShareProfile";
-import VerifiedBadge, { BADGES } from "@/components/VerifiedBadge";
+import VerifiedBadge from "@/components/VerifiedBadge";
+import { STICKERS } from "@/components/mood/MoodStickers";
 import BadgePicker from "@/components/BadgePicker";
 import BadgeApply from "@/components/BadgeApply";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -41,12 +42,38 @@ const IC: Record<string, string> = {
   race: '<path d="M5 17h14l-1.5-5.5A2 2 0 0 0 15.6 10H8.4a2 2 0 0 0-1.9 1.5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/>',
   camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
 };
+/**
+ * A goofy AUTISTIK icon: the thing itself (wallet, chat bubble, mic…) come alive, with wobbly googly eyes and a silly
+ * mouth. Each icon gets its own eyes and mouth so they don't all look the same.
+ */
+const FACE: Record<string, [number, number, number, number, string]> = {
+  // [left eye r, right eye r, pupil dx, pupil dy, mouth]
+  wallet: [2.6, 3.4, 0.9, 0.6, "tongue"], chats: [3, 2.4, -0.8, 0.8, "o"], live: [2.4, 2.4, 0.8, -0.6, "grin"], star: [3.2, 2.6, -0.9, -0.4, "zig"],
+  swap: [2.6, 2.6, 0.9, 0.9, "grin"], scan: [3.4, 2.2, 0.6, 0.2, "o"], board: [2.4, 3, -0.6, 0.8, "tongue"], launch: [2.6, 2.6, 0, -1, "grin"],
+  lock: [2.2, 2.2, 0.9, 0, "zig"], race: [2.8, 2.8, 1, 0.4, "tongue"], people: [2.4, 2.8, -0.8, 0.6, "grin"], user: [2.6, 2.6, 0.6, 0.9, "o"],
+};
+function Goofy({ icon, d }: { icon: string; d: string }) {
+  const [l, r, px, py, m] = FACE[icon] || [2.6, 2.6, 0.6, 0.6, "grin"];
+  return (
+    <svg className="goofy" viewBox="0 0 24 24" width={30} height={30} aria-hidden="true">
+      <g fill="none" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" opacity=".95" dangerouslySetInnerHTML={{ __html: d }} />
+      <g className="goofy-eyes">
+        <circle cx="8.6" cy="11" r={l} fill="#fff" stroke="#1B1430" strokeWidth=".9" /><circle cx={8.6 + px} cy={11 + py} r={l * 0.45} fill="#1B1430" />
+        <circle cx="15.6" cy="10.6" r={r} fill="#fff" stroke="#1B1430" strokeWidth=".9" /><circle cx={15.6 - px * 0.6} cy={10.6 + py} r={r * 0.45} fill="#1B1430" />
+      </g>
+      {m === "tongue" && <><path d="M9.5 16.2c1.6 1.3 3.4 1.3 5 0" fill="none" stroke="#1B1430" strokeWidth="1.2" strokeLinecap="round" /><path d="M11.6 17c0 1.8 2.2 1.8 2.2 0" fill="#FF6B9A" stroke="#1B1430" strokeWidth=".7" /></>}
+      {m === "o" && <ellipse cx="12.2" cy="16.8" rx="1.5" ry="1.9" fill="#1B1430" />}
+      {m === "grin" && <path d="M9 15.8c1.8 2.6 4.6 2.6 6.4 0z" fill="#1B1430" />}
+      {m === "zig" && <path d="M9 16.6l1.4-1 1.4 1 1.4-1 1.4 1 1.4-1" fill="none" stroke="#1B1430" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />}
+    </svg>
+  );
+}
 function Svg({ d, size = 18 }: { d: string; size?: number }) {
   return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" dangerouslySetInnerHTML={{ __html: d }} />;
 }
 /** One row: coloured icon tile, label, optional value on the right, chevron. */
 function Row({ href, onClick, icon, color, label, value }: { href?: string; onClick?: () => void; icon: string; color: string; label: string; value?: ReactNode }) {
-  const body = <><span className="yp-ic" style={{ ["--c" as any]: color }}><Svg d={IC[icon]} /></span><span className="yp-l">{label}</span>{value != null && <span className="yp-v">{value}</span>}<i className="yp-chev" aria-hidden="true">›</i></>;
+  const body = <><span className="yp-ic goofy-tile" style={{ ["--c" as any]: color }}><Goofy icon={icon} d={IC[icon]} /></span><span className="yp-l">{label}</span>{value != null && <span className="yp-v">{value}</span>}<i className="yp-chev" aria-hidden="true">›</i></>;
   return href ? <Link href={href} className="yp-row">{body}</Link> : <button type="button" className="yp-row" onClick={onClick}>{body}</button>;
 }
 const usd = (n: number | null | undefined) => (n == null ? "–" : n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n < 1 ? 4 : 2 }));
@@ -155,8 +182,8 @@ export default function MePanel({ me, settings }: {
               ) : (
                 <>
                   <b className="mp-bs-h">🏅 Choose your badge type</b>
-                  <small className="mp-dim">Apply for Verified (creators, projects, known members) or Team (you work with AUTISTIK). Once approved, you pick one of these 10 designs to show next to your name everywhere.</small>
-                  <div className="mp-bs-row" aria-hidden="true">{BADGES.map((b, i) => <VerifiedBadge key={b.name} n={i + 1} size={26} />)}</div>
+                  <small className="mp-dim">Apply for Verified (creators, projects, known members) or Team (you work with AUTISTIK). Once approved, you pick one of these 10 AUTISTIK stickers to show next to your name everywhere.</small>
+                  <div className="mp-bs-row" aria-hidden="true">{STICKERS.map((b, i) => <VerifiedBadge key={b.key} n={i + 11} size={26} />)}</div>
                   <BadgeApply verified={false} team={false} />
                 </>
               )}
@@ -181,7 +208,7 @@ export default function MePanel({ me, settings }: {
 
       {!verified && (
         <button type="button" className="yp-cta" onClick={(e) => { e.stopPropagation(); setBadge(true); }}>
-          <span className="yp-cta-ic" aria-hidden="true"><VerifiedBadge n={1} size={22} /></span>
+          <span className="yp-cta-ic" aria-hidden="true"><VerifiedBadge n={11} size={22} /></span>
           <span className="yp-cta-t"><b>Get a badge</b><small>Apply for Verified or Team. It shows next to your name everywhere.</small></span>
           <i className="yp-chev" aria-hidden="true">›</i>
         </button>
