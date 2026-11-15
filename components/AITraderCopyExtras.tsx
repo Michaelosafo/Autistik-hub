@@ -3,6 +3,7 @@
  * Parts of the AI trader's copy trading panel: which sources it trades (Telegram only by default), callers whose
  * posts buy a set dollar amount, and the dump re-buy for new projects.
  */
+import Clamp from "@/components/Clamp";
 import { useState } from "react";
 
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
@@ -98,7 +99,7 @@ export function Callers({ list, normal, groups, channels, busy, onAct, dsl = 5, 
         <div className="stack" style={{ gap: 10 }}>{[...byGroup.entries()].map(([k, cs]) => (
           <div key={k} className="stack" style={{ gap: 6 }}>
             <small><b>{groupName(k)}</b>{k !== "" && k !== "x" ? " · only these callers are bought here" : ""}</small>
-            <div className="aic-list">{cs.map((c) => <CallerRow key={c.id} c={c} label={label(c)} busy={busy} onAct={onAct} dsl={dsl} dtp={dtp} />)}</div>
+            <div className="aic-list">{<Clamp>{cs.map((c) => <CallerRow key={c.id} c={c} label={label(c)} busy={busy} onAct={onAct} dsl={dsl} dtp={dtp} />)}</Clamp>}</div>
           </div>
         ))}</div>
       ) : <small className="muted">No callers yet: every call in your ticked groups is bought.</small>}
@@ -127,7 +128,7 @@ export function RebuyBox({ on, dump, tp, sl, list, busy, onAct }: { on: boolean;
           <span className="ait-in"><em>+</em><input inputMode="decimal" disabled={busy} value={t || String(tp)} onChange={(e) => setT(e.target.value)} onBlur={() => { if (t && Number(t) !== tp) onAct("rbt", "settings", { rebuy_tp: Number(t) }, `Re-buys sell at +${Number(t)}%.`); setT(""); }} /><em>%</em></span></label>
       </div>
       {list.length > 0 && (
-        <div className="aic-list">{list.map((r) => {
+        <div className="aic-list">{<Clamp>{list.map((r) => {
           const low = r.low_usd ? (1 - Number(r.low_usd) / Number(r.sold_usd)) * 100 : 0;
           return (
             <div key={r.id} className={"aic-row" + (r.status === "watching" ? " on" : "")}>
@@ -135,7 +136,7 @@ export function RebuyBox({ on, dump, tp, sl, list, busy, onAct }: { on: boolean;
               <a className="btn small" href={`https://dexscreener.com/${r.chain}/${r.token}`} target="_blank" rel="noopener noreferrer">Chart</a>
             </div>
           );
-        })}</div>
+        })}</Clamp>}</div>
       )}
     </div>
   );
@@ -154,7 +155,7 @@ export function LiveChains({ list, live, relay, busy, onAct }: { list: LiveWalle
     <div className="aic-block">
       <b>⛓ Live chains</b>
       <small className="muted">{live ? "Live trading buys on the chains switched on here." : "You're in practice mode: these apply once you switch to Live."} Each chain pays with its own coin, so the wallet needs that coin there: BNB on BNB Chain, ETH on Ethereum, ETH on Robinhood Chain, HYPE on Elysium, SOL on Solana. The same address works on BNB Chain, Ethereum, Robinhood Chain and Elysium. Use Move funds below to bridge between them. Calls on a chain that&apos;s off (or has no money) are skipped.</small>
-      <div className="aic-list">{list.map((w) => (
+      <div className="aic-list">{<Clamp>{list.map((w) => (
         <div key={w.chain} className={"aic-row aic-chain" + (w.on ? " on" : "")}>
           <input type="checkbox" checked={w.on} disabled={busy || (!w.address && !w.on)} onChange={(e) => toggle(w.chain, e.target.checked)} aria-label={`Trade live on ${CHAIN_LABEL[w.chain]}`} />
           <span className="grow">
@@ -163,7 +164,7 @@ export function LiveChains({ list, live, relay, busy, onAct }: { list: LiveWalle
           </span>
           {w.chain === "solana" && !w.address && <button type="button" className="btn small" disabled={busy} onClick={() => onAct("solw", "sol-wallet", {})}>Create Solana wallet</button>}
         </div>
-      ))}</div>
+      ))}</Clamp>}</div>
       <MoveFunds list={list} relay={relay} busy={busy} onAct={onAct} />
       <SolImport has={list.some((w) => w.chain === "solana" && w.address)} busy={busy} onAct={onAct} />
       {list.some((w) => w.chain === "solana" && w.address) && (
@@ -345,7 +346,7 @@ export function Squads({ list, chats, normal, busy, onAct, dsl = 5, dtp = 100 }:
         <b>👥 Squads</b>
         <small className="muted">Group the people, channels, X accounts and wallets you trust. Their calls are always bought, at the squad&apos;s size (blank = normal size, {normal}).</small>
       </div>
-      {list.map((q) => <SquadCard key={q.id} q={q} chats={chats} normal={normal} busy={busy} onAct={onAct} dsl={dsl} dtp={dtp} />)}
+      {<Clamp>{list.map((q) => <SquadCard key={q.id} q={q} chats={chats} normal={normal} busy={busy} onAct={onAct} dsl={dsl} dtp={dtp} />)}</Clamp>}
       <form className="sq-new" onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return; onAct("squad-new", "squad", { op: "create", name, usd: Number(usd) || 0 }).then(() => { setName(""); setUsd(""); }); }}>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New squad name, like Top callers" maxLength={40} aria-label="Squad name" />
         <span className="ait-in"><em>$</em><input inputMode="decimal" value={usd} onChange={(e) => setUsd(e.target.value)} placeholder="Size" aria-label="Buy size in dollars" /></span>
@@ -381,7 +382,7 @@ function SquadCard({ q, chats, normal, busy, onAct, dsl = 5, dtp = 100 }: { q: S
         <small className="muted">Tap a person to give them their own size and stop-loss.</small>
       </div>
       <div className="sq-chips">
-        {q.members.length ? q.members.map((m) => (
+        {q.members.length ? <Clamp>{q.members.map((m) => (
           <span key={m.id} className={"sq-chip " + m.kind + (open === m.id ? " on" : "")} title={m.value}>
             <button type="button" className="sq-chip-b" onClick={() => setOpen(open === m.id ? null : m.id)} aria-expanded={open === m.id}>
               <i aria-hidden="true">{KIND_ICON[m.kind]}</i>{m.label || m.value}
@@ -389,7 +390,7 @@ function SquadCard({ q, chats, normal, busy, onAct, dsl = 5, dtp = 100 }: { q: S
             </button>
             <button type="button" disabled={busy} onClick={() => onAct(`squad-rm-${m.id}`, "squad", { op: "unmember", id: q.id, member: m.id })} aria-label={`Remove ${m.label || m.value}`}>×</button>
           </span>
-        )) : <small className="muted">Empty. Add people, channels or wallets below.</small>}
+        ))}</Clamp> : <small className="muted">Empty. Add people, channels or wallets below.</small>}
       </div>
       {open != null && q.members.find((m) => m.id === open) && <MemberEdit key={open} m={q.members.find((m) => m.id === open)!} q={q} normal={normal} dsl={dsl} dtp={dtp} busy={busy} onAct={onAct} onDone={() => setOpen(null)} />}
       <form className="sq-box" onSubmit={(e) => { e.preventDefault(); add(text); }}>

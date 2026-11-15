@@ -8,6 +8,7 @@
  * - TrackedBoard: every Telegram channel / group, X account and caller being followed, in one list, with how many
  *   calls each sent and how many the AI bought, plus every call from all of them in one feed.
  */
+import Clamp from "@/components/Clamp";
 import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
 import type { CopyData } from "@/components/AITraderCopy";
@@ -178,13 +179,13 @@ export function WalletPanel({ live, cash, open, bnbUsd, wallets, wallets2 }: { l
           </div>
           {coins.length > 0 && (
             <div className="aitx-list">
-              {coins.map(({ p, worth, pct }) => (
+              {<Clamp>{coins.map(({ p, worth, pct }) => (
                 <div key={p.id} className="aitx-li">
                   {p.logo ? <img src={p.logo} alt="" width={28} height={28} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
                   <span className="grow"><b>{p.symbol}</b><br /><small className="muted">bought at {fmtUsd(Number(p.entry_usd))}</small></span>
                   <span className="n"><b>{usd(worth)}</b><br /><small className={pct >= 0 ? "up" : "down"}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</small></span>
                 </div>
-              ))}
+              ))}</Clamp>}
             </div>
           )}
           {live && ws.length > 0 && (
@@ -302,7 +303,7 @@ export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly =
           </div>
           {!shown.length ? <small className="muted">Nothing saved yet. Add Telegram channels, X accounts and callers in the sections below; they all show here.</small> : (
             <div className="aitx-list">
-              {shown.map((r) => {
+              {<Clamp>{shown.map((r) => {
                 const st = stats(r);
                 const e = r.edit;
                 const buys = e ? (e.usd ? `buys $${Number(e.usd).toLocaleString("en-US")}` : e.kind === "source" ? `buys the normal size${normalUsd ? ` ($${normalUsd})` : ""}` : "") + (e.kind === "caller" ? ` · SL −${e.sl || dsl}% · TP +${e.tp || dtp}%` : "") : "";
@@ -320,14 +321,14 @@ export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly =
                     {e && onAct && editing === r.key && <BuyEdit kind={e.kind} id={e.id} usd={e.usd} sl={e.sl} tp={e.tp} dsl={dsl} dtp={dtp} busy={busy} onAct={onAct} onDone={() => setEditing(null)} />}
                   </div>
                 );
-              })}
+              })}</Clamp>}
             </div>
           )}
           <small className="muted">Counts are from the latest {signals.length} calls and this page&apos;s trades. Add, pause or remove sources in Copy trading and Fresh signals below.</small>
         </>
       ) : !signals.length ? <small className="muted">No calls yet. Every call from every source shows here as it lands.</small> : (
         <div className="aitx-list">
-          {signals.map((g) => {
+          {<Clamp>{signals.map((g) => {
             const won = g.result?.startsWith("bought");
             return (
               <div key={g.id} className="aitx-li">
@@ -336,7 +337,7 @@ export function TrackedBoard({ copy, xCallers, signals, positions, callersOnly =
                 {g.url.startsWith("http") && <a href={g.url} target="_blank" rel="noopener noreferrer" className="btn small">Open</a>}
               </div>
             );
-          })}
+          })}</Clamp>}
         </div>
       )}
     </section>
@@ -387,7 +388,7 @@ export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean
       )}
       {list && list.length > 0 && (
         <div className="aitx-list">
-          {list.map((h) => (
+          {<Clamp>{list.map((h) => (
             <div key={`${h.slot}:${h.chain}:${h.token}`} className={"aitx-li wrap" + (h.tracked ? "" : " loose")}>
               {h.logo ? <img src={h.logo} alt="" width={28} height={28} /> : <span className="ait-ph">{(h.symbol || "?").slice(0, 2)}</span>}
               <span className="grow"><b>{h.symbol || `${h.token.slice(0, 6)}…`}</b> <small className="muted">{h.chain}{h.slot === 2 ? " · Wallet 2" : ""}</small><br />
@@ -400,7 +401,7 @@ export function WalletCoins({ busy, onAct, dsl = 5, dtp = 100 }: { busy: boolean
                 </span>
               )}
             </div>
-          ))}
+          ))}</Clamp>}
         </div>
       )}
     </section>
@@ -522,7 +523,7 @@ export function ScoutCard({ s, busy, onAct }: { s: ScoutS; busy: boolean; onAct:
       </div>
       {!d ? <small className="muted">Loading…</small> : !rows.length ? <small className="muted">{on ? "Learning: calls are scored once their 24 hours are up (or they hit the target). The first scores show within the hour from the groups' recent history." : "Switch the scout on to start learning."}</small> : (
         <div className="aitx-list">
-          {rows.slice(0, 25).map((r) => (
+          {<Clamp>{rows.map((r) => (
             <div key={r.key} className="aitx-li wrap">
               <span className={"aitx-plat " + (r.platform === "x" ? "x" : "tg")}>{r.platform === "x" ? "X" : "TG"}</span>
               <span className="grow"><b>{tab === "callers" ? `@${r.who}` : r.who}</b>{r.following && <small className="up"> · following</small>}<br />
@@ -535,7 +536,7 @@ export function ScoutCard({ s, busy, onAct }: { s: ScoutS; busy: boolean; onAct:
                 )}</span>
               <span className="n"><b className={(tab === "callers" ? r.winRate : r.fastRate) >= (tab === "callers" ? Number(s.scout_min_win ?? 97) : Number(s.scout_group_rate ?? 60)) ? "up" : ""}>{Math.round(tab === "callers" ? r.winRate : r.fastRate)}%</b><br /><small className="muted">{tab === "callers" ? `hit ${s.scout_multiple ?? 3}x` : `2x in ${s.scout_fast_min ?? 30}m`}</small></span>
             </div>
-          ))}
+          ))}</Clamp>}
         </div>
       )}
       <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); if (link.trim()) onAct("scout-chat", "scout-chat", { link: link.trim() }).then(() => { setLink(""); load(); }); }}>
