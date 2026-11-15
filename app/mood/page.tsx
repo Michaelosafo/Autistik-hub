@@ -2,6 +2,7 @@ import Link from "next/link";
 import MadnessPanel from "@/components/mood/MadnessPanel";
 import FocusTik from "@/components/mood/FocusTik";
 import MyTikPanel from "@/components/mood/MyTikPanel";
+import PublicFeed from "@/components/mood/PublicFeed";
 import { MoodSticker } from "@/components/mood/MoodStickers";
 import LiveNow from "@/components/rooms/LiveNow";
 import { currentUser } from "@/lib/supabase/server";
@@ -34,12 +35,8 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
       ) : tab === "streams" ? <StreamsTab signedIn={!!user} />
         : tab === "videos" ? <VideosTab signedIn={!!user} />
         : tab === "fun" ? <FunTab signedIn={!!user} />
-        : !user ? (
-        <div className="card stack" style={{ alignItems: "flex-start" }}>
-          <p style={{ margin: 0 }}>TIK is for members. Sign in or join free to post and see everyone&apos;s Tiks.</p>
-          <Link className="btn primary" href="/login?next=/mood">Sign in / Join</Link>
-        </div>
-      ) : (
+        : !user ? <PublicFeed focus={/^[0-9a-f-]{36}$/i.test(searchParams.tik || "") ? searchParams.tik : undefined} />
+        : (
         <div className="tik-layout">
           <MyTikPanel />
           <div className="tik-layout-feed"><MadnessPanel full focus={/^[0-9a-f-]{36}$/i.test(searchParams.tik || "") ? <FocusTik id={searchParams.tik!} /> : null} /></div>
