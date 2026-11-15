@@ -250,18 +250,6 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
             {replies > 0 && <span><b>{replies}</b> {replies === 1 ? "comment" : "comments"}</span>}
           </div>
         )}
-        {pills.length > 0 && (
-          <div className="tik-rchips" aria-label={`${likes} reactions`}>
-            {pills.map(({ k, list }) => (
-              <button key={k} type="button" className={"tik-rchip" + (liked && myKind === k ? " mine" : "")} onClick={() => { setWhoTab(k); setWho(true); }} aria-label={`${list.length} ${RNAME[k]}: see who`} title={`${RNAME[k]}: see who`}>
-                <span className="tik-rchip-e" aria-hidden="true">{REMOJI[k]}</span>
-                <span className="tik-rchip-f" aria-hidden="true">{list.slice(0, 4).map((r) => <Avatar key={r.user_id} className="me-av" alias={r.p?.alias || "?"} color={r.p?.color} url={r.p?.avatar_url} />)}</span>
-                {list.length > 4 && <b>+{list.length - 4}</b>}
-              </button>
-            ))}
-            {likes > 4 && <button type="button" className="tik-rchip all" onClick={() => { setWhoTab("all"); setWho(true); }}>All {likes}</button>}
-          </div>
-        )}
         <div className="tik-actions">
           <button type="button" className={"tik-act reply" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${replies} replies`} title="Reply">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
@@ -299,6 +287,18 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
             <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2.5 10.6 13.4M21.5 2.5l-6.8 19-4.1-8.1-8.1-4.1 19-6.8z" /></svg>
             <span>{copied ? "Copied" : ""}</span>
           </button>
+        {pills.length > 0 && (
+            <div className="tik-rchips" aria-label={`${likes} reactions`}>
+              {pills.map(({ k, list }) => (
+                <button key={k} type="button" className={"tik-rchip" + (liked && myKind === k ? " mine" : "")} onClick={() => { setWhoTab(k); setWho(true); }} aria-label={`${list.length} ${RNAME[k]}: see who`} title={`${RNAME[k]}: see who`}>
+                  <span className="tik-rchip-e" aria-hidden="true">{REMOJI[k]}</span>
+                  <span className="tik-rchip-f" aria-hidden="true">{list.slice(0, 4).map((r) => <Avatar key={r.user_id} className="me-av" alias={r.p?.alias || "?"} color={r.p?.color} url={r.p?.avatar_url} />)}</span>
+                  {list.length > 4 && <b>+{list.length - 4}</b>}
+                </button>
+              ))}
+              {likes > 4 && <button type="button" className="tik-rchip all" onClick={() => { setWhoTab("all"); setWho(true); }}>All {likes}</button>}
+            </div>
+          )}
         </div>
         {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}>View {replies} {replies === 1 ? "comment" : "comments"}</button>}
         {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
