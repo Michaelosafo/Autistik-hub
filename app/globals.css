@@ -7190,3 +7190,43 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
   .mytik-tabs button { flex: 0 0 76px; }
   .mytik-list ul { max-height: 260px; }
 }
+
+/* TIK reaction pills (like Telegram): emoji + up to 4 faces, +N; tap to see everyone */
+.tik-rchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
+.tik-rchip { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 3px 10px 3px 8px; border-radius: 99px; background: linear-gradient(180deg, rgba(181,124,255,.16), rgba(181,124,255,.08)); border: 1px solid rgba(181,124,255,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 2px 0 rgba(120,80,200,.18); font-size: .82em; font-weight: 800; color: var(--ink); transition: transform .1s; }
+.tik-rchip:hover { transform: translateY(-1px); }
+.tik-rchip:active { transform: translateY(1px); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
+.tik-rchip.mine { color: #fff; border-color: transparent; background: linear-gradient(135deg, #4FA8FF, #2F7BFF); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 2px 0 #1d5bd1; }
+.tik-rchip.all { padding: 3px 12px; color: #B57CFF; }
+.tik-rchip:focus-visible { outline: 2px solid #F0B90B; outline-offset: 2px; }
+.tik-rchip-e { font-size: 1.25em; line-height: 1; }
+.tik-rchip-f { display: inline-flex; }
+.tik-rchip-f .me-av { width: 24px; height: 24px; border-radius: 50%; margin-left: -8px; box-shadow: 0 0 0 2px var(--surface); font-size: .7em; }
+.tik-rchip.mine .tik-rchip-f .me-av { box-shadow: 0 0 0 2px #2F7BFF; }
+.tik-rchip-f .me-av:first-child { margin-left: 0; }
+
+/* AUTISTIK 3D action buttons (reply, retikle, react, views, send) */
+.tik:not(.compact) > .tik-main > .tik-actions { gap: 6px; justify-content: flex-start; margin: 8px 0 0; flex-wrap: wrap; }
+.tik-actions .tik-act { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex !important; align-items: center; gap: 5px; height: 36px; min-width: 40px; justify-content: center; padding: 0 12px !important; border-radius: 14px !important; font-size: .82em; font-weight: 800; color: var(--ink) !important;
+  background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 82%, #B57CFF) 100%) !important;
+  border: 1px solid color-mix(in srgb, var(--line) 60%, #B57CFF) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 3px 0 color-mix(in srgb, #B57CFF 45%, var(--line)), 0 6px 12px -8px rgba(90,50,160,.5) !important;
+  transition: transform .08s, box-shadow .08s; }
+.tik-actions .tik-act:hover { transform: translateY(-1px); }
+.tik-actions .tik-act:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 0 0 color-mix(in srgb, #B57CFF 45%, var(--line)) !important; }
+.tik-actions .tik-act svg { width: 18px !important; height: 18px !important; }
+.tik-actions .tik-act.like:not(.on) svg { stroke: #FF4F8B; }
+.tik-actions .tik-act.like.on { background: linear-gradient(180deg, #FFE1EC, #FFC2D8) !important; border-color: #FF8FB5 !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 3px 0 #FF6B9A, 0 6px 12px -8px #FF4F8B !important; color: #9c1d4c !important; }
+.tik-actions .tik-act.reply.on, .tik-actions .tik-act.tickle.on { color: #fff !important; background: linear-gradient(180deg, #C69BFF, #9B6BFF) !important; border-color: #8a5cf0 !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 0 #6d3fd6 !important; }
+.tik-actions .tik-act.tickle.on svg, .tik-actions .tik-act.reply.on svg { stroke: #fff; }
+.tik-actions .tik-act.share { color: #2F7BFF !important; }
+.tik-actions .tik-act.share.on { color: #fff !important; background: linear-gradient(180deg, #6FB6FF, #2F7BFF) !important; border-color: #2a6be0 !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 3px 0 #1d5bd1 !important; }
+.tik-actions .tik-act span:empty { display: none; }
+.tik-actions .tik-act:focus-visible { outline: 2px solid #F0B90B; outline-offset: 2px; }
+:root[data-theme="dark"] .tik-actions .tik-act { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 3px 0 #3a2a5c, 0 6px 12px -8px #000 !important; }
+/* in comments: the same buttons, smaller, all on one line */
+.tik-replies > .tik.compact .tik-actions .tik-act { height: 28px; min-width: 32px; padding: 0 8px !important; border-radius: 10px !important; font-size: .76em; box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 0 color-mix(in srgb, #B57CFF 40%, var(--line)) !important; }
+.tik-replies > .tik.compact .tik-actions .tik-act svg { width: 14px !important; height: 14px !important; }
+.tik-replies > .tik.compact .tik-rchip { height: 28px; font-size: .74em; }
+.tik-replies > .tik.compact .tik-rchip-f .me-av { width: 20px; height: 20px; }
+@media (max-width: 560px) { .tik:not(.compact) > .tik-main > .tik-actions { gap: 5px; } .tik-actions .tik-act { padding: 0 9px !important; height: 34px; } }
