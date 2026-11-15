@@ -18,6 +18,7 @@ import { refreshTrending, type Hot } from "./useTrending";
 type RKind = "love" | "haha" | "fire" | "100" | "wow" | "sad" | "pray" | "clap";
 const RKINDS: RKind[] = ["love", "haha", "fire", "100", "wow", "sad", "pray", "clap"];
 const REMOJI: Record<RKind, string> = { love: "❤️", haha: "😂", fire: "🔥", "100": "💯", wow: "😮", sad: "😢", pray: "🙏", clap: "👏" };
+type Rx = { user_id: string; kind: RKind; p: { alias: string; color: string | null; avatar_url: string | null } | null };
 const RNAME: Record<RKind, string> = { love: "Love", haha: "Haha", fire: "Fire", "100": "100", wow: "Wow", sad: "Sad", pray: "Pray", clap: "Clap" };
 
 /** One Tik: who, what they wrote, a picture, likes and replies. */
@@ -95,19 +96,30 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
   const [myKind, setMyKind] = useState<RKind>("love");
   const [picker, setPicker] = useState(false);
   const [who, setWho] = useState(false);
-  const [top, setTop] = useState<RKind[]>([]);
-  // My reaction and the top reactions on this Tik (shown next to the count).
+  // Who reacted with what (for the reaction pills under the post: emoji + up to 4 faces).
+  const [rx, setRx] = useState<Rx[]>([]);
+  const [rxKey, setRxKey] = useState(0);
+  const [whoTab, setWhoTab] = useState<RKind | "all">("all");
   useEffect(() => {
-    if (!(t.likes > 0)) return;
+    if (!(t.likes > 0) && rxKey === 0) return;
     let gone = false;
-    supabaseBrowser().from("tik_likes").select("user_id,kind").eq("tik_id", t.id).limit(500).then(({ data }) => {
+    (async () => {
+      const sb = supabaseBrowser();
+      const { data } = await sb.from("tik_likes").select("user_id,kind,created_at").eq("tik_id", t.id).order("created_at", { ascending: false }).limit(500);
       if (gone || !data) return;
-      const c = new Map<string, number>();
-      for (const r of data as { user_id: string; kind: string }[]) { c.set(r.kind, (c.get(r.kind) || 0) + 1); if (me && r.user_id === me) setMyKind((r.kind as RKind) || "love"); }
-      setTop([...c.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k]) => k as RKind));
-    });
+      const rows = data as { user_id: string; kind: string }[];
+      const mineRow = me ? rows.find((r) => r.user_id === me) : null;
+      if (mineRow) setMyKind((mineRow.kind as RKind) || "love");
+      // Faces: the first 4 of each reaction.
+      const want = new Set<string>(); const per = new Map<string, number>();
+      for (const r of rows) { const k = per.get(r.kind) || 0; if (k < 4) { want.add(r.user_id); per.set(r.kind, k + 1); } }
+      const { data: ps } = want.size ? await sb.from("profiles").select("id,alias,color,avatar_url").in("id", [...want]) : { data: [] };
+      const by = new Map(((ps || []) as any[]).map((p) => [p.id, p]));
+      if (!gone) setRx(rows.map((r) => ({ user_id: r.user_id, kind: (r.kind as RKind) || "love", p: by.get(r.user_id) || null })));
+    })();
     return () => { gone = true; };
-  }, [t.id, t.likes, me]);
+  }, [t.id, t.likes, me, rxKey]);
+  const pills = RKINDS.map((k) => ({ k, list: rx.filter((r) => r.kind === k) })).filter((g) => g.list.length).sort((x, y) => y.list.length - x.list.length);
   const [tickled, setTickled] = useState(!!t.tickled);
   const [tickles, setTickles] = useState(t.tickles ?? 0);
   const [copied, setCopied] = useState(false);
@@ -146,14 +158,15 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
       const { error } = await sb.from("tik_likes").delete().eq("tik_id", t.id).eq("user_id", me);
       if (error) { setLiked(prevLiked); setLikes((n) => n + 1); }
     } else if (liked) {
-      setMyKind(kind!); setTop((x) => (x.includes(kind!) ? x : [kind!, ...x].slice(0, 3)));
+      setMyKind(kind!);
       const { error } = await sb.from("tik_likes").update({ kind }).eq("tik_id", t.id).eq("user_id", me);
       if (error) setMyKind(prevKind);
     } else {
-      setLiked(true); setMyKind(kind!); setLikes((n) => n + 1); setTop((x) => (x.includes(kind!) ? x : [kind!, ...x].slice(0, 3)));
+      setLiked(true); setMyKind(kind!); setLikes((n) => n + 1);
       const { error } = await sb.from("tik_likes").insert({ tik_id: t.id, kind });
       if (error && error.code !== "23505") { setLiked(false); setLikes((n) => Math.max(0, n - 1)); }
     }
+    setRxKey((n) => n + 1);
     refreshTrending();
   }
   /** Tickle (repost) this Tik to everyone's feed, or undo it. */
@@ -235,6 +248,18 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
             {replies > 0 && <span><b>{replies}</b> {replies === 1 ? "comment" : "comments"}</span>}
           </div>
         )}
+        {pills.length > 0 && (
+          <div className="tik-rchips" aria-label={`${likes} reactions`}>
+            {pills.map(({ k, list }) => (
+              <button key={k} type="button" className={"tik-rchip" + (liked && myKind === k ? " mine" : "")} onClick={() => { setWhoTab(k); setWho(true); }} aria-label={`${list.length} ${RNAME[k]}: see who`} title={`${RNAME[k]}: see who`}>
+                <span className="tik-rchip-e" aria-hidden="true">{REMOJI[k]}</span>
+                <span className="tik-rchip-f" aria-hidden="true">{list.slice(0, 4).map((r) => <Avatar key={r.user_id} className="me-av" alias={r.p?.alias || "?"} color={r.p?.color} url={r.p?.avatar_url} />)}</span>
+                {list.length > 4 && <b>+{list.length - 4}</b>}
+              </button>
+            ))}
+            {likes > 4 && <button type="button" className="tik-rchip all" onClick={() => { setWhoTab("all"); setWho(true); }}>All {likes}</button>}
+          </div>
+        )}
         <div className="tik-actions">
           <button type="button" className={"tik-act reply" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${replies} replies`} title="Reply">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
@@ -251,9 +276,6 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
               {liked ? <span className="tik-remoji" aria-hidden="true">{REMOJI[myKind]}</span>
                 : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>}
             </button>
-            {likes > 0 && <button type="button" className="tik-rcount" onClick={() => setWho(true)} aria-label={`${likes} reactions: see who`} title="See who reacted">
-              {top.length > 0 && <span className="tik-rtop" aria-hidden="true">{top.map((k) => <i key={k}>{REMOJI[k]}</i>)}</span>}<b>{likes}</b>
-            </button>}
             {picker && <>
               <span className="tik-rbg" onClick={() => setPicker(false)} aria-hidden="true" />
               <span className="tik-rpick" role="menu" aria-label="Pick a reaction">
@@ -278,7 +300,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
         </div>
         {!open && replies > 0 && <button type="button" className="tik-show" onClick={() => setOpen(true)}>View {replies} {replies === 1 ? "comment" : "comments"}</button>}
         {open && <Replies tik={t} me={me} onCount={(d) => { setReplies((n) => n + d); refreshTrending(); }} />}
-        {who && typeof document !== "undefined" && createPortal(<Reactors tikId={t.id} total={likes} onClose={() => setWho(false)} />, document.body)}
+        {who && typeof document !== "undefined" && createPortal(<Reactors tikId={t.id} total={likes} first={whoTab} onClose={() => setWho(false)} />, document.body)}
         {viewers && typeof document !== "undefined" && createPortal(<Viewers tikId={t.id} count={t.views ?? 0} total={seenN} onClose={() => setViewers(false)} />, document.body)}
       </div>
       {zoom && t.image_url && (
@@ -337,9 +359,9 @@ function QuickReplies({ tikId, onSent }: { tikId: string; onSent: () => void }) 
 }
 
 /** Who reacted and with what: a small sheet with tabs per reaction; tap outside to go back. */
-function Reactors({ tikId, total, onClose }: { tikId: string; total: number; onClose: () => void }) {
+function Reactors({ tikId, total, first = "all", onClose }: { tikId: string; total: number; first?: RKind | "all"; onClose: () => void }) {
   const [list, setList] = useState<{ id: string; alias: string; color: string | null; avatar_url: string | null; kind: RKind; at: string }[] | null>(null);
-  const [tab, setTab] = useState<RKind | "all">("all");
+  const [tab, setTab] = useState<RKind | "all">(first);
   useEffect(() => {
     const sb = supabaseBrowser();
     (async () => {
