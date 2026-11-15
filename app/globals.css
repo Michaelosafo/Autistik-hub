@@ -7335,3 +7335,22 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .tik-tool.st.on { background: rgba(181,124,255,.16); }
 .tik-quick button.st { padding: 2px 6px; display: inline-grid; place-items: center; }
 .bp-grid .vsticker { margin: 0; }
+
+/* TIK panel round 3: three square sticker tiles (Posts, Retikles, Comments), stickers after the words */
+.mytik-me { grid-template-columns: auto minmax(0, 1fr); }
+.mytik-tabs, .mytik .mytik-tabs { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; overflow: visible; }
+.mytik-tabs button, .mytik .mytik-tabs button { flex: none !important; flex-direction: row !important; justify-content: space-between; align-items: center; gap: 4px; aspect-ratio: 1.35 / 1; padding: 8px 6px 8px 10px; border-radius: 16px; border: 1.5px solid color-mix(in srgb, var(--tc) 40%, var(--line)); background: linear-gradient(160deg, color-mix(in srgb, var(--tc) 16%, var(--surface)), var(--surface)); box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 3px 0 color-mix(in srgb, var(--tc) 35%, var(--line)); }
+.mytik-tabs button .msticker { flex: none; transition: transform .15s; }
+.mytik-tabs button:hover .msticker { transform: rotate(-10deg) scale(1.1); }
+.mytik-tt { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.mytik-tabs button .mytik-tt b { font-size: 1.25em; line-height: 1; color: var(--ink); }
+.mytik-tabs button .mytik-tt small { font-size: .7em; font-weight: 800; color: color-mix(in srgb, var(--tc) 70%, var(--ink)); }
+.mytik-tabs button.on { background: linear-gradient(150deg, var(--tc), color-mix(in srgb, var(--tc) 60%, #B57CFF)); border-color: transparent; }
+.mytik-tabs button.on .mytik-tt b, .mytik-tabs button.on .mytik-tt small { color: #fff; }
+.mytik-tabs button:active { transform: translateY(2px); }
+.mytik-list li a > em .msticker { display: block; }
+/* top TIK nav: word then its sticker */
+.tik-hello-go a { display: inline-flex !important; align-items: center; gap: 6px; }
+.tik-hello-go a .msticker { transition: transform .15s; }
+.tik-hello-go a:hover .msticker, .tik-hello-go a.on .msticker { transform: rotate(-8deg) scale(1.08); }
+@media (max-width: 560px) { .tik-hello-go a .msticker { width: 22px; height: 22px; } .tik-hello-go a { gap: 4px; font-size: .92em; } }
