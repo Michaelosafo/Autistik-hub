@@ -7143,3 +7143,50 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .tik-replies > .tik.compact .tik-act span:empty { display: none; }
 .tik-replies > .tik.compact.mine .tik-actions { justify-content: flex-end; }
 @media (max-width: 560px) { .tik.mine .tik-rpick, .tik-replies > .tik.compact.mine .tik-rpick { left: auto; right: 0; } }
+
+/* TIK: your profile + activity panel (left on wide screens, on top on phones) */
+.tik-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
+.tik-layout-feed { min-width: 0; }
+@media (min-width: 960px) { .tik-layout { grid-template-columns: 280px minmax(0, 1fr); align-items: start; } .mytik { position: sticky; top: 76px; } }
+.mytik { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 20px; background: linear-gradient(160deg, rgba(181,124,255,.14), rgba(255,107,154,.08) 55%, var(--surface)); border: 1px solid rgba(181,124,255,.28); min-width: 0; }
+.mytik-me { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mytik-av .me-av { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px #B57CFF; }
+.mytik-id { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.mytik-id a { color: var(--ink); text-decoration: none; }
+.mytik-id > a b { font-size: 1.05em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.mytik-id small { color: var(--muted); font-size: .8em; }
+.mytik-f button { all: unset; cursor: pointer; border-radius: 6px; padding: 0 2px; }
+.mytik-f button:hover, .mytik-f button.on { color: #B57CFF; }
+.mytik-f button b { color: var(--ink); }
+.mytik-go { display: flex; gap: 6px; }
+.mytik-btn { flex: 1; text-align: center; padding: 8px 6px; border-radius: 12px; font-weight: 800; font-size: .82em; text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
+.mytik-btn.main { color: #fff; border: 0; background: linear-gradient(135deg, #B57CFF, #FF6B9A); }
+.mytik-btn:hover { transform: translateY(-1px); }
+.mytik-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.mytik-tabs button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); text-align: center; transition: transform .12s, border-color .15s; }
+.mytik-tabs button i { font-style: normal; font-size: 1.05em; }
+.mytik-tabs button b { font-size: 1em; line-height: 1.1; }
+.mytik-tabs button small { font-size: .7em; color: var(--muted); font-weight: 700; }
+.mytik-tabs button:hover { transform: translateY(-1px); border-color: #B57CFF; }
+.mytik-tabs button.on { border-color: transparent; background: linear-gradient(135deg, #B57CFF, #FF6B9A); color: #fff; }
+.mytik-tabs button.on small { color: rgba(255,255,255,.9); }
+.mytik-tabs button:focus-visible { outline: 2px solid #F0B90B; }
+.mytik-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
+.mytik-lh { display: flex; justify-content: space-between; align-items: center; font-size: .86em; }
+.mytik-lh button { all: unset; cursor: pointer; padding: 2px 6px; border-radius: 8px; color: var(--muted); }
+.mytik-list ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; max-height: 340px; overflow-y: auto; }
+.mytik-list li a { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 10px; color: var(--ink); text-decoration: none; font-size: .84em; min-width: 0; }
+.mytik-list li a:hover { background: rgba(var(--wc), .06); }
+.mytik-list li a > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mytik-list li a > small { color: var(--muted); font-size: .85em; flex: none; }
+.mytik-list li a > em { font-style: normal; flex: none; width: 24px; text-align: center; }
+.mytik-list li a > em.live { width: auto; padding: 1px 6px; border-radius: 6px; background: #ef4444; color: #fff; font-size: .72em; font-weight: 800; }
+.mytik-list li a .me-av { width: 28px; height: 28px; flex: none; }
+.mytik-all { font-size: .78em; font-weight: 700; color: #B57CFF; text-decoration: none; align-self: flex-start; }
+@media (max-width: 959px) {
+  .mytik { padding: 12px; gap: 10px; }
+  .mytik-tabs { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .mytik-tabs::-webkit-scrollbar { display: none; }
+  .mytik-tabs button { flex: 0 0 76px; }
+  .mytik-list ul { max-height: 260px; }
+}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import MadnessPanel from "@/components/mood/MadnessPanel";
 import FocusTik from "@/components/mood/FocusTik";
+import MyTikPanel from "@/components/mood/MyTikPanel";
 import LiveNow from "@/components/rooms/LiveNow";
 import { currentUser } from "@/lib/supabase/server";
 import { FunTab, StreamsTab, VideosTab } from "@/components/watch/VideoTabs";
@@ -38,7 +39,10 @@ export default async function MadnessPage({ searchParams }: { searchParams: { ti
           <Link className="btn primary" href="/login?next=/mood">Sign in / Join</Link>
         </div>
       ) : (
-        <MadnessPanel full focus={/^[0-9a-f-]{36}$/i.test(searchParams.tik || "") ? <FocusTik id={searchParams.tik!} /> : null} />
+        <div className="tik-layout">
+          <MyTikPanel />
+          <div className="tik-layout-feed"><MadnessPanel full focus={/^[0-9a-f-]{36}$/i.test(searchParams.tik || "") ? <FocusTik id={searchParams.tik!} /> : null} /></div>
+        </div>
       )}
     </div>
   );
