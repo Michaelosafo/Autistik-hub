@@ -10,6 +10,7 @@ import { LogoBadge } from "@/components/LogoMark";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
+import DailyMood from "@/components/mood/DailyMood";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
 import { LINKS } from "@/lib/site";
@@ -115,7 +116,7 @@ export default function RailShell({ me, path, app, menuRef, menuOpen, onMenu, me
         {path !== "/" && !chatPage && <header className="nx-top">
           <b>{section?.name ?? "AUTISTIK Hub"}</b>
           <div className="nx-top-r">
-            <LangPicker />
+            <LangPicker /><DailyMood />
             <ThemeToggle />
             {!me && <Link className="signin-btn small" href={`/login?next=${encodeURIComponent(path)}`}>Sign in <span aria-hidden="true">→</span></Link>}
           </div>

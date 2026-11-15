@@ -19,7 +19,7 @@ function myProfile(): Promise<MeP> {
 import { TIK_STYLES, canStyle, type TikStyle } from "./tik-styles";
 
 /** Shrinks a picture to at most 1280px and saves it as WebP (smaller, strips location data). */
-async function shrink(file: File): Promise<Blob> {
+export async function shrink(file: File): Promise<Blob> {
   const img = await createImageBitmap(file);
   const scale = Math.min(1, 1280 / Math.max(img.width, img.height));
   const c = document.createElement("canvas");

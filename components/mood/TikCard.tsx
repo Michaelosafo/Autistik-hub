@@ -10,6 +10,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
 import RichText from "./RichText";
+import { MoodSticker, stickerOf } from "./MoodStickers";
 import { canStyle } from "./tik-styles";
 import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
@@ -229,6 +230,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
           </div>
         </div>
         {t.reply_to && !compact && (t.to?.alias || parentAlias) && <small className="tik-replying">Replying to <b>@{t.to?.handle || t.to?.alias || parentAlias}</b></small>}
+        {stickerOf(t.mood) && <span className="tik-msticker" title={stickerOf(t.mood)!.label}><MoodSticker k={t.mood!} size={compact ? 30 : 44} /><small>{stickerOf(t.mood)!.label}</small></span>}
         {t.style && !t.reply_to && canStyle(t.body, !!t.image_url)
           ? <div className={`tik-style s-${t.style}`}><p><RichText text={t.body} /></p></div>
           : <p className="tik-body"><RichText text={t.body} /></p>}
