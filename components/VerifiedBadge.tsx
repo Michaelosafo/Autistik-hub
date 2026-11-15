@@ -1,5 +1,6 @@
 "use client";
 import { useId } from "react";
+import { MoodSticker, STICKERS } from "@/components/mood/MoodStickers";
 
 /** A star-burst outline with `n` points (for the rosette and the star). */
 function burst(n: number, r1: number, r2: number, cx = 12, cy = 12) {
@@ -30,8 +31,18 @@ export const BADGES: { name: string; colors: [string, string, string?]; shape: s
 
 /** A member's verified badge (1–10; no choice yet shows Classic). */
 export default function VerifiedBadge({ n, size = 16, title = "Verified by AUTISTIK", className }: { n?: number | null; size?: number; title?: string; className?: string }) {
-  const b = BADGES[(n && n >= 1 && n <= 10 ? n : 1) - 1];
   const id = useId().replace(/:/g, "");
+  // 11–20: the AUTISTIK mood stickers, with a small check so it still reads as verified.
+  if (n && n >= 11 && n <= 20) {
+    const st = STICKERS[n - 11];
+    return (
+      <span className={"vbadge vsticker" + (className ? ` ${className}` : "")} role="img" aria-label={`${title} · ${st.label}`} title={`${title} · ${st.label}`} style={{ width: size * 1.25, height: size * 1.25 }}>
+        <MoodSticker k={st.key} size={size * 1.25} />
+        <i aria-hidden="true"><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" fill="#2F7BFF" /><path d="M3.3 6.2l1.8 1.8 3.6-3.8" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></i>
+      </span>
+    );
+  }
+  const b = BADGES[(n && n >= 1 && n <= 10 ? n : 1) - 1];
   const [c1, c2, c3] = b.colors;
   return (
     <svg className={"vbadge" + (className ? ` ${className}` : "")} width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={`${title} · ${b.name}`} style={{ filter: `drop-shadow(0 0 ${Math.max(1, size / 8)}px ${b.glow}88)` }}>

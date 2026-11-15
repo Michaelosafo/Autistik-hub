@@ -7309,3 +7309,29 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .mytik-list ul { max-height: 200px; }
 @media (max-width: 959px) { .mytik-tabs button { flex: 0 0 auto; } }
 .mytik-me .mytik-go { flex-direction: column; align-items: stretch; } .mytik-me .mytik-btn { padding: 3px 8px; font-size: .68em; text-align: left; }
+
+/* AUTISTIK stickers everywhere: badge, reactions, inline in text, tray in the post / comment box */
+.vsticker { position: relative; display: inline-grid; place-items: center; vertical-align: -0.28em; margin-left: 3px; flex: none; }
+.vsticker .msticker { width: 100%; height: 100%; }
+.vsticker > i { position: absolute; right: -2px; bottom: -1px; width: 42%; height: 42%; display: block; filter: drop-shadow(0 0 1px #fff); }
+.vsticker > i svg { width: 100%; height: 100%; display: block; }
+.rt-st { display: inline-block; vertical-align: -0.35em; margin: 0 1px; }
+.rt-st .msticker { display: inline-block; }
+.rt-st.solo { display: block; margin: 2px 0; }
+.rt-st.solo .msticker { animation: msBounce .6s ease; }
+.tik-rpick { gap: 0; padding: 4px 6px; }
+.tik-rpick button { font-size: 1em; padding: 2px; }
+.tik-rpick button .msticker { width: 30px; height: 30px; }
+.tik-rchip-e .msticker { display: block; }
+.st-tray { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 2px; padding: 6px; border-radius: 14px; background: rgba(var(--wc), .04); border: 1px solid var(--line); margin: 6px 0; }
+.st-tray button { all: unset; cursor: pointer; display: grid; place-items: center; padding: 3px 0; border-radius: 10px; transition: transform .12s, background .12s; }
+.st-tray button:hover { background: rgba(181,124,255,.14); transform: translateY(-2px) rotate(-6deg); }
+.st-tray button:focus-visible { outline: 2px solid #F0B90B; }
+@media (max-width: 420px) { .st-tray { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.tik-chatbox-wrap { display: flex; flex-direction: column; min-width: 0; }
+.tik-sticker-btn { all: unset; cursor: pointer; flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; transition: transform .12s; }
+.tik-sticker-btn:hover, .tik-sticker-btn.on { transform: rotate(-10deg) scale(1.08); background: rgba(181,124,255,.14); }
+.tik-tool.st { display: inline-grid; place-items: center; }
+.tik-tool.st.on { background: rgba(181,124,255,.16); }
+.tik-quick button.st { padding: 2px 6px; display: inline-grid; place-items: center; }
+.bp-grid .vsticker { margin: 0; }

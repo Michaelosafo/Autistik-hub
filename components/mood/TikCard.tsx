@@ -10,17 +10,23 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
 import RichText from "./RichText";
-import { MoodSticker, stickerOf } from "./MoodStickers";
+import { MoodSticker, STICKERS, stickerOf, type StickerKey } from "./MoodStickers";
 import { canStyle } from "./tik-styles";
 import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
 
 /** Reactions: tap the heart to pick one; the count shows the total, tap it to see who reacted with what. */
-type RKind = "love" | "haha" | "fire" | "100" | "wow" | "sad" | "pray" | "clap";
-const RKINDS: RKind[] = ["love", "haha", "fire", "100", "wow", "sad", "pray", "clap"];
-const REMOJI: Record<RKind, string> = { love: "❤️", haha: "😂", fire: "🔥", "100": "💯", wow: "😮", sad: "😢", pray: "🙏", clap: "👏" };
+type RKind = "love" | "haha" | "fire" | "100" | "wow" | "sad" | "pray" | "clap" | StickerKey;
+/** The reactions you can pick now: the 10 AUTISTIK stickers (older emoji reactions still show). */
+const RKINDS: RKind[] = STICKERS.map((x) => x.key);
+const ALLKINDS: RKind[] = [...RKINDS, "love", "haha", "fire", "100", "wow", "sad", "pray", "clap"];
+/** A reaction's picture: the sticker, or the emoji for older reactions. */
+function RIcon({ k, size = 20 }: { k: RKind; size?: number }) {
+  return stickerOf(k) ? <MoodSticker k={k} size={size} /> : <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{(REMOJI as any)[k] || "❤️"}</span>;
+}
+const REMOJI: Record<string, string> = { love: "❤️", haha: "😂", fire: "🔥", "100": "💯", wow: "😮", sad: "😢", pray: "🙏", clap: "👏" };
 type Rx = { user_id: string; kind: RKind; p: { alias: string; color: string | null; avatar_url: string | null } | null };
-const RNAME: Record<RKind, string> = { love: "Love", haha: "Haha", fire: "Fire", "100": "100", wow: "Wow", sad: "Sad", pray: "Pray", clap: "Clap" };
+const RNAME: Record<string, string> = { love: "Love", haha: "Haha", fire: "Fire", "100": "100", wow: "Wow", sad: "Sad", pray: "Pray", clap: "Clap", ...Object.fromEntries(STICKERS.map((x) => [x.key, x.label])) };
 
 /** One Tik: who, what they wrote, a picture, likes and replies. */
 type CardProps = {
@@ -120,7 +126,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
     })();
     return () => { gone = true; };
   }, [t.id, t.likes, me, rxKey]);
-  const pills = RKINDS.map((k) => ({ k, list: rx.filter((r) => r.kind === k) })).filter((g) => g.list.length).sort((x, y) => y.list.length - x.list.length);
+  const pills = ALLKINDS.map((k) => ({ k, list: rx.filter((r) => r.kind === k) })).filter((g) => g.list.length).sort((x, y) => y.list.length - x.list.length);
   const [tickled, setTickled] = useState(!!t.tickled);
   const [tickles, setTickles] = useState(t.tickles ?? 0);
   const [copied, setCopied] = useState(false);
@@ -263,13 +269,13 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
           )}
           <span className="tik-react-wrap">
             <button type="button" key={liked ? "l1" : "l0"} className={"tik-act like" + (liked ? " on pop" : "")} onClick={() => setPicker(!picker)} aria-pressed={liked} aria-expanded={picker} aria-label={liked ? `Your reaction: ${RNAME[myKind]}. Change it` : "React"} title="React">
-              {liked ? <span className="tik-remoji" aria-hidden="true">{REMOJI[myKind]}</span>
+              {liked ? <span className="tik-remoji" aria-hidden="true"><RIcon k={myKind} size={18} /></span>
                 : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>}
             </button>
             {picker && <>
               <span className="tik-rbg" onClick={() => setPicker(false)} aria-hidden="true" />
               <span className="tik-rpick" role="menu" aria-label="Pick a reaction">
-                {RKINDS.map((k) => <button key={k} type="button" role="menuitem" className={liked && myKind === k ? "on" : ""} onClick={() => react(k)} aria-label={RNAME[k]} title={RNAME[k]}>{REMOJI[k]}</button>)}
+                {RKINDS.map((k) => <button key={k} type="button" role="menuitem" className={liked && myKind === k ? "on" : ""} onClick={() => react(k)} aria-label={RNAME[k]} title={RNAME[k]}><RIcon k={k} size={30} /></button>)}
               </span>
             </>}
           </span>
@@ -291,7 +297,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
             <div className="tik-rchips" aria-label={`${likes} reactions`}>
               {pills.map(({ k, list }) => (
                 <button key={k} type="button" className={"tik-rchip" + (liked && myKind === k ? " mine" : "")} onClick={() => { setWhoTab(k); setWho(true); }} aria-label={`${list.length} ${RNAME[k]}: see who`} title={`${RNAME[k]}: see who`}>
-                  <span className="tik-rchip-e" aria-hidden="true">{REMOJI[k]}</span>
+                  <span className="tik-rchip-e" aria-hidden="true"><RIcon k={k} size={16} /></span>
                   <span className="tik-rchip-f" aria-hidden="true">{list.slice(0, 4).map((r) => <Avatar key={r.user_id} className="me-av" alias={r.p?.alias || "?"} color={r.p?.color} url={r.p?.avatar_url} />)}</span>
                   {list.length > 4 && <b>+{list.length - 4}</b>}
                 </button>
@@ -355,6 +361,7 @@ function QuickReplies({ tikId, onSent }: { tikId: string; onSent: () => void }) 
   }
   return (
     <div className="tik-quick" role="group" aria-label="Quick replies">
+      {STICKERS.map((x) => <button key={x.key} type="button" className={"st" + (busy === `:${x.key}:` ? " on" : "")} disabled={!!busy} onClick={() => send(`:${x.key}:`)} aria-label={`Send ${x.label}`} title={x.label}><MoodSticker k={x.key} size={26} /></button>)}
       {QUICK.map((q) => <button key={q} type="button" disabled={!!busy} className={busy === q ? "on" : ""} onClick={() => send(q)}>{q}</button>)}
     </div>
   );
@@ -383,11 +390,11 @@ function Reactors({ tikId, total, first = "all", onClose }: { tikId: string; tot
         <div className="tik-viewers-h"><b>{total} {total === 1 ? "reaction" : "reactions"}</b><button type="button" onClick={onClose} aria-label="Close">✕</button></div>
         <div className="tik-rtabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "all"} className={tab === "all" ? "on" : ""} onClick={() => setTab("all")}>All {list?.length ?? ""}</button>
-          {[...counts.entries()].sort((x, y) => y[1] - x[1]).map(([k, n]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)} title={RNAME[k]}>{REMOJI[k]} {n}</button>)}
+          {[...counts.entries()].sort((x, y) => y[1] - x[1]).map(([k, n]) => <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)} title={RNAME[k]}><RIcon k={k} size={18} /> {n}</button>)}
         </div>
         {list === null ? <small className="muted">Loading…</small> : shown.length === 0 ? <small className="muted">No reactions yet.</small> : (
           <ul>{shown.map((v) => (
-            <li key={v.id}><Link href={`/members/${v.id}`} onClick={onClose}><span className="tik-rav"><Avatar className="me-av" alias={v.alias} color={v.color} url={v.avatar_url} /><i aria-label={RNAME[v.kind]}>{REMOJI[v.kind]}</i></span><b>{v.alias}</b><small>{ago(v.at)}</small></Link></li>
+            <li key={v.id}><Link href={`/members/${v.id}`} onClick={onClose}><span className="tik-rav"><Avatar className="me-av" alias={v.alias} color={v.color} url={v.avatar_url} /><i aria-label={RNAME[v.kind]}><RIcon k={v.kind} size={16} /></i></span><b>{v.alias}</b><small>{ago(v.at)}</small></Link></li>
           ))}</ul>
         )}
       </div>

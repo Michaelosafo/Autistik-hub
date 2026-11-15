@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import VerifiedBadge, { BADGES } from "@/components/VerifiedBadge";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { STICKERS } from "@/components/mood/MoodStickers";
 
 /**
  * Verified members choose which of the 10 badges shows next to their name, everywhere on AUTISTIK. When they've just
@@ -11,7 +12,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 export default function BadgePicker({ current, name, startOpen, onSaved }: { current: number | null; name: string; startOpen?: boolean; onSaved?: (n: number) => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(!current || !!startOpen);
-  const [pick, setPick] = useState<number>(current || 1);
+  const [pick, setPick] = useState<number>(current || 11);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   async function save() {
@@ -38,6 +39,16 @@ export default function BadgePicker({ current, name, startOpen, onSaved }: { cur
       <div className="bp-preview">
         <span className="bp-name">{name}</span><VerifiedBadge n={pick} size={26} />
       </div>
+      <small className="muted"><b>AUTISTIK stickers</b> (subscriber badges)</small>
+      <div className="bp-grid" role="radiogroup" aria-label="AUTISTIK sticker badges">
+        {STICKERS.map((st, i) => (
+          <button key={st.key} type="button" role="radio" aria-checked={pick === i + 11} className={"bp-item" + (pick === i + 11 ? " on" : "")} onClick={() => setPick(i + 11)}>
+            <VerifiedBadge n={i + 11} size={34} />
+            <small>{st.label}</small>
+          </button>
+        ))}
+      </div>
+      <small className="muted"><b>Classic badges</b></small>
       <div className="bp-grid" role="radiogroup" aria-label="Verified badges">
         {BADGES.map((b, i) => (
           <button key={b.name} type="button" role="radio" aria-checked={pick === i + 1} className={"bp-item" + (pick === i + 1 ? " on" : "")} onClick={() => setPick(i + 1)}>
