@@ -12,9 +12,9 @@ import Avatar from "@/components/Avatar";
 import PhotoCrop from "@/components/PhotoCrop";
 import ShareProfile from "@/components/members/ShareProfile";
 import VerifiedBadge from "@/components/VerifiedBadge";
-import { STICKERS } from "@/components/mood/MoodStickers";
 import BadgePicker from "@/components/BadgePicker";
 import BadgeApply from "@/components/BadgeApply";
+import BadgePay from "@/components/BadgePay";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type Summary = {
@@ -93,6 +93,7 @@ export default function MePanel({ me, settings }: {
   const [view, setView] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [badge, setBadge] = useState(false);
+  const [paidUntil, setPaidUntil] = useState<string | null>(null);
   const [vb, setVb] = useState<number | null>(null);
 
   useEffect(() => {
@@ -177,13 +178,16 @@ export default function MePanel({ me, settings }: {
         {badge && (
           <div className="mp-sheet-bg" role="dialog" aria-modal="true" aria-label="Your badge" onClick={(e) => e.target === e.currentTarget && setBadge(false)}>
             <div className="mp-sheet mp-badge-sheet">
-              {verified ? (
-                <BadgePicker current={vb ?? sum?.profile?.verified_badge ?? null} name={sum?.profile?.alias || me.alias} startOpen onSaved={(n) => { setVb(n); setBadge(false); }} />
+              {verified || paidUntil ? (
+                <>
+                  <BadgePicker current={vb ?? sum?.profile?.verified_badge ?? null} name={sum?.profile?.alias || me.alias} startOpen onSaved={(n) => { setVb(n); setBadge(false); }} />
+                  {(paidUntil || (sum?.profile as any)?.verified_until) && <BadgePay until={paidUntil || (sum?.profile as any)?.verified_until} onPaid={(u) => setPaidUntil(u)} />}
+                </>
               ) : (
                 <>
-                  <b className="mp-bs-h">🏅 Choose your badge type</b>
-                  <small className="mp-dim">Apply for Verified (creators, projects, known members) or Team (you work with AUTISTIK). Once approved, you pick one of these 10 AUTISTIK stickers to show next to your name everywhere.</small>
-                  <div className="mp-bs-row" aria-hidden="true">{STICKERS.map((b, i) => <VerifiedBadge key={b.key} n={i + 11} size={26} />)}</div>
+                  <BadgePay onPaid={(u) => setPaidUntil(u)} />
+                  <b className="mp-bs-h">Working with AUTISTIK?</b>
+                  <small className="mp-dim">Team members and partners can apply for a free badge instead. The owner decides.</small>
                   <BadgeApply verified={false} team={false} />
                 </>
               )}

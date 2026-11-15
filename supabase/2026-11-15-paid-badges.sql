@@ -1,0 +1,2 @@
+-- Paid AUTISTIK sticker badge (applied 2026-11-15)
+-- profiles.verified_until; badge_payments(tx_hash pk, user_id, paid_wei, usd, until) RLS: own rows only; expire_paid_badges() (service only)
