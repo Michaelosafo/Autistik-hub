@@ -7067,3 +7067,14 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .qw-send{display:flex;flex-direction:column;gap:8px;padding-top:10px;border-top:1px dashed color-mix(in srgb,var(--acc) 30%,var(--line))}
 .qw-label{font-weight:800;color:var(--acc)}
 @media (max-width:640px){.qw-acts{width:100%}.qw-acts .qw-btn{flex:1 1 calc(50% - 6px);justify-content:center}}
+
+/* Homepage: shorter AUTISTIK wordmark and "Autism is not a disease." heading (less height top to bottom) */
+.lp .lp-wordmark { font-size: clamp(2.1rem, 7.6vw, 4.3rem); line-height: .9; }
+.lp .lp-hero-mark { margin: 0 0 -2px; }
+.lp .lp-hero h1 { font-size: clamp(1.7em, 4vw, 2.7em); line-height: 1.04; margin: 6px 0 10px; }
+.lp .lp-hero h1 .lp-punch { line-height: 1.08; padding: 0 .2em .04em; }
+.lp .lp-hero h1 .lp-loop { margin-top: .12em; }
+@media (max-width: 640px) {
+  .lp .lp-hero h1 { font-size: clamp(1.7em, 8vw, 2.2em); margin: 4px 0 8px; }
+  .lp .lp-hero h1 .lp-loop { margin-top: 4px; }
+}

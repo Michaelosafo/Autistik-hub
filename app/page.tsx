@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 
 // The vision in plain words, for someone new to autism, crypto or both. [question, answer, icon]
 // The hero's second line keeps typing through these.
-const HERO_LOOP = ["It's a different way of thinking.", "It's a source of strength.", "It's a community.", "It's a way of being."];
+const HERO_LOOP = ["It’s a different way of thinking.", "It’s a source of strength.", "It’s a community.", "It’s a way of being."];
 
 const WHY: { q: string; a: string; icon: IconName }[] = [
   { q: "What is AUTISTIK?", a: "A website and app where autistic people, their families and supporters connect, learn and find support, with simple, secure crypto (digital money) tools explained in plain language.", icon: "groups" },
