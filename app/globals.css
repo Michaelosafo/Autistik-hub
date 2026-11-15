@@ -7088,3 +7088,28 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
   .lp .lp-hero h1 { font-size: clamp(1.25em, 6.4vw, 1.9em); }
   .lp .lp-hero h1 .lp-punch { display: inline-block; }
 }
+
+/* TIK: nothing spills off to the right (post page, comments, replies), and a slightly smaller, clearer font */
+.tik-post-page, .tik-focus, .mood-feed, .ptik, .tik-pro, .mp-mood { max-width: 100%; overflow-x: clip; }
+.tik, .tik-main, .tik-replies, .tik-replies > .tik.compact, .tik-head, .tik-quick { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.tik-head { flex-wrap: wrap; row-gap: 2px; }
+.tik-name { min-width: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tik-body, .tik-style, .tik-replying, .tik-detail-meta { overflow-wrap: anywhere; word-break: break-word; }
+.tik-body a { word-break: break-all; }
+.tik img, .tik video, .tik iframe, .tik-img { max-width: 100%; }
+.tik-replies .tik-replies { margin-left: 12px !important; }
+.tik-replies .tik-replies .tik-replies { margin-left: 0 !important; }
+.tik-replies > .tik.compact .tik-actions { transform: none; flex-wrap: wrap; row-gap: 2px; margin-left: -4px; }
+.tik:not(.compact) > .tik-main > .tik-actions { min-width: 0; max-width: 100%; }
+.tik-replies textarea, .tik-replies input, .tik-replies form { max-width: 100%; box-sizing: border-box; }
+/* font: a little smaller, easy to read */
+.tik-body { font-size: .97em; line-height: 1.5; letter-spacing: .003em; }
+.tik.compact .tik-body, .tik-replies > .tik.compact .tik-body { font-size: .92em; line-height: 1.45; }
+.tik.detail .tik-body { font-size: 1.06em; line-height: 1.5; }
+.tik-head { font-size: .9em; }
+@media (max-width: 560px) {
+  .tik { padding: 10px 10px 10px 8px; gap: 8px; }
+  .tik-av .me-av { width: 34px; height: 34px; }
+  .tik-replies > .tik.compact .tik-av .me-av { width: 28px; height: 28px; }
+  .tik:not(.compact) > .tik-main > .tik-actions .tik-act { padding: 6px 5px; }
+}
