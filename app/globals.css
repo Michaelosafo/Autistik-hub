@@ -7496,3 +7496,15 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .tik-replies .tik-quick { padding: 8px 0 4px !important; }
 .tik-replies .tik-chatbox-wrap { padding: 6px 0 2px; }
 .tik-show { display: inline-block; padding: 8px 0; font-weight: 800; font-size: .86em; color: #B57CFF; text-decoration: none; }
+
+/* Profile activity: 3, then View all */
+.act-more > summary { list-style: none; cursor: pointer; display: block; text-align: center; margin-top: 6px; padding: 8px; border-radius: 12px; font-size: .84em; font-weight: 800; color: #B57CFF; background: rgba(181,124,255,.1); }
+.act-more > summary::-webkit-details-marker { display: none; }
+.act-more > summary:hover { background: rgba(181,124,255,.18); }
+.act-more > summary:focus-visible { outline: 2px solid #F0B90B; }
+.act-more .act-close { display: none; }
+.act-more[open] .act-open { display: none; }
+.act-more[open] .act-close { display: inline; }
+.act-more[open] > summary { order: 2; }
+.act-more[open] { display: flex; flex-direction: column; }
+.act-more[open] > .activity { order: 1; }
