@@ -7459,3 +7459,17 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .tik-sticker-btn .msticker { width: 20px; height: 20px; }
 .tik-chatbox-wrap .st-tray { grid-template-columns: repeat(10, minmax(0, 1fr)); }
 .tik-chatbox-wrap .st-tray .msticker { width: 24px; height: 24px; }
+
+/* React picker: all 15 choices always visible: a neat grid, never cut off by the screen edge */
+.tik-rpick { display: grid !important; grid-template-columns: repeat(5, 40px); gap: 4px !important; padding: 8px !important; border-radius: 18px !important; width: max-content; max-width: none !important; overflow: visible !important; left: 0 !important; right: auto !important; transform: none !important; }
+.tik-rpick button { width: 40px; height: 40px; display: grid !important; place-items: center; padding: 0 !important; border-radius: 12px !important; }
+.tik-rpick button .msticker { width: 32px !important; height: 32px !important; }
+.tik-rpick button > span { font-size: 26px !important; }
+.tik.mine .tik-rpick, .tik-replies > .tik.compact.mine .tik-rpick { left: auto !important; right: 0 !important; }
+@media (max-width: 640px) {
+  /* on phones it opens fixed above the bottom bar, centred, so the whole grid is always on screen */
+  .tik-rpick { position: fixed !important; left: 50% !important; right: auto !important; top: auto !important; bottom: 110px !important; transform: translateX(-50%) !important; z-index: 1001 !important; grid-template-columns: repeat(5, 44px); box-shadow: 0 18px 40px -12px rgba(0,0,0,.45) !important; }
+  .tik.mine .tik-rpick, .tik-replies > .tik.compact.mine .tik-rpick { left: 50% !important; right: auto !important; }
+  .tik-rpick button { width: 44px; height: 44px; }
+  .tik-rbg { background: rgba(18,12,32,.25); z-index: 1000 !important; }
+}
