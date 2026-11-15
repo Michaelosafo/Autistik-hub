@@ -148,9 +148,9 @@ export default function AITrader() {
   const freeUsd = cash != null && d.bnbUsd ? cash * d.bnbUsd : null;
 
   return (
-    <div className="stack ait">
+    <div className="stack ait ait-desk" style={{ ["--acc" as any]: "#3b82f6" }}>
       <TraderTabs />
-      <div className="page-head">
+      <div className="page-head ait-hero">
         <Link href="/admin" className="muted">← Admin</Link>
         <div className="label">{d.isOwner ? "Owner" : "Admin"} · your own trader</div>
         <h1>🤖 AI trader</h1>
