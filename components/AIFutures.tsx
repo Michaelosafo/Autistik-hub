@@ -77,6 +77,62 @@ const ago = (iso: string) => { const s = (Date.now() - Date.parse(iso)) / 1000; 
 const hold = (m: number) => (m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${Math.floor(m / 1440)}d ${Math.floor((m % 1440) / 60)}h`);
 const pct = (x: number | null | undefined, d = 1) => (x == null || !isFinite(x) ? "–" : `${x >= 0 ? "+" : ""}${x.toFixed(d)}%`);
 
+/**
+ * First thing on each trader page: its trades, newest first (last 5, "See more" for the rest). What went in (the
+ * margin, or the dollars spent on a coin), what it made or lost, the %, and whether it's still open or why it closed.
+ */
+function DeskTrades({ open, closed, live, spot, lbl }: { open: P[]; closed: P[]; live: boolean; spot: boolean; lbl: (p: P) => string }) {
+  const [n, setN] = useState(5);
+  const [mode, setMode] = useState<"live" | "paper">(live ? "live" : "paper");
+  const rows = [...open, ...closed].filter((p) => (mode === "live" ? p.mode === "live" : p.mode !== "live")).sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at));
+  const done = closed.filter((p) => (mode === "live" ? p.mode === "live" : p.mode !== "live"));
+  const pnl = done.reduce((a, p) => a + (Number(p.pnl_usd) || 0), 0), wins = done.filter((p) => (Number(p.pnl_usd) || 0) > 0).length;
+  const put = done.reduce((a, p) => a + (Number(p.margin_usd) || 0), 0);
+  const openPnl = open.filter((p) => (mode === "live" ? p.mode === "live" : p.mode !== "live")).reduce((a, p) => a + (Number(p.upnl) || 0), 0);
+  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return (
+    <section className="card stack ct">
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <b>🧾 {spot ? "Coins bought" : "Trades"}</b>
+        <div className="row" style={{ gap: 6 }}>
+          <button type="button" className={"btn small" + (mode === "live" ? " primary" : "")} onClick={() => { setMode("live"); setN(5); }}>Live</button>
+          <button type="button" className={"btn small" + (mode === "paper" ? " primary" : "")} onClick={() => { setMode("paper"); setN(5); }}>Practice</button>
+        </div>
+      </div>
+      <div className="ct-sum">
+        <div><small>Closed trades</small><b>{done.length}</b><em>{done.length ? `${Math.round((wins / done.length) * 100)}% in profit` : "–"}</em></div>
+        <div><small>{spot ? "Put in" : "Margin used"}</small><b>${put.toFixed(2)}</b></div>
+        <div><small>Profit (closed)</small><b className={pnl >= 0 ? "up" : "down"}>{pnl >= 0 ? "+" : "-"}${Math.abs(pnl).toFixed(2)}</b></div>
+        <div><small>Open now</small><b className={openPnl >= 0 ? "up" : "down"}>{openPnl >= 0 ? "+" : "-"}${Math.abs(openPnl).toFixed(2)}</b></div>
+      </div>
+      {!rows.length ? <small className="muted">No {mode === "live" ? "live" : "practice"} trades yet.</small> : (
+        <div className="ct-list">
+          {rows.slice(0, n).map((p) => {
+            const isOpen = !p.closed_at, res = isOpen ? Number(p.upnl) || 0 : Number(p.pnl_usd) || 0, inn = Number(p.margin_usd) || 0;
+            const pct = inn ? (res / inn) * 100 : null;
+            return (
+              <div key={p.id} className={"ct-row" + (isOpen ? " open" : res >= 0 ? " win" : " loss")}>
+                <div className="ct-main">
+                  <b>{spot ? "🪙" : p.side === "long" ? "📈 Long" : "📉 Short"} {lbl(p)}</b>
+                  <small className="muted">{spot ? "" : `${p.lev}x · `}{when(p.opened_at)}</small>
+                  <small className="muted">{isOpen ? "🟢 Still open" : `Closed: ${(p.reason || "–").replace(/\s*\(.*$/, "")}`}</small>
+                </div>
+                <div className="ct-num">
+                  <span>${inn.toFixed(2)}{spot ? "" : " margin"}</span>
+                  <b className={res >= 0 ? "up" : "down"}>{res >= 0 ? "+" : "-"}${Math.abs(res).toFixed(2)}</b>
+                  {pct != null && <small className={res >= 0 ? "up" : "down"}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</small>}
+                </div>
+              </div>
+            );
+          })}
+          {rows.length > n && <button type="button" className="btn small ghost" onClick={() => setN(n + 10)}>See more ({rows.length - n} more)</button>}
+          {n > 5 && <button type="button" className="btn small ghost" onClick={() => setN(5)}>Show less</button>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /** The account's value over time: one point per closed trade, then now. */
 function Curve({ pts, start }: { pts: { t: string; v: number }[]; start: number }) {
   if (pts.length < 2) return <small className="muted">The chart starts after the first closed trade.</small>;
@@ -357,6 +413,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
         : turboDesk ? <p className="muted">⚠️ High risk. Its own wallet and money, funded from Solana like Futures. Every minute it trades the 15 most-traded coins on Hyperliquid right now, long or short, at up to {s.max_lev}x with {s.risk_pct}% of the account at risk a trade, and jumps in on weaker signals than Futures (charts and breaking news). Strong stops: never more than 1.5% away, resting on Hyperliquid itself and also checked every 4 seconds; break-even as soon as it&apos;s 0.6× the risk in profit, then it trails tightly. It can grow fast and lose fast: a bad day can cost {s.daily_loss_pct}% before it pauses.</p>
         : earnDesk ? <p className="muted">The fourth one, for slow and steady growth: no picking coins. Its own wallet; fund it from Solana like the others, then put the money into HLP, Hyperliquid&apos;s own market-making vault. HLP earns from making markets and liquidations on every Hyperliquid market, and your share grows (or shrinks) with it every day. Each deposit can be taken out 4 days after it was made. It&apos;s not a savings account: in bad weeks HLP can lose money too.</p> : fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
       </div>
+
+      {!earnDesk && <DeskTrades open={d.open} closed={d.closed} live={live} spot={snipeDesk} lbl={lbl as any} />}
 
 {!earnDesk && (<>
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
