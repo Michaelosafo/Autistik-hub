@@ -7473,3 +7473,26 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
   .tik-rpick button { width: 44px; height: 44px; }
   .tik-rbg { background: rgba(18,12,32,.25); z-index: 1000 !important; }
 }
+
+/* X-style time line under each post: "8:43 AM · 15 Nov 26 · 20 Views" */
+.tik-when { display: flex !important; flex-wrap: wrap; align-items: center; gap: 0 !important; margin: 4px 0 0; padding: 0 !important; border: 0 !important; font-size: .78em !important; color: var(--muted); }
+.tik-when > * + *::before { content: "·"; margin: 0 6px; color: var(--muted); }
+.tik-when b { color: var(--ink); font-weight: 800; }
+.tik-when.big { font-size: .9em !important; padding: 8px 0 !important; border-bottom: 1px solid var(--line) !important; margin-bottom: 4px; }
+
+/* Comments like X: flat list, everyone on the left, no chat bubbles, thin dividers */
+.tik-replies { border-top: 1px solid var(--line) !important; margin-top: 8px !important; padding: 0 !important; gap: 0 !important; }
+.tik-replies::before { display: none !important; }
+.tik-replies > .tik.compact, .tik-replies > .tik.compact.mine { flex-direction: row !important; align-self: stretch !important; max-width: 100% !important; padding: 10px 0 8px !important; border-bottom: 1px solid var(--line) !important; animation: none !important; }
+.tik-replies > .tik.compact.mine .tik-head { flex-direction: row !important; }
+.tik-replies > .tik.compact.mine .tik-time { margin: 0 !important; }
+.tik-replies > .tik.compact .tik-body, .tik-replies > .tik.compact .tik-style, .tik-replies > .tik.compact.mine .tik-body { background: transparent !important; color: var(--ink) !important; padding: 0 !important; border-radius: 0 !important; align-self: stretch !important; font-size: .92em; }
+.tik-replies > .tik.compact .tik-handle, .tik-replies > .tik.compact .tik-dotsep { display: inline !important; }
+.tik-replies > .tik.compact .tik-handle { color: var(--muted); max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tik-replies > .tik.compact .tik-actions, .tik-replies > .tik.compact.mine .tik-actions { justify-content: flex-start !important; gap: 18px !important; margin-top: 6px; }
+.tik-replies > .tik.compact .tik-actions .tik-act { background: transparent !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; color: var(--muted) !important; height: 20px !important; }
+.tik-replies > .tik.compact .tik-actions .tik-act svg { width: 15px !important; height: 15px !important; }
+.tik-replies > .tik.compact .tik-actions .tik-rchips, .tik-replies > .tik.compact.mine .tik-actions .tik-rchips { order: 0; margin: 0 0 0 auto; }
+.tik-replies .tik-quick { padding: 8px 0 4px !important; }
+.tik-replies .tik-chatbox-wrap { padding: 6px 0 2px; }
+.tik-show { display: inline-block; padding: 8px 0; font-weight: 800; font-size: .86em; color: #B57CFF; text-decoration: none; }
