@@ -591,7 +591,11 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
     }).eq("id", p.id);
     if (p.strategy === "copy" && p.new_project && reason.startsWith("Take profit") && price) await startRebuyWatch(p, price).catch(() => {});
     if (p.strategy === "copy" || p.strategy === "rebuy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol}${n((p as any).wallet) === 2 ? " (Wallet 2)" : ""} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
-    await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
+    const usdIn = /^USD/.test(String((p as any).native || "")) ? n((p as any).spent_native) : 0;
+    const money = usdIn > 0 && receivedNative != null
+      ? `$${n(receivedNative).toFixed(2)} back for $${usdIn.toFixed(2)} in, ${n(receivedNative) - usdIn >= 0 ? "+" : "-"}$${Math.abs(n(receivedNative) - usdIn).toFixed(2)}`
+      : `${received.toFixed(4)} BNB back for ${n(p.spent).toFixed(4)} in, ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB`;
+    await log(pnl >= 0 ? "win" : "loss", `Sold ${p.symbol} on ${CHAIN_NAME[p.chain] || p.chain} (${reason}): ${money} (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%).`);
   } catch (e) {
     await tq("ai_trader_positions").update({ status: "open", updated_at: new Date().toISOString() }).eq("id", p.id);
     await log("error", `Couldn't sell ${p.symbol}: ${(e as Error).message}`);
@@ -768,6 +772,7 @@ export const adminActive = (s: Settings) => !!s.admin_seen_at && Date.now() - Da
 async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
   const out = new Map<string, Flow>();
   const byChain = new Map<string, string[]>();
+  const pairs0 = new Map<string, any>(); // DexScreener pairs with no liquidity figure (launch curves)
   for (const p of ps) byChain.set(p.chain, [...(byChain.get(p.chain) || []), p.token]);
   await Promise.all([...byChain].map(async ([chain, toks]) => {
     for (let i = 0; i < toks.length; i += 30) {
@@ -775,7 +780,11 @@ async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
       const pairs: any[] = (await r?.json().catch(() => null)) || [];
       for (const t of toks.slice(i, i + 30)) {
         const best = pairs.filter((x) => String(x?.baseToken?.address || "").toLowerCase() === t.toLowerCase()).sort((a, b) => n(b?.liquidity?.usd) - n(a?.liquidity?.usd))[0];
-        if (best) out.set(`${chain}:${t.toLowerCase()}`, toFlow(best));
+        // DexScreener lists coins still on a launch curve (pump.fun, four.meme) with no liquidity figure at all. That
+        // is "unknown", not $0: leave them to the launch-curve pricing below, which reads the curve's real reserves.
+        if (best && !(n(best?.liquidity?.usd) > 0)) pairs0.set(`${chain}:${t.toLowerCase()}`, best);
+        if (best && n(best?.liquidity?.usd) > 0) out.set(`${chain}:${t.toLowerCase()}`, toFlow(best));
+        else if (best && chain !== "solana" && chain !== "bsc") out.set(`${chain}:${t.toLowerCase()}`, { ...toFlow(best), liquidity: NaN });
       }
     }
     // Solana coins bought while still on their launch curve have no DEX pool until they graduate: price them from
@@ -783,6 +792,11 @@ async function flowsFor(ps: Position[]): Promise<Map<string, Flow>> {
     if (chain === "solana" || chain === "bsc") await Promise.all(toks.filter((t) => !out.has(`${chain}:${t.toLowerCase()}`)).slice(0, 10).map(async (t) => {
       const f = await (chain === "solana" ? launchFlow(t) : fourLaunchFlow(t)).catch(() => null);
       if (f) out.set(`${chain}:${t.toLowerCase()}`, f);
+      else {
+        // Not on a curve either: use DexScreener's price, liquidity unknown.
+        const best = pairs0.get(`${chain}:${t.toLowerCase()}`);
+        if (best) out.set(`${chain}:${t.toLowerCase()}`, { ...toFlow(best), liquidity: NaN });
+      }
     }));
   }));
   return out;
@@ -975,7 +989,10 @@ async function manage(s: Settings) {
     const ageH = (Date.now() - Date.parse(p.opened_at)) / 36e5;
     // Small-coin trades judge a pulled pool against their own size, not the big-coin minimum.
     const rugLine = p.strategy ? Math.max(500, s.micro_min_liq / 2) : s.min_liquidity / 3;
-    const rug = m?.liquidity != null && m.liquidity < rugLine;
+    // A pulled pool: liquidity really measured (not unknown) and below the line, AND the price has dropped or the trade
+    // is a few minutes old. A brand-new buy at an unchanged price is never sold as a "rug" off one odd reading.
+    const ageMin = (Date.now() - Date.parse(p.opened_at)) / 60_000;
+    const rug = m?.liquidity != null && isFinite(m.liquidity) && m.liquidity < rugLine && (ch <= -3 || ageMin >= 3);
     // Copy trades (coins posted in the groups you follow) always sell at their own target, stop-loss or profit lock,
     // even when you're in control: nothing else (sellers taking over, max hold) closes them. They are saved with no
     // trail of their own, so the profit lock uses the main trailing stop setting (0 there turns it off for them too).
