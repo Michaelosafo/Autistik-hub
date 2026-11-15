@@ -4,6 +4,7 @@
  * many coins at once, the safety gates, default stop-loss / take profit / trailing stop, and each coin's own
  * stop-loss and take profit. Shows open coins with live profit, closed trades and everything it did.
  */
+import CoinsTraded from "@/components/CoinsTraded";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fmtAmount, fmtUsd } from "@/lib/num-format";
@@ -156,6 +157,7 @@ export default function AITrader() {
         <p className="muted">It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
       </div>
 
+      <CoinsTraded busy={!!busy} onAct={act} />
       <JustBought open={openNow} busy={!!busy} onAct={act} freeUsd={freeUsd} />
       <WalletPanel live={live} cash={cash} open={openNow} bnbUsd={d.bnbUsd ?? null} wallets={d.copy.wallets || []} wallets2={d.copy.wallets2} />
       {live && <WalletCoins busy={!!busy} onAct={act} dsl={Number((s as any).copy_sl) || 5} dtp={Number((s as any).copy_tp) || 100} />}

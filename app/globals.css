@@ -7000,3 +7000,16 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 /* Wordmark a little smaller, sitting on the left */
 .lp .lp-wordmark { font-size: clamp(2.6rem, 10vw, 5.4rem); }
 .lp .lp-hero-mark { justify-content: flex-start; padding-left: 2px; }
+
+/* AI trader: Coins traded dashboard */
+.ct-sum { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.ct-sum > div { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 14px; background: rgba(var(--wc), .05); min-width: 0; }
+.ct-sum small { color: var(--muted); font-size: .75em; } .ct-sum b { font-size: 1.05em; } .ct-sum em { font-style: normal; font-size: .75em; color: var(--muted); }
+.ct-list { display: flex; flex-direction: column; gap: 6px; }
+.ct-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 14px; background: rgba(var(--wc), .04); border-left: 3px solid rgba(var(--wc), .15); }
+.ct-row.win { border-left-color: #2EBD85; } .ct-row.loss { border-left-color: #FF4F6B; } .ct-row.open { border-left-color: #F0B90B; }
+.ct-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ct-num { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; font-size: .9em; }
+.ct-links { display: flex; gap: 8px; font-size: .8em; }
+.ct-away { padding-top: 6px; border-top: 1px solid rgba(var(--wc), .08); }
+@media (max-width: 560px) { .ct-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

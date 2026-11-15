@@ -590,6 +590,12 @@ export async function closePosition(p: Position, reason: string, priceUsd?: numb
       last_usd: price, closed_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     }).eq("id", p.id);
     if (p.strategy === "copy" && p.new_project && reason.startsWith("Take profit") && price) await startRebuyWatch(p, price).catch(() => {});
+    // "Send money back to Solana after each sale" on: a coin bought with money bridged from Solana is sold, so send
+    // what's left on that chain home (only once nothing else is open there).
+    if (p.mode === "live" && p.chain !== "solana" && /bridged from Solana/.test(p.why || "")) {
+      const { data: st } = await tq("ai_trader_settings").select("return_home").eq("id", T()).maybeSingle();
+      if ((st as any)?.return_home) await stablesHome(p.chain as LiveChain).catch(() => {});
+    }
     if (p.strategy === "copy" || p.strategy === "rebuy") await tgNotify(`${pnl >= 0 ? "✅" : "🔻"} Sold ${p.symbol}${n((p as any).wallet) === 2 ? " (Wallet 2)" : ""} (${reason}): ${pnl >= 0 ? "+" : ""}${pnl.toFixed(4)} BNB (${n(p.spent) ? ((pnl / n(p.spent)) * 100).toFixed(1) : "0"}%)${p.mode === "paper" ? " · practice" : ""}.`);
     const usdIn = /^USD/.test(String((p as any).native || "")) ? n((p as any).spent_native) : 0;
     const money = usdIn > 0 && receivedNative != null
@@ -1803,6 +1809,37 @@ export async function relayMoveQuote(from: string, to: string, amount: number) {
   if (!(amount > 0)) throw new Error("Type an amount.");
   const q = await relayBridgeQuote(from, to, amount, await myWallets());
   return { receive: q.receive, receiveSymbol: q.receiveSymbol, feeUsd: q.feeUsd, seconds: q.seconds };
+}
+
+/**
+ * Send the USDT / USDC sitting on BNB Chain / Ethereum (from sold coins bought there) back to the Solana wallet,
+ * through Relay. Skips a chain that still has open trades (unless `force`), and leaves anything under $2.
+ */
+export async function stablesHome(only?: LiveChain, force = false): Promise<string> {
+  const w = await myWallets(1);
+  if (!w.evm || !w.sol) return "Needs both the EVM and the Solana wallet.";
+  const { evmRelayToSol } = await import("@/lib/ai-trader-chains");
+  const solUsdt = STABLES.solana![0].token;
+  const out: string[] = [];
+  for (const chain of (only ? [only] : LIVE_CHAINS.filter((c) => c !== "solana")) as LiveChain[]) {
+    if (!STABLES[chain]?.length) continue;
+    if (!force) {
+      const { data: open } = await tq("ai_trader_positions").select("id").eq("chain", chain).eq("mode", "live").in("status", ["open", "closing"]).limit(1);
+      if (open?.length) { out.push(`${CHAIN_NAME[chain]}: kept (a trade there is still open)`); continue; }
+    }
+    for (const st of await stableBalances(chain, w).catch(() => [])) {
+      if (st.balance < 2) continue;
+      const def = stableBySymbol(chain, st.symbol);
+      if (!def) continue;
+      try {
+        const raw = BigInt(Math.floor(st.balance * 10 ** def.decimals));
+        const r = await evmRelayToSol(w.evm, chain as any, def.token, raw, w.sol.publicKey.toBase58(), solUsdt);
+        out.push(`${CHAIN_NAME[chain]}: $${st.balance.toFixed(2)} ${st.symbol} → about $${Number(r.receive ?? st.balance).toFixed(2)} USDT on Solana`);
+        await log("settings", `🏠 Sent $${st.balance.toFixed(2)} ${st.symbol} from ${CHAIN_NAME[chain]} back to the Solana wallet (Relay, about $${Number(r.receive ?? st.balance).toFixed(2)} USDT arrives).`);
+      } catch (e) { out.push(`${CHAIN_NAME[chain]}: couldn't send ${st.symbol} (${(e as Error).message.slice(0, 80)})`); }
+    }
+  }
+  return out.length ? out.join(" · ") : "Nothing to send back: no USDT / USDC left on BNB Chain or Ethereum.";
 }
 
 export async function relayMove(from: string, to: string, amount: number) {
