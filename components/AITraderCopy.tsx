@@ -4,6 +4,7 @@
  * Lists and Communities. Every contract address posted in a followed source is bought (honeypot check only) and sold
  * at the copy target (default 2x) or stop-loss (default -5%).
  */
+import Clamp from "@/components/Clamp";
 import { useEffect, useState } from "react";
 import AITraderTgAccount, { type TgaState } from "@/components/AITraderTgAccount";
 import { Callers, LiveChains, SourcePicker, RebuyBox, Squads, Wallet2, type Caller, type LiveWallet, type Rebuy, type Squad } from "@/components/AITraderCopyExtras";
@@ -114,7 +115,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
           <small className="muted">Add the bot to any group or channel to copy it: it shows up here and is followed straight away. Telegram doesn&apos;t let bots see your other groups, so only groups the bot is in can be listed. In channels the bot must be an admin.</small>
         )}
         {tgLink && !tgLink.canReadGroups && <small className="aic-warn">⚠ The bot can&apos;t read normal group messages yet. In @BotFather send <code>/setprivacy</code>, pick the bot, choose <b>Disable</b>, then remove and re-add it to your groups (or make it a group admin).</small>}
-        {tgSrc.length > 0 && <div className="aic-list">{tgSrc.map((x) => <Row key={x.id} x={x} />)}</div>}
+        {tgSrc.length > 0 && <div className="aic-list">{<Clamp>{tgSrc.map((x) => <Row key={x.id} x={x} />)}</Clamp>}</div>}
         {c.tg.linked && owner && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => onAct("tgu", "tg-unlink", {})}>Unlink Telegram</button>}
           </div>
         </details>
@@ -194,7 +195,7 @@ export default function AITraderCopy({ c, s, owner, busy, onAct, reload }: { c: 
             </div>
             {(() => {
               const rest = xSrc.filter((x) => !(x.kind === "x_list" && lists?.some((l) => l.id === x.ref)) && !(x.kind === "x_account" && follows?.some((f) => f.handle.toLowerCase() === x.ref)));
-              return rest.length > 0 && <div><small className="muted">Following</small><div className="aic-list">{rest.map((x) => <Row key={x.id} x={x} />)}</div></div>;
+              return rest.length > 0 && <div><small className="muted">Following</small><div className="aic-list">{<Clamp>{rest.map((x) => <Row key={x.id} x={x} />)}</Clamp>}</div></div>;
             })()}
             <small className="muted">Accounts are checked every minute; up to 3 Lists or Communities are read each minute, taking turns, to stay inside X&apos;s limits.</small>
             {c.x.signedIn && owner && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={busy} onClick={() => onAct("xo", "x-logout", {})}>Sign out of X</button>}
