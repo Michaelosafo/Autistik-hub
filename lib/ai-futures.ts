@@ -707,9 +707,11 @@ async function manage(s: FSettings, m: Mkt, news: Map<string, { score: number; w
     let stop = n(p.stop);
     // At +1R the stop moves to break-even (plus fees); past +1.5R it trails 0.8R behind the best price.
     // Turbo (high leverage) protects sooner: break-even at +0.6R, trailing 0.6R behind from +1R.
-    const tb = isTurboDesk() || isMadDesk();
+    // Madness's stops are very tight (~0.4%), so break-even at +0.6R was hit by normal noise: lots of tiny wins and
+    // full-size losses. It now waits for +1R, then trails 0.9R behind from +1.5R, so winners can reach the 3R target.
+    const tb = isTurboDesk(), md = isMadDesk();
     if (gainR >= (tb ? 0.6 : 1)) stop = long ? Math.max(stop, p.entry * 1.001) : Math.min(stop, p.entry * 0.999);
-    if (gainR >= (tb ? 1 : 1.5)) stop = long ? Math.max(stop, best - (tb ? 0.6 : 0.8) * risk) : Math.min(stop, best + (tb ? 0.6 : 0.8) * risk);
+    if (gainR >= (tb ? 1 : 1.5)) stop = long ? Math.max(stop, best - (tb ? 0.6 : md ? 0.9 : 0.8) * risk) : Math.min(stop, best + (tb ? 0.6 : md ? 0.9 : 0.8) * risk);
     const hit = (long ? price <= stop : price >= stop) ? "Stop-loss" : (long ? price >= p.target : price <= p.target) ? "Take profit" : null;
     const liqHit = p.liq && (long ? price <= p.liq : price >= p.liq);
     const ns = news.get(p.coin)?.score ?? 0;
@@ -890,7 +892,8 @@ export async function runFutures(): Promise<string> {
     // Turbo: the 15 most-traded Hyperliquid coins right now (plus any it holds), picked fresh every minute.
     // Madness: the 8 most-traded coins that allow 20x or more (the high-leverage majors).
     const mine = (s.extra_coins || []).filter((c) => hl.has(c));
-    if (isMadDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0 && (a.maxLev ?? 0) >= 20).sort((a, b) => b.dayVol - a.dayVol).slice(0, 8).map((a) => a.name);
+    // Madness: the 12 most-traded coins that allow 10x or more (it was only finding 4, so it hardly traded).
+    if (isMadDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0 && (a.maxLev ?? 0) >= 10).sort((a, b) => b.dayVol - a.dayVol).slice(0, 12).map((a) => a.name);
     if (isTurboDesk()) s.coins = [...hl.values()].filter((a) => a.mark > 0 && a.dayVol > 0).sort((a, b) => b.dayVol - a.dayVol).slice(0, 15).map((a) => a.name);
     // Your own coins (added on the page) are always watched too.
     if ((isMadDesk() || isTurboDesk()) && mine.length) s.coins = [...new Set([...s.coins, ...mine])];
@@ -937,18 +940,18 @@ export async function runFutures(): Promise<string> {
       // a strong setup and no news against it.
       if (isMadDesk()) {
         if (!ta) return;
-        if (Math.abs(ns.score) >= 0.5 && Math.sign(t) === Math.sign(ns.score) && Math.abs(t) >= 0.2) cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + Math.abs(t), why: `News: ${ns.why} · chart agrees: ${ta.notes.join(", ")}`, news: true, ta });
-        else if (Math.abs(t) >= 0.7 && !(ns.score && Math.sign(ns.score) !== Math.sign(t))) cands.push({ coin, side: t > 0 ? "long" : "short", score: Math.abs(t), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news agrees ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
+        if (Math.abs(ns.score) >= 0.4 && Math.sign(t) === Math.sign(ns.score) && Math.abs(t) >= 0.15) cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + Math.abs(t), why: `News: ${ns.why} · chart agrees: ${ta.notes.join(", ")}`, news: true, ta });
+        else if (Math.abs(t) >= 0.55 && !(ns.score && Math.sign(ns.score) !== Math.sign(t))) cands.push({ coin, side: t > 0 ? "long" : "short", score: Math.abs(t), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news agrees ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
         return;
       }
       // Strong news trades first, as long as the chart isn't clearly against it.
       const turbo = isTurboDesk(); // quicker, riskier entries
-      if (Math.abs(ns.score) >= (turbo ? 0.45 : 0.6) && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
+      if (Math.abs(ns.score) >= (turbo ? 0.4 : 0.6) && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
         cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + 0.5, why: `News: ${ns.why}${ta ? ` · chart: ${ta.notes.join(", ")}` : ""}`, news: true, ta });
         return;
       }
       const blended = ns.score ? 0.65 * t + 0.35 * ns.score : t;
-      if (ta && Math.abs(blended) >= (turbo ? 0.5 : 0.65)) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
+      if (ta && Math.abs(blended) >= (turbo ? 0.45 : 0.65)) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
     }));
     cands.sort((a, b) => b.score - a.score);
     const notes: string[] = [];
