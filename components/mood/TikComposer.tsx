@@ -17,6 +17,16 @@ function myProfile(): Promise<MeP> {
   return meP;
 }
 import { TIK_STYLES, canStyle, type TikStyle } from "./tik-styles";
+import { MoodSticker, STICKERS } from "./MoodStickers";
+
+/** The AUTISTIK stickers, small, to drop into what you type (saved as :name:). */
+function StickerTray({ onPick }: { onPick: (code: string) => void }) {
+  return (
+    <div className="st-tray" role="group" aria-label="Stickers">
+      {STICKERS.map((s) => <button key={s.key} type="button" onClick={() => onPick(`:${s.key}:`)} aria-label={s.label} title={s.label}><MoodSticker k={s.key} size={30} /></button>)}
+    </div>
+  );
+}
 
 /** Shrinks a picture to at most 1280px and saves it as WebP (smaller, strips location data). */
 export async function shrink(file: File): Promise<Blob> {
@@ -33,6 +43,7 @@ export async function shrink(file: File): Promise<Blob> {
 export default function TikComposer({ replyTo, replyUser, onPosted, compact, placeholder, big }: { replyTo?: string; replyUser?: string | null; onPosted?: () => void; compact?: boolean; placeholder?: string; big?: boolean }) {
   const [body, setBody] = useState("");
   const [pic, setPic] = useState<{ blob: Blob; url: string } | null>(null);
+  const [stickers, setStickers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [style, setStyle] = useState<TikStyle | null>(null);
@@ -74,8 +85,17 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
   }
 
   const styled = !replyTo && !!style && canStyle(body, !!pic);
+  const addSticker = (code: string) => {
+    const el = ta.current, at = el ? el.selectionStart ?? body.length : body.length;
+    const next = (body.slice(0, at) + (at && !/\s$/.test(body.slice(0, at)) ? " " : "") + code + " " + body.slice(at)).slice(0, 500);
+    setBody(next);
+    setTimeout(() => el?.focus(), 0);
+  };
   if (replyTo) return (
+    <div className="tik-chatbox-wrap">
+    {stickers && <StickerTray onPick={addSticker} />}
     <div className="tik-chatbox">
+      <button type="button" className={"tik-sticker-btn" + (stickers ? " on" : "")} onClick={() => setStickers(!stickers)} aria-pressed={stickers} aria-label="Stickers" title="Stickers"><MoodSticker k="stimmy" size={22} /></button>
       <textarea ref={ta} value={body} maxLength={500} rows={1} onChange={(e) => setBody(e.target.value)}
         onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !busy && body.trim()) { e.preventDefault(); post(); } }}
         placeholder={placeholder || "Write a comment…"} aria-label="Your comment" />
@@ -83,6 +103,7 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 12l16-8-6 16-2.5-6.5z" /><path d="M11.5 13.5L20 4" /></svg>
       </button>
       {msg && <small className="tik-msg" role="status">{msg}</small>}
+    </div>
     </div>
   );
   return (
@@ -113,11 +134,13 @@ export default function TikComposer({ replyTo, replyUser, onPosted, compact, pla
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="2" /><path d="M21 16l-5-5-9 9" /></svg>
         </button>
         <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ""; }} />
+        <button type="button" className={"tik-tool st" + (stickers ? " on" : "")} onClick={() => setStickers(!stickers)} aria-pressed={stickers} aria-label="Stickers" title="Stickers"><MoodSticker k="stimmy" size={20} /></button>
         {!pic && <button type="button" className={"tik-tool aa" + (designs || style ? " on" : "")} onClick={() => setDesigns(!designs)} aria-pressed={designs} aria-label="Post designs" title="Designs">Aa</button>}
         <span className="tik-grow" />
         <span className="tik-ring" style={{ ["--p" as any]: `${Math.min(100, body.length / 5)}%` }} data-warn={body.length > 450 || undefined} title={`${body.length}/500`} aria-label={`${500 - body.length} letters left`}>{body.length > 450 ? 500 - body.length : ""}</span>
         <button type="button" className="tik-post" disabled={busy || !body.trim()} onClick={post}>{busy ? "Posting…" : "Post"}</button>
       </div>
+      {stickers && <StickerTray onPick={addSticker} />}
       {msg && <small className="tik-msg" role="status">{msg}</small>}
       </div>
     </div>

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago } from "@/lib/mood";
+import { MoodSticker, stickerOf } from "./MoodStickers";
 
 type Me = { id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null };
 type K = "posts" | "retikles" | "comments" | "videos" | "streams" | "reactions";
@@ -79,7 +80,7 @@ export default function MyTikPanel() {
         out = [
           ...((t || []) as any[]).map((x) => ({ id: "t" + x.id, at: x.created_at, href: `/mood?tik=${x.tickle_of || x.reply_to || x.id}`, tag: x.tickle_of ? "🔁" : x.reply_to ? "💬" : "📝", text: x.tickle_of ? "You retikled a post" : x.reply_to ? `You commented: ${cut(x.body, 50)}` : cut(x.body) })),
           ...((v || []) as any[]).map((x) => ({ id: "v" + x.id, at: x.created_at, href: `/watch/${x.id}`, tag: x.kind === "stream" ? (x.status === "live" ? "LIVE" : "🔴") : "🎬", text: x.kind === "stream" ? `You streamed: ${cut(x.title, 50)}` : `You posted a video: ${cut(x.title, 50)}` })),
-          ...((rx || []) as any[]).map((r) => ({ id: "r" + r.tik_id + r.user_id, at: r.created_at, href: `/mood?tik=${r.tik_id}`, tag: REMOJI[r.kind] || "❤️", text: `${who.get(r.user_id) || "Member"} reacted to “${cut(body.get(r.tik_id), 40)}”` })),
+          ...((rx || []) as any[]).map((r) => ({ id: "r" + r.tik_id + r.user_id, at: r.created_at, href: `/mood?tik=${r.tik_id}`, tag: "rx:" + r.kind, text: `${who.get(r.user_id) || "Member"} reacted to “${cut(body.get(r.tik_id), 40)}”` })),
         ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 10);
       } else if (tab === "videos" || tab === "streams") {
         let q = sb.from("videos").select("id,title,kind,status,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(8);
@@ -93,7 +94,7 @@ export default function MyTikPanel() {
         const list = (data || []) as any[];
         const { data: ps } = list.length ? await sb.from("profiles").select("id,alias").in("id", list.map((r) => r.user_id)) : { data: [] };
         const who = new Map(((ps || []) as any[]).map((p) => [p.id, p.alias]));
-        out = list.map((r) => ({ id: r.tik_id + r.user_id, text: `${who.get(r.user_id) || "Member"} reacted to “${cut(body.get(r.tik_id), 40)}”`, at: r.created_at, href: `/mood?tik=${r.tik_id}`, tag: REMOJI[r.kind] || "❤️" }));
+        out = list.map((r) => ({ id: r.tik_id + r.user_id, text: `${who.get(r.user_id) || "Member"} reacted to “${cut(body.get(r.tik_id), 40)}”`, at: r.created_at, href: `/mood?tik=${r.tik_id}`, tag: "rx:" + r.kind }));
       } else {
         let q = sb.from("tiks").select("id,body,reply_to,tickle_of,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(8);
         q = tab === "posts" ? q.is("reply_to", null).is("tickle_of", null) : tab === "retikles" ? q.not("tickle_of", "is", null) : q.not("reply_to", "is", null);
@@ -135,7 +136,7 @@ export default function MyTikPanel() {
           <div className="mytik-lh"><b>{tab === "activity" ? "⚡ Your recent activity" : tab === "followers" ? "👥 Your followers" : tab === "following" ? "➕ You follow" : TABS.find(([k]) => k === tab)?.slice(1).join(" ")}</b>{tab !== "activity" && <button type="button" onClick={() => setTab("activity")}>✕</button>}</div>
           {rows === null ? <small className="muted">Loading…</small> : !rows.length ? <small className="muted">{tab === "activity" ? "No activity yet: post your first Tik!" : "Nothing here yet."}</small> : (
             <ul>{rows.map((r) => (
-              <li key={r.id}><Link href={r.href}>{r.person ? <Avatar className="me-av" alias={r.person.alias} color={r.person.color} url={r.person.avatar_url} /> : r.tag && <em className={r.tag === "LIVE" ? "live" : ""}>{r.tag}</em>}<span>{r.text}{r.person && r.tag && <small> {r.tag}</small>}</span><small>{r.person ? "" : ago(r.at)}</small></Link></li>
+              <li key={r.id}><Link href={r.href}>{r.person ? <Avatar className="me-av" alias={r.person.alias} color={r.person.color} url={r.person.avatar_url} /> : r.tag?.startsWith("rx:") ? <em>{stickerOf(r.tag.slice(3)) ? <MoodSticker k={r.tag.slice(3)} size={20} /> : REMOJI[r.tag.slice(3)] || "❤️"}</em> : r.tag && <em className={r.tag === "LIVE" ? "live" : ""}>{r.tag}</em>}<span>{r.text}{r.person && r.tag && <small> {r.tag}</small>}</span><small>{r.person ? "" : ago(r.at)}</small></Link></li>
             ))}</ul>
           )}
           <Link href={`/members/${me.id}`} className="mytik-all">See everything on your profile →</Link>
