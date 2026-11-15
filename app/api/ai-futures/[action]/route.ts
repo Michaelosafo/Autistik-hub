@@ -24,7 +24,9 @@ export async function GET(req: Request, { params }: { params: { action: string }
       sb.from("ai_futures_positions").select("fut_id").in("status", ["open", "closing"]),
     ]);
     const ids = [...new Set([...(on || []).map((r: any) => Number(r.id)), ...(holding || []).map((r: any) => Number(r.fut_id))])];
-    const out = await Promise.all(ids.map((id) => withTrader(id, () => runFutures()).then((r) => ({ id, r }), (e) => ({ id, r: `error: ${(e as Error).message}` }))));
+    // Each desk gets 52s; a slow one is reported instead of timing out the whole minute for all 8 desks.
+    const capped = <X,>(p: Promise<X>) => Promise.race([p, new Promise<X>((_, no) => setTimeout(() => no(new Error("still running after 52s, continues next minute")), 52_000))]);
+    const out = await Promise.all(ids.map((id) => capped(withTrader(id, () => runFutures())).then((r) => ({ id, r }), (e) => ({ id, r: `error: ${(e as Error).message}` }))));
     return json({ ok: true, ran: out });
   }
   const id = desk(req, await mine());

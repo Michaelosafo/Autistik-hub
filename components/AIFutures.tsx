@@ -358,6 +358,91 @@ function MoneyFlow({ d, busy, act, set }: { d: D; busy: string; act: (n: string,
   );
 }
 
+const MY_SOL = "ait-my-solana";
+const isSolAddr = (a: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a.trim());
+const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
+
+/**
+ * The one-tap wallet bar at the top of every trader: see the money, open the wallet on Hyperliquid (or Solscan),
+ * copy the address, close every trade, and send the money straight to your own Solana address (saved on this device).
+ */
+function QuickWallet({ d, busy, act, spot, reload }: { d: D; busy: string; act: (n: string, a: string, b: unknown, done?: string) => Promise<void>; spot: boolean; reload: () => Promise<void> }) {
+  const w = d.wallet, sw = d.snipe?.wallet;
+  const addr = spot ? sw?.address : w?.address;
+  const [mine, setMine] = useState("");
+  const [sym, setSym] = useState<"USDT" | "USDC">("USDT");
+  const [amt, setAmt] = useState("");
+  const [note, setNote] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [working, setWorking] = useState("");
+  useEffect(() => { try { setMine(localStorage.getItem(MY_SOL) || ""); } catch { /* storage off */ } }, []);
+  const keep = (v: string) => { setMine(v); try { localStorage.setItem(MY_SOL, v.trim()); } catch { /* storage off */ } };
+  const free = w?.hlFree ?? 0, total = spot ? sw?.total ?? null : w?.hlValue ?? null;
+  const n = d.open.length;
+  const link = !addr ? null : spot ? `https://solscan.io/account/${addr}` : `https://app.hyperliquid.xyz/explorer/address/${addr}`;
+  const send = async (usdAmt: number) => {
+    if (!isSolAddr(mine)) { setNote("Paste your Solana address first (Phantom → copy address)."); return; }
+    if (!(usdAmt >= 2)) { setNote("Nothing free to send yet (at least $2). Close trades first, or wait for them to finish."); return; }
+    if (!confirm(`Send $${usdAmt.toFixed(2)} from Hyperliquid to your Solana address ${short(mine.trim())} as ${sym}? Arrives in about a minute. Double-check the address: a wrong one can't be undone.`)) return;
+    await act("qw-send", "withdraw", { usd: Math.floor(usdAmt * 100) / 100, to: "solana", address: mine.trim(), symbol: sym }, `Sent: about $${usdAmt.toFixed(2)} ${sym} arrives on ${short(mine.trim())} in about a minute. Track it in Money in & out.`);
+  };
+  // Close everything, wait for the money to be free, then send all of it to Solana.
+  const cashOut = async () => {
+    if (!isSolAddr(mine)) { setNote("Paste your Solana address first."); return; }
+    if (!confirm(`Close all ${n} trade${n === 1 ? "" : "s"} at the market price, stop new trades, and send everything on Hyperliquid to ${short(mine.trim())} as ${sym}?`)) return;
+    setWorking("cash"); setNote("Closing trades…");
+    try {
+      await call("settings", { enabled: false }).catch(() => {});
+      if (n) await call("close-all", {});
+      let freeNow = 0;
+      for (let i = 0; i < 6; i++) {
+        const r = await fetch(`/api/ai-futures/status${DESK}`, { cache: "no-store" }).then((x) => x.json()).catch(() => null);
+        freeNow = Number(r?.wallet?.hlFree || 0);
+        if (!(r?.open?.length) && freeNow >= 2) break;
+        setNote(`Waiting for the money to free up… (${i + 1})`);
+        await new Promise((ok) => setTimeout(ok, 2500));
+      }
+      if (freeNow < 2) throw new Error("Trades closed, but nothing is free to send yet. Try Send in a minute.");
+      const r = await call("withdraw", { usd: Math.floor(freeNow * 100) / 100, to: "solana", address: mine.trim(), symbol: sym });
+      setNote(r.note || `Sent $${freeNow.toFixed(2)} to ${short(mine.trim())}.`);
+    } catch (e) { setNote((e as Error).message); }
+    setWorking(""); await reload();
+  };
+  const dis = !!busy || !!working;
+  return (
+    <section className="card qw" aria-label="Quick wallet">
+      <div className="qw-head">
+        <div className="qw-bal">
+          <small>{spot ? "Solana wallet" : "On Hyperliquid"}</small>
+          <b>{usd(total)}</b>
+          {!spot && <em>{usd(free)} free · {n} open trade{n === 1 ? "" : "s"}</em>}
+          {spot && <em>{n} open coin{n === 1 ? "" : "s"}</em>}
+        </div>
+        <div className="qw-acts">
+          {link && <a className="qw-btn" href={link} target="_blank" rel="noreferrer">🔗 {spot ? "Solscan" : "Hyperliquid"}</a>}
+          {addr && <button type="button" className="qw-btn" onClick={() => { navigator.clipboard?.writeText(addr); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? "✓ Copied" : `📋 ${short(addr)}`}</button>}
+          <button type="button" className="qw-btn red" disabled={dis || !n} onClick={() => { if (confirm(`Close all ${n} open trade${n === 1 ? "" : "s"} now at the market price?`)) act("ca", "close-all", {}); }}>{busy === "ca" ? "Closing…" : `✖ Close all${n ? ` (${n})` : ""}`}</button>
+          <button type="button" className="qw-btn" disabled={dis} onClick={() => act("set", "settings", { enabled: !d.settings.enabled })}>{d.settings.enabled ? "⏸ Pause" : "▶ Start"}</button>
+        </div>
+      </div>
+      {!spot && w && (
+        <div className="qw-send">
+          <span className="qw-label">⬆ Send to my Solana</span>
+          <input className="ait-text" value={mine} onChange={(e) => { keep(e.target.value); setNote(""); }} placeholder="Your Solana address (saved on this device)" aria-label="Your Solana address" />
+          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span className="ait-seg" role="group" aria-label="Receive as">{(["USDT", "USDC"] as const).map((x) => <button key={x} type="button" className={sym === x ? "on" : ""} onClick={() => setSym(x)}>{x}</button>)}</span>
+            <span className="ait-in" style={{ maxWidth: 120 }}><em>$</em><input inputMode="decimal" value={amt} placeholder={free.toFixed(2)} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars to send" /></span>
+            <button type="button" className="qw-btn go" disabled={dis || !isSolAddr(mine)} onClick={() => send(Number(amt) || free)}>{busy === "qw-send" ? "Sending…" : `Send ${usd(Number(amt) || free)}`}</button>
+            <button type="button" className="qw-btn red" disabled={dis || !isSolAddr(mine)} onClick={cashOut} title="Stop, close every trade, then send everything">{working === "cash" ? "Cashing out…" : "💸 Close all & send everything"}</button>
+          </div>
+          {mine && !isSolAddr(mine) && <small className="down">That doesn&apos;t look like a Solana address.</small>}
+        </div>
+      )}
+      {note && <small className="aic-note" role="status">{note}</small>}
+    </section>
+  );
+}
+
 /** Which trader this page drives: "" = Futures (crypto), "?desk=fx" = the Forex trader. Set by the page. */
 let DESK = "";
 async function call(action: string, body: unknown) {
@@ -372,6 +457,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
   const snipeDesk = desk === "snipe" || copyDesk; // Sniper and Copy: spot coins from the shared Solana wallet
   DESK = desk ? `?desk=${desk}` : "";
   const NAME = copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
+  const ACC = copyDesk ? "#ec4899" : madDesk ? "#ef4444" : snipeDesk ? "#f97316" : turboDesk ? "#8b5cf6" : earnDesk ? "#eab308" : fxDesk ? "#06b6d4" : "#10b981";
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
@@ -407,9 +493,9 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
   );
 
   return (
-    <div className="stack ait">
+    <div className="stack ait ait-desk" style={{ ["--acc" as any]: ACC }}>
       <TraderTabs />
-      <div className="page-head">
+      <div className="page-head ait-hero">
         <Link href="/admin" className="muted">← Admin</Link>
         <h1>{copyDesk ? "👥 Copy" : madDesk ? "🔥 Madness" : snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
         {copyDesk ? <p className="muted">Copies the wallets you add below, on Solana, BNB Chain and Ethereum. It checks them about every second: when one buys a coin, Copy buys it too (through Relay, with Jupiter as backup), ${d.snipe?.cfg.usd ?? 20} a buy unless you set an amount for that wallet; when that wallet sells, Copy sells the same share right away (they sell half, it sells half; they sell it all, it sells it all). Each copy waits a random moment and buys a slightly different amount, so it doesn&apos;t mirror the wallet exactly (everything on Solana is public, so this lowers the chance of being noticed, not a promise). Safety: stop-loss at -{d.snipe?.cfg.sl ?? 50}%, its own budget in the wallet shared with Sniper and Turbo, at most {s.max_positions} coins at once, and coins Jupiter flags as scams are skipped. Sells always follow the wallet, even when Copy is stopped.</p>
@@ -418,6 +504,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
         : turboDesk ? <p className="muted">⚠️ High risk. Its own wallet and money, funded from Solana like Futures. Every minute it trades the 15 most-traded coins on Hyperliquid right now, long or short, at up to {s.max_lev}x with {s.risk_pct}% of the account at risk a trade, and jumps in on weaker signals than Futures (charts and breaking news). Strong stops: never more than 1.5% away, resting on Hyperliquid itself and also checked every 4 seconds; break-even as soon as it&apos;s 0.6× the risk in profit, then it trails tightly. It can grow fast and lose fast: a bad day can cost {s.daily_loss_pct}% before it pauses.</p>
         : earnDesk ? <p className="muted">The fourth one, for slow and steady growth: no picking coins. Its own wallet; fund it from Solana like the others, then put the money into HLP, Hyperliquid&apos;s own market-making vault. HLP earns from making markets and liquidations on every Hyperliquid market, and your share grows (or shrinks) with it every day. Each deposit can be taken out 4 days after it was made. It&apos;s not a savings account: in bad weeks HLP can lose money too.</p> : fxDesk ? <p className="muted">The third trader, separate from the Telegram bot and Futures: its own wallet, money and trades. It trades currency pairs (EUR/USD, USD/JPY, GBP/USD, the dollar index, …) on trade.xyz inside Hyperliquid, long or short. Every minute it reads forex news (FXStreet, investingLive: US data, Fed and other central banks) and the X accounts below, lets the AI judge which pair each headline moves, checks the charts, and only trades when news and chart agree or on a strong chart setup. Leverage {s.max_lev}x, auto-sells any trade at -{s.max_loss_pct}%, every trade has a stop-loss resting on Hyperliquid, moves to break-even once it&apos;s in profit, then trails. No trades at the weekend; forex trades close before Friday&apos;s close. Fund it from Solana like Futures.</p> : <p className="muted">Its own trader, separate from the copy bot: its own wallet, money and trades. Every minute it reads fresh crypto news (CoinDesk, Cointelegraph, Decrypt, The Block) and the X accounts below, lets the AI judge which coin each headline moves, checks the charts (1-hour trend, 5-minute momentum, breakouts on high volume, RSI, volatility), and opens a long or short on Hyperliquid or Aster when news and chart agree. Leverage {s.max_lev}x, and every trade auto-sells at -{s.max_loss_pct}%. Every trade has a stop-loss far before liquidation, moves it to break-even once it&apos;s in profit, then trails it.</p>}
       </div>
+
+      <QuickWallet d={d} busy={busy} act={act} spot={snipeDesk} reload={load} />
 
       {!earnDesk && <DeskTrades open={d.open} closed={d.closed} live={live} spot={snipeDesk} lbl={lbl as any} />}
 

@@ -36,7 +36,7 @@ export async function secondOpinion(key: string, style: string, facts: Record<st
   try {
     const msg = await Promise.race([
       anthropic().messages.create({
-        model: FAST_MODEL, max_tokens: 600, ...cheap(FAST_MODEL),
+        model: FAST_MODEL, max_tokens: 1200, ...cheap(FAST_MODEL),
         system: `You are a disciplined senior trader reviewing a trade your bot wants to take. Style: ${style}. Approve only setups with a real edge: the signals agree, the move isn't already over, the risk/reward is sound and nothing in the facts screams danger (fake coin, exhausted pump, fighting a strong trend, news already priced in, a coin that keeps losing). Reply ONLY with JSON: {"go":true|false,"confidence":0..1,"why":"max 20 words"}.`,
         messages: [{ role: "user", content: JSON.stringify(facts).slice(0, 3500) }],
       }),
@@ -44,7 +44,8 @@ export async function secondOpinion(key: string, style: string, facts: Record<st
     ]);
     const text = (msg as any).content?.filter((c: any) => c.type === "text").map((c: any) => c.text || "").join("") || "";
     if (!text.includes("{")) throw new Error(`no JSON in reply (stop: ${(msg as any).stop_reason})`);
-    const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    const j = readVerdict(text);
+    if (!j) throw new Error(`unreadable reply (stop: ${(msg as any).stop_reason}): ${text.slice(0, 120)}`);
     const v: Verdict = { go: j.go === true, confidence: Math.max(0, Math.min(1, n(j.confidence))), why: String(j.why || "").slice(0, 160) };
     if (!v.go || v.confidence < 0.45) { vetoed.set(k, Date.now() + 15 * 60_000); return { ...v, go: false }; }
     return v;
@@ -52,6 +53,23 @@ export async function secondOpinion(key: string, style: string, facts: Record<st
     console.error(`AI second opinion failed: ${(e as Error).message}`);
     return mustAnswer ? { go: false, confidence: 0, why: "AI check unavailable, so no buy" } : { go: true, confidence: 0.5, why: "AI check unavailable, cautious size" };
   }
+}
+
+/**
+ * Reads {"go","confidence","why"} from the AI's reply. Tries strict JSON first; if the reply was cut off or the
+ * "why" has stray quotes/braces (the "Unterminated string" errors), it still pulls go + confidence out by pattern,
+ * so a good verdict isn't thrown away and the trade isn't taken blind at "cautious size".
+ */
+function readVerdict(text: string): { go: unknown; confidence: unknown; why: unknown } | null {
+  const start = text.indexOf("{");
+  for (let end = text.lastIndexOf("}"); end > start; end = text.lastIndexOf("}", end - 1)) {
+    try { const j = JSON.parse(text.slice(start, end + 1)); if (j && typeof j === "object" && "go" in j) return j; } catch { /* try a shorter slice */ }
+  }
+  const go = /"go"\s*:\s*(true|false)/i.exec(text)?.[1];
+  const conf = /"confidence"\s*:\s*([0-9.]+)/i.exec(text)?.[1];
+  if (go == null || conf == null) return null;
+  const why = /"why"\s*:\s*"([^"]*)/i.exec(text)?.[1] || "";
+  return { go: go.toLowerCase() === "true", confidence: Number(conf), why };
 }
 
 /** How much to scale a bet from the AI's confidence: 0.6x (just passed) to 1.2x (very strong). */

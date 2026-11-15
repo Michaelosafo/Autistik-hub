@@ -1354,7 +1354,7 @@ export async function runFast() {
   // once a minute, so a crash is sold seconds after it starts.
   let guardOn = true;
   const guard = (async () => {
-    while (guardOn && Date.now() - started < 52_000) {
+    while (guardOn && Date.now() - started < 46_000) {
       await new Promise((ok) => setTimeout(ok, 4_000));
       if (!guardOn) break;
       const { count } = await tq("ai_trader_positions").select("id", { count: "exact", head: true }).in("status", ["open", "closing"]);
@@ -1379,15 +1379,16 @@ export async function runFast() {
       // Groups, channels and chats read through the admin's own Telegram account.
       // Kept open for most of the minute, checking every chat every ~2 seconds: buys land seconds after the call.
       // Watch until ~50 seconds after this run started (the next run takes over a few seconds later).
-      const watchMs = Math.max(8_000, (s.scout_on ? 41_000 : 50_000) - (Date.now() - started));
+      const watchMs = Math.max(5_000, (s.scout_on ? 34_000 : 40_000) - (Date.now() - started));
       const errs = await tgaWatch(async (post) => out.push(...(await copyPost({ text: post.text, user: post.chat, url: post.url, at: post.at, from: post.from, chat: post.chatRef, isChannel: post.isChannel, isBot: post.isBot }, "telegram", `posted in "${post.chat}"${post.from?.username ? ` by @${post.from.username}` : ""} on Telegram`).catch(() => []))), watchMs).catch((e) => [(e as Error).message]);
       if (errs.length) await sb.from("ai_trader_settings").update({ last_note: `Telegram: ${errs[0]}`.slice(0, 300) }).eq("id", T());
     }
   }
   // Caller scout: the last few seconds of the minute read a few more groups to learn who calls winners.
-  if (s.scout_on) await scoutTick(Math.max(3_000, 51_000 - (Date.now() - started))).catch(() => {});
+  if (s.scout_on && Date.now() - started < 40_000) await scoutTick(Math.max(2_000, 42_000 - (Date.now() - started))).catch(() => {});
   // General mode only: X callers and DexScreener signals.
-  if (general && s.signals_on) {
+  // Leave room to finish inside Vercel's 60s limit (it was timing out ~300 times a week, cutting buys mid-way).
+  if (general && s.signals_on && Date.now() - started < 44_000) {
     if (xReady() && s.callers.length) {
       const posts = await xPosts(s.callers).catch(() => []);
       for (const post of posts.slice(0, 5)) {
