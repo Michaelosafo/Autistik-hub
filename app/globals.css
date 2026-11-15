@@ -7034,3 +7034,7 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .ct-more { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 10px 24px; font-size: .92em; }
 .ct-morebtn { all: unset; cursor: pointer; align-self: flex-start; font-size: .82em; font-weight: 700; color: #7C5CFF; padding: 4px 8px; }
 .ct-morebtn:hover { text-decoration: underline; }
+
+/* Wordmark: the eye logo is now the letter "I" (one rainbow stem, one eye), sized like a capital letter */
+.wordmark .wm-logo { display: inline-block; width: .3em; height: .74em; margin: 0 .035em; transform: none; vertical-align: baseline; }
+.wordmark .wm-logo .eye-logo { display: block; width: 100%; height: 100%; filter: drop-shadow(0 .03em .1em rgba(181,124,255,.45)); }
