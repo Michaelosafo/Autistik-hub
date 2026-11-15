@@ -64,7 +64,7 @@ export default function TikCard(props: CardProps) {
  */
 function ViewIcon({ grew }: { grew: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={"xi tik-eye" + (grew ? " grew" : "")}><path d="M4.5 20.5v-6M9.5 20.5V8M14.5 20.5V3.5M19.5 20.5v-9" /></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={"xi tik-eye" + (grew ? " grew" : "")}><rect x="4" y="13" width="3.4" height="7" rx="1.7" /><rect x="10.3" y="8.5" width="3.4" height="11.5" rx="1.7" /><rect x="16.6" y="4" width="3.4" height="16" rx="1.7" /></svg>
   );
 }
 
@@ -267,12 +267,12 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
         )}
         <div className="tik-actions">
           <button type="button" className={"tik-act reply" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${replies} replies`} title="Reply">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M9.5 4.5h5A6.5 6.5 0 0 1 21 11v.2a6.3 6.3 0 0 1-6.3 6.3H12l-5 3.4v-3.6A6.3 6.3 0 0 1 3 11.2V11a6.5 6.5 0 0 1 6.5-6.5z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M7 4.5h10a3.5 3.5 0 0 1 3.5 3.5v6.5A3.5 3.5 0 0 1 17 18h-5.2L7 21v-3a3.5 3.5 0 0 1-3.5-3.5V8A3.5 3.5 0 0 1 7 4.5z" /><path d="M8.6 11.3h.01M12 11.3h.01M15.4 11.3h.01" strokeWidth="2.6" /></svg>
             <span>{replies > 0 ? replies : ""}</span>
           </button>
           {!t.reply_to && (
             <button type="button" className={"tik-act tickle" + (tickled ? " on" : "")} onClick={tickle} aria-pressed={tickled} aria-label={tickled ? "Undo Tickle" : "Tickle: repost to everyone"} title={tickled ? "Undo Tickle" : "Tickle (repost)"}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M2.5 8 6 4.5 9.5 8M6 5v10.5A2.5 2.5 0 0 0 8.5 18H13M21.5 16 18 19.5 14.5 16M18 19V8.5A2.5 2.5 0 0 0 15.5 6H11" /></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M19.5 9.5A8 8 0 0 0 5.2 7.4M4.5 14.5a8 8 0 0 0 14.3 2.1" /><path d="M5 3.8v3.9h3.9M19 20.2v-3.9h-3.9" /></svg>
               <span>{tickles > 0 ? tickles : ""}</span>
             </button>
           )}
@@ -299,7 +299,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
                 {peek && <span className="tik-peek" role="status">👁 {seenN.toLocaleString()} {seenN === 1 ? "view" : "views"}</span>}
               </button>)}
           <button type="button" className={"tik-act share" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik" title="Copy link">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><circle cx="18" cy="5.5" r="2.6" /><circle cx="6" cy="12" r="2.6" /><circle cx="18" cy="18.5" r="2.6" /><path d="M8.3 10.8l7.4-4M8.3 13.2l7.4 4" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M12 14.5V3.5M7.8 7.6 12 3.5l4.2 4.1" /><path d="M5 12.5v4.8A2.7 2.7 0 0 0 7.7 20h8.6a2.7 2.7 0 0 0 2.7-2.7v-4.8" /></svg>
             <span>{copied ? "Copied" : ""}</span>
           </button>
         </div>
