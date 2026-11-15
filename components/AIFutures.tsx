@@ -695,7 +695,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
           ["max_positions", "Positions at once", "", ""],
           ["daily_loss_pct", "Daily loss limit", "%", "Down this much today: no new trades until tomorrow (UTC)."],
           ["max_hold_hours", "Max hold", "hours", ""],
-          ["profit_lock_pct", "Daily profit lock", "%", "Up this much today: it keeps the profit and opens no new trades until tomorrow (UTC). 0 = off."],
+          ["profit_lock_pct", "Profit guard", "%", "While it's winning it keeps trading. Once it has been up this much today, if it then gives back half of the day's best gain (the market turned), it stops new trades until tomorrow (UTC) and keeps the rest. 0 = off."],
           ["stop_pct", "My stop-loss", "% from entry", "Your own stop for new trades, e.g. 1 = 1% away. 0 = the AI sets it. Leverage is lowered by itself if needed so liquidation stays far past your stop. Change one open trade's stop with Edit stop on it."],
         ].filter(([k]) => (!snipeDesk || ["max_positions", "daily_loss_pct", "max_hold_hours", "profit_lock_pct"].includes(k)) && !(k === "stop_pct" && (snipeDesk || fxDesk))).map(([k, label, unit, hint]) => (
           <div key={k} className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>

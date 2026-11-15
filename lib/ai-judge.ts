@@ -4,11 +4,13 @@
  * 1. A second opinion before every trade: Claude looks at the whole setup (chart, news, funding, this coin's recent
  *    results, the trader's style) like a senior trader and either vetoes it or says how confident it is. Confidence
  *    sizes the bet: a shaky setup gets a smaller bet, a strong one a slightly bigger one (never past the risk limits).
- * 2. Learning from results: after 4 losses in a row it pauses 2 hours; a coin that lost its last 3 trades in a day is
- *    left alone for 24 hours; if news-led or chart-led trades keep losing, that kind is skipped; and when the recent
- *    win rate is poor every bet shrinks (and grows a little when it's good).
- * 3. A daily profit lock: once the account is up the day's target (10% by default), no new trades until tomorrow, so
- *    a good day isn't given back.
+ * 2. Learning from results, pausing only when the market has turned against it: 4 losses in a row within the last
+ *    3 hours (and losing money overall in that time) → a 45-minute pause; a coin that lost its last 3 trades within
+ *    6 hours is left alone for 6 hours; a kind of trade (news-led / chart-led) that keeps losing over the last 2 days
+ *    is skipped until it recovers; and the recent win rate scales every bet down (or a little up).
+ * 3. A profit guard instead of a stop: while it's winning it keeps trading. Only once the day was a good one (up the
+ *    day's target, 10% by default) and it then gives back half of the best gain of the day does it stop new trades
+ *    until tomorrow, so a good day isn't handed back.
  *
  * None of this can make every trade a winner. It's there to avoid bad trades, keep losses small and keep good days.
  */
@@ -61,18 +63,21 @@ type Closed = { coin: string; pnl_usd: number; closed_at: string; why: string | 
 export async function lessons(mode: string, coin?: string, newsDriven?: boolean): Promise<{ stop: string | null; size: number }> {
   const { data } = await sb().from("ai_futures_positions").select("coin,pnl_usd,closed_at,why").eq("fut_id", T()).eq("mode", mode).eq("status", "closed").order("closed_at", { ascending: false }).limit(40);
   const list = (data || []) as Closed[];
-  // 1. Losing streak: 4 in a row, the last within 2 hours.
+  const ago = (p: Closed) => Date.now() - Date.parse(p.closed_at);
+  // 1. The market has turned against it: 4+ losses in a row, all within the last 3 hours, and losing money overall
+  //    in those 3 hours → a 45-minute pause (then it tries again, at a smaller size while the win rate is poor).
   let streak = 0;
-  for (const p of list) { if (n(p.pnl_usd) < 0) streak++; else break; }
-  if (streak >= 4 && list[0] && Date.now() - Date.parse(list[0].closed_at) < 2 * 36e5) return { stop: `${streak} losses in a row: taking a 2-hour break`, size: 0 };
-  // 2. This coin lost its last 3 trades within a day.
+  for (const p of list) { if (n(p.pnl_usd) < 0 && ago(p) < 3 * 36e5) streak++; else break; }
+  const last3h = list.filter((p) => ago(p) < 3 * 36e5).reduce((a, p) => a + n(p.pnl_usd), 0);
+  if (streak >= 4 && last3h < 0 && list[0] && ago(list[0]) < 45 * 6e4) return { stop: `${streak} losses in a row and down $${Math.abs(last3h).toFixed(2)} in 3 hours: the market isn't suiting it, pausing 45 minutes`, size: 0 };
+  // 2. This coin lost its last 3 trades within 6 hours: left alone for 6 hours.
   if (coin) {
     const mine = list.filter((p) => p.coin === coin).slice(0, 3);
-    if (mine.length === 3 && mine.every((p) => n(p.pnl_usd) < 0) && Date.now() - Date.parse(mine[0].closed_at) < 24 * 36e5) return { stop: "lost its last 3 trades: leaving it alone for a day", size: 0 };
+    if (mine.length === 3 && mine.every((p) => n(p.pnl_usd) < 0) && ago(mine[0]) < 6 * 36e5 && ago(mine[2]) < 6 * 36e5) return { stop: "lost its last 3 trades: leaving it alone for a few hours", size: 0 };
   }
-  // 3. This kind of trade (news-led or chart-led) keeps losing: at least 6 of them, under 30% won.
+  // 3. This kind of trade (news-led or chart-led) keeps losing over the last 2 days: at least 6 of them, under 30% won.
   if (newsDriven != null) {
-    const kind = list.filter((p) => /^news|news:/i.test(String(p.why || "")) === newsDriven).slice(0, 15);
+    const kind = list.filter((p) => ago(p) < 48 * 36e5 && /^news|news:/i.test(String(p.why || "")) === newsDriven).slice(0, 15);
     if (kind.length >= 6 && kind.filter((p) => n(p.pnl_usd) > 0).length / kind.length < 0.3) return { stop: `${newsDriven ? "news" : "chart"}-led trades keep losing lately: skipping them`, size: 0 };
   }
   // 4. Recent win rate sets the bet size.
@@ -83,12 +88,23 @@ export async function lessons(mode: string, coin?: string, newsDriven?: boolean)
 }
 
 /** The daily profit lock: up the day's target since the start of the day (UTC) → no new trades today. */
-export function profitLocked(s: { profit_lock_pct?: number | null; day_start_usd: number | null }, total: number): string | null {
+export function profitLocked(s: { profit_lock_pct?: number | null; day_start_usd: number | null; day_peak_usd?: number | null }, total: number): string | null {
   const pct = n(s.profit_lock_pct ?? 10);
   const start = n(s.day_start_usd);
   if (!(pct > 0) || !(start > 0)) return null;
-  const up = (total / start - 1) * 100;
-  return up >= pct ? `Up ${up.toFixed(1)}% today (profit lock at ${pct}%): keeping it, no new trades until tomorrow (UTC)` : null;
+  // Winning: keep trading. Only after a good day (best gain today ≥ the target) that has then given back half of that
+  // best gain does it stop new trades until tomorrow.
+  const peak = Math.max(n(s.day_peak_usd), total, start);
+  const best = (peak / start - 1) * 100, up = (total / start - 1) * 100;
+  if (best >= pct && up < best / 2) return `Was up ${best.toFixed(1)}% today, now ${up >= 0 ? "+" : ""}${up.toFixed(1)}%: the market turned, so it's keeping the rest of today's profit (no new trades until tomorrow, UTC)`;
+  return null;
+}
+
+/** Remember today's best account value (for the profit guard). Resets with the day (when day_start_usd is reset). */
+export async function trackPeak(s: { id?: number; day_peak_usd?: number | null; day_start_usd: number | null }, total: number) {
+  const start = n(s.day_start_usd), peak = n(s.day_peak_usd);
+  const next = !(peak > 0) || peak < start * 0.999 ? Math.max(start, total) : Math.max(peak, total);
+  if (Math.abs(next - peak) > 0.005) { await sb().from("ai_futures_settings").update({ day_peak_usd: next }).eq("id", T()); s.day_peak_usd = next; }
 }
 
 /** This coin's last few results, for the second opinion. */
