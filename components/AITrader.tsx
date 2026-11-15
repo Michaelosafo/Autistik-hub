@@ -4,6 +4,7 @@
  * many coins at once, the safety gates, default stop-loss / take profit / trailing stop, and each coin's own
  * stop-loss and take profit. Shows open coins with live profit, closed trades and everything it did.
  */
+import Clamp from "@/components/Clamp";
 import CoinsTraded from "@/components/CoinsTraded";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -283,20 +284,20 @@ export default function AITrader() {
 
       <section className="card stack">
         <b>Open coins ({d.open.length})</b>
-        {!d.open.length ? <small className="muted">Nothing open. It buys when a coin passes every check.</small> : d.open.map((p) => <Open key={p.id} p={p} busy={!!busy} onAct={act} />)}
+        {!d.open.length ? <small className="muted">Nothing open. It buys when a coin passes every check.</small> : <Clamp>{d.open.map((p) => <Open key={p.id} p={p} busy={!!busy} onAct={act} />)}</Clamp>}
       </section>
 
       <section className="card stack">
         <b>Closed trades</b>
         {!d.closed.length ? <small className="muted">None yet.</small> : (
           <div className="ait-table">
-            {d.closed.map((p) => (
+            <Clamp>{d.closed.map((p) => (
               <div key={p.id} className="ait-tr">
                 <span><b>{p.symbol}</b> <small className="muted">{chainName(p.chain)} · {p.mode === "paper" ? "practice" : "live"} · {p.closed_at ? ago(p.closed_at) : ""}</small><br /><small className="muted">{p.close_reason}</small></span>
                 <span className="n">{fmtAmount(Number(p.spent))} → {fmtAmount(Number(p.received) || 0)} BNB</span>
                 <span className={"n " + ((Number(p.pnl) || 0) >= 0 ? "up" : "down")}><b>{sign(Number(p.pnl_pct) || 0)}%</b></span>
               </div>
-            ))}
+            ))}</Clamp>
           </div>
         )}
       </section>
@@ -366,7 +367,7 @@ function Bought({ open, closed, busy, onAct, freeUsd, onSell, onForget }: { open
             <span className={total >= 0 ? "up" : "down"}><b>{sign(total)}%</b> overall</span>
           </div>
           <div className="ait-bl">
-            {rows.map(({ p, pct, worth: w, price }) => (
+            <Clamp>{rows.map(({ p, pct, worth: w, price }) => (
               <div key={p.id} className="ait-b">
                 {p.logo ? <img src={p.logo} alt="" width={36} height={36} /> : <span className="ait-ph">{(p.symbol || "?").slice(0, 2)}</span>}
                 <div className="ait-b-name">
@@ -390,7 +391,7 @@ function Bought({ open, closed, busy, onAct, freeUsd, onSell, onForget }: { open
                   ))}
                 </div>
               </div>
-            ))}
+            ))}</Clamp>
           </div>
           {tab === "open" && <small className="muted">Prices update every 5 minutes.</small>}
         </>
