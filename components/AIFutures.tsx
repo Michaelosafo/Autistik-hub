@@ -82,52 +82,56 @@ const pct = (x: number | null | undefined, d = 1) => (x == null || !isFinite(x) 
  * margin, or the dollars spent on a coin), what it made or lost, the %, and whether it's still open or why it closed.
  */
 function DeskTrades({ open, closed, live, spot, lbl }: { open: P[]; closed: P[]; live: boolean; spot: boolean; lbl: (p: P) => string }) {
-  const [n, setN] = useState(5);
+  const [more, setMore] = useState<0 | 1 | 2>(0); // 0 = last 3, 1 = everything today, 2 = everything
+  const [pick, setPick] = useState<number | null>(null);
   const [mode, setMode] = useState<"live" | "paper">(live ? "live" : "paper");
-  const rows = [...open, ...closed].filter((p) => (mode === "live" ? p.mode === "live" : p.mode !== "live")).sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at));
-  const done = closed.filter((p) => (mode === "live" ? p.mode === "live" : p.mode !== "live"));
-  const pnl = done.reduce((a, p) => a + (Number(p.pnl_usd) || 0), 0), wins = done.filter((p) => (Number(p.pnl_usd) || 0) > 0).length;
-  const put = done.reduce((a, p) => a + (Number(p.margin_usd) || 0), 0);
-  const openPnl = open.filter((p) => (mode === "live" ? p.mode === "live" : p.mode !== "live")).reduce((a, p) => a + (Number(p.upnl) || 0), 0);
-  const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const mine = (p: P) => (mode === "live" ? p.mode === "live" : p.mode !== "live");
+  const rows = [...open, ...closed].filter(mine).sort((a, b) => Date.parse(b.opened_at) - Date.parse(a.opened_at));
+  const day = new Date().toDateString();
+  const today = rows.filter((p) => new Date(p.opened_at).toDateString() === day || (p.closed_at && new Date(p.closed_at).toDateString() === day));
+  const list = more === 0 ? rows.slice(0, 3) : more === 1 ? (today.length > 3 ? today : rows.slice(0, 3)) : rows;
+  const res = (p: P) => (p.closed_at ? Number(p.pnl_usd) || 0 : Number(p.upnl) || 0);
+  const todayPnl = today.reduce((a, p) => a + res(p), 0);
+  const when = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const full = (iso: string) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const f = (x: number | null | undefined) => (x == null || !isFinite(Number(x)) ? "–" : Number(x) >= 100 ? Number(x).toFixed(2) : Number(x).toPrecision(5));
   return (
-    <section className="card stack ct">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+    <section className="card stack ct mini">
+      <div className="ct-head">
         <b>🧾 {spot ? "Coins bought" : "Trades"}</b>
-        <div className="row" style={{ gap: 6 }}>
-          <button type="button" className={"btn small" + (mode === "live" ? " primary" : "")} onClick={() => { setMode("live"); setN(5); }}>Live</button>
-          <button type="button" className={"btn small" + (mode === "paper" ? " primary" : "")} onClick={() => { setMode("paper"); setN(5); }}>Practice</button>
-        </div>
+        <small className="muted">Today: <b className={todayPnl >= 0 ? "up" : "down"}>{todayPnl >= 0 ? "+" : "-"}${Math.abs(todayPnl).toFixed(2)}</b> · {today.length} trade{today.length === 1 ? "" : "s"}</small>
+        <span className="ct-tabs">
+          <button type="button" className={mode === "live" ? "on" : ""} onClick={() => { setMode("live"); setMore(0); }}>Live</button>
+          <button type="button" className={mode === "paper" ? "on" : ""} onClick={() => { setMode("paper"); setMore(0); }}>Practice</button>
+        </span>
       </div>
-      <div className="ct-sum">
-        <div><small>Closed trades</small><b>{done.length}</b><em>{done.length ? `${Math.round((wins / done.length) * 100)}% in profit` : "–"}</em></div>
-        <div><small>{spot ? "Put in" : "Margin used"}</small><b>${put.toFixed(2)}</b></div>
-        <div><small>Profit (closed)</small><b className={pnl >= 0 ? "up" : "down"}>{pnl >= 0 ? "+" : "-"}${Math.abs(pnl).toFixed(2)}</b></div>
-        <div><small>Open now</small><b className={openPnl >= 0 ? "up" : "down"}>{openPnl >= 0 ? "+" : "-"}${Math.abs(openPnl).toFixed(2)}</b></div>
-      </div>
-      {!rows.length ? <small className="muted">No {mode === "live" ? "live" : "practice"} trades yet.</small> : (
-        <div className="ct-list">
-          {rows.slice(0, n).map((p) => {
-            const isOpen = !p.closed_at, res = isOpen ? Number(p.upnl) || 0 : Number(p.pnl_usd) || 0, inn = Number(p.margin_usd) || 0;
-            const pct = inn ? (res / inn) * 100 : null;
-            return (
-              <div key={p.id} className={"ct-row" + (isOpen ? " open" : res >= 0 ? " win" : " loss")}>
-                <div className="ct-main">
-                  <b>{spot ? "🪙" : p.side === "long" ? "📈 Long" : "📉 Short"} {lbl(p)}</b>
-                  <small className="muted">{spot ? "" : `${p.lev}x · `}{when(p.opened_at)}</small>
-                  <small className="muted">{isOpen ? "🟢 Still open" : `Closed: ${(p.reason || "–").replace(/\s*\(.*$/, "")}`}</small>
-                </div>
-                <div className="ct-num">
-                  <span>${inn.toFixed(2)}{spot ? "" : " margin"}</span>
-                  <b className={res >= 0 ? "up" : "down"}>{res >= 0 ? "+" : "-"}${Math.abs(res).toFixed(2)}</b>
-                  {pct != null && <small className={res >= 0 ? "up" : "down"}>{pct >= 0 ? "+" : ""}{pct.toFixed(1)}%</small>}
-                </div>
+      {!rows.length ? <small className="muted">No {mode === "live" ? "live" : "practice"} trades yet.</small> : list.map((p) => {
+        const r = res(p), isOpen = !p.closed_at, inn = Number(p.margin_usd) || 0, pct = inn ? (r / inn) * 100 : null, on = pick === p.id;
+        return (
+          <div key={p.id} className={"ct-line" + (on ? " on" : "")}>
+            <button type="button" className="ct-tap" onClick={() => setPick(on ? null : p.id)} aria-expanded={on}>
+              <span className={"ct-dot" + (isOpen ? " open" : r >= 0 ? " win" : " loss")} aria-hidden="true" />
+              <span className="ct-name">{spot ? "" : p.side === "long" ? "📈 " : "📉 "}{lbl(p)}</span>
+              <span className="muted ct-time">{isOpen ? "open" : when(p.closed_at!)}</span>
+              <b className={r >= 0 ? "up" : "down"}>{r >= 0 ? "+" : "-"}${Math.abs(r).toFixed(2)}{pct != null ? <small> {pct >= 0 ? "+" : ""}{pct.toFixed(0)}%</small> : null}</b>
+            </button>
+            {on && (
+              <div className="ct-more">
+                <small>{spot ? `Spent $${inn.toFixed(2)}` : `${p.side === "long" ? "Long" : "Short"} ${p.lev}x · margin $${inn.toFixed(2)} · position $${(Number(p.notional_usd) || 0).toFixed(2)}`}</small>
+                <small>Bought {full(p.opened_at)} at {f(p.entry)}{isOpen ? ` · now ${f(p.price)}` : ` · sold ${full(p.closed_at!)} at ${f(p.exit)}`}</small>
+                <small>Stop {f(p.stop)} · target {f(p.target)}{p.liq ? ` · liquidation ~${f(p.liq)}` : ""}</small>
+                {!isOpen && <small>Why it closed: {p.reason || "–"}</small>}
+                {p.why && <small className="muted">Why it opened: {p.why}</small>}
+                <small className="muted">{p.mode === "live" ? "Real money" : "Practice"}{p.venue ? ` · ${p.venue}` : ""}</small>
               </div>
-            );
-          })}
-          {rows.length > n && <button type="button" className="btn small ghost" onClick={() => setN(n + 10)}>See more ({rows.length - n} more)</button>}
-          {n > 5 && <button type="button" className="btn small ghost" onClick={() => setN(5)}>Show less</button>}
-        </div>
+            )}
+          </div>
+        );
+      })}
+      {rows.length > 3 && (
+        <button type="button" className="ct-morebtn" onClick={() => setMore(more === 0 ? (today.length > 3 ? 1 : 2) : more === 1 ? 2 : 0)}>
+          {more === 0 ? (today.length > 3 ? `More: all ${today.length} today` : `More (${rows.length - 3})`) : more === 1 ? `Older trades (${rows.length - today.length})` : "Show less"}
+        </button>
       )}
     </section>
   );

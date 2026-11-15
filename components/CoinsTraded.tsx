@@ -32,62 +32,67 @@ function money(r: Row) {
 
 export default function CoinsTraded({ busy, onAct }: { busy: boolean; onAct: (n: string, a: string, b: unknown, done?: string) => Promise<void> }) {
   const [d, setD] = useState<Data | null>(null);
-  const [all, setAll] = useState(false);
+  const [more, setMore] = useState<0 | 1 | 2>(0); // 0 = last 3, 1 = everything today, 2 = last 14 days
+  const [pick, setPick] = useState<string | null>(null);
   const [live, setLive] = useState(true);
   const load = () => fetch("/api/ai-trader/traded", { cache: "no-store" }).then((r) => r.json()).then((j) => j.ok && setD(j)).catch(() => {});
   useEffect(() => { load(); const t = setInterval(load, 30_000); return () => clearInterval(t); }, []);
   if (!d) return <section className="card"><small className="muted">Loading coins traded…</small></section>;
   const rows = d.rows.filter((r) => (live ? r.mode === "live" : r.mode !== "live"));
-  const shown = all ? rows : rows.slice(0, 12);
-  let inn = 0, out = 0, wins = 0, done = 0;
-  for (const r of rows) { const m = money(r); if (m.inn != null && r.status === "closed" && m.out != null) { inn += m.inn; out += m.out; done++; if (m.out >= m.inn) wins++; } }
+  const day = new Date().toDateString();
+  const today = rows.filter((r) => new Date(r.opened_at).toDateString() === day || (r.closed_at && new Date(r.closed_at).toDateString() === day));
+  const list = more === 0 ? rows.slice(0, 3) : more === 1 ? (today.length > 3 ? today : rows.slice(0, 3)) : rows;
+  let tIn = 0, tOut = 0;
+  for (const r of today) { const m = money(r); if (m.inn != null && m.out != null) { tIn += m.inn; tOut += m.out; } }
   const act = async (n: string, a: string, b: unknown, msg?: string) => { await onAct(n, a, b, msg); load(); };
+  const time = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   return (
-    <section className="card stack ct">
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-        <b>🧾 Coins traded (last 14 days)</b>
-        <div className="row" style={{ gap: 6 }}>
-          <button type="button" className={"btn small" + (live ? " primary" : "")} onClick={() => setLive(true)}>Live</button>
-          <button type="button" className={"btn small" + (!live ? " primary" : "")} onClick={() => setLive(false)}>Practice</button>
-        </div>
+    <section className="card stack ct mini">
+      <div className="ct-head">
+        <b>🧾 Coins traded</b>
+        <small className="muted">Today: <b className={tOut - tIn >= 0 ? "up" : "down"}>{tOut - tIn >= 0 ? "+" : "-"}{usd(Math.abs(tOut - tIn))}</b> · {today.length} coin{today.length === 1 ? "" : "s"}</small>
+        <span className="ct-tabs">
+          <button type="button" className={live ? "on" : ""} onClick={() => { setLive(true); setMore(0); }}>Live</button>
+          <button type="button" className={!live ? "on" : ""} onClick={() => { setLive(false); setMore(0); }}>Practice</button>
+        </span>
       </div>
-      <div className="ct-sum">
-        <div><small>Sold trades</small><b>{done}</b><em>{done ? `${Math.round((wins / done) * 100)}% in profit` : "–"}</em></div>
-        <div><small>Put in</small><b>{usd(inn)}</b></div>
-        <div><small>Got back</small><b>{usd(out)}</b></div>
-        <div><small>Result</small><b className={out - inn >= 0 ? "up" : "down"}>{out - inn >= 0 ? "+" : "-"}{usd(Math.abs(out - inn))}</b></div>
-      </div>
-      {!rows.length ? <small className="muted">No {live ? "live" : "practice"} trades in the last 14 days.</small> : (
-        <div className="ct-list">
-          {shown.map((r) => {
-            const m = money(r), open = r.status !== "closed";
-            const bridged = /bridged from Solana/.test(r.why || "");
-            const paidFrom = r.chain === "solana" ? `Solana wallet (${r.native || "SOL"})` : bridged ? `Solana wallet → ${CH[r.chain] || r.chain} with Relay` : `${CH[r.chain] || r.chain} wallet (${r.native || "BNB"})`;
-            const from = r.pot === "scout" ? `🔎 scout · ${r.source_group || ""}` : r.source_group ? `📡 ${r.source_group}${r.source_who ? ` · ${r.source_who}` : ""}` : "🤖 AI pick";
-            return (
-              <div key={r.id} className={"ct-row" + (open ? " open" : (m.pct ?? 0) >= 0 ? " win" : " loss")}>
-                <div className="ct-main">
-                  <b>{r.symbol}</b> <small className="muted">{CH[r.chain] || r.chain} · {when(r.opened_at)}</small>
-                  <small className="muted ct-from">{from}</small>
-                  <small>💳 Paid from: <b>{paidFrom}</b></small>
-                  <small className="muted">{open ? "🟢 Still open" : `Sold: ${r.close_reason || "–"}`}</small>
-                </div>
-                <div className="ct-num">
-                  <span>{m.inn != null ? usd(m.inn) : `${Number(r.spent).toFixed(4)} BNB`}</span>
-                  <span className="muted">→ {m.out != null ? usd(m.out) : open ? "…" : r.received != null ? `${Number(r.received).toFixed(4)} BNB` : "–"}</span>
-                  {m.pct != null && <b className={m.pct >= 0 ? "up" : "down"}>{m.pct >= 0 ? "+" : ""}{m.pct.toFixed(1)}%</b>}
-                  <span className="ct-links">
-                    {r.buy_tx && SCAN[r.chain] && <a href={SCAN[r.chain] + r.buy_tx} target="_blank" rel="noreferrer">buy</a>}
-                    {r.sell_tx && SCAN[r.chain] && <a href={SCAN[r.chain] + r.sell_tx} target="_blank" rel="noreferrer">sell</a>}
-                  </span>
-                </div>
+      {!rows.length ? <small className="muted">No {live ? "live" : "practice"} trades in the last 14 days.</small> : list.map((r) => {
+        const m = money(r), open = r.status !== "closed", on = pick === r.id;
+        const res = m.inn != null && m.out != null ? m.out - m.inn : null;
+        const bridged = /bridged from Solana/.test(r.why || "");
+        const paidFrom = r.chain === "solana" ? `Solana wallet (${r.native || "SOL"})` : bridged ? `Solana wallet → ${CH[r.chain] || r.chain} with Relay` : `${CH[r.chain] || r.chain} wallet (${r.native || "BNB"})`;
+        const from = r.pot === "scout" ? `🔎 Scout · ${r.source_group || ""}` : r.source_group ? `📡 ${r.source_group}${r.source_who ? ` · ${r.source_who}` : ""}` : "🤖 AI pick";
+        return (
+          <div key={r.id} className={"ct-line" + (on ? " on" : "")}>
+            <button type="button" className="ct-tap" onClick={() => setPick(on ? null : r.id)} aria-expanded={on}>
+              <span className={"ct-dot" + (open ? " open" : (m.pct ?? 0) >= 0 ? " win" : " loss")} aria-hidden="true" />
+              <span className="ct-name">{r.symbol} <small className="muted">{(CH[r.chain] || r.chain).split(" ")[0]}</small></span>
+              <span className="muted ct-time">{open ? "open" : time(r.closed_at || r.opened_at)}</span>
+              {res != null ? <b className={res >= 0 ? "up" : "down"}>{res >= 0 ? "+" : "-"}{usd(Math.abs(res))}{m.pct != null ? <small> {m.pct >= 0 ? "+" : ""}{m.pct.toFixed(0)}%</small> : null}</b>
+                : <b className={(m.pct ?? 0) >= 0 ? "up" : "down"}>{m.pct != null ? `${m.pct >= 0 ? "+" : ""}${m.pct.toFixed(0)}%` : "…"}</b>}
+            </button>
+            {on && (
+              <div className="ct-more">
+                <small>{m.inn != null ? `In ${usd(m.inn)}` : `In ${Number(r.spent).toFixed(4)} BNB`}{m.out != null ? ` → ${open ? "now " : "out "}${usd(m.out)}` : ""}</small>
+                <small>💳 Paid from: <b>{paidFrom}</b></small>
+                <small>{from}</small>
+                <small>Bought {when(r.opened_at)}{r.closed_at ? ` · sold ${when(r.closed_at)}` : ""}</small>
+                <small>{open ? "🟢 Still open" : `Why it sold: ${r.close_reason || "–"}`}</small>
+                <span className="ct-links">
+                  {r.buy_tx && SCAN[r.chain] && <a href={SCAN[r.chain] + r.buy_tx} target="_blank" rel="noreferrer">See the buy</a>}
+                  {r.sell_tx && SCAN[r.chain] && <a href={SCAN[r.chain] + r.sell_tx} target="_blank" rel="noreferrer">See the sell</a>}
+                </span>
               </div>
-            );
-          })}
-          {rows.length > 12 && <button type="button" className="btn small ghost" onClick={() => setAll(!all)}>{all ? "Show fewer" : `Show all ${rows.length}`}</button>}
-        </div>
+            )}
+          </div>
+        );
+      })}
+      {rows.length > 3 && (
+        <button type="button" className="ct-morebtn" onClick={() => setMore(more === 0 ? (today.length > 3 ? 1 : 2) : more === 1 ? 2 : 0)}>
+          {more === 0 ? (today.length > 3 ? `More: all ${today.length} today` : `More (${rows.length - 3})`) : more === 1 ? `Older (${rows.length - today.length})` : "Show less"}
+        </button>
       )}
-      <div className="ct-away stack" style={{ gap: 6 }}>
+      {(more > 0 || d.away.length > 0) && <div className="ct-away stack" style={{ gap: 6 }}>
         <b>🏠 Money on other chains</b>
         {!d.away.length ? <small className="muted">None: everything is back in the Solana wallet (or still in open trades).</small> : (
           <>
@@ -100,7 +105,7 @@ export default function CoinsTraded({ busy, onAct }: { busy: boolean; onAct: (n:
           <input type="checkbox" checked={d.returnHome} disabled={busy} onChange={(e) => act("rh", "settings", { return_home: e.target.checked }, e.target.checked ? "On: after each sale on BNB Chain / Ethereum, the money (with any profit) goes back to Solana once nothing else is open there." : "Off: money from sales stays on that chain for the next buy there.")} />
           <small><b>Send money back to Solana after each sale</b> <span className="muted">(profit included; each trip costs a small Relay fee)</span></small>
         </label>
-      </div>
+      </div>}
     </section>
   );
 }

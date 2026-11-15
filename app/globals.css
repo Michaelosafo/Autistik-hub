@@ -7013,3 +7013,24 @@ a.me-pic.labelled{text-decoration:none;color:inherit}
 .ct-links { display: flex; gap: 8px; font-size: .8em; }
 .ct-away { padding-top: 6px; border-top: 1px solid rgba(var(--wc), .08); }
 @media (max-width: 560px) { .ct-sum { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Trades / Coins traded: compact rows, tap a coin for everything about it */
+.ct.mini { gap: 4px; }
+.ct-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.ct-head > small { flex: 1 1 auto; }
+.ct-tabs { display: inline-flex; padding: 2px; border-radius: 99px; background: rgba(var(--wc), .06); }
+.ct-tabs button { all: unset; cursor: pointer; font-size: .74em; font-weight: 700; padding: 3px 10px; border-radius: 99px; color: var(--muted); }
+.ct-tabs button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+.ct-line { border-radius: 12px; }
+.ct-line.on { background: rgba(var(--wc), .05); }
+.ct-tap { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 12px; font-size: .88em; }
+.ct-tap:hover { background: rgba(var(--wc), .05); }
+.ct-tap:focus-visible { outline: 2px solid #F0B90B; }
+.ct-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: rgba(var(--wc), .3); }
+.ct-dot.win { background: #2EBD85; } .ct-dot.loss { background: #FF4F6B; } .ct-dot.open { background: #F0B90B; }
+.ct-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ct-time { font-size: .82em; flex: none; }
+.ct-tap > b { flex: none; font-size: .95em; } .ct-tap > b small { font-weight: 600; opacity: .8; }
+.ct-more { display: flex; flex-direction: column; gap: 3px; padding: 0 10px 10px 24px; font-size: .92em; }
+.ct-morebtn { all: unset; cursor: pointer; align-self: flex-start; font-size: .82em; font-weight: 700; color: #7C5CFF; padding: 4px 8px; }
+.ct-morebtn:hover { text-decoration: underline; }
