@@ -32,6 +32,7 @@ export default function MyTikPanel() {
   const [tab, setTab] = useState<View>("activity");
   const [rows, setRows] = useState<Row[] | null>(null);
   const [moodOpen, setMoodOpen] = useState(false);
+  const [all, setAll] = useState(false);
   /** Put a mood sticker on your picture for 5 hours (or take it off). */
   const setMood = async (k: string | null) => {
     const { data, error } = await supabaseBrowser().rpc("set_mood_status", { p_mood: k });
@@ -64,6 +65,7 @@ export default function MyTikPanel() {
     })();
   }, []);
 
+  useEffect(() => { setAll(false); }, [tab]);
   useEffect(() => {
     if (!me) return;
     setRows(null);
@@ -80,21 +82,21 @@ export default function MyTikPanel() {
       } else if (tab === "activity") {
         // Everything you did lately, newest first: posts, comments, retikles, videos, and reactions you got.
         const [{ data: t }, { data: v }] = await Promise.all([
-          sb.from("tiks").select("id,body,reply_to,tickle_of,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(10),
-          sb.from("videos").select("id,title,kind,status,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(4),
+          sb.from("tiks").select("id,body,reply_to,tickle_of,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(40),
+          sb.from("videos").select("id,title,kind,status,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(10),
         ]);
         const { data: mine } = await sb.from("tiks").select("id,body").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(100);
         const body = new Map(((mine || []) as any[]).map((x) => [x.id, x.body]));
-        const { data: rx } = body.size ? await sb.from("tik_likes").select("tik_id,user_id,kind,created_at").in("tik_id", [...body.keys()]).neq("user_id", me.id).order("created_at", { ascending: false }).limit(6) : { data: [] };
+        const { data: rx } = body.size ? await sb.from("tik_likes").select("tik_id,user_id,kind,created_at").in("tik_id", [...body.keys()]).neq("user_id", me.id).order("created_at", { ascending: false }).limit(20) : { data: [] };
         const { data: ps } = (rx || []).length ? await sb.from("profiles").select("id,alias").in("id", (rx as any[]).map((r) => r.user_id)) : { data: [] };
         const who = new Map(((ps || []) as any[]).map((p) => [p.id, p.alias]));
         out = [
           ...((t || []) as any[]).map((x) => ({ id: "t" + x.id, at: x.created_at, href: `/mood?tik=${x.tickle_of || x.reply_to || x.id}`, tag: x.tickle_of ? "🔁" : x.reply_to ? "💬" : "📝", text: x.tickle_of ? "You retikled a post" : x.reply_to ? `You commented: ${cut(x.body, 50)}` : cut(x.body) })),
           ...((v || []) as any[]).map((x) => ({ id: "v" + x.id, at: x.created_at, href: `/watch/${x.id}`, tag: x.kind === "stream" ? (x.status === "live" ? "LIVE" : "🔴") : "🎬", text: x.kind === "stream" ? `You streamed: ${cut(x.title, 50)}` : `You posted a video: ${cut(x.title, 50)}` })),
           ...((rx || []) as any[]).map((r) => ({ id: "r" + r.tik_id + r.user_id, at: r.created_at, href: `/mood?tik=${r.tik_id}`, tag: "rx:" + r.kind, text: `${who.get(r.user_id) || "Member"} reacted to “${cut(body.get(r.tik_id), 40)}”` })),
-        ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 10);
+        ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 40);
       } else if (tab === "videos" || tab === "streams") {
-        let q = sb.from("videos").select("id,title,kind,status,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(8);
+        let q = sb.from("videos").select("id,title,kind,status,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(40);
         q = tab === "streams" ? q.eq("kind", "stream") : q.neq("kind", "stream");
         const { data } = await q;
         out = ((data || []) as any[]).map((v) => ({ id: v.id, text: cut(v.title, 60), at: v.created_at, href: `/watch/${v.id}`, tag: v.status === "live" ? "LIVE" : undefined }));
@@ -107,7 +109,7 @@ export default function MyTikPanel() {
         const who = new Map(((ps || []) as any[]).map((p) => [p.id, p.alias]));
         out = list.map((r) => ({ id: r.tik_id + r.user_id, text: `${who.get(r.user_id) || "Member"} reacted to “${cut(body.get(r.tik_id), 40)}”`, at: r.created_at, href: `/mood?tik=${r.tik_id}`, tag: "rx:" + r.kind }));
       } else {
-        let q = sb.from("tiks").select("id,body,reply_to,tickle_of,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(8);
+        let q = sb.from("tiks").select("id,body,reply_to,tickle_of,created_at").eq("author_id", me.id).eq("hidden", false).order("created_at", { ascending: false }).limit(40);
         q = tab === "posts" ? q.is("reply_to", null).is("tickle_of", null) : tab === "retikles" ? q.not("tickle_of", "is", null) : q.not("reply_to", "is", null);
         const { data } = await q;
         out = ((data || []) as any[]).map((t) => ({ id: t.id, text: tab === "retikles" ? "Retikled a post" : cut(t.body), at: t.created_at, href: `/mood?tik=${t.tickle_of || t.reply_to || t.id}` }));
@@ -149,11 +151,12 @@ export default function MyTikPanel() {
         <div className="mytik-list" role="tabpanel">
           <div className="mytik-lh"><b>{tab === "activity" ? "⚡ Your recent activity" : tab === "followers" ? "👥 Your followers" : tab === "following" ? "➕ You follow" : TABS.find(([k]) => k === tab)?.[2]}</b>{tab !== "activity" && <button type="button" onClick={() => setTab("activity")}>✕</button>}</div>
           {rows === null ? <small className="muted">Loading…</small> : !rows.length ? <small className="muted">{tab === "activity" ? "No activity yet: post your first Tik!" : "Nothing here yet."}</small> : (
-            <ul>{rows.map((r) => (
+            <ul className={all ? "all" : ""}>{(all ? rows : rows.slice(0, 3)).map((r) => (
               <li key={r.id}><Link href={r.href}>{r.person ? <Avatar className="me-av" alias={r.person.alias} color={r.person.color} url={r.person.avatar_url} /> : r.tag?.startsWith("rx:") ? <em>{stickerOf(r.tag.slice(3)) ? <MoodSticker k={r.tag.slice(3)} size={20} /> : REMOJI[r.tag.slice(3)] || "❤️"}</em> : r.tag && ICON[r.tag] ? <em><MoodSticker k={ICON[r.tag]} size={22} /></em> : r.tag && <em className={r.tag === "LIVE" ? "live" : ""}>{r.tag}</em>}<span>{r.text}{r.person && r.tag && <small> {r.tag}</small>}</span><small>{r.person ? "" : ago(r.at)}</small></Link></li>
             ))}</ul>
           )}
-          <Link href={`/members/${me.id}`} className="mytik-all">See everything on your profile →</Link>
+          {rows && rows.length > 3 && <button type="button" className="mytik-more" onClick={() => setAll(!all)} aria-expanded={all}>{all ? "Show less" : `See all ${rows.length} →`}</button>}
+          {all && <Link href={`/members/${me.id}`} className="mytik-all">Open your full profile →</Link>}
         </div>
       )}
     </aside>

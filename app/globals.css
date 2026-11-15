@@ -7397,3 +7397,9 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .tik-new.big .tik-new-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
 .tik-new.big .tik-post { border-radius: 99px; padding: 8px 18px; background: linear-gradient(135deg, #B57CFF, #FF6B9A); color: #fff; border: 0; font-weight: 800; box-shadow: 0 3px 0 #8a4fd6; }
 .tik-new.big .tik-post:disabled { opacity: .45; box-shadow: none; }
+/* Your recent activity: 3 rows, See all opens the whole list */
+.mytik-list ul { max-height: none; overflow: visible; }
+.mytik-list ul.all { max-height: 60vh; overflow-y: auto; }
+.mytik-more { all: unset; cursor: pointer; align-self: stretch; text-align: center; padding: 7px; border-radius: 10px; font-size: .78em; font-weight: 800; color: #B57CFF; background: rgba(181,124,255,.1); }
+.mytik-more:hover { background: rgba(181,124,255,.18); }
+.mytik-more:focus-visible { outline: 2px solid #F0B90B; }
