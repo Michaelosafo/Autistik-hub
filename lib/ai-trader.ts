@@ -996,10 +996,12 @@ async function manage(s: Settings) {
     // Copy trades (coins posted in the groups you follow) always sell at their own target, stop-loss or profit lock,
     // even when you're in control: nothing else (sellers taking over, max hold) closes them. They are saved with no
     // trail of their own, so the profit lock uses the main trailing stop setting (0 there turns it off for them too).
-    // No rug sell for them: you picked these callers, so only the stop-loss, target and profit lock decide.
+    // Telegram channels, groups and the people you picked: no rug sell, only the stop-loss, target and profit lock.
+    // Calls from X and the scout's own finds keep the rug sell.
     if (p.strategy === "copy" || p.strategy === "rebuy") {
       const lock = trailStop(p, high, n(p.trail) || n(s.trail));
-      const cw = ch <= -n(p.stop_loss) ? `Stop-loss (${ch.toFixed(1)}%)` : ch >= n(p.take_profit) ? `Take profit (+${ch.toFixed(1)}%)`
+      const keepsRug = (p as any).pot === "scout" || /^X · /.test(String((p as any).source_group || ""));
+      const cw = keepsRug && rug ? "Liquidity dropped sharply (possible rug)" : ch <= -n(p.stop_loss) ? `Stop-loss (${ch.toFixed(1)}%)` : ch >= n(p.take_profit) ? `Take profit (+${ch.toFixed(1)}%)`
         : lock != null && price <= lock ? `Trailing stop (${ch >= 0 ? "+" : ""}${ch.toFixed(1)}%, ${((price / high - 1) * 100).toFixed(1)}% from the high of +${((high / n(p.entry_usd) - 1) * 100).toFixed(1)}%)` : null;
       if (cw) await closePosition({ ...p, high_usd: high }, cw, price);
       continue;
@@ -1691,7 +1693,8 @@ async function actOnCopy(s: Settings, sig: Signal, f: Flow | null, label: string
   const [room, room2, g] = await Promise.all([
     buyRoom(s, f.chain),
     scoutPot ? Promise.resolve("no Wallet 2") : s.mode === "live" ? buyRoom(s, f.chain, 2) : Promise.resolve("no Wallet 2"),
-    scoutPot ? scoutCheck(s, f, scoutPot.trusted) : copyCheckFor(s, f.chain, f.token),
+    // Telegram channels, groups and your picked callers: no rug check (only taxes are read). X calls: the rug check.
+    scoutPot ? scoutCheck(s, f, scoutPot.trusted) : sig.source === "x" ? copyGate(f.chain, f.token) : copyCheckFor({ ...s, copy_check: false }, f.chain, f.token),
   ]);
   const key = f.token.toLowerCase();
   // Why each wallet can't buy ("" = it can). Wallet 2 not added for this network = nothing to report.
