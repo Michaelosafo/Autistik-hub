@@ -63,14 +63,8 @@ export default function TikCard(props: CardProps) {
  * The view counter's icon: an eye whose iris is a small gradient "signal", pulsing once when the number grows.
  */
 function ViewIcon({ grew }: { grew: boolean }) {
-  const id = useId().replace(/:/g, "");
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className={"tik-eye" + (grew ? " grew" : "")}>
-      <defs><linearGradient id={`ve${id}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFD84D" /><stop offset=".55" stopColor="#FF6B9A" /><stop offset="1" stopColor="#B57CFF" /></linearGradient></defs>
-      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx="12" cy="12" r="3.6" fill={`url(#ve${id})`} stroke="none" />
-      <path d="M10.4 12.9l1-1.3.9.8 1.3-1.7" fill="none" stroke="#fff" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={"xi tik-eye" + (grew ? " grew" : "")}><path d="M4.5 20.5v-6M9.5 20.5V8M14.5 20.5V3.5M19.5 20.5v-9" /></svg>
   );
 }
 
@@ -273,19 +267,18 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
         )}
         <div className="tik-actions">
           <button type="button" className={"tik-act reply" + (open ? " on" : "")} onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`${replies} replies`} title="Reply">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.7A8 8 0 1 1 21 12z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M9.5 4.5h5A6.5 6.5 0 0 1 21 11v.2a6.3 6.3 0 0 1-6.3 6.3H12l-5 3.4v-3.6A6.3 6.3 0 0 1 3 11.2V11a6.5 6.5 0 0 1 6.5-6.5z" /></svg>
             <span>{replies > 0 ? replies : ""}</span>
           </button>
           {!t.reply_to && (
             <button type="button" className={"tik-act tickle" + (tickled ? " on" : "")} onClick={tickle} aria-pressed={tickled} aria-label={tickled ? "Undo Tickle" : "Tickle: repost to everyone"} title={tickled ? "Undo Tickle" : "Tickle (repost)"}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M17 2l4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" /></svg>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><path d="M2.5 8 6 4.5 9.5 8M6 5v10.5A2.5 2.5 0 0 0 8.5 18H13M21.5 16 18 19.5 14.5 16M18 19V8.5A2.5 2.5 0 0 0 15.5 6H11" /></svg>
               <span>{tickles > 0 ? tickles : ""}</span>
             </button>
           )}
           <span className="tik-react-wrap">
             <button type="button" key={liked ? "l1" : "l0"} className={"tik-act like" + (liked ? " on pop" : "")} onClick={() => setPicker(!picker)} aria-pressed={liked} aria-expanded={picker} aria-label={liked ? `Your reaction: ${RNAME[myKind]}. Change it` : "React"} title="React">
-              {liked ? <span className="tik-remoji" aria-hidden="true"><RIcon k={myKind} size={18} /></span>
-                : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1.2 8.4 3 5 6.4 5c2 0 3.4 1.1 4.1 2.3h3C14.2 6.1 15.6 5 17.6 5 21 5 22.8 8.4 21.3 11.4 19 15.6 12 20 12 20z" /></svg>}
+              <svg viewBox="0 0 24 24" aria-hidden="true" className={"xi heart" + (liked ? " full" : "")}><path d="M12 20.3s-7.8-4.7-9.4-9.6C1.6 7.5 3.5 4.4 6.8 4.2c2.1-.1 3.6 1 5.2 2.9 1.6-1.9 3.1-3 5.2-2.9 3.3.2 5.2 3.3 4.2 6.5-1.6 4.9-9.4 9.6-9.4 9.6z" /></svg>
             </button>
             {likes > 0 && <button type="button" className="tik-rcount" onClick={() => { setWhoTab("all"); setWho(true); }} aria-label={`${likes} reactions: see who`} title="See who reacted">{likes}</button>}
             {picker && <>
@@ -306,7 +299,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
                 {peek && <span className="tik-peek" role="status">👁 {seenN.toLocaleString()} {seenN === 1 ? "view" : "views"}</span>}
               </button>)}
           <button type="button" className={"tik-act share" + (copied ? " on" : "")} onClick={copyLink} aria-label="Copy link to this Tik" title="Copy link">
-            <svg viewBox="0 0 24 24" aria-hidden="true" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2.5 10.6 13.4M21.5 2.5l-6.8 19-4.1-8.1-8.1-4.1 19-6.8z" /></svg>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="xi"><circle cx="18" cy="5.5" r="2.6" /><circle cx="6" cy="12" r="2.6" /><circle cx="18" cy="18.5" r="2.6" /><path d="M8.3 10.8l7.4-4M8.3 13.2l7.4 4" /></svg>
             <span>{copied ? "Copied" : ""}</span>
           </button>
         </div>
