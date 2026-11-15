@@ -14,6 +14,8 @@ export async function GET(req: Request) {
   const denied = cronDenied(req);
   if (denied) return denied;
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return json({ error: "not set up" }, 503);
+  // Paid AUTISTIK badges end after their year.
+  await supabaseService().rpc("expire_paid_badges").then(() => {}, () => {});
   const { data: go } = await supabaseService().rpc("analytics_lease", { p_seconds: 240 });
   if (go !== true) return json({ skipped: true });
   const result = await runChecks(Date.now() + 35_000);

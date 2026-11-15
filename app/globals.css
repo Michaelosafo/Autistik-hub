@@ -7421,3 +7421,41 @@ button.mytik-av:focus-visible { outline: 2px solid #F0B90B; outline-offset: 3px;
 .yp-l { font-weight: 800 !important; letter-spacing: -.01em; }
 .yp-v { font-weight: 800; font-variant-numeric: tabular-nums; }
 .yp-chev { color: #B57CFF !important; font-weight: 900; }
+
+/* Badge payment card */
+.bpay { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 14px; border-radius: 18px; background: linear-gradient(160deg, rgba(255,216,77,.18), rgba(181,124,255,.16)); border: 1px solid rgba(181,124,255,.3); }
+.bpay-stk { display: flex; }
+.bpay-stk .msticker { margin-left: -8px; } .bpay-stk .msticker:first-child { margin-left: 0; }
+.bpay-h { font-family: var(--f-display); font-size: 1.1em; }
+.bpay-sub { color: var(--muted); font-size: .82em; max-width: 34ch; }
+.bpay-btn { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; padding: 12px; border-radius: 14px; font-weight: 900; color: #fff; background: linear-gradient(135deg, #B57CFF, #FF6B9A); box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 3px 0 #8a4fd6; }
+.bpay-btn:disabled { opacity: .55; cursor: default; }
+.bpay-btn:active { transform: translateY(2px); }
+.bpay-fine { color: var(--muted); font-size: .7em; }
+.bpay-err, .bpay-status { font-size: .8em; }
+.bpay-err { color: #E5484D; }
+
+/* Comments: compact and tidy for everyone */
+.tik-actions, .tik:not(.compact) > .tik-main > .tik-actions { flex-wrap: wrap !important; row-gap: 6px !important; }
+.tik-actions .tik-rchips { margin-left: auto; max-width: 100%; }
+.tik-replies > .tik.compact .tik-actions { justify-content: flex-start !important; gap: 4px !important; margin-top: 2px; }
+.tik-replies > .tik.compact.mine .tik-actions { justify-content: flex-end !important; }
+.tik-replies > .tik.compact .tik-actions .tik-act { flex: none !important; height: 22px !important; min-width: 24px !important; padding: 0 6px !important; border-radius: 7px !important; box-shadow: 0 1px 0 color-mix(in srgb, #B57CFF 35%, var(--line)) !important; }
+.tik-replies > .tik.compact .tik-actions .tik-act svg { width: 11px !important; height: 11px !important; }
+.tik-replies > .tik.compact .tik-av .me-av { width: 30px !important; height: 30px !important; }
+.tik-replies > .tik.compact .tik-head { font-size: .78em; gap: 5px; }
+.tik-replies > .tik.compact .tik-body { padding: 7px 12px !important; font-size: .9em; }
+.tik-replies > .tik.compact { margin-bottom: 2px; }
+/* quick reply stickers: one slim scrolling row of small stickers */
+.tik-quick { gap: 4px !important; flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; padding: 2px 0 !important; }
+.tik-quick button { flex: none !important; padding: 3px 9px !important; font-size: .7em !important; border-radius: 99px !important; }
+.tik-quick button.st { width: 30px; height: 30px; padding: 0 !important; display: grid !important; place-items: center; background: transparent !important; border: 0 !important; }
+.tik-quick button.st .msticker { width: 24px; height: 24px; }
+/* comment box: slimmer */
+.tik-chatbox { min-height: 0 !important; padding: 4px 4px 4px 6px !important; border-radius: 99px !important; }
+.tik-chatbox textarea { font-size: .92em !important; padding: 8px 4px !important; min-height: 20px !important; }
+.tik-chatbox .tik-send { width: 34px !important; height: 34px !important; flex: none; }
+.tik-sticker-btn { width: 30px; height: 30px; }
+.tik-sticker-btn .msticker { width: 20px; height: 20px; }
+.tik-chatbox-wrap .st-tray { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.tik-chatbox-wrap .st-tray .msticker { width: 24px; height: 24px; }
