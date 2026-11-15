@@ -10,23 +10,24 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago, type Tik } from "@/lib/mood";
 import TikComposer from "./TikComposer";
 import RichText from "./RichText";
+import MoodFlash from "./MoodFlash";
 import { MoodSticker, STICKERS, stickerOf, type StickerKey } from "./MoodStickers";
 import { canStyle } from "./tik-styles";
 import { useTiks } from "./useMood";
 import { refreshTrending, type Hot } from "./useTrending";
 
 /** Reactions: tap the heart to pick one; the count shows the total, tap it to see who reacted with what. */
-type RKind = "love" | "haha" | "fire" | "100" | "wow" | "sad" | "pray" | "clap" | StickerKey;
+type RKind = "love" | "haha" | "fire" | "100" | "wow" | "sad" | "pray" | "clap" | "rocket" | "warning" | "thumbs" | StickerKey;
 /** The reactions you can pick now: the 10 AUTISTIK stickers (older emoji reactions still show). */
-const RKINDS: RKind[] = STICKERS.map((x) => x.key);
-const ALLKINDS: RKind[] = [...RKINDS, "love", "haha", "fire", "100", "wow", "sad", "pray", "clap"];
+const RKINDS: RKind[] = [...STICKERS.map((x) => x.key), "rocket", "warning", "fire", "thumbs", "clap"];
+const ALLKINDS: RKind[] = [...new Set<RKind>([...RKINDS, "love", "haha", "fire", "100", "wow", "sad", "pray", "clap"])];
 /** A reaction's picture: the sticker, or the emoji for older reactions. */
 function RIcon({ k, size = 20 }: { k: RKind; size?: number }) {
   return stickerOf(k) ? <MoodSticker k={k} size={size} /> : <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>{(REMOJI as any)[k] || "❤️"}</span>;
 }
-const REMOJI: Record<string, string> = { love: "❤️", haha: "😂", fire: "🔥", "100": "💯", wow: "😮", sad: "😢", pray: "🙏", clap: "👏" };
+const REMOJI: Record<string, string> = { rocket: "🚀", warning: "⚠️", thumbs: "👍", love: "❤️", haha: "😂", fire: "🔥", "100": "💯", wow: "😮", sad: "😢", pray: "🙏", clap: "👏" };
 type Rx = { user_id: string; kind: RKind; p: { alias: string; color: string | null; avatar_url: string | null } | null };
-const RNAME: Record<string, string> = { love: "Love", haha: "Haha", fire: "Fire", "100": "100", wow: "Wow", sad: "Sad", pray: "Pray", clap: "Clap", ...Object.fromEntries(STICKERS.map((x) => [x.key, x.label])) };
+const RNAME: Record<string, string> = { rocket: "Rocket", warning: "Careful", thumbs: "Thumbs up", love: "Love", haha: "Haha", fire: "Fire", "100": "100", wow: "Wow", sad: "Sad", pray: "Pray", clap: "Clap", ...Object.fromEntries(STICKERS.map((x) => [x.key, x.label])) };
 
 /** One Tik: who, what they wrote, a picture, likes and replies. */
 type CardProps = {
@@ -210,6 +211,7 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
       {false && hot && <span className="tik-hot" title={`${hot.replies} replies and ${hot.likes} likes in the last 24 hours`}>🔥 Trending{hot.rank <= 3 ? ` #${hot.rank}` : ""}<small>{hot.recent > 0 ? `${hot.recent} in the last hour` : `${hot.replies} replies · ${hot.likes} likes today`}</small></span>}
       <Link href={a ? `/members/${a.id}` : "#"} className="tik-av" aria-label={a?.alias || "Member"}>
         <Avatar className="me-av" alias={a?.alias || "?"} color={a?.color} url={a?.avatar_url} />
+        <MoodFlash mood={a?.mood_status} until={a?.mood_until} size={compact ? 16 : 22} />
       </Link>
       <div className="tik-main">
         <div className="tik-head">

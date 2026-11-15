@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Avatar from "@/components/Avatar";
+import MoodFlash from "@/components/mood/MoodFlash";
 import { notFound } from "next/navigation";
 import BadgeApply from "@/components/BadgeApply";
 import ProfileEdit from "@/components/ProfileEdit";
@@ -45,7 +46,7 @@ export default async function MemberPage({ params, searchParams }: { params: { i
     loadProfiles(sb, [params.id]),
     sb.from("practitioners").select("role").eq("user_id", params.id).maybeSingle(),
     sb.from("group_members").select("group_id").eq("user_id", params.id),
-    sb.from("profiles").select("activity_visibility").eq("id", params.id).maybeSingle(),
+    sb.from("profiles").select("activity_visibility,mood_status,mood_until").eq("id", params.id).maybeSingle(),
     memberCard(sb, params.id),
     memberActivity(sb, params.id, 30),
   ]);
@@ -68,7 +69,7 @@ export default async function MemberPage({ params, searchParams }: { params: { i
     <div className="pp">
       <section className={"pp-head" + (prof.is_team ? " team" : "")}>
         <div className="pp-cover" aria-hidden="true" />
-        <Avatar className="avatar pp-av" alias={prof.alias} color={prof.color} url={prof.avatar_url} />
+        <span className="pp-av-wrap"><Avatar className="avatar pp-av" alias={prof.alias} color={prof.color} url={prof.avatar_url} /><MoodFlash mood={(vis as any)?.mood_status} until={(vis as any)?.mood_until} size={40} /></span>
         <h1 className="pp-name">{prof.alias}{verified && <VerifiedBadge n={p.verified_badge} size={22} className="vbadge-name" title={prof.is_team ? "AUTISTIK team" : "Verified by AUTISTIK"} />}</h1>
         <div className="pp-sub">
           {prof.handle && <span>@{prof.handle}</span>}

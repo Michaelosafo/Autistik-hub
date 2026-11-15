@@ -9,11 +9,12 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import { supabaseService } from "@/lib/supabase/server";
 import { ago } from "@/lib/mood";
 import RichText from "./RichText";
+import MoodFlash from "./MoodFlash";
 import { MoodSticker, STICKERS, stickerOf } from "./MoodStickers";
 
 type Row = {
   id: string; body: string; mood: string | null; image_url: string | null; created_at: string; author_id: string;
-  author: { id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null; is_team: boolean; is_verified: boolean; verified_badge: number | null; activity_visibility: string | null } | null;
+  author: { id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null; is_team: boolean; is_verified: boolean; verified_badge: number | null; activity_visibility: string | null; mood_status: string | null; mood_until: string | null } | null;
   tik_likes: { count: number }[]; replies: { count: number }[];
 };
 
@@ -22,7 +23,7 @@ export default async function PublicFeed({ focus }: { focus?: string }) {
   try {
     const sb = supabaseService();
     let q = sb.from("tiks")
-      .select("id,body,mood,image_url,created_at,author_id,author:profiles!tiks_author_id_fkey(id,alias,handle,color,avatar_url,is_team,is_verified,verified_badge,activity_visibility),tik_likes(count),replies:tiks!reply_to(count)")
+      .select("id,body,mood,image_url,created_at,author_id,author:profiles!tiks_author_id_fkey(id,alias,handle,color,avatar_url,is_team,is_verified,verified_badge,activity_visibility,mood_status,mood_until),tik_likes(count),replies:tiks!reply_to(count)")
       .eq("hidden", false).is("reply_to", null).is("tickle_of", null).order("created_at", { ascending: false }).limit(30);
     if (focus) q = q.eq("id", focus);
     const { data } = await q;
@@ -41,7 +42,7 @@ export default async function PublicFeed({ focus }: { focus?: string }) {
         const v = a.is_verified || a.is_team;
         return (
           <article key={t.id} className="tik pubtik-card">
-            <span className="tik-av"><Avatar className="me-av" alias={a.alias} color={a.color} url={a.avatar_url} /></span>
+            <span className="tik-av"><Avatar className="me-av" alias={a.alias} color={a.color} url={a.avatar_url} /><MoodFlash mood={a.mood_status} until={a.mood_until} /></span>
             <div className="tik-main">
               <div className="tik-head">
                 <b className="tik-name">{a.alias}</b>

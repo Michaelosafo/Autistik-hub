@@ -14,7 +14,7 @@ export const MOODS = [
 export type MoodKey = (typeof MOODS)[number]["key"];
 export const moodOf = (k: string | null | undefined) => MOODS.find((m) => m.key === k) || null;
 
-export type TikAuthor = { id: string; alias: string; color: string | null; avatar_url: string | null; is_team?: boolean; is_verified?: boolean; handle?: string | null; verified_badge?: number | null };
+export type TikAuthor = { id: string; alias: string; color: string | null; avatar_url: string | null; is_team?: boolean; is_verified?: boolean; handle?: string | null; verified_badge?: number | null; mood_status?: string | null; mood_until?: string | null };
 export type Tik = {
   id: string; body: string; mood: string | null; image_url: string | null; style?: string | null; created_at: string; author_id: string; reply_to: string | null;
   author: TikAuthor | null; likes: number; replies: number; liked: boolean;
@@ -30,7 +30,7 @@ export type Tik = {
   reply_user?: string | null; to?: { id: string; alias: string; handle?: string | null } | null;
 };
 
-export const TIK_COLS = "id,body,mood,image_url,style,created_at,author_id,reply_to,tickle_of,views,impressions,reply_user,to:profiles!tiks_reply_user_fkey(id,alias,handle),author:profiles!tiks_author_id_fkey(id,alias,color,avatar_url,is_team,is_verified,handle,verified_badge),tik_likes(count),replies:tiks!reply_to(count)";
+export const TIK_COLS = "id,body,mood,image_url,style,created_at,author_id,reply_to,tickle_of,views,impressions,reply_user,to:profiles!tiks_reply_user_fkey(id,alias,handle),author:profiles!tiks_author_id_fkey(id,alias,color,avatar_url,is_team,is_verified,handle,verified_badge,mood_status,mood_until),tik_likes(count),replies:tiks!reply_to(count)";
 
 export function ago(iso: string) {
   const s = Math.max(1, (Date.now() - Date.parse(iso)) / 1000);

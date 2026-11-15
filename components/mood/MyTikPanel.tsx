@@ -9,9 +9,10 @@ import { useEffect, useState } from "react";
 import Avatar from "@/components/Avatar";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ago } from "@/lib/mood";
-import { MoodSticker, stickerOf } from "./MoodStickers";
+import { MoodSticker, STICKERS, stickerOf } from "./MoodStickers";
+import MoodFlash from "./MoodFlash";
 
-type Me = { id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null };
+type Me = { id: string; alias: string; handle: string | null; color: string | null; avatar_url: string | null; mood_status?: string | null; mood_until?: string | null };
 type K = "posts" | "retikles" | "comments" | "videos" | "streams" | "reactions";
 type View = K | "followers" | "following" | "activity";
 type Row = { id: string; text: string; at: string; href: string; tag?: string; person?: { alias: string; color: string | null; avatar_url: string | null } };
@@ -30,13 +31,21 @@ export default function MyTikPanel() {
   const [n, setN] = useState<Record<K, number> & { followers: number; following: number }>({ posts: 0, retikles: 0, comments: 0, videos: 0, streams: 0, reactions: 0, followers: 0, following: 0 });
   const [tab, setTab] = useState<View>("activity");
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [moodOpen, setMoodOpen] = useState(false);
+  /** Put a mood sticker on your picture for 5 hours (or take it off). */
+  const setMood = async (k: string | null) => {
+    const { data, error } = await supabaseBrowser().rpc("set_mood_status", { p_mood: k });
+    if (error) return;
+    setMe((m) => (m ? { ...m, mood_status: k, mood_until: (data as string | null) ?? null } : m));
+    setMoodOpen(false);
+  };
 
   useEffect(() => {
     const sb = supabaseBrowser();
     (async () => {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) return;
-      const { data: p } = await sb.from("profiles").select("id,alias,handle,color,avatar_url").eq("id", user.id).maybeSingle();
+      const { data: p } = await sb.from("profiles").select("id,alias,handle,color,avatar_url,mood_status,mood_until").eq("id", user.id).maybeSingle();
       setMe((p as Me) || { id: user.id, alias: "Me", handle: null, color: null, avatar_url: null });
       const c = (q: any) => q.then((r: any) => r.count || 0, () => 0);
       const head = { count: "exact" as const, head: true };
@@ -111,7 +120,7 @@ export default function MyTikPanel() {
   return (
     <aside className="mytik" aria-label="Your TIK">
       <div className="mytik-me">
-        <Link href={`/members/${me.id}`} className="mytik-av" aria-label="Your profile"><Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} /></Link>
+        <button type="button" className="mytik-av" onClick={() => setMoodOpen(!moodOpen)} aria-label="Set your mood on your picture" title="Set your mood (shows on your picture for 5 hours)"><Avatar className="me-av" alias={me.alias} color={me.color} url={me.avatar_url} /><MoodFlash mood={me.mood_status} until={me.mood_until} size={24} />{!(me.mood_until && Date.parse(me.mood_until) > Date.now()) && <i className="mytik-plus" aria-hidden="true">+</i>}</button>
         <div className="mytik-id">
           <Link href={`/members/${me.id}`}><b>{me.alias}</b></Link>
           {me.handle && <small>@{me.handle}</small>}
@@ -121,6 +130,13 @@ export default function MyTikPanel() {
           </small>
         </div>
       </div>
+      {moodOpen && (
+        <div className="mytik-mood">
+          <small><b>Your mood for the next 5 hours</b> · it flashes on your picture</small>
+          <div className="st-tray">{STICKERS.map((x) => <button key={x.key} type="button" className={me.mood_status === x.key && me.mood_until && Date.parse(me.mood_until) > Date.now() ? "on" : ""} onClick={() => setMood(x.key)} aria-label={x.label} title={x.label}><MoodSticker k={x.key} size={30} /></button>)}</div>
+          {me.mood_until && Date.parse(me.mood_until) > Date.now() && <button type="button" className="mytik-clear" onClick={() => setMood(null)}>Remove my mood</button>}
+        </div>
+      )}
       <div className="mytik-tabs" role="tablist" aria-label="Your activity">
         {TABS.map(([k, st, l, c]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(tab === k ? "activity" : k)} style={{ ["--tc" as any]: c }}>

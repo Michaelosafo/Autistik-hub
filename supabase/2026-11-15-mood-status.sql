@@ -1,0 +1,2 @@
+-- Mood status on profile picture (5h) + more reactions (applied 2026-11-15)
+-- profiles.mood_status/mood_until, set_mood_status(text) security definer, tik_likes kinds + rocket/warning/thumbs
