@@ -81,13 +81,18 @@ type Closed = { coin: string; pnl_usd: number; closed_at: string; why: string | 
 export async function lessons(mode: string, coin?: string, newsDriven?: boolean): Promise<{ stop: string | null; size: number }> {
   const { data } = await sb().from("ai_futures_positions").select("coin,pnl_usd,closed_at,why").eq("fut_id", T()).eq("mode", mode).eq("status", "closed").order("closed_at", { ascending: false }).limit(40);
   const list = (data || []) as Closed[];
+  // Turbo (300000s) and Madness (600000s) are meant to trade a lot: they pause only when the market has really
+  // turned against them, and otherwise trade smaller instead of sitting out.
+  const desk = T();
+  const aggressive = (desk >= 300000 && desk < 400000) || (desk >= 600000 && desk < 700000);
+  const pauseMin = aggressive ? 30 : 45;
   const ago = (p: Closed) => Date.now() - Date.parse(p.closed_at);
   // 1. The market has turned against it: 4+ losses in a row, all within the last 3 hours, and losing money overall
   //    in those 3 hours → a 45-minute pause (then it tries again, at a smaller size while the win rate is poor).
   let streak = 0;
   for (const p of list) { if (n(p.pnl_usd) < 0 && ago(p) < 3 * 36e5) streak++; else break; }
   const last3h = list.filter((p) => ago(p) < 3 * 36e5).reduce((a, p) => a + n(p.pnl_usd), 0);
-  if (streak >= 4 && last3h < 0 && list[0] && ago(list[0]) < 45 * 6e4) return { stop: `${streak} losses in a row and down $${Math.abs(last3h).toFixed(2)} in 3 hours: the market isn't suiting it, pausing 45 minutes`, size: 0 };
+  if (streak >= 4 && last3h < 0 && list[0] && ago(list[0]) < pauseMin * 6e4) return { stop: `${streak} losses in a row and down $${Math.abs(last3h).toFixed(2)} in 3 hours: the market isn't suiting it, pausing ${pauseMin} minutes`, size: 0 };
   // 2. This coin lost its last 3 trades within 6 hours: left alone for 6 hours.
   if (coin) {
     const mine = list.filter((p) => p.coin === coin).slice(0, 3);
@@ -96,7 +101,10 @@ export async function lessons(mode: string, coin?: string, newsDriven?: boolean)
   // 3. This kind of trade (news-led or chart-led) keeps losing over the last 2 days: at least 6 of them, under 30% won.
   if (newsDriven != null) {
     const kind = list.filter((p) => ago(p) < 48 * 36e5 && /^news|news:/i.test(String(p.why || "")) === newsDriven).slice(0, 15);
-    if (kind.length >= 6 && kind.filter((p) => n(p.pnl_usd) > 0).length / kind.length < 0.3) return { stop: `${newsDriven ? "news" : "chart"}-led trades keep losing lately: skipping them`, size: 0 };
+    if (kind.length >= 6 && kind.filter((p) => n(p.pnl_usd) > 0).length / kind.length < 0.3) {
+      if (!aggressive) return { stop: `${newsDriven ? "news" : "chart"}-led trades keep losing lately: skipping them`, size: 0 };
+      return { stop: null, size: 0.6 }; // Turbo / Madness: keep trading, smaller, until this kind recovers
+    }
   }
   // 4. Recent win rate sets the bet size.
   const last = list.slice(0, 20);
