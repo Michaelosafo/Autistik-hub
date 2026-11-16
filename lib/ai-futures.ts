@@ -66,6 +66,8 @@ export const isTurboDesk = () => T() >= TURBO_DESK && T() < SNIPE_DESK;
 export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < COPY_DESK;
 export const isCopyDesk = () => T() >= COPY_DESK && T() < MAD_DESK;
 export const isMadDesk = () => T() >= MAD_DESK && T() < MAD_DESK + FX_DESK;
+/** The main Futures desk (crypto on Hyperliquid/Aster, none of the special desks above). */
+export const isFutDesk = () => !isFxDesk() && !isEarnDesk() && !isTurboDesk() && !isSnipeDesk() && !isCopyDesk() && !isMadDesk();
 /** Sniper and Copy: spot coins bought from the shared Solana wallet, each with its own budget. */
 export const isSpotDesk = () => isSnipeDesk() || isCopyDesk();
 /**
@@ -571,18 +573,84 @@ async function rss(fx = false): Promise<Item[]> {
   return all.flat().filter((i) => i.title && Date.now() - i.at < 20 * 60_000);
 }
 
+/**
+ * Public Telegram news channels, read from their web preview (t.me/s/…, no login needed). A channel that's gone or
+ * private just returns nothing.
+ */
+const TG_CHANNELS = ["WatcherGuru", "wublockchainenglish", "whale_alert_io", "binance_announcements", "cointelegraph", "tree_news"];
+const unesc = (x: string) => x.replace(/<br\s*\/?>/gi, " ").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim();
+async function tgChannels(): Promise<Item[]> {
+  const all = await Promise.all(TG_CHANNELS.map(async (ch) => {
+    const html = await fetch(`https://t.me/s/${ch}`, { cache: "no-store", signal: AbortSignal.timeout(6000), headers: { "user-agent": "Mozilla/5.0 AUTISTIK-Hub" } }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
+    const out: Item[] = [];
+    for (const blk of html.split(/<div class="tgme_widget_message_wrap/).slice(1).slice(-10)) {
+      const post = /data-post="([^"]+)"/.exec(blk)?.[1];
+      const text = unesc(/<div class="tgme_widget_message_text[^"]*"[^>]*>([\s\S]*?)<\/div>/.exec(blk)?.[1] || "");
+      const at = Date.parse(/<time[^>]*datetime="([^"]+)"/.exec(blk)?.[1] || "") || 0;
+      if (post && text && at) out.push({ key: `tg:${post}`, source: `TG ${ch}`, title: text.slice(0, 400), url: `https://t.me/${post}`, at });
+    }
+    return out;
+  }));
+  return all.flat().filter((i) => Date.now() - i.at < 20 * 60_000);
+}
+
+/**
+ * Google News, searched with questions the AI writes itself: every 10 minutes it asks "what could move these
+ * markets right now?" and turns that into a few searches (plus fixed ones), so it hunts for news instead of only
+ * waiting for the feeds above.
+ */
+const askedAt = new Map<string, { at: number; qs: string[] }>();
+async function newsQuestions(coins: string[], fx: string[]): Promise<string[]> {
+  const k = `${T()}`;
+  const c = askedAt.get(k);
+  if (c && Date.now() - c.at < 10 * 60_000) return c.qs;
+  const fixed = fx.length ? ["forex dollar Fed", "EUR USD ECB", "USD JPY BoJ"] : ["crypto market news", "bitcoin price", ...coins.slice(0, 4).map((x) => `${x} crypto`)];
+  let qs = fixed;
+  if (process.env.ANTHROPIC_API_KEY) {
+    const msg = await anthropic().messages.create({
+      model: FAST_MODEL, max_tokens: 300,
+      system: `You are a ${fx.length ? "forex" : "crypto futures"} trader hunting for news that could move these markets in the next hour: ${fx.length ? fx.map((x) => x.replace(/^[^:]+:/, "")).join(", ") : coins.join(", ")}. Today is ${new Date().toUTCString()}. Ask yourself what could be happening right now (macro data, central banks, ETF flows, hacks, listings, regulation, liquidations, big wallets) and write 4 short Google News search queries (2-5 words each) to find out. Reply ONLY with a JSON array of strings.`,
+      messages: [{ role: "user", content: "What should I search for right now?" }],
+    } as any).catch(() => null);
+    const text = (msg as any)?.content?.find?.((b: any) => b.type === "text")?.text || "";
+    try { const a = JSON.parse(text.slice(text.indexOf("["), text.lastIndexOf("]") + 1)); if (Array.isArray(a)) qs = [...a.filter((x) => typeof x === "string").slice(0, 4), ...fixed.slice(0, 2)]; } catch { /* keep the fixed ones */ }
+  }
+  askedAt.set(k, { at: Date.now(), qs });
+  return qs;
+}
+async function googleNews(coins: string[], fx: string[]): Promise<Item[]> {
+  const qs = await newsQuestions(coins, fx);
+  const all = await Promise.all(qs.map(async (q) => {
+    const x = await fetch(`https://news.google.com/rss/search?q=${encodeURIComponent(`${q} when:1h`)}&hl=en-US&gl=US&ceid=US:en`, { cache: "no-store", signal: AbortSignal.timeout(6000), headers: { "user-agent": "Mozilla/5.0 AUTISTIK-Hub" } }).then((r) => (r.ok ? r.text() : "")).catch(() => "");
+    return (x.match(/<item[\s>][\s\S]*?<\/item>/gi) || []).slice(0, 8).map((it) => {
+      const link = tag(it, "link") || tag(it, "guid");
+      const src = tag(it, "source") || "Google News";
+      return { key: `g:${tag(it, "title")}`.slice(0, 300), source: src, title: tag(it, "title").slice(0, 300), url: link, at: Date.parse(tag(it, "pubDate")) || 0 };
+    });
+  }));
+  return all.flat().filter((i) => i.title && Date.now() - i.at < 45 * 60_000);
+}
+
 /** New headlines and X posts (each judged once), read by the AI: which coin, up or down, how strongly. */
 async function readNews(s: FSettings, m: Mkt): Promise<number> {
   const items: Item[] = [];
   const fx = s.venues.includes("forex") ? [...m.fx.keys()] : [];
-  if (s.use_news) items.push(...(await rss(fx.length > 0).catch(() => [])));
+  if (s.use_news) {
+    const [feeds, google, tg] = await Promise.all([
+      rss(fx.length > 0).catch(() => []),
+      googleNews(s.coins, fx).catch(() => []),
+      fx.length ? Promise.resolve([] as Item[]) : tgChannels().catch(() => []),
+    ]);
+    items.push(...feeds, ...google, ...tg);
+  }
   if (s.use_x && s.x_handles.length) {
     const posts = await accountPosts(s.x_handles.slice(0, 20)).catch(() => []);
     items.push(...posts.map((p) => ({ key: `x:${p.id}`, source: `@${p.user}`, title: p.text.slice(0, 400), url: p.url, at: p.at })));
   }
   if (!items.length) return 0;
   // Only ones not seen before: the insert decides (each item is judged once, even with two runs at once).
-  const { data: fresh } = await fq("ai_futures_news").upsert(items.slice(0, 40).map((i) => ({ key: i.key, source: i.source, title: i.title, url: i.url, at: new Date(i.at).toISOString() })), { onConflict: "fut_id,key", ignoreDuplicates: true }).select("key");
+  items.sort((a, b) => b.at - a.at);
+  const { data: fresh } = await fq("ai_futures_news").upsert(items.slice(0, 60).map((i) => ({ key: i.key, source: i.source, title: i.title, url: i.url, at: new Date(i.at).toISOString() })), { onConflict: "fut_id,key", ignoreDuplicates: true }).select("key");
   const keys = new Set((fresh || []).map((r: any) => r.key));
   const todo = items.filter((i) => keys.has(i.key)).slice(0, 20);
   if (!todo.length || !process.env.ANTHROPIC_API_KEY) return 0;
@@ -785,7 +853,7 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   if (les.stop) return `${label}: ${les.stop}`;
   const style = isMadDesk() ? "Madness desk: high leverage and a very tight stop are its FIXED design, chosen by the system so liquidation is always far past the stop, with the stop resting on the exchange and risk per trade capped by the account settings. Do NOT turn a trade down for its leverage, its stop size or its risk per trade. Judge only the direction: is price likely to move this way over the next minutes to an hour? A strong chart setup with no news against it is acceptable without fresh news; turn down only if the setup is weak, choppy, clearly late (already extended), or news points the other way"
     : isTurboDesk() ? "aggressive high-leverage momentum on the most-traded crypto perps; accepts more risk but still needs a real edge"
-    : isFxDesk() ? "conservative forex. Two kinds of trade: a news trade (fresh news, and the chart must lean the same way) and a chart-only trade (no fresh news in the last 30 minutes, which is normal for forex most of the day; the system has already checked there is no news against it). Do NOT turn a chart-only trade down just because there is no news. Turn down only if the chart setup is weak or choppy, the move is already extended, the risk/reward is poor, or news points the other way" : "careful crypto futures: news and chart together, protect the account first";
+    : isFxDesk() ? "conservative forex. Two kinds of trade: a news trade (fresh news, and the chart must lean the same way) and a chart-only trade (no fresh news in the last 30 minutes, which is normal for forex most of the day; the system has already checked there is no news against it). Do NOT turn a chart-only trade down just because there is no news. Turn down only if the chart setup is weak or choppy, the move is already extended, the risk/reward is poor, or news points the other way" : "active crypto futures: the owner wants it trading often. A news trade needs the chart not fighting it; a chart-only trade with no news against it is fine without fresh news. Risk per trade, the daily loss limit and losing streaks per coin are already handled by the system, so do NOT turn a trade down for a coin's few recent losses or for a tight stop. Turn down only if the setup is weak or choppy, the move is clearly already over, or news points the other way";
   const v = await secondOpinion(`${coin}:${side}`, style, {
     market: label, side, price, leverage: lev, stopPct: +(stopPct * 100).toFixed(2), targetPct: +(stopPct * (newsDriven ? 250 : 220)).toFixed(2),
     signal: why, tradeKind: newsDriven ? "news trade (fresh news, see signal)" : "chart-only trade",
@@ -948,12 +1016,13 @@ export async function runFutures(): Promise<string> {
       }
       // Strong news trades first, as long as the chart isn't clearly against it.
       const turbo = isTurboDesk(); // quicker, riskier entries
-      if (Math.abs(ns.score) >= (turbo ? 0.4 : 0.6) && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
+      const fut = isFutDesk(); // main Futures desk: trades more often (risk per trade and the daily loss limit are unchanged)
+      if (Math.abs(ns.score) >= (turbo ? 0.4 : fut ? 0.5 : 0.6) && !(Math.sign(t) === -Math.sign(ns.score) && Math.abs(t) >= 0.3)) {
         cands.push({ coin, side: ns.score > 0 ? "long" : "short", score: Math.abs(ns.score) + 0.5, why: `News: ${ns.why}${ta ? ` · chart: ${ta.notes.join(", ")}` : ""}`, news: true, ta });
         return;
       }
       const blended = ns.score ? 0.65 * t + 0.35 * ns.score : t;
-      if (ta && Math.abs(blended) >= (turbo ? 0.45 : 0.65)) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
+      if (ta && Math.abs(blended) >= (turbo ? 0.45 : fut ? 0.55 : 0.65)) cands.push({ coin, side: blended > 0 ? "long" : "short", score: Math.abs(blended), why: `Chart: ${ta.notes.join(", ")}${ns.score ? ` · news ${ns.score > 0 ? "+" : ""}${ns.score.toFixed(2)}` : ""}`, news: false, ta });
     }));
     cands.sort((a, b) => b.score - a.score);
     const notes: string[] = [];
