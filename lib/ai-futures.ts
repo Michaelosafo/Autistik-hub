@@ -785,10 +785,12 @@ async function open(s: FSettings, m: Mkt, eq: { total: number; free: number }, c
   if (les.stop) return `${label}: ${les.stop}`;
   const style = isMadDesk() ? "Madness desk: high leverage and a very tight stop are its FIXED design, chosen by the system so liquidation is always far past the stop, with the stop resting on the exchange and risk per trade capped by the account settings. Do NOT turn a trade down for its leverage, its stop size or its risk per trade. Judge only the direction: is price likely to move this way over the next minutes to an hour? A strong chart setup with no news against it is acceptable without fresh news; turn down only if the setup is weak, choppy, clearly late (already extended), or news points the other way"
     : isTurboDesk() ? "aggressive high-leverage momentum on the most-traded crypto perps; accepts more risk but still needs a real edge"
-    : isFxDesk() ? "conservative forex: news and chart must agree; avoid trading into big scheduled releases" : "careful crypto futures: news and chart together, protect the account first";
+    : isFxDesk() ? "conservative forex. Two kinds of trade: a news trade (fresh news, and the chart must lean the same way) and a chart-only trade (no fresh news in the last 30 minutes, which is normal for forex most of the day; the system has already checked there is no news against it). Do NOT turn a chart-only trade down just because there is no news. Turn down only if the chart setup is weak or choppy, the move is already extended, the risk/reward is poor, or news points the other way" : "careful crypto futures: news and chart together, protect the account first";
   const v = await secondOpinion(`${coin}:${side}`, style, {
     market: label, side, price, leverage: lev, stopPct: +(stopPct * 100).toFixed(2), targetPct: +(stopPct * (newsDriven ? 250 : 220)).toFixed(2),
-    signal: why, chartScore: ta?.score ?? null, chart: ta?.notes ?? [], fundingPerHour: f, recentTradesOnThisMarket: await coinHistory(s.mode, coin),
+    signal: why, tradeKind: newsDriven ? "news trade (fresh news, see signal)" : "chart-only trade",
+    newsLast30Min: newsDriven ? "fresh news supports this side (see signal)" : "no fresh market-moving news for this market in the last 30 minutes; none against this side",
+    chartScore: ta?.score ?? null, chart: ta?.notes ?? [], fundingPerHour: f, recentTradesOnThisMarket: await coinHistory(s.mode, coin),
     account: Math.round(eq.total), mode: s.mode,
   });
   if (!v.go) { await flog("skip", `🧠 Turned down ${side} ${label}: ${v.why}`); return `AI said no (${v.why})`; }
