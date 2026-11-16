@@ -12,6 +12,8 @@ import Ctl, { MicBtn } from "./Ctl";
 import LiveChatRaw from "./LiveChat";
 import WalletGate from "@/components/rooms/WalletGate";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { SfuPull, SfuPush, sfuReady, type PullWant } from "@/lib/sfu";
+import RoomMusic, { MusicPanel, type Music } from "./RoomMusic";
 
 export type LiveMe = { id: string; alias: string; color: string | null; avatar_url: string | null; is_verified?: boolean; verified_badge?: number | null;
   /** For the wallet in the room: the built-in wallet's app ID and the member's wallet details. */
@@ -20,7 +22,13 @@ export type LiveRoomInfo = { id: string; title: string; host_id: string; ended_a
 type Me = LiveMe;
 type Room = LiveRoomInfo;
 type Role = "host" | "cohost" | "speaker" | "listener";
-type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number; ver?: boolean; vb?: number | null; hid?: boolean };
+type Peer = { id: string; alias: string; color: string | null; avatar_url: string | null; role: Role; hand: boolean; muted: boolean; at: number; ver?: boolean; vb?: number | null; hid?: boolean;
+  /** Through the voice relay: the speaker's relay session and the tracks they send (mic, cam, music, mv). */
+  sf?: { s: string; t: string[] } | null;
+  /** What this host / co-host is playing for the room. */
+  mus?: Music | null };
+/** A live this big switches to crowd mode: plain listeners check in every 30 s instead of live presence. */
+const CROWD = 120;
 
 // Connection helpers. STUN finds each phone's public address; a TURN relay (from /api/rooms/ice, when set up) carries
 // the voice when two networks won't connect directly, which is common on mobile data.
@@ -159,6 +167,24 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
 
   const chan = useRef<any>(null);
   const mic = useRef<MediaStream | null>(null);
+  // Voice relay (big lives): one connection up for my tracks, one down for everyone on stage.
+  const sfu = useRef(false);
+  const push = useRef<SfuPush | null>(null);
+  const pull = useRef<SfuPull | null>(null);
+  const sfuMeta = useRef<{ s: string; t: string[] } | null>(null);
+  // Room music (host / co-hosts): what's playing, and the device song's sound and picture going to the relay.
+  const [music, setMusic] = useState<Music | null>(null); // what I'm playing
+  const musicRef = useRef<Music | null>(null); musicRef.current = music;
+  const musicTrack = useRef<MediaStreamTrack | null>(null);
+  const musicVideo = useRef<MediaStreamTrack | null>(null);
+  const musicEl = useRef<HTMLMediaElement | null>(null);
+  const [musicStreams, setMusicStreams] = useState<Record<string, MediaStream>>({}); // from → song picture (video songs)
+  const [musicPanel, setMusicPanel] = useState(false);
+  // Crowd mode: the room's real size (from check-ins) and the listeners not on live presence.
+  const [crowd, setCrowd] = useState<{ count: number; people: Peer[] }>({ count: 0, people: [] });
+  const crowdMode = sfu.current && crowd.count >= CROWD;
+  const crowdRef = useRef(false); crowdRef.current = crowdMode;
+  const tracked = useRef(false);
   const pcs = useRef(new Map<string, RTCPeerConnection>()); // key: "from>to"
   const voices = useRef(new Map<string, MediaStream>()); // incoming voices, for the recording
   const mixCtx = useRef<AudioContext | null>(null);
@@ -229,7 +255,10 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     try { mixSrc.current.get(key)?.disconnect(); } catch {}
     mixSrc.current.delete(key);
     const [from, to] = key.split(">");
-    if (to === me.id) {
+    if (to === me.id && from.endsWith("~m")) {
+      const f = from.slice(0, -2);
+      setMusicStreams((v) => { if (!v[f]) return v; const n = { ...v }; delete n[f]; return n; });
+    } else if (to === me.id) {
       setVideos((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
       levels.current.get(from)?.(); levels.current.delete(from);
     }
@@ -310,6 +339,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
 
   // I'm on stage: send my microphone (and camera, if on) to one person.
   async function callPeer(to: string) {
+    if (sfu.current) return; // the relay carries my voice to everyone (sfuSend)
     if (!mic.current || to === me.id) return;
     await loadIce();
     if (!mic.current) return;
@@ -322,6 +352,111 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     send("offer", { to, key, sdp: pc.localDescription });
     // No answer (the message got lost, or they weren't ready yet): call again.
     setTimeout(() => { if (pcs.current.get(key) === pc && pc.signalingState === "have-local-offer") retry(key, to); }, 6000);
+  }
+
+  // ---- Voice relay (big lives) ----
+  const sendTries = useRef(0);
+  const sending = useRef<Promise<void> | null>(null);
+  /** Send my tracks (mic, camera, room music) up to the relay, then tell the room where to find them. */
+  function sfuSend(): Promise<void> {
+    if (!sfu.current || !joinedRef.current) return Promise.resolve();
+    const run = (sending.current || Promise.resolve()).then(async () => {
+      const wantMic = !!mic.current && canSpeakRef.current;
+      const wantMusic = !!musicTrack.current && runners().includes(me.id);
+      if (!wantMic && !wantMusic) {
+        if (push.current) { push.current.close(); push.current = null; }
+        if (sfuMeta.current) { sfuMeta.current = null; await track(myRoleRef.current, hand, mutedRef.current); }
+        return;
+      }
+      try {
+        if (!push.current) {
+          await loadIce();
+          const p = new SfuPush({ roomId: room.id, ice: ICE, onFail: () => { if (push.current !== p) return; p.close(); push.current = null; setTimeout(() => { sfuSend(); }, 1000); } });
+          await p.open(); push.current = p;
+        }
+        const p = push.current;
+        const a = wantMic ? mic.current!.getAudioTracks()[0] : null;
+        const v = wantMic ? mic.current!.getVideoTracks()[0] : null;
+        if (a) await p.publish("mic", a, 40_000); else if (p.has("mic")) await p.unpublish("mic");
+        if (v) await p.publish("cam", v, 600_000); else if (p.has("cam")) await p.unpublish("cam");
+        if (wantMusic) await p.publish("music", musicTrack.current!, 128_000); else if (p.has("music")) await p.unpublish("music");
+        if (wantMusic && musicVideo.current) await p.publish("mv", musicVideo.current, 900_000); else if (p.has("mv")) await p.unpublish("mv");
+        const t = ["mic", "cam", "music", "mv"].filter((n) => p.has(n));
+        sfuMeta.current = { s: p.sessionId, t };
+        sendTries.current = 0;
+        await track(myRoleRef.current, false, mutedRef.current);
+      } catch {
+        const n = ++sendTries.current;
+        if (push.current) { push.current.close(); push.current = null; }
+        if (n <= 6) { setMsg("Connecting your voice…"); setTimeout(() => { sfuSend(); }, 1500 * n); }
+        else setMsg("Your voice couldn't reach the room. Check your internet, or leave and rejoin.");
+      }
+    });
+    sending.current = run.catch(() => {});
+    return run;
+  }
+
+  /** A speaker's track arrived from the relay. */
+  function onRelayTrack(key: string, t: MediaStreamTrack) {
+    const [from, name] = key.split("|");
+    if (name === "cam" || name === "mv") {
+      const st = new MediaStream([t]);
+      if (name === "cam") setVideos((v) => ({ ...v, [from]: st })); else setMusicStreams((v) => ({ ...v, [from]: st }));
+      return;
+    }
+    const pk = name === "music" ? `${from}~m>${me.id}` : `${from}>${me.id}`;
+    let a = audios.current.get(pk);
+    if (!a) { a = takeAudio(); audios.current.set(pk, a); }
+    const st = new MediaStream([t]);
+    a.srcObject = st;
+    voices.current.set(pk, st);
+    if (recorder.current) mixIn(pk, st);
+    a.play().catch(() => setNeedTap(true));
+    if (name === "mic") watchLevel(from, st);
+  }
+  function dropRelay(key: string) {
+    const [from, name] = key.split("|");
+    if (name === "cam") setVideos((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
+    else if (name === "mv") setMusicStreams((v) => { if (!v[from]) return v; const n = { ...v }; delete n[from]; return n; });
+    else closePc(name === "music" ? `${from}~m>${me.id}` : `${from}>${me.id}`);
+  }
+  const pulling = useRef(false);
+  /** Receive exactly the tracks of the people on stage (and room music), over one relay connection. */
+  async function syncPulls() {
+    if (!sfu.current || !joinedRef.current || pulling.current) return;
+    pulling.current = true;
+    try {
+      const here = peersRef.current;
+      const want: PullWant[] = [];
+      for (const p of Object.values(here)) {
+        if (p.id === me.id || !p.sf?.s || !onStageNow(p.id)) continue;
+        for (const t of p.sf.t) if (/^(mic|cam|music|mv)$/.test(t)) want.push({ key: `${p.id}|${t}`, sessionId: p.sf.s, trackName: t });
+      }
+      if (!pull.current) {
+        if (!want.length) return;
+        await loadIce();
+        const pl: SfuPull = new SfuPull({ roomId: room.id, ice: ICE, onTrack: onRelayTrack, onFail: () => {
+          if (pull.current !== pl) return;
+          pl.keys().forEach(dropRelay); pl.close(); pull.current = null;
+          setTimeout(() => { syncPulls(); }, 1000);
+        } });
+        await pl.open(); pull.current = pl;
+      }
+      const pl = pull.current;
+      const wk = new Set(want.map((w) => w.key));
+      // Off stage, or stopped a track: stop now. Gone from the room: give a blip 15 s before hanging up.
+      const off = pl.keys().filter((k) => !wk.has(k) && here[k.split("|")[0]]);
+      const away = pl.keys().filter((k) => !wk.has(k) && !here[k.split("|")[0]]);
+      if (off.length) { off.forEach(dropRelay); pl.drop(off); }
+      if (away.length) setTimeout(() => {
+        const still = away.filter((k) => pull.current === pl && !peersRef.current[k.split("|")[0]]);
+        if (still.length) { still.forEach(dropRelay); pl.drop(still); }
+      }, 15_000);
+      const fresh = want.filter((w) => { const c = pl.current(w.key); return !c || c.sessionId !== w.sessionId; });
+      if (fresh.length) await pl.pull(fresh);
+    } catch {
+      setTimeout(() => { syncPulls(); }, 3000);
+    } finally { pulling.current = false; }
   }
 
   // Who's talking: a simple loudness meter per voice, all on one shared audio engine (phones allow only a few).
@@ -377,6 +512,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       setCam(false);
       send("cam", { on: false });
     }
+    if (sfu.current) { sfuSend(); return; }
     Object.keys(peers).forEach((id) => { if (id !== me.id) callPeer(id); });
   }
 
@@ -386,6 +522,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     mic.current = null;
     levels.current.get(me.id)?.();
     for (const k of [...pcs.current.keys()]) if (k.startsWith(`${me.id}>`)) closePc(k);
+    if (sfu.current && joinedRef.current) sfuSend();
   }
 
   const runners = () => [room.host_id, ...cohostsRef.current];
@@ -394,6 +531,20 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     if (chan.current) return;
     if (!joinedRef.current) { if (joining) return; setMsg(""); setJoining(true); }
     unlockAudio();
+    if (!joinedRef.current) {
+      sfu.current = await sfuReady(room.id);
+      // Big live: learn its size before going on presence, so a crowd of listeners doesn't flood everyone's phone.
+      if (sfu.current && !isHost) {
+        try {
+          const j = await fetch(`/api/rooms/${room.id}/here`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hidden: hiddenRef.current }) }).then((r) => r.json());
+          if (j && Array.isArray(j.people)) {
+            const c = { count: Number(j.count) || 0, people: j.people.map((p: any) => ({ ...p, role: "listener" as Role, hand: false, muted: true, at: 0 })) };
+            setCrowd(c); crowdRef.current = c.count >= CROWD;
+          }
+        } catch { /* small-room behaviour */ }
+      }
+    }
+    if (chan.current) return;
     const sb = supabaseBrowser();
     // A leftover connection to this room (left earlier, or a dropped one) would be handed back instead of a new one.
     for (const c of sb.getChannels()) if ((c as any).topic === `realtime:room:${room.id}`) { try { sb.removeChannel(c); } catch {} }
@@ -402,7 +553,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     ch.on("presence", { event: "sync" }, () => {
       const st = ch.presenceState() as Record<string, any[]>;
       const next: Record<string, Peer> = {};
-      for (const [id, metas] of Object.entries(st)) { const m = metas[metas.length - 1]; if (m) next[id] = { id, alias: m.alias, color: m.color, avatar_url: m.avatar_url, role: m.role, hand: !!m.hand, muted: !!m.muted, at: m.at || 0, ver: !!m.ver, vb: m.vb ?? null, hid: !!m.hid }; }
+      for (const [id, metas] of Object.entries(st)) { const m = metas[metas.length - 1]; if (m) next[id] = { id, alias: m.alias, color: m.color, avatar_url: m.avatar_url, role: m.role, hand: !!m.hand, muted: !!m.muted, at: m.at || 0, ver: !!m.ver, vb: m.vb ?? null, hid: !!m.hid, sf: m.sf || null, mus: m.mus || null }; }
       setPeers(next);
       // Presence can blink (a reconnect, a phone switching network): only hang up on someone still gone 15s later.
       const gone = [...pcs.current.keys()].filter((k) => { const [a, b] = k.split(">"); return !next[a] || !next[b]; });
@@ -534,7 +685,15 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   myRoleRef.current = myRole;
   async function track(role: Role, h: boolean, m: boolean) {
     const hid = hiddenRef.current && role === "listener"; // speakers are always shown
-    await chan.current?.track({ alias: hid ? "Hidden listener" : me.alias, color: hid ? "#6b6480" : me.color, avatar_url: hid ? null : me.avatar_url, ver: hid ? false : !!me.is_verified, vb: hid ? null : me.verified_badge ?? null, hid, role, hand: h, muted: m, at: Date.now(), ...(isHost ? { speakers: speakersRef.current, cohosts: cohostsRef.current, rec: !!recorder.current, open: openRef.current } : {}) });
+    // Crowd mode: a plain listener stays off live presence (the check-ins count them); a raised hand goes on it.
+    if (crowdRef.current && role === "listener" && !h && !isHost) {
+      if (tracked.current) { tracked.current = false; await chan.current?.untrack?.().catch?.(() => {}); }
+      return;
+    }
+    tracked.current = true;
+    const mine = role !== "listener" || isHost ? sfuMeta.current : null;
+    const canMus = isHost || cohostsRef.current.includes(me.id);
+    await chan.current?.track({ ...(mine ? { sf: mine } : {}), ...(canMus && musicRef.current ? { mus: musicRef.current } : {}), alias: hid ? "Hidden listener" : me.alias, color: hid ? "#6b6480" : me.color, avatar_url: hid ? null : me.avatar_url, ver: hid ? false : !!me.is_verified, vb: hid ? null : me.verified_badge ?? null, hid, role, hand: h, muted: m, at: Date.now(), ...(isHost ? { speakers: speakersRef.current, cohosts: cohostsRef.current, rec: !!recorder.current, open: openRef.current } : {}) });
   }
 
   // Back to the site after leaving it: go straight back into the live you were in.
@@ -549,7 +708,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     if (!joined) return;
     (async () => {
       if (canSpeak) {
-        if (await startMic()) Object.keys(peers).forEach((id) => { if (id !== me.id && !pcs.current.has(`${me.id}>${id}`)) callPeer(id); });
+        if (await startMic()) { if (sfu.current) await sfuSend(); else Object.keys(peers).forEach((id) => { if (id !== me.id && !pcs.current.has(`${me.id}>${id}`)) callPeer(id); }); }
         setPeers((p) => ({ ...p }));
         setHand(false);
         if (!isHost && !wasSpeaker.current) setMsg("You're on stage. Tap the mic under your picture to talk.");
@@ -561,7 +720,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
 
   // Everyone on stage sends their voice to everyone in the room, including people who join later.
   useEffect(() => {
-    if (!joined || !canSpeak || !mic.current) return;
+    if (!joined || !canSpeak || !mic.current || sfu.current) return;
     Object.keys(peers).forEach((id) => { if (id !== me.id && !pcs.current.has(`${me.id}>${id}`)) callPeer(id); });
   }, [peers, joined, canSpeak]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -570,6 +729,95 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     for (const k of [...pcs.current.keys()]) { const [from, to] = k.split(">"); if (to === me.id && !onStageNow(from)) closePc(k); }
   }, [speakers, cohosts]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Relay: who's on stage (or what they send) changed, so receive exactly their tracks.
+  useEffect(() => { if (joined && sfu.current) syncPulls(); }, [peers, speakers, cohosts, joined]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Check-ins (every ~30 s): the real room size, and the listeners who stay off live presence in a big live.
+  useEffect(() => {
+    if (!joined) return;
+    let stop = false, t: ReturnType<typeof setTimeout>;
+    const beat = async () => {
+      try {
+        const r = await fetch(`/api/rooms/${room.id}/here`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hidden: hiddenRef.current }) });
+        const j = await r.json().catch(() => null);
+        if (!stop && j && Array.isArray(j.people)) setCrowd({ count: Number(j.count) || 0, people: j.people.map((p: any) => ({ ...p, role: "listener", hand: false, muted: true, at: 0 })) });
+      } catch { /* next time */ }
+      if (!stop) t = setTimeout(beat, 25_000 + Math.random() * 10_000); // spread out, so 1,000 phones don't all check in at once
+    };
+    t = setTimeout(beat, 1500 + Math.random() * 4000);
+    return () => { stop = true; clearTimeout(t); };
+  }, [joined]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The live just got big (or small again): plain listeners leave (or rejoin) live presence.
+  useEffect(() => { if (joined) track(myRoleRef.current, hand, mutedRef.current); }, [crowdMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- Room music (host and co-hosts) ----
+  /** Play a link for everyone (YouTube, Vimeo, SoundCloud, Spotify…): it shows like a video on everyone's screen. */
+  async function playLink(m: Music) {
+    stopDeviceMusic();
+    setMusic(m); musicRef.current = m;
+    await track(myRoleRef.current, false, mutedRef.current);
+    setMusicPanel(false);
+  }
+  /** Play a song or video from this phone straight into the room. */
+  async function playFile(f: File) {
+    if (!sfu.current) { setMsg("Playing from your phone needs the voice relay switched on. Paste a YouTube link instead."); return; }
+    stopDeviceMusic();
+    const isVid = f.type.startsWith("video/");
+    const el = document.createElement(isVid ? "video" : "audio") as HTMLMediaElement;
+    el.src = URL.createObjectURL(f); (el as any).playsInline = true; el.setAttribute("playsinline", ""); el.crossOrigin = "anonymous";
+    try {
+      const ctx = meterCtx(); if (ctx.state === "suspended") await ctx.resume();
+      const src = ctx.createMediaElementSource(el);
+      const dest = ctx.createMediaStreamDestination();
+      src.connect(dest); src.connect(ctx.destination); // the room hears it, and so do you
+      await el.play();
+      musicEl.current = el;
+      musicTrack.current = dest.stream.getAudioTracks()[0] || null;
+      // A video file: its picture goes too, where the browser can capture it.
+      if (isVid) { try { const cs = (el as any).captureStream?.() || (el as any).mozCaptureStream?.(); musicVideo.current = cs?.getVideoTracks?.()[0] || null; } catch { musicVideo.current = null; } }
+      el.onended = () => { stopMusic(); };
+      const m: Music = { k: "file", t: f.name.replace(/\.[a-z0-9]{2,5}$/i, "").slice(0, 80), at: Date.now(), by: me.alias, vid: !!musicVideo.current };
+      setMusic(m); musicRef.current = m;
+      setMusicPanel(false);
+      await sfuSend();
+    } catch {
+      try { URL.revokeObjectURL(el.src); } catch {}
+      setMsg("That file couldn't play here. Try an MP3, M4A or MP4.");
+    }
+  }
+  function stopDeviceMusic() {
+    const el = musicEl.current; musicEl.current = null;
+    if (el) { try { el.pause(); URL.revokeObjectURL(el.src); } catch {} }
+    try { musicTrack.current?.stop(); musicVideo.current?.stop(); } catch {}
+    musicTrack.current = null; musicVideo.current = null;
+  }
+  async function stopMusic() {
+    const had = !!musicTrack.current;
+    stopDeviceMusic();
+    setMusic(null); musicRef.current = null;
+    if (had) await sfuSend();
+    await track(myRoleRef.current, false, mutedRef.current);
+  }
+  function pauseMusic() {
+    const el = musicEl.current; if (!el) return;
+    if (el.paused) el.play().catch(() => {}); else el.pause();
+    const m = musicRef.current; if (m) { const nm = { ...m, paused: el.paused }; setMusic(nm); musicRef.current = nm; track(myRoleRef.current, false, mutedRef.current); }
+  }
+  // What the room is playing: the newest from the host or a co-host.
+  const roomMusic = useMemo(() => {
+    let best: (Music & { from: string }) | null = music ? { ...music, from: me.id } : null;
+    for (const p of Object.values(peers)) {
+      if (p.id === me.id || !p.mus || !(p.id === room.host_id || cohosts.includes(p.id))) continue;
+      if (!best || p.mus.at > best.at) best = { ...p.mus, from: p.id };
+    }
+    return best;
+  }, [peers, music, cohosts]); // eslint-disable-line react-hooks/exhaustive-deps
+  const musicVol = useRef(1);
+  function setMusicVolume(v: number) {
+    musicVol.current = v;
+    audios.current.forEach((a, k) => { if (k.includes("~m>")) a.volume = v; });
+  }
+
   // Not hearing someone on stage (a connection message got lost, or their link dropped): ask them to send their voice
   // again. Checked every 8 s, at most once every 15 s per speaker. Also wakes any voice the phone paused.
   const askedAt = useRef(new Map<string, number>());
@@ -577,7 +825,8 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     if (!joined) return;
     const t = setInterval(() => {
       const here = peersRef.current;
-      for (const id of new Set([room.host_id, ...cohostsRef.current, ...speakersRef.current])) {
+      if (sfu.current) syncPulls(); // relay: make sure every voice on stage is coming in
+      else for (const id of new Set([room.host_id, ...cohostsRef.current, ...speakersRef.current])) {
         if (id === me.id || !here[id]) continue;
         const pc = pcs.current.get(`${id}>${me.id}`);
         if (pc && (pc.connectionState === "connected" || pc.connectionState === "connecting")) continue;
@@ -693,9 +942,14 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   const [left, setLeft] = useState(false);
   function leave(forget = true) {
     clearTimeout(watchdog.current); live.current = false;
+    joinedRef.current = false;
     try { wake.current?.release(); } catch {} wake.current = null;
+    stopDeviceMusic(); setMusic(null); musicRef.current = null;
     stopMic();
     for (const k of [...pcs.current.keys()]) closePc(k);
+    if (pull.current) { pull.current.keys().forEach(dropRelay); pull.current.close(); pull.current = null; }
+    if (push.current) { push.current.close(); push.current = null; }
+    sfuMeta.current = null; tracked.current = false;
     levels.current.forEach((f) => f()); levels.current.clear();
     // Remove the room connection completely (not just switch it off): opening the live again must get a fresh one.
     const old = chan.current; chan.current = null;
@@ -844,6 +1098,10 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
 
   // ---- reactions
   const fk = useRef(0);
+  // Each reaction goes to everyone in the room, so in a big live only a share of taps is sent (about one a second for
+  // the whole room); you always see your own. Stage people's reactions always go.
+  const countRef = useRef(0);
+  const share = () => canSpeakRef.current || Math.random() < Math.min(1, 25 / Math.max(1, countRef.current));
   const myName = () => (hiddenRef.current && !canSpeakRef.current ? "Someone" : me.alias);
   function float(e: string, n?: string) {
     const k = ++fk.current;
@@ -853,7 +1111,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   }
   // Reactions show on your screen every tap, but go to the room at most ~4 a second (keeps it under rate limits).
   const lastSend = useRef(0);
-  const react = (e: string) => { float(e, "You"); const t = Date.now(); if (t - lastSend.current > 250) { lastSend.current = t; send("react", { e, n: myName() }); } };
+  const react = (e: string) => { float(e, "You"); const t = Date.now(); if (t - lastSend.current > 250 && share()) { lastSend.current = t; send("react", { e, n: myName() }); } };
   const blazeT = useRef<any>(null);
   function fireBurst(who?: string, fromId?: string) {
     setFires((n) => n + 1);
@@ -873,14 +1131,21 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     blazeT.current = setTimeout(() => setBlaze(false), 1400);
   }
   const lastFire = useRef(0);
-  const moreFire = () => { fireBurst("You", hiddenRef.current && !canSpeakRef.current ? "" : me.id); const t = Date.now(); if (t - lastFire.current > 350) { lastFire.current = t; send("fire", { n: myName() }); } try { navigator.vibrate?.(30); } catch {} };
+  const moreFire = () => { fireBurst("You", hiddenRef.current && !canSpeakRef.current ? "" : me.id); const t = Date.now(); if (t - lastFire.current > 350 && share()) { lastFire.current = t; send("fire", { n: myName() }); } try { navigator.vibrate?.(30); } catch {} };
 
-  const list = useMemo(() => Object.values(peers).sort((a, b) => a.at - b.at), [peers]);
+  // Everyone on live presence, plus (in a big live) the listeners known from check-ins.
+  const list = useMemo(() => {
+    const out = Object.values(peers).sort((a, b) => a.at - b.at);
+    if (crowd.people.length) { const seen = new Set(out.map((p) => p.id)); for (const p of crowd.people) if (!seen.has(p.id)) out.push(p); }
+    return out;
+  }, [peers, crowd.people]);
+  const roomCount = Math.max(list.length, crowd.count);
+  countRef.current = roomCount;
   const onStage = list.filter((p) => roleOf(p.id) !== "listener").sort((a, b) => ["host", "cohost", "speaker"].indexOf(roleOf(a.id)) - ["host", "cohost", "speaker"].indexOf(roleOf(b.id)));
   const audience = list.filter((p) => roleOf(p.id) === "listener");
   // What the floating window shows (read by its drawing timer).
   pipInfo.current = { title: room.title, speaking: onStage.filter((p) => talking[p.id] && !p.muted).map((p) => (p.id === me.id ? "You" : p.alias)).slice(0, 2).join(", "),
-    count: list.length, muted, canSpeak };
+    count: roomCount, muted, canSpeak };
   try { (navigator as any).mediaSession?.setMicrophoneActive?.(canSpeak && !muted); } catch {}
   const hands = audience.filter((p) => p.hand);
   const badge = { host: "Host", cohost: "Co-host", speaker: "Speaker", listener: "" } as const;
@@ -943,15 +1208,15 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       {mini ? (
         <Link href={`/spaces/${room.id}`} className="lv-mini-t" title="Open the live">
           <span className="room-live"><i />Live</span>
-          <span className="lv-mini-txt"><b>{room.title}</b><small>{onStage.filter((p) => talking[p.id] && !p.muted).map((p) => p.alias).slice(0, 2).join(", ") || `${list.length} here`}{recOn ? " · 🔴 REC" : ""}</small></span>
+          <span className="lv-mini-txt"><b>{room.title}</b><small>{onStage.filter((p) => talking[p.id] && !p.muted).map((p) => p.alias).slice(0, 2).join(", ") || `${fmt(roomCount)} here`}{recOn ? " · 🔴 REC" : ""}</small></span>
         </Link>
       ) : (
         <div className="lv-top">
           <span className="room-live"><i />Live</span>
           <h1>{room.title}</h1>
           <div className="lv-count">
-            <b>👥 {list.length} in the room</b>
-            <small className="muted">🎙 {onStage.length} speaking · 🎧 {audience.length} listening{openMic ? " · Open mic" : ""}</small>
+            <b>👥 {fmt(roomCount)} in the room</b>
+            <small className="muted">🎙 {onStage.length} speaking · 🎧 {fmt(Math.max(audience.length, roomCount - onStage.length))} listening{openMic ? " · Open mic" : ""}</small>
             {joined && <button type="button" className="lv-mini-btn" onClick={() => setShowAll(true)}>See all</button>}
             {joined && canRun && hands.length > 0 && !openMic && <button type="button" className="lv-mini-btn hand" onClick={() => document.querySelector(".lv-hands")?.scrollIntoView({ behavior: "smooth", block: "center" })}>✋ {hands.length} want{hands.length === 1 ? "s" : ""} to speak</button>}
             {joined && !canSpeak && <button type="button" className="lv-mini-btn" onClick={toggleHide} aria-pressed={hidden}>{hidden ? "👁 Show me" : "🙈 Hide me"}</button>}
@@ -991,6 +1256,11 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
             </div>
           )}
           {drop && <div className="room-drop-banner" role="status">{drop} <small>Check your wallet.</small></div>}
+          {roomMusic && (
+            <RoomMusic music={roomMusic} mine={roomMusic.from === me.id} picture={roomMusic.from === me.id ? null : musicStreams[roomMusic.from] || null}
+              onStop={roomMusic.from === me.id ? stopMusic : undefined} onPause={roomMusic.from === me.id && roomMusic.k === "file" ? pauseMusic : undefined}
+              onVolume={roomMusic.from !== me.id && roomMusic.k === "file" ? setMusicVolume : undefined} />
+          )}
           {(cam || Object.keys(videos).length > 0) && (
             <section className="room-videos" aria-label="Video">
               {cam && mic.current && <VideoTile stream={mic.current} mine label="You" />}
@@ -1003,8 +1273,10 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
               <small>Host controls</small>
               <button type="button" className="btn small" onClick={muteAll} disabled={onStage.filter((p) => p.id !== me.id && !p.muted).length === 0}>🔇 Mute everyone</button>
               {isHost && <button type="button" className={"btn small" + (openMic ? " primary" : "")} onClick={toggleOpen} aria-pressed={openMic}>{openMic ? "🎙️ Open mic: on" : "✋ Invite only"}</button>}
+              <button type="button" className={"btn small" + (music ? " primary" : "")} onClick={() => setMusicPanel((v) => !v)} aria-expanded={musicPanel}>🎵 {music ? "Music: on" : "Music"}</button>
             </div>
           )}
+          {canRun && musicPanel && <MusicPanel me={me.alias} canFile={sfu.current} playing={!!music} onLink={playLink} onFile={playFile} onStop={stopMusic} onClose={() => setMusicPanel(false)} />}
 
           <section className={"lv-stage" + (onStage.length > 4 ? " dense" : "")} aria-label="On stage">
             {onStage.map((p) => {
@@ -1112,7 +1384,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
       {!mini && showAll && (
         <div className="lv-all-bg" onClick={() => setShowAll(false)}>
           <div className="lv-all" role="dialog" aria-modal="true" aria-label="Everyone in the room" onClick={(e) => e.stopPropagation()}>
-            <div className="lv-all-h"><b>👥 {list.length} in the room</b><button type="button" className="lv-mini-btn" onClick={() => setShowAll(false)}>Close</button></div>
+            <div className="lv-all-h"><b>👥 {fmt(roomCount)} in the room</b><button type="button" className="lv-mini-btn" onClick={() => setShowAll(false)}>Close</button></div>
             <input className="input" placeholder="Search names" value={allQ} onChange={(e) => setAllQ(e.target.value)} aria-label="Search people in the room" />
             <div className="lv-all-list">
               {[...onStage, ...audience].filter((p) => !allQ.trim() || p.alias.toLowerCase().includes(allQ.trim().toLowerCase())).map((p) => {
