@@ -64,11 +64,17 @@ export function rememberedLive(): { id: string; title: string; t: number } | nul
  * voice to everyone in the room separately, so a lighter voice lets many more people hear everyone without the phone's
  * upload choking (that's what cut people out before). Written into the connection offer / answer.
  */
+/**
+ * Phone-to-phone voice: the more people listening, the lighter each copy, so a speaker's phone keeps up.
+ * Opus stays clear for speech down to 16 kbps.
+ */
+let voiceKbps = 32;
+export function setVoiceFor(listeners: number) { voiceKbps = listeners > 60 ? 16 : listeners > 25 ? 20 : listeners > 10 ? 24 : 32; }
 function lightVoice(sdp?: string) {
   if (!sdp) return sdp;
   const m = /a=rtpmap:(\d+) opus\/48000[^\r\n]*/i.exec(sdp);
   if (!m) return sdp;
-  const pt = m[1], add = ["maxaveragebitrate=32000", "stereo=0", "sprop-stereo=0", "useinbandfec=1", "usedtx=1"];
+  const pt = m[1], add = [`maxaveragebitrate=${voiceKbps * 1000}`, "stereo=0", "sprop-stereo=0", "useinbandfec=1", "usedtx=1"];
   const re = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
   if (re.test(sdp)) return sdp.replace(re, (_l, p: string) => `a=fmtp:${pt} ${[...p.split(";").map((x) => x.trim()).filter((x) => x && !/^(maxaveragebitrate|stereo|sprop-stereo|useinbandfec|usedtx)=/.test(x)), ...add].join(";")}`);
   return sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} ${add.join(";")}`);
@@ -80,7 +86,7 @@ function voiceFirst(pc: RTCPeerConnection) {
     try {
       const p = snd.getParameters();
       if (!p.encodings?.length) p.encodings = [{}];
-      p.encodings[0].maxBitrate = 32_000;
+      p.encodings[0].maxBitrate = voiceKbps * 1000;
       (p.encodings[0] as any).priority = "high"; (p.encodings[0] as any).networkPriority = "high";
       snd.setParameters(p).catch(() => {});
     } catch { /* older browser: the offer / answer cap still applies */ }
@@ -341,6 +347,7 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
   async function callPeer(to: string) {
     if (sfu.current) return; // the relay carries my voice to everyone (sfuSend)
     if (!mic.current || to === me.id) return;
+    setVoiceFor(Object.keys(peersRef.current).length);
     await loadIce();
     if (!mic.current) return;
     const key = `${me.id}>${to}`;
