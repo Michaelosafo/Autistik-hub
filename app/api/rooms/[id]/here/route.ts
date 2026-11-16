@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LIST = 200; // listeners shown in the room (the count covers everyone)
+/** Most people in one live at a time (Supabase Free allows 200 live connections for the whole site). */
+const MAX_ROOM = Number(process.env.LIVE_MAX_PEOPLE || 200);
 
 /** The room count and the listener list, worked out once every 10 seconds per room (not once per member). */
 const cache = new Map<string, { at: number; count: number; people: any[] }>();
@@ -20,8 +22,19 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!user) return json({ error: "Sign in first." }, 401);
   const b: any = await req.json().catch(() => ({}));
   const sb = supabaseService();
-  const { data: room } = await sb.from("live_rooms").select("id,ended_at").eq("id", params.id).maybeSingle();
+  const { data: room } = await sb.from("live_rooms").select("id,ended_at,host_id,cohosts,speakers").eq("id", params.id).maybeSingle();
   if (!room || room.ended_at) return json({ ended: true }, 410);
+  // Room cap: a full live turns new people away (the host, co-hosts, speakers and anyone already in always get in).
+  const stage = room.host_id === user.id || (room.cohosts || []).includes(user.id) || (room.speakers || []).includes(user.id);
+  if (!stage) {
+    const since = new Date(Date.now() - 75_000).toISOString();
+    const { data: mine } = await sb.from("live_room_attendance").select("last_seen").eq("room_id", params.id).eq("user_id", user.id).maybeSingle();
+    const inAlready = !!mine?.last_seen && mine.last_seen >= since;
+    if (!inAlready) {
+      const { count: active } = await sb.from("live_room_attendance").select("user_id", { count: "exact", head: true }).eq("room_id", params.id).gte("last_seen", since);
+      if ((active || 0) >= MAX_ROOM) return json({ full: true, max: MAX_ROOM });
+    }
+  }
   // Only someone who opened the room (the page records that, and checks private access) can check in.
   const { error, count: n } = await sb.from("live_room_attendance").update({ last_seen: new Date().toISOString(), hidden: !!b.hidden }, { count: "exact" }).eq("room_id", params.id).eq("user_id", user.id);
   if (error || !n) return json({ error: "Open the live first." }, 403);
