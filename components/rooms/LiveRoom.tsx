@@ -533,13 +533,14 @@ export default function LiveRoom({ room, me, mini = false, autoJoin = false, onS
     unlockAudio();
     if (!joinedRef.current) {
       sfu.current = await sfuReady(room.id);
-      // Big live: learn its size before going on presence, so a crowd of listeners doesn't flood everyone's phone.
-      if (sfu.current && !isHost) {
+      // Learn the live's size first: a full live says so, and a big one keeps listeners off live presence.
+      if (!isHost) {
         try {
           const j = await fetch(`/api/rooms/${room.id}/here`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ hidden: hiddenRef.current }) }).then((r) => r.json());
+          if (j?.full) { setMsg(`This live is full (${j.max} people). Try again in a little while.`); setJoining(false); return; }
           if (j && Array.isArray(j.people)) {
             const c = { count: Number(j.count) || 0, people: j.people.map((p: any) => ({ ...p, role: "listener" as Role, hand: false, muted: true, at: 0 })) };
-            setCrowd(c); crowdRef.current = c.count >= CROWD;
+            setCrowd(c); crowdRef.current = sfu.current && c.count >= CROWD;
           }
         } catch { /* small-room behaviour */ }
       }
