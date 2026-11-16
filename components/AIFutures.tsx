@@ -804,7 +804,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       <section className="card stack">
         <b>📰 News the AI acted on</b>
         {!d.news.length ? <small className="muted">Nothing market-moving yet.</small> : d.news.map((x) => (
-          <small key={x.key}><b className={x.direction > 0 ? "up" : "down"}>{x.direction > 0 ? "▲" : "▼"} {x.coin === "USD" ? "US dollar" : fxLabel(x.coin)}</b> {Math.round(x.strength * 100)}% · <a href={x.url} target="_blank" rel="noopener noreferrer">{x.title.slice(0, 140)}</a> <span className="muted">· {x.source} · {ago(x.at)}</span></small>
+          <small key={x.key}><b className={x.direction > 0 ? "up" : "down"}>{x.direction > 0 ? "▲" : "▼"} {x.coin === "USD" ? "US dollar" : x.coin ? fxLabel(x.coin) : "—"}</b> {Math.round((x.strength || 0) * 100)}% · <a href={x.url || undefined} target="_blank" rel="noopener noreferrer">{String(x.title || "").slice(0, 140)}</a> <span className="muted">· {x.source} · {ago(x.at)}</span></small>
         ))}
       </section>
       )}

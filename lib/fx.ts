@@ -3,7 +3,7 @@
  * and are quoted either as the currency in dollars (EUR ≈ 1.14) or as dollars in that currency (JPY ≈ 150). The price
  * tells which, so these work out the usual pair name and which way the price goes when the dollar gets stronger.
  */
-export const isFx = (coin: string) => coin.startsWith("xyz:");
+export const isFx = (coin: string) => typeof coin === "string" && coin.startsWith("xyz:");
 export const fxCode = (coin: string) => coin.replace(/^[^:]+:/, "");
 
 /** +1 if this market's price rises when the US dollar strengthens, -1 if it falls. */
@@ -18,7 +18,7 @@ export function usdSign(coin: string, price: number): 1 | -1 {
 
 /** "EUR/USD", "USD/JPY", "DXY (dollar index)"; crypto coins come back as they are. */
 export function fxLabel(coin: string, price?: number | null) {
-  if (!isFx(coin)) return coin;
+  if (!isFx(coin)) return coin ?? "";
   const c = fxCode(coin);
   if (c === "DXY") return "DXY (dollar index)";
   return usdSign(coin, Number(price) || (["EUR", "GBP", "AUD", "NZD", "CHF"].includes(c) ? 1.1 : 100)) < 0 ? `${c}/USD` : `USD/${c}`;

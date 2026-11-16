@@ -671,7 +671,7 @@ async function readNews(s: FSettings, m: Mkt): Promise<number> {
     const it = todo[Number(o.i) - 1];
     if (!it) continue;
     const coin = typeof o.coin === "string" && (o.coin === "MARKET" || s.coins.includes(o.coin) || (fx.length && (o.coin === "USD" || fx.includes(o.coin)))) ? o.coin : null;
-    const dir = [1, -1].includes(Number(o.dir)) ? Number(o.dir) : 0;
+    const dir = coin && [1, -1].includes(Number(o.dir)) ? Number(o.dir) : 0; // no market it trades → not acted on
     const strength = Math.max(0, Math.min(1, n(o.strength)));
     await fq("ai_futures_news").update({ coin, direction: dir, strength }).eq("key", it.key);
     if (coin && dir && strength >= 0.5) { hits++; await flog("news", `${dir > 0 ? "🟢" : "🔴"} ${coin} ${dir > 0 ? "up" : "down"} (${Math.round(strength * 100)}%): ${it.title.slice(0, 160)} · ${it.source}`); }
@@ -1114,7 +1114,7 @@ export async function futStatus() {
     fq("ai_futures_positions").select("*").in("status", ["open", "closing"]).order("opened_at", { ascending: false }),
     fq("ai_futures_positions").select("*").eq("status", "closed").order("closed_at", { ascending: false }).limit(200),
     fq("ai_futures_log").select("*").order("at", { ascending: false }).limit(60),
-    fq("ai_futures_news").select("*").not("direction", "is", null).neq("direction", 0).order("at", { ascending: false }).limit(20),
+    fq("ai_futures_news").select("*").not("direction", "is", null).neq("direction", 0).not("coin", "is", null).order("at", { ascending: false }).limit(20),
     futWallet().catch(() => null),
     refreshTransfers().catch(() => null),
   ]);
