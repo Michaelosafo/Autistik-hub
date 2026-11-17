@@ -35,9 +35,14 @@ const USDT = getAddress("0x55d398326f99059fF775485246999027B3197955");
 const ZERO = "0x0000000000000000000000000000000000000000";
 const V3_FEES = [100, 500, 2500, 10000] as const;
 const GAS_LIMIT = 700_000n;
-const GAS_KEEP = 0.0005; // least BNB left in each wallet for the buy, the approve and the sell
-/** BNB kept back at your gas speed: the buy, the approve and the sell later (~550k gas in all), never under GAS_KEEP. */
-const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, 550_000 * gweiOf(s) * 1e-9);
+const GAS_KEEP = 0.0002; // least BNB left for the buy's own gas
+/** Most gas a buy is given (its estimate +30%, capped here), so the buy always fits what's kept back. */
+const BUY_GAS = 320_000n;
+/**
+ * BNB kept back: only the buy's own gas at your gas speed. Everything else is spent on the buy; you add BNB later
+ * for the sell.
+ */
+const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, Number(BUY_GAS) * gweiOf(s) * 1e-9);
 const MIN_USD = 0.1;
 
 const ROUTER_ABI = parseAbi([
@@ -124,7 +129,8 @@ async function loadGuns(): Promise<Gun[]> {
 async function fire(g: Gun, s: FSettings, tx: { to: `0x${string}`; data: `0x${string}`; value: bigint; gas?: bigint }): Promise<string> {
   const gasPrice = BigInt(Math.round(gweiOf(s) * 1e9));
   // The network wants gas limit × gas price + value in the wallet, so the limit is the real estimate (+30%), not a guess.
-  const gas = tx.gas || (await pc().estimateGas({ account: g.a.address, to: tx.to, data: tx.data, value: tx.value }).then((x: bigint) => (x * 13n) / 10n).catch(() => 300_000n));
+  const gas = tx.gas || (await pc().estimateGas({ account: g.a.address, to: tx.to, data: tx.data, value: tx.value })
+    .then((x: bigint) => { const pad = (x * 13n) / 10n; return pad <= BUY_GAS ? pad : x <= BUY_GAS ? BUY_GAS : (x * 11n) / 10n; }).catch(() => BUY_GAS));
   const raw = await g.a.signTransaction({ chainId: 56, type: "legacy", nonce: g.nonce, gas, gasPrice, to: tx.to, data: tx.data, value: tx.value });
   const post = async (url: string) => {
     const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_sendRawTransaction", params: [raw] }), signal: AbortSignal.timeout(4000) });
@@ -192,8 +198,8 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
       }
       // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
       const amt = keyUsd(s, g.slot) ?? usdEach; // this wallet's own amount, else the token's / the normal one
-      // Buy as much as the wallet allows, up to the amount, always leaving the gas: the full amount in USDT if it has
-      // it, else whichever of USDT / spare BNB is bigger (a smaller buy beats no buy).
+      // Buy as much as the wallet allows, up to the amount, leaving only the buy's gas: the full amount in USDT if it
+      // has it, else whichever of USDT / spare BNB is bigger (a smaller buy beats no buy).
       const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
       const useUsdt = usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
       let usd = Math.min(amt, useUsdt ? usdtFree : bnbFree);
@@ -205,7 +211,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
       const { hash, got } = r;
       if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
       await record(s, t, name, usd, got, hash, g.slot, useUsdt ? "USDT" : "BNB", route);
-      await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought${usd < amt * 0.95 ? ` (all it could spend, the rest kept for gas)` : ""}. https://bscscan.com/tx/${hash}`);
+      await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought${usd < amt * 0.95 ? ` (all it had, minus the buy's gas)` : ""}. https://bscscan.com/tx/${hash}`);
       // Ready to sell fast later: approve the router for this coin now (in the background).
       approveForSell(g, s, token).catch(() => {});
       return true;
