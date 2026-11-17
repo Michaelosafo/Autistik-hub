@@ -11,9 +11,9 @@ type Act = (name: string, action: string, body: unknown, done?: string) => Promi
 const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
-export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
+export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
   s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
-  busy: string; act: Act; set: (b: any, done?: string) => Promise<void>;
+  busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean;
 }) {
   const [addr, setAddr] = useState(""), [label, setLabel] = useState(""), [err, setErr] = useState("");
   const [keyIn, setKeyIn] = useState<Record<number, string>>({});
@@ -43,6 +43,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
 
   return (
     <section className="card stack">
+      {!sniper && <>
       <b>🟡 Wallets to copy (BNB Chain)</b>
       <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); add(); }}>
         <input className="input" style={{ flex: "1 1 260px", fontFamily: "monospace" }} placeholder="Paste wallet address 0x…" value={addr} onChange={(e) => { setAddr(e.target.value); setErr(""); }} aria-label="Wallet address to copy" autoComplete="off" spellCheck={false} />
@@ -62,6 +63,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
       ))}
       {dropped > 0 && <small className="muted">{dropped} older Solana / Ethereum wallet{dropped === 1 ? " is" : "s are"} no longer copied (Copy is BNB Chain only now). Saving any change clears {dropped === 1 ? "it" : "them"}.</small>}
 
+      </>}
       <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 5)</b>
       <small className="muted">Each wallet you add buys every copied coin with its own money (USDT / USDC on BNB Chain, else BNB), so with 3 wallets each copy is bought 3 times. Keep a little BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
       {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
@@ -96,7 +98,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
       {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live (top of the page) once {mine.length ? "your wallet holds BNB" : "you've created or added a wallet and sent it BNB"}.</small>}
 
       <b style={{ marginTop: 8 }}>⚡ Speed and bot protection</b>
-      <small className="muted">Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away.</small>
+      <small className="muted">{sniper ? "Gas speed decides who lands first in the block when liquidity arrives: Turbo or Max for hot launches." : "Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away."}</small>
       <label className="ait-check" style={{ margin: 0 }}>
         <input type="checkbox" checked={s.copy_mev !== false} disabled={!!busy} onChange={(e) => set({ copy_mev: e.target.checked }, e.target.checked ? "MEV protection on: buys and sells go through PancakeSwap MEV Guard, hidden from sandwich bots." : "MEV protection off: trades go to the public mempool.")} />
         <span>🛡 MEV bot protection <small className="muted">(sends through PancakeSwap MEV Guard, a private route: sandwich bots can&apos;t see or front-run your trade)</small></span>
@@ -109,12 +111,13 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
         })}
         <small className="muted">{Number(s.copy_gwei ?? 0.3)} gwei ≈ ${(Number(s.copy_gwei ?? 0.3) * 250_000 * 1e-9 * (bnbUsd || 600)).toFixed(2)} a swap. Higher lands first in the block.</small>
       </div>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      {!sniper && <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         <small><b>Max slippage:</b> {Number(s.copy_slip ?? 12)}%</small>
         {[5, 8, 12, 15].map((v) => <button key={v} type="button" className={"btn small" + (Number(s.copy_slip ?? 12) === v ? " primary" : " ghost")} disabled={!!busy || Number(s.copy_slip ?? 12) === v} onClick={() => set({ copy_slip: v }, `Max slippage ${v}%.`)}>{v}%</button>)}
         <small className="muted">Higher fills on fast-moving coins; with MEV protection on, bots can&apos;t use it against you.</small>
-      </div>
+      </div>}
 
+      {!sniper && <>
       <b style={{ marginTop: 8 }}>💵 Each buy</b>
       {([["copy_sl_on", "Automatic stop-loss", s.copy_sl_on !== false, `sells by itself at -${cfg?.sl ?? 50}%`], ["copy_tp_on", "Automatic take profit", s.copy_tp_on !== false, `sells by itself at +${cfg?.tp ?? 100}%`]] as const).map(([k, l, on, hint]) => (
         <label key={k} className="ait-check" style={{ margin: 0 }}>
@@ -128,6 +131,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
           <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${l} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) > 0) set({ [k]: Number(x) }); }}>Change</button>
         </div>
       ))}
+      </>}
     </section>
   );
 }

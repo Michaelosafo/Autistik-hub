@@ -313,7 +313,7 @@ export const mevOn = (s: FSettings) => (s as any).copy_mev !== false;
 const fastOf = (s: FSettings) => ({ mev: mevOn(s) ? MEV_RPC : null, gwei: gweiOf(s), approveMax: true });
 const MEV_RPC = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 let bnbCache = { at: 0, usd: 0 };
-async function bnbPrice() {
+export async function bnbPrice() {
   if (Date.now() - bnbCache.at < 60_000 && bnbCache.usd > 0) return bnbCache.usd;
   const c = await import("@/lib/ai-trader-chains");
   bnbCache = { at: Date.now(), usd: await c.nativeUsd("bsc") };

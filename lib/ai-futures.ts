@@ -55,6 +55,12 @@ export const SNIPE_DESK = 400000;
 /** Copy (500000 + id): copies BNB Chain wallets you paste, buying from 1–2 of your own wallets (lib/ai-copy.ts). */
 export const COPY_DESK = 500000;
 /**
+ * BSC Sniper (550000 + id): inside the Copy range on purpose, so it shares Copy's wallets (keys per desk), Live switch,
+ * Sell / exit buttons, gas and MEV settings. Paste a token's address before its liquidity is added; the moment
+ * liquidity lands, every wallet buys (lib/ai-liq-snipe.ts).
+ */
+export const LIQ_DESK = 550000;
+/**
  * Madness (600000 + id): Hyperliquid futures at the highest leverage each coin allows that still keeps liquidation
  * at least 3x further away than a very tight stop-loss (0.25%–0.6%), on the most-traded coins, only when the news and
  * the chart agree. The stop rests on Hyperliquid, so it is hit long before liquidation. Own wallet and money.
@@ -65,6 +71,7 @@ export const isEarnDesk = () => T() >= EARN_DESK && T() < TURBO_DESK;
 export const isTurboDesk = () => T() >= TURBO_DESK && T() < SNIPE_DESK;
 export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < COPY_DESK;
 export const isCopyDesk = () => T() >= COPY_DESK && T() < MAD_DESK;
+export const isLiqDesk = () => T() >= LIQ_DESK && T() < MAD_DESK;
 export const isMadDesk = () => T() >= MAD_DESK && T() < MAD_DESK + FX_DESK;
 /** The main Futures desk (crypto on Hyperliquid/Aster, none of the special desks above). */
 export const isFutDesk = () => !isFxDesk() && !isEarnDesk() && !isTurboDesk() && !isSnipeDesk() && !isCopyDesk() && !isMadDesk();
@@ -79,7 +86,7 @@ async function ensureSolDesk() {
   if (solId() === T()) return;
   await sb().from("ai_futures_settings").upsert({ id: solId(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }, { onConflict: "id", ignoreDuplicates: true });
 }
-const deskName = () => (isMadDesk() ? "Madness" : isCopyDesk() ? "Copy" : isSnipeDesk() ? "Sniper" : isTurboDesk() ? "Turbo" : isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"); // the most anyone can set (each coin's own exchange maximum still applies)
+const deskName = () => (isMadDesk() ? "Madness" : isLiqDesk() ? "BSC Sniper" : isCopyDesk() ? "Copy" : isSnipeDesk() ? "Sniper" : isTurboDesk() ? "Turbo" : isEarnDesk() ? "Earn" : isFxDesk() ? "Forex" : "Futures"); // the most anyone can set (each coin's own exchange maximum still applies)
 
 export type FSettings = {
   id: number; enabled: boolean; mode: "paper" | "live"; paper_usd: number; paper_start: number; venues: string[]; coins: string[];
@@ -110,7 +117,8 @@ const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news"
 export async function flog(kind: string, text: string) { await fq("ai_futures_log").insert({ kind, text: text.slice(0, 600) }); }
 
 export async function getF(): Promise<FSettings> {
-  const first = isCopyDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false, snipe_usd: 20, snipe_sl: 50, snipe_tp: 1000 }
+  const first = isLiqDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 50, use_news: false, use_x: false, auto_fund: false, snipe_usd: 5, snipe_sl: 50, snipe_tp: 100, copy_sl_on: false, copy_tp_on: false, copy_gwei: 1 }
+    : isCopyDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false, snipe_usd: 20, snipe_sl: 50, snipe_tp: 1000 }
     : isSnipeDesk() ? { id: T(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }
     : isMadDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 50, no_liq: true, risk_pct: 3, max_loss_pct: 25, max_positions: 3, max_hold_hours: 6, daily_loss_pct: 25, use_ta: true, use_news: true }
     : isTurboDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 15, no_liq: false, risk_pct: 3, max_loss_pct: 40, max_positions: 4, max_hold_hours: 12, daily_loss_pct: 25 }
@@ -950,6 +958,7 @@ export async function runFutures(): Promise<string> {
   try {
     // Sniper: its own engine, money stays in its Solana wallet (nothing goes to Hyperliquid).
     if (isSnipeDesk()) return note(await (await import("@/lib/ai-sniper")).runSniper(s));
+    if (isLiqDesk()) return note(await (await import("@/lib/ai-liq-snipe")).runLiqSnipe(s));
     if (isCopyDesk()) return note(await (await import("@/lib/ai-copy")).runCopy(s));
     await autoFund(s).catch((e) => flog("error", `Auto-fund: ${(e as Error).message}`));
     await refreshTransfers(3).catch(() => null);
