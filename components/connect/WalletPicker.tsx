@@ -77,9 +77,9 @@ export default function WalletPicker() {
       }
       const viaWc = !!WALLETCONNECT_ID;
       if (w.id === "okx" && mobile && isAndroid() && viaWc) continue; // pinned at the top on Android
-      // Bitget's WalletConnect link does not open the dapp on Android. Open this site inside Bitget instead.
-      const bitgetDirect = mobile && w.id === "bitget" && !!w.dapp;
-      const phoneWc = mobile && viaWc && !!(w.wc || w.native) && !bitgetDirect, phoneDapp = bitgetDirect || (mobile && !phoneWc && !!w.dapp);
+      // Phones: open this site inside the wallet app. WalletConnect often never opens the app.
+      const phoneDapp = mobile && !!w.dapp;
+      const phoneWc = mobile && viaWc && !!(w.wc || w.native) && !phoneDapp;
       out.push({
         key: w.id, name: w.name, logo: `/wallets/${w.id}.svg`, color: w.color,
         badge: w.name === last ? "Last used" : undefined,
