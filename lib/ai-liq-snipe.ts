@@ -381,6 +381,7 @@ async function record(s: FSettings, t: LiqTarget, name: string, usd: number, qty
  * A wallet holds a sniped token but there's no open trade for it (the buy went through but its amount couldn't be
  * read): record it now at today's value, so it gets Sell buttons and the auto-sell.
  */
+const pickNoted = new Set<string>();
 async function pickUp(s: FSettings) {
   if (s.mode !== "live") return;
   const targets = liqTargets(s).filter((t) => (t.state || "waiting") !== "waiting");
@@ -395,12 +396,20 @@ async function pickUp(s: FSettings) {
     if (!todo.length) continue;
     const dec = Number(await c.readContract({ address: token, abi: ERC20, functionName: "decimals" }).catch(() => 18));
     for (const x of todo) {
-      const bal = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [x.a!.address] }).catch(() => 0n));
-      if (bal <= 0n) continue;
-      const out = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [bal, [token, WBNB]] }).catch(() => null);
-      const usd = out ? (Number(out[1]) / 1e18) * bnbUsd : 0;
+      const bal = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [x.a!.address] }).catch(() => -1n));
+      if (bal < 0n) continue; // couldn't read: try next run
+      const name = t.label || token.slice(0, 10);
+      if (bal === 0n) {
+        if (!pickNoted.has(`${coin}|${x.slot}`)) { pickNoted.add(`${coin}|${x.slot}`); if (t.state === "failed") await flog("skip", `Wallet ${x.slot} holds no ${name}: the buy got no tokens (a launch tax can take 100% in the first blocks) or they were sold already.`); }
+        continue;
+      }
+      const [viaBnb, viaUsdt] = await Promise.all([
+        c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [bal, [token, WBNB]] }).catch(() => null),
+        c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [bal, [token, USDT]] }).catch(() => null),
+      ]);
+      const usd = Math.max(viaBnb ? (Number(viaBnb[1]) / 1e18) * bnbUsd : 0, viaUsdt ? Number(viaUsdt[1]) / 1e18 : 0);
       const qty = Number(bal) / 10 ** dec;
-      if (!(usd > 0.05)) continue; // ignore dust left after a sell
+      if (!(usd > 0.05)) { if (!pickNoted.has(`${coin}|${x.slot}`)) { pickNoted.add(`${coin}|${x.slot}`); await flog("skip", `Wallet ${x.slot} holds ${qty.toPrecision(4)} ${name}, but PancakeSwap prices it at under $0.05 (or it can't be sold there).`); } continue; }
       await record(s, t, t.label || token.slice(0, 8), usd, qty, null, x.slot, "BNB", { kind: "v2", path: [WBNB, token], via: "WBNB" });
       await flog("open", `⚡ Wallet ${x.slot} holds ${t.label || token.slice(0, 10)} (worth $${usd.toFixed(2)}) from a snipe whose amount wasn't recorded: added to your trades so you can sell it here.`);
     }
