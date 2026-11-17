@@ -40,3 +40,10 @@ alter table public.ai_futures_positions add column if not exists copy_pay text;
 alter table public.ai_futures_settings add column if not exists copy_gwei numeric not null default 0.3;
 alter table public.ai_futures_settings add column if not exists copy_slip numeric not null default 12;
 alter table public.ai_futures_settings add column if not exists copy_mev boolean not null default true;
+
+-- BSC Sniper (desk 550000 + id): tokens to snipe and when to sell.
+alter table public.ai_futures_settings add column if not exists liq_targets jsonb not null default '[]'::jsonb;
+alter table public.ai_futures_settings add column if not exists liq_x numeric not null default 2;
+alter table public.ai_futures_settings add column if not exists liq_sell_pct numeric not null default 100;
+alter table public.ai_futures_settings add column if not exists liq_slip numeric not null default 20;
+alter table public.ai_futures_settings add column if not exists liq_tp_on boolean not null default true;

@@ -4,6 +4,7 @@
  * Practice or Live (Hyperliquid), never above 3x, every trade with a stop-loss well before liquidation.
  */
 import CopyBsc, { CopyTrades, type CopyKeys, type CopyPos } from "@/components/CopyBsc";
+import LiqSniper from "@/components/LiqSniper";
 import Clamp from "@/components/Clamp";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -453,12 +454,13 @@ async function call(action: string, body: unknown) {
   return d;
 }
 
-export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "snipe" | "copy" | "mad" } = {}) {
-  const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", copyDesk = desk === "copy", madDesk = desk === "mad";
+export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "snipe" | "copy" | "liq" | "mad" } = {}) {
+  const liqDesk = desk === "liq"; // BSC Sniper: Copy's wallets and trade cards, its own token list
+  const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", copyDesk = desk === "copy" || liqDesk, madDesk = desk === "mad";
   const snipeDesk = desk === "snipe" || copyDesk; // Sniper and Copy: spot coins from the shared Solana wallet
   DESK = desk ? `?desk=${desk}` : "";
-  const NAME = copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
-  const ACC = copyDesk ? "#ec4899" : madDesk ? "#ef4444" : snipeDesk ? "#f97316" : turboDesk ? "#8b5cf6" : earnDesk ? "#eab308" : fxDesk ? "#06b6d4" : "#10b981";
+  const NAME = liqDesk ? "Sniper (BSC)" : copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
+  const ACC = liqDesk ? "#22c55e" : copyDesk ? "#ec4899" : madDesk ? "#ef4444" : snipeDesk ? "#f97316" : turboDesk ? "#8b5cf6" : earnDesk ? "#eab308" : fxDesk ? "#06b6d4" : "#10b981";
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState("");
@@ -498,8 +500,9 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       <TraderTabs />
       <div className="page-head ait-hero">
         <Link href="/admin" className="muted">← Admin</Link>
-        <h1>{copyDesk ? "👥 Copy" : madDesk ? "🔥 Madness" : snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
-        {copyDesk ? <p className="muted">BNB Chain only. Paste the wallets to copy and add one or two of your own wallets (private keys). About every second it checks the copied wallets: when one buys a coin, each of your wallets buys it with its own BNB (${d.snipe?.cfg.usd ?? 20} worth each, unless you set an amount for that copied wallet); when it sells, your wallets sell the same share back to BNB. Safety: stop-loss at -{d.snipe?.cfg.sl ?? 50}%, at most {s.max_positions} coins at once. Sells always follow the wallet, even when Copy is stopped.</p>
+        <h1>{liqDesk ? "⚡ Sniper (BSC)" : copyDesk ? "👥 Copy" : madDesk ? "🔥 Madness" : snipeDesk ? "🎯 Sniper" : turboDesk ? "🚀 Turbo" : earnDesk ? "💰 Earn" : fxDesk ? "💱 AI Forex" : "📊 AI Futures"}</h1>
+        {liqDesk ? <p className="muted">Paste a token&apos;s contract address before its liquidity is added. Every block (about 0.45 s) it checks PancakeSwap; the moment liquidity is in and the token can be bought, every wallet you added buys it straight through the PancakeSwap router, at your gas speed, through MEV Guard so bots can&apos;t sandwich it. Each buy is test-run first, so if trading isn&apos;t open yet nothing is spent and it tries again the next block. It sells at the profit multiple you pick (like 2x), or when you tap Sell.</p>
+        : copyDesk ? <p className="muted">BNB Chain only. Paste the wallets to copy and add one or two of your own wallets (private keys). About every second it checks the copied wallets: when one buys a coin, each of your wallets buys it with its own BNB (${d.snipe?.cfg.usd ?? 20} worth each, unless you set an amount for that copied wallet); when it sells, your wallets sell the same share back to BNB. Safety: stop-loss at -{d.snipe?.cfg.sl ?? 50}%, at most {s.max_positions} coins at once. Sells always follow the wallet, even when Copy is stopped.</p>
         : madDesk ? <p className="muted">⚠️ Highest risk. Its own wallet and money, funded from Solana like Futures. It trades the 8 most-traded Hyperliquid coins that allow 20x or more, long or short, only when fresh news and the chart agree (or on a very strong chart setup with no news against it), and the AI must approve each trade. Very tight stop-loss (0.25%–0.6% away, resting on Hyperliquid itself and checked every 2 seconds), then the highest leverage the coin allows (up to {s.max_lev}x) that keeps liquidation at least {s.no_liq !== false ? "8" : "3"} times further away than the stop, so the stop always fires first{s.no_liq !== false ? " (🛡 Never get liquidated is on)" : ""}. Takes profit at 3× the risk, moves to break-even early and trails tightly. {s.risk_pct}% of the account at risk a trade; it pauses after a {s.daily_loss_pct}% losing day. A gap past the stop in a sudden crash is still possible: expect fast wins and fast losses.</p>
         : snipeDesk ? <p className="muted">⚠️ High risk. Its own Solana wallet and money. Every minute it scans brand-new coins on pump.fun (other launchpads such as letsbonk or Meteora only with a clean RugCheck report) and buys the ones pumping hard with real volume: under an hour old, $8K–$150K market cap, +15% in 5 minutes, $5K+ traded, buyers well ahead of sellers, 40+ holders, no whale or creator holding most of it. Every buy is rug-scanned and checked by the AI first. ${d.snipe?.cfg.usd ?? 10} a buy; checks its trades every 2.5 seconds: sells at +{d.snipe?.cfg.tp ?? 100}% or -{d.snipe?.cfg.sl ?? 25}%, locks break-even after +20%, +15% after +40%, trails 15% under the high past +50%, sells on a rug or after {s.max_hold_hours}h. Most new coins go to zero: a few big wins have to pay for many small losses.</p>
         : turboDesk ? <p className="muted">⚠️ High risk. Its own wallet and money, funded from Solana like Futures. Every minute it trades the 15 most-traded coins on Hyperliquid right now, long or short, at up to {s.max_lev}x with {s.risk_pct}% of the account at risk a trade, and jumps in on weaker signals than Futures (charts and breaking news). Strong stops: never more than 1.5% away, resting on Hyperliquid itself and also checked every 4 seconds; break-even as soon as it&apos;s 0.6× the risk in profit, then it trails tightly. It can grow fast and lose fast: a bad day can cost {s.daily_loss_pct}% before it pauses.</p>
@@ -520,7 +523,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
         <div className="ait-seg" role="radiogroup" aria-label="Mode">
           <button type="button" role="radio" aria-checked={!live} className={!live ? "on" : ""} disabled={!!busy || !live} onClick={() => set({ mode: "paper" })}>Practice</button>
           <button type="button" role="radio" aria-checked={live} className={live ? "on" : ""} disabled={!!busy || live}
-            onClick={() => { if (confirm(copyDesk ? "Go LIVE? Your Copy wallets will buy real coins with their BNB whenever a wallet you copy buys. You can lose money. Only use money you can afford to lose." : snipeDesk ? `Go LIVE? ${NAME} will buy real coins with its budget in the shared Solana wallet. You can lose money. Only use money you can afford to lose.` : `Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${madDesk ? "up to " : ""}${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
+            onClick={() => { if (confirm(liqDesk ? "Go LIVE? Your Sniper wallets will buy real tokens the moment their liquidity is added. New tokens can be scams or have huge taxes: only use money you can afford to lose." : copyDesk ? "Go LIVE? Your Copy wallets will buy real coins with their BNB whenever a wallet you copy buys. You can lose money. Only use money you can afford to lose." : snipeDesk ? `Go LIVE? ${NAME} will buy real coins with its budget in the shared Solana wallet. You can lose money. Only use money you can afford to lose.` : `Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${madDesk ? "up to " : ""}${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
         </div>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
         {msg && <small className="aic-note" role="status">{msg}</small>}
@@ -545,7 +548,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       )}
 
       {copyDesk && <CopyTrades list={d.open as unknown as CopyPos[]} busy={busy} act={act} />}
-      {copyDesk && <CopyBsc s={s as any} keys={d.copyKeys || null} cfg={d.snipe?.cfg} busy={busy} act={act} set={set} />}
+      {liqDesk && <LiqSniper s={s as any} busy={busy} set={set} />}
+      {copyDesk && <CopyBsc sniper={liqDesk} s={s as any} keys={d.copyKeys || null} cfg={d.snipe?.cfg} busy={busy} act={act} set={set} />}
 
       {snipeDesk && !copyDesk && (
         <section className="card stack">

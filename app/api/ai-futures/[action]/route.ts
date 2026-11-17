@@ -8,7 +8,7 @@ import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
-import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, COPY_DESK, MAD_DESK, isCopyDesk, isSpotDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures, setStopTarget } from "@/lib/ai-futures";
+import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, COPY_DESK, LIQ_DESK, MAD_DESK, isCopyDesk, isLiqDesk, isSpotDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures, setStopTarget } from "@/lib/ai-futures";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,7 +48,7 @@ async function mine(): Promise<number | null> {
 /** ?desk=fx: the admin's Forex trader, ?desk=earn: their Earn desk (each its own id), otherwise their Futures trader. */
 const desk = (req: Request, id: number | null) => {
   const d = new URL(req.url).searchParams.get("desk");
-  const off: Record<string, number> = { fx: FX_DESK, earn: EARN_DESK, turbo: TURBO_DESK, snipe: SNIPE_DESK, copy: COPY_DESK, mad: MAD_DESK };
+  const off: Record<string, number> = { fx: FX_DESK, earn: EARN_DESK, turbo: TURBO_DESK, snipe: SNIPE_DESK, copy: COPY_DESK, liq: LIQ_DESK, mad: MAD_DESK };
   return id && d && off[d] ? off[d] + id : id;
 };
 
@@ -75,6 +75,20 @@ export async function POST(req: Request, { params }: { params: { action: string 
             if (typeof b.copy_mev === "boolean") up.copy_mev = b.copy_mev;
             if (b.copy_gwei != null) { const v = clamp(b.copy_gwei, 0.05, 20); if (v != null) up.copy_gwei = v; }
             if (b.copy_slip != null) { const v = clamp(b.copy_slip, 3, 15); if (v != null) up.copy_slip = v; }
+          }
+          if (isLiqDesk()) {
+            if (b.liq_x != null) { const v = clamp(b.liq_x, 1.05, 1000); if (v != null) up.liq_x = v; }
+            if (b.liq_sell_pct != null) { const v = clamp(b.liq_sell_pct, 5, 100); if (v != null) up.liq_sell_pct = v; }
+            if (b.liq_slip != null) { const v = clamp(b.liq_slip, 3, 49); if (v != null) up.liq_slip = v; }
+            if (typeof b.liq_tp_on === "boolean") up.liq_tp_on = b.liq_tp_on;
+            if (Array.isArray(b.liq_targets)) {
+              // Tokens to snipe: 0x addresses, each once.
+              const seen = new Set<string>();
+              up.liq_targets = b.liq_targets.map((t: any) => ({
+                token: String(t?.token || "").trim(), label: String(t?.label || "").trim().slice(0, 24) || undefined, usd: clamp(t?.usd, 0.5, 100000),
+                on: t?.on !== false, state: ["waiting", "done", "failed"].includes(t?.state) ? t.state : "waiting", added: String(t?.added || new Date().toISOString()),
+              })).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(t.token) && !seen.has(t.token.toLowerCase()) && seen.add(t.token.toLowerCase())).slice(0, 30);
+            }
           }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
             // BNB Chain only: 0x… addresses.
@@ -109,7 +123,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 up.mode = b.mode; up.day = null; up.day_start_usd = null;
                 const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
                 if (error) return json({ error: error.message }, 400);
-                return json({ ok: true, note: `Copy is LIVE: ${have.length > 1 ? `${have.length} wallets buy` : `wallet ${have[0].slot} buys`} with BNB on BNB Chain.${funded ? "" : ` They hold almost no BNB yet: send BNB (BNB Chain / BEP20) to ${have.map((x) => x.address).join(" or ")} so they can buy.`}` });
+                return json({ ok: true, note: `${isLiqDesk() ? "Sniper" : "Copy"} is LIVE: ${have.length > 1 ? `${have.length} wallets buy` : `wallet ${have[0].slot} buys`} on BNB Chain.${funded ? "" : ` They hold almost no BNB yet: send BNB (BNB Chain / BEP20) to ${have.map((x) => x.address).join(" or ")} so they can buy.`}` });
               }
               if (isSpotDesk()) {
                 const nm = isCopyDesk() ? "Copy" : "Sniper";
