@@ -111,7 +111,7 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
 
   function fail(e: any) {
     const m = String(e?.shortMessage || e?.message || "");
-    setMsg(/rejected|denied|cancel/i.test(m) ? "You cancelled in your wallet." : /INSUFFICIENT_\w*_AMOUNT/.test(m) ? "The price moved. Try again." : m || "Something went wrong.");
+    setMsg(/rejected|denied|cancel/i.test(m) ? "You cancelled in your wallet." : /INSUFFICIENT_\w*_AMOUNT|not live/i.test(m) ? (/not live/i.test(m) ? "Trading is still closed, so the pool can't send the tokens back yet. Tap Remove liquidity again." : "The price moved. Try again.") : m || "Something went wrong.");
   }
 
   async function wallet() {
@@ -209,19 +209,44 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
   }
 
   async function remove() {
-    if (!info?.pair || !token || info.lp <= 0n) return;
-    const amount = (info.lp * BigInt(pct)) / 100n;
-    if (amount <= 0n) return;
+    if (!info?.pair || !token) return;
     if (!confirm(`Remove ${pct}% of the LP in this wallet? The tokens and ${CHAIN.coin} come back here. Liquidity that was burned or locked on a normal launch is not touched.`)) return;
     setBusy(true);
     try {
       const { w, acc } = await wallet();
-      const shareToken = info.lpTotal > 0n ? (info.rToken * amount) / info.lpTotal : 0n;
-      const shareCoin = info.lpTotal > 0n ? (info.rCoin * amount) / info.lpTotal : 0n;
+      const [t0, reserves, total, lpBal] = await Promise.all([
+        pub.readContract({ address: info.pair, abi: PAIR_ABI, functionName: "token0" }),
+        pub.readContract({ address: info.pair, abi: PAIR_ABI, functionName: "getReserves" }),
+        pub.readContract({ address: info.pair, abi: PAIR_ABI, functionName: "totalSupply" }),
+        pub.readContract({ address: info.pair, abi: ERC20, functionName: "balanceOf", args: [acc] }),
+      ]);
+      const lpNow = lpBal as bigint;
+      const amount = (lpNow * BigInt(pct)) / 100n;
+      if (amount <= 0n) { setMsg("This wallet has no LP to remove."); return; }
+      const [r0, r1] = reserves as [bigint, bigint, number];
+      const rToken = getAddress(t0 as string) === token ? r0 : r1;
+      const rCoin = getAddress(t0 as string) === token ? r1 : r0;
+      const supply = total as bigint;
+      const shareToken = supply > 0n ? (rToken * amount) / supply : 0n;
+      const shareCoin = supply > 0n ? (rCoin * amount) / supply : 0n;
       await approveIfNeeded(w, acc, info.pair, amount, `Allow ${CHAIN.dex} to use your LP tokens`);
+      const closed = await pub.readContract({ address: token, abi: parseAbi(["function tradingLive() view returns (bool)"]), functionName: "tradingLive" }).catch(() => null);
+      if (closed === false) {
+        let blocked = false;
+        try {
+          await pub.simulateContract({
+            address: ROUTER, abi: ROUTER_ABI, functionName: "removeLiquidityETHSupportingFeeOnTransferTokens",
+            args: [token, amount, 0n, 0n, acc, deadline()], account: acc,
+          });
+        } catch (e: any) {
+          blocked = /not live/i.test(String(e?.shortMessage || e?.message || e?.cause?.shortMessage || ""));
+        }
+        if (blocked) await send(w, acc, { address: token, abi: parseAbi(["function enableTrading()"]), functionName: "enableTrading" }, "Open trading so the pool can send the tokens back");
+      }
+      const loose = (v: bigint) => (v * 5000n) / 10_000n;
       const hash = await send(w, acc, {
         address: ROUTER, abi: ROUTER_ABI, functionName: "removeLiquidityETHSupportingFeeOnTransferTokens",
-        args: [token, amount, slip(shareToken), slip(shareCoin), acc, deadline()],
+        args: [token, amount, loose(shareToken), loose(shareCoin), acc, deadline()],
       }, `Remove ${pct}% of your liquidity`);
       reportActivity("liquidity", CHAIN.key, hash, `Admin removed ${pct}% of ${info.symbol} liquidity`);
       setMsg(`✅ Removed ${pct}% of the liquidity in this wallet. ${CHAIN.explorer}/tx/${hash}`);
