@@ -324,7 +324,8 @@ export async function bnbPrice() {
 
 // ---------- Buying and selling ----------
 
-async function copyBuy(s: FSettings, mv: Move): Promise<string> {
+async function copyBuy(s: FSettings, mv: Move, quiet = false): Promise<string> {
+  const errs: string[] = [];
   const cfg = snipeCfg(s);
   const token = tokenOf(mv.mint)!;
   const { data: open } = await pos().select("id,coin").eq("fut_id", T()).in("status", ["open", "closing"]);
@@ -334,7 +335,7 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
   // Speed: the price lookup gets 1.5 s at most. Live buys don't need it (the price comes from what the swap gave).
   const info = await Promise.race([coinInfo(mv.mint).catch(() => null), sleep(1500).then(() => null)]);
   if (s.mode !== "live" && (!info || !(info.price > 0))) return "no price for it yet";
-  if (info && info.liq > 0 && info.liq < 2000) return `too little liquidity ($${Math.round(info.liq)})`;
+  if (info && info.liq > 0 && info.liq < 50) return `too little liquidity ($${Math.round(info.liq)})`;
   const sym = info?.symbol || token.slice(0, 8);
   const eq = s.mode === "live" ? { total: 0, free: 0 } : await copyEquity(s);
   const base = Math.max(1, n(mv.wallet.usd) || cfg.usd);
@@ -391,12 +392,13 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
       await flog("open", `👥 Wallet ${slot} bought ${sym} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had, minus the buy's gas)" : ""}: ${who} just bought it. ${link}`);
       return slot;
     } catch (e) {
-      await flog("error", `Wallet ${slot} couldn't buy ${sym}: ${(e as Error).message.slice(0, 160)}`);
+      errs.push((e as Error).message);
+      if (!quiet || !WAITABLE.test((e as Error).message)) await flog("error", `Wallet ${slot} couldn't buy ${sym}: ${(e as Error).message.slice(0, 160)}`);
       return null;
     }
   }));
   const ok = done.filter(Boolean);
-  if (!ok.length) return (await Promise.all(SLOTS.map((x) => copyKey(x)))).some(Boolean) ? `couldn't buy ${sym}` : "add a wallet (private key) to buy with";
+  if (!ok.length) return (await Promise.all(SLOTS.map((x) => copyKey(x)))).some(Boolean) ? `couldn't buy ${sym}${errs[0] ? `: ${errs[0].slice(0, 160)}` : ""}` : "add a wallet (private key) to buy with";
   return `bought ${sym} (wallet ${ok.join(" + ")})`;
 }
 
@@ -486,6 +488,13 @@ async function act(s: FSettings, all: Move[]): Promise<string[]> {
       if (data?.length) notes.push(`sold ${(data[0] as FPos).why?.split(":")[0]}`);
     } else if (s.enabled) {
       const r = await copyBuy(s, mv).catch((e) => `failed: ${(e as Error).message}`);
+      if (!/^bought|already holding/.test(r) && WAITABLE.test(r)) {
+        // The copied wallet could buy (it's the team's / whitelisted) but nobody else can yet: wait for trading to open.
+        addPending(s, mv);
+        await flog("skip", `Saw ${mv.wallet.label || short(mv.wallet.address)} buy ${mv.mint.slice(4, 12)}…, but others can't buy it yet (trading not open). Copy tries again every second for 15 minutes and buys the moment it can. https://bscscan.com/tx/${mv.sig}`);
+        notes.push(`waiting for ${mv.mint.slice(4, 12)}`);
+        return;
+      }
       if (/^failed/.test(r)) await flog("error", `Copy buy ${mv.mint.slice(4, 12)}…: ${r}`);
       else if (!/^bought/.test(r)) await flog("skip", `Saw ${mv.wallet.label || short(mv.wallet.address)} buy ${mv.mint.slice(4, 12)}… but skipped: ${r}. https://bscscan.com/tx/${mv.sig}`);
       notes.push(r);
@@ -493,6 +502,39 @@ async function act(s: FSettings, all: Move[]): Promise<string[]> {
   }
 }
 const follow = async (s: FSettings) => act(s, await newMoves(s));
+
+/** "Can't buy it yet" (trading closed, pool not there yet…): worth trying again every second. */
+const WAITABLE = /TRANSFER_FAILED|refused the test buy|token not found|no route|trading|not live|not enabled|not open|TransferHelper/i;
+const WAIT_MS = 15 * 60_000;
+type Pending = { mint: string; sig: string; until: number; wallet: CopyWallet };
+const pendingOf = (s: FSettings): Pending[] => { const seen = ((s as any).copy_seen ||= {}); return (seen.pending ||= []); };
+function addPending(s: FSettings, mv: Move) {
+  const list = pendingOf(s);
+  if (list.some((p) => p.mint === mv.mint)) return;
+  list.push({ mint: mv.mint, sig: mv.sig, until: Date.now() + WAIT_MS, wallet: { address: mv.wallet.address, label: mv.wallet.label, usd: mv.wallet.usd } });
+  sb().from("ai_futures_settings").update({ copy_seen: (s as any).copy_seen }).eq("id", T()).then(() => {}, () => {});
+}
+/** Tokens a copied wallet bought before trading opened: try again (quietly) until it works or 15 minutes pass. */
+async function retryPending(s: FSettings): Promise<string[]> {
+  const list = pendingOf(s);
+  if (!list.length || !s.enabled) return [];
+  const notes: string[] = [];
+  const keep: Pending[] = [];
+  await Promise.all(list.map(async (p) => {
+    const name = p.mint.slice(4, 12);
+    if (Date.now() > p.until) { await flog("skip", `Stopped waiting for ${name}…: trading didn't open for others within 15 minutes.`); return; }
+    const r = await copyBuy(s, { wallet: p.wallet, sig: p.sig, mint: p.mint, kind: "buy", frac: 0 }, true).catch((e) => `failed: ${(e as Error).message}`);
+    if (/^bought/.test(r)) { notes.push(r); return; }
+    if (/already holding/.test(r)) return;
+    if (WAITABLE.test(r)) { keep.push(p); return; }
+    await flog("skip", `Stopped waiting for ${name}…: ${r.slice(0, 160)}`);
+  }));
+  if (keep.length !== list.length) {
+    (s as any).copy_seen.pending = keep;
+    await sb().from("ai_futures_settings").update({ copy_seen: (s as any).copy_seen }).eq("id", T());
+  }
+  return notes;
+}
 
 /** Safety stop-loss / take profit for every open copy trade. */
 async function stops(s: FSettings) {
@@ -538,7 +580,11 @@ export async function runCopy(s: FSettings): Promise<string> {
         notes.push(...(await act(run, moves).catch((e) => [`live error: ${(e as Error).message}`])));
       }
       const t = Date.now();
-      if (t - lastPoll >= 1000) { lastPoll = t; notes.push(...(await follow(run).catch((e) => [`watch error: ${(e as Error).message}`]))); }
+      if (t - lastPoll >= 1000) {
+        lastPoll = t;
+        notes.push(...(await follow(run).catch((e) => [`watch error: ${(e as Error).message}`])));
+        notes.push(...(await retryPending(run).catch(() => [])));
+      }
       if (t - lastStop > 5000) { lastStop = t; await stops(run).catch(() => {}); }
       if (!queue.length) await new Promise<void>((r) => { wake = r; setTimeout(r, Math.max(100, 1000 - (Date.now() - lastPoll))); });
       wake = null;
