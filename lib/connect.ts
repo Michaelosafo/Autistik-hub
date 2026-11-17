@@ -20,19 +20,25 @@ type Detected = { info: WalletInfo; provider: any };
  * link at the wallet's own app (an Android intent with its package) opens ONLY the wallet; if it isn't installed,
  * the phone goes to its Play Store page.
  */
-const ANDROID_APP: Record<string, string> = { "bkcode.vip": "com.bitkeep.wallet" };
+const ONE_APP: { test: RegExp; scheme: string; pkg: string }[] = [
+  { test: /bitkeep:|bkcode\.vip/i, scheme: "bitkeep", pkg: "com.bitkeep.wallet" },
+  { test: /trust:|link\.trustwallet\.com/i, scheme: "trust", pkg: "com.wallet.crypto.trustapp" },
+  { test: /metamask:|metamask\.app\.link/i, scheme: "metamask", pkg: "io.metamask" },
+  { test: /okex:|okx:|www\.okx\.com/i, scheme: "okex", pkg: "com.okx.wallet" },
+  { test: /bnc:|app\.binance\.com/i, scheme: "bnc", pkg: "com.binance.dev" },
+  { test: /cbwallet:|go\.cb-w\.com/i, scheme: "cbwallet", pkg: "org.toshi" },
+  { test: /phantom:|phantom\.app/i, scheme: "phantom", pkg: "app.phantom" },
+  { test: /safepal/i, scheme: "safepalwallet", pkg: "io.safepal.wallet" },
+  { test: /tokenpocket|tpoutside|tpdapp/i, scheme: "tpoutside", pkg: "vip.mytokenpocket" },
+  { test: /rabby/i, scheme: "rabby", pkg: "io.rabby" },
+];
+/** Android: open that one wallet app. An https link also offers Chrome, so this uses the app's own scheme and package. */
 export function pinAndroid(href: string): string {
   if (typeof navigator === "undefined" || !/Android/i.test(navigator.userAgent)) return href;
-  if (/^bitkeep:\/\//i.test(href)) return href;
-  const m = /^https:\/\/([^/?#]+)(.*)$/.exec(href);
-  // Android only opens Bitget through https://bkcode.vip. A bitkeep:// link does not, so the
-  // app stays on its home screen. package= keeps Chrome out of the chooser.
-  if (m?.[1] === "bkcode.vip") {
-    return `intent://${m[1]}${m[2]}#Intent;scheme=https;package=com.bitkeep.wallet;S.browser_fallback_url=${encodeURIComponent("https://web3.bitget.com/en/wallet-download")};end`;
-  }
-  const pkg = m && ANDROID_APP[m[1]];
-  if (!pkg) return href;
-  return `intent://${m[1]}${m[2]}#Intent;scheme=https;package=${pkg};end`;
+  const hit = ONE_APP.find((a) => a.test.test(href));
+  if (!hit) return href;
+  const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  return `intent://${q.replace(/^\//, "")}#Intent;scheme=${hit.scheme};package=${hit.pkg};end`;
 }
 
 /** Official Bitget "open this dapp" link. Android only accepts https://bkcode.vip. */
@@ -58,7 +64,7 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // Bitget and Trust first: both handle every network and switch between them easily.
   // Bitget on a phone opens this site inside the app (official bkcode.vip link). WalletConnect's
   // bitkeep://wc link does not open the dapp on Android, so people had to find it by hand.
-  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => bitgetOpenDapp(u) },
+  { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => bitgetOpenDapp(u) },
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => { const q = `open_url?coin_id=20000714&url=${encodeURIComponent(u)}`; return androidScheme("trust", q, "com.wallet.crypto.trustapp", "https://trustwallet.com/download", `trust://${q}`); } },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => { const path = `dapp/${u.replace(/^https?:\/\//, "")}`; return androidScheme("metamask", path, "io.metamask", "https://metamask.io/download/", `metamask://${path}`); } },
   { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi", dapp: (u) => { const q = `app.binance.com/cedefi/dapp?url=${encodeURIComponent(u)}`; return androidScheme("bnc", q, "com.binance.dev", "https://www.binance.com/en/web3wallet", `bnc://${q}`); } },
@@ -161,7 +167,9 @@ export function startDiscovery() {
   window.dispatchEvent(new Event("eip6963:requestProvider"));
   // Back from the wallet app: if it approved while this tab was in the background, use that connection now.
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && !state.current && wc?.session) choose("WalletConnect", wc);
+    if (document.visibilityState !== "visible" || state.current) return;
+    if (wc?.session) { choose("WalletConnect", wc); return; }
+    if (wcFlagAge() < 15 * 60_000) restoreWallet().catch(() => {});
   });
 }
 
@@ -405,7 +413,7 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
     metadata: {
       name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
       // Where the wallet app sends the member back after they approve: this page, in their browser.
-      redirect: { universal: location.origin + location.pathname },
+      redirect: { native: location.origin + location.pathname, universal: location.origin + location.pathname },
     } as any,
   } as any);
   wc.on("disconnect", () => { flagWc(false); if (state.current?.provider === wc) set({ current: null }); });
@@ -634,7 +642,17 @@ export function openWalletApp(href: string) {
     const tg = (window as any).Telegram?.WebApp;
     if (tg?.initData && typeof tg.openLink === "function" && /^https:/.test(href)) { tg.openLink(href); return; }
   } catch { /* not a Telegram mini app */ }
-  try { location.href = href; } catch { /* blocked: the "Open" button is there */ }
+  // A link click keeps this page alive, so the signature can finish. location.href would leave the page.
+  try {
+    const a = document.createElement("a");
+    a.setAttribute("href", href);
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch {
+    try { location.href = href; } catch { /* the Open button is there */ }
+  }
 }
 
 /** The wallet used last time on this device (for a "Last used" badge). */
@@ -745,7 +763,7 @@ async function initSolWc() {
     customStoragePrefix: "autistik-sol",
     metadata: {
       name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
-      redirect: { universal: location.origin + location.pathname },
+      redirect: { native: location.origin + location.pathname, universal: location.origin + location.pathname },
     } as any,
   } as any);
   solWc.on("session_delete", () => { if (state.sol?.name.endsWith("(WalletConnect)")) set({ sol: null }); });
