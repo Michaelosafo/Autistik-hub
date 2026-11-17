@@ -411,7 +411,7 @@ async function initWc(chainId = netOf(state.network).chainId || 56) {
     showQrModal: true,
     qrModalOptions: { themeMode: "dark", explorerRecommendedWalletIds: WC_FEATURED } as any,
     metadata: {
-      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
+      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icons/icon-512.png`, `${location.origin}/icon.svg`],
       // Where the wallet app sends the member back after they approve: this page, in their browser.
       redirect: { native: location.origin + location.pathname, universal: location.origin + location.pathname },
     } as any,
@@ -762,7 +762,7 @@ async function initSolWc() {
     projectId: WALLETCONNECT_ID,
     customStoragePrefix: "autistik-sol",
     metadata: {
-      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icon.svg`],
+      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icons/icon-512.png`, `${location.origin}/icon.svg`],
       redirect: { native: location.origin + location.pathname, universal: location.origin + location.pathname },
     } as any,
   } as any);

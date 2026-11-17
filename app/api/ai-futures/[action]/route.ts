@@ -70,12 +70,10 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90], snipe_budget: [0, 1_000_000], profit_lock_pct: [0, 500], stop_pct: [0, 50] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
+            // BNB Chain only: 0x… addresses.
             const seen = new Set<string>();
-            up.copy_wallets = b.copy_wallets.map((w: any) => {
-              const address = String(w?.address || "").trim();
-              const evm = /^0x[0-9a-fA-F]{40}$/.test(address);
-              return { address, chain: evm ? (w?.chain === "ethereum" ? "ethereum" : "bsc") : "solana", label: String(w?.label || "").trim().slice(0, 24) || undefined, usd: clamp(w?.usd, 1, 10000), on: w?.on !== false };
-            }).filter((w: any) => (w.chain === "solana" ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(w.address) : true) && !seen.has(`${w.chain}:${w.address.toLowerCase()}`) && seen.add(`${w.chain}:${w.address.toLowerCase()}`)).slice(0, 25);
+            up.copy_wallets = b.copy_wallets.map((w: any) => ({ address: String(w?.address || "").trim(), chain: "bsc", label: String(w?.label || "").trim().slice(0, 24) || undefined, usd: clamp(w?.usd, 1, 10000), on: w?.on !== false }))
+              .filter((w: any) => /^0x[0-9a-fA-F]{40}$/.test(w.address) && !seen.has(w.address.toLowerCase()) && seen.add(w.address.toLowerCase())).slice(0, 25);
           }
           if (Array.isArray(b.venues)) up.venues = VENUES.filter((v) => b.venues.includes(v));
           if (Array.isArray(b.coins) || Array.isArray(b.extra_coins)) {
@@ -94,6 +92,18 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (b.mode === "paper" || b.mode === "live") {
             if (b.mode === "live") {
               const { data: open } = await sb.from("ai_futures_positions").select("id").eq("fut_id", id).eq("mode", "paper").in("status", ["open", "closing"]).limit(1);
+              if (isCopyDesk()) {
+                const { copyKeys } = await import("@/lib/ai-copy");
+                const k = await copyKeys();
+                const have = k.keys.filter((x) => x.address);
+                if (!have.length) return json({ error: "Add at least one wallet (private key) for Copy to buy with first." }, 400);
+                if (!have.some((x) => Number(x.bnb) > 0.005)) return json({ error: `Your Copy wallet${have.length > 1 ? "s hold" : " holds"} almost no BNB. Send BNB (on BNB Chain) to ${have.map((x) => x.address).join(" or ")} first.` }, 400);
+                if (open?.length) await closeAllNow("paper");
+                up.mode = b.mode; up.day = null; up.day_start_usd = null;
+                const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
+                if (error) return json({ error: error.message }, 400);
+                return json({ ok: true, note: `Copy is LIVE: ${have.length > 1 ? `${have.length} wallets buy` : `wallet ${have[0].slot} buys`} with BNB on BNB Chain.` });
+              }
               if (isSpotDesk()) {
                 const nm = isCopyDesk() ? "Copy" : "Sniper";
                 const sw = await (await import("@/lib/ai-sniper")).snipeWallet().catch(() => null);
@@ -123,6 +133,17 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (error) return json({ error: error.message }, 400);
           await flog("settings", `Settings changed: ${Object.entries(up).filter(([k]) => !["day", "day_start_usd"].includes(k)).map(([k, v]) => `${k} = ${Array.isArray(v) ? v.map((x: any) => (x && typeof x === "object" ? x.label || x.address : x)).join(", ") : v}`).join("; ")}`);
           return json({ ok: true, note: up.mode === "live" ? "LIVE: the AI now trades real money on Hyperliquid." : up.enabled === true ? "AI Futures is on." : up.enabled === false ? "Off. Open positions are still watched." : "Saved." });
+        }
+        case "copy-key-set": {
+          if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
+          const { setCopyKey } = await import("@/lib/ai-copy");
+          const address = await setCopyKey(Number(b.slot), String(b.key || ""));
+          return json({ ok: true, address, note: `Wallet ${Number(b.slot)} added: ${address.slice(0, 6)}…${address.slice(-4)}. Send BNB to it so it can buy.` });
+        }
+        case "copy-key-remove": {
+          if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
+          await (await import("@/lib/ai-copy")).removeCopyKey(Number(b.slot));
+          return json({ ok: true, note: `Wallet ${Number(b.slot)} removed.` });
         }
         case "wallet": { const address = await createFutWallet(); return json({ ok: true, address, note: "Wallet created. See How to fund." }); }
         case "key-reveal": return json({ ok: true, key: await revealFutKey() });
