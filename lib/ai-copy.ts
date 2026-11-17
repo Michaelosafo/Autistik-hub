@@ -47,6 +47,8 @@ const MONEY = new Set(["0x55d398326f99059ff775485246999027b3197955", "0x8ac76a51
 
 export const MAX_KEYS = 5;
 export const SLOTS = [1, 2, 3, 4, 5] as const;
+/** BNB kept for gas in each wallet (a swap on BNB Chain costs well under a cent; this covers many). */
+const COPY_GAS = 0.0006;
 const keyCache = new Map<string, { key: string; a: PrivateKeyAccount }>();
 export async function copyKey(slot: number): Promise<PrivateKeyAccount | null> {
   const { data } = await sb().rpc("ai_copy_key_get", { p_id: T(), p_slot: slot });
@@ -103,8 +105,10 @@ export async function copyKeys() {
   const bnbUsd = await c.nativeUsd("bsc").catch(() => 0);
   const keys = await Promise.all(SLOTS.map(async (slot) => {
     const a = await copyKey(slot).catch(() => null);
-    if (!a) return { slot, address: null, bnb: null };
-    return { slot, address: a.address, bnb: await c.chainBalance("bsc", { evm: a, sol: null }).catch(() => null) };
+    if (!a) return { slot, address: null, bnb: null, usd: null };
+    const w = { evm: a, sol: null };
+    const [bnb, st] = await Promise.all([c.chainBalance("bsc", w).catch(() => null), c.stableBalances("bsc", w).catch(() => [])]);
+    return { slot, address: a.address, bnb, usd: st.reduce((x, y) => x + y.balance, 0) };
   }));
   return { bnbUsd, keys };
 }
@@ -112,9 +116,9 @@ export async function copyKeys() {
 // ---------- Watching the copied wallets ----------
 
 /** BSC nodes that serve eth_getLogs, first that answers wins. COPY_BSC_RPC (e.g. a QuickNode / Ankr / NodeReal URL) goes first. */
-const LOG_RPCS = [process.env.COPY_BSC_RPC, "https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://1rpc.io/bnb", "https://bsc.blockpi.network/v1/rpc/public"].filter(Boolean) as string[];
+const LOG_RPCS = [process.env.COPY_BSC_RPC, "https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://bsc-mainnet.public.blastapi.io", "https://binance.llamarpc.com", "https://bsc.meowrpc.com", "https://1rpc.io/bnb"].filter(Boolean) as string[];
 let logClient: any = null;
-const bscLogs = () => (logClient ||= createPublicClient({ chain: bsc, transport: fallback(LOG_RPCS.map((u) => http(u, { timeout: 8000 }))) }));
+const bscLogs = () => (logClient ||= createPublicClient({ chain: bsc, transport: fallback(LOG_RPCS.map((u) => http(u, { timeout: 6000, retryCount: 0 })), { retryCount: 1 }) }));
 
 type Move = { wallet: CopyWallet; sig: string; mint: string; kind: "buy" | "sell"; frac: number };
 const TRANSFER = { type: "event", name: "Transfer", inputs: [{ type: "address", name: "from", indexed: true }, { type: "address", name: "to", indexed: true }, { type: "uint256", name: "value", indexed: false }] } as const;
@@ -147,7 +151,7 @@ async function bscMoves(ws: CopyWallet[], last: number): Promise<{ head: number;
   const head = Number(await c.getBlockNumber());
   if (!last || head - last > 400) return { head, moves: [] }; // first look (or a gap over ~3 min): never copy old trades
   if (head <= last) return { head: last, moves: [] };
-  const from = BigInt(last + 1), to = BigInt(Math.min(head, last + 100));
+  const from = BigInt(last + 1), to = BigInt(Math.min(head, last + 50));
   const addrs = ws.map((w) => w.address as `0x${string}`);
   const [ins, outs] = await Promise.all([
     c.getLogs({ event: TRANSFER, args: { to: addrs }, fromBlock: from, toBlock: to }),
@@ -211,8 +215,8 @@ async function copyEquity(s: FSettings): Promise<{ total: number; free: number }
   const { data } = await pos().select("*").eq("fut_id", T()).eq("mode", "live").in("status", ["open", "closing"]);
   const inTrades = ((data || []) as FPos[]).reduce((a, p) => a + n(p.notional_usd) * (n(p.last) || n(p.entry)) / n(p.entry), 0);
   const k = await copyKeys();
-  const bnb = k.keys.reduce((a, x) => a + n(x.bnb), 0);
-  return { total: bnb * k.bnbUsd + inTrades, free: bnb * k.bnbUsd };
+  const free = k.keys.reduce((a, x) => a + n(x.bnb) * k.bnbUsd + n(x.usd), 0);
+  return { total: free + inTrades, free };
 }
 
 /** The automatic stop-loss / take profit can be switched off: then you sell yourself (Sell buttons on the page). */
@@ -280,11 +284,11 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
   const who = mv.wallet.label || short(mv.wallet.address);
   const link = `https://bscscan.com/tx/${mv.sig}`;
   await sleep(300 + Math.random() * 1500); // a short random wait, so it never lands in the same moment as the wallet
-  const row = (usd: number, entry: number, qty: number, tx: string | null, slot: number | null) => pos().insert({
+  const row = (usd: number, entry: number, qty: number, tx: string | null, slot: number | null, pay: string | null = null) => pos().insert({
     fut_id: T(), mode: s.mode, venue: "copy", coin: mv.mint, side: "long", lev: 1, margin_usd: usd, notional_usd: usd,
     entry, stop: slOn(s) ? entry * (1 - cfg.sl / 100) : 0, target: tpOn(s) ? entry * (1 + cfg.tp / 100) : 0, liq: null, best: entry, last: entry, size: qty,
     fees_usd: s.mode === "paper" ? usd * 0.01 : 0, why: `${info.symbol}: copied ${who}`, open_tx: tx, risk_usd: slOn(s) ? usd * cfg.sl / 100 : usd,
-    equity_at_open: eq.total, copy_from: mv.wallet.address, copy_slot: slot,
+    equity_at_open: eq.total, copy_from: mv.wallet.address, copy_slot: slot, copy_pay: pay,
   });
 
   if (s.mode !== "live") {
@@ -305,16 +309,22 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     const a = await copyKey(slot);
     if (!a) return null;
     const w = { evm: a, sol: null };
-    const usd = +(base * (0.88 + Math.random() * 0.24)).toFixed(2); // ±12%: never exactly the same size
-    const bnb = usd / bnbUsd;
-    const have = await c.chainBalance("bsc", w).catch(() => 0);
-    if (have < bnb + c.GAS_KEEP.bsc) { await flog("skip", `Wallet ${slot} skipped ${info.symbol}: it has ${have.toFixed(4)} BNB, needs ${(bnb + c.GAS_KEEP.bsc).toFixed(4)} (buy + gas).`); return null; }
+    const want = +(base * (0.88 + Math.random() * 0.24)).toFixed(2); // ±12%: never exactly the same size
+    // Pay with whatever the wallet holds: USDT / USDC on BNB Chain first, else BNB. Less than the buy size: all of it.
+    const [have, sts] = await Promise.all([c.chainBalance("bsc", w).catch(() => 0), c.stableBalances("bsc", w).catch(() => [])]);
+    const st = sts.sort((x, y) => y.balance - x.balance)[0] || null;
+    const bnbFree = Math.max(0, have - COPY_GAS) * bnbUsd, stFree = st ? st.balance : 0;
+    if (have < COPY_GAS) { await flog("skip", `Wallet ${slot} skipped ${info.symbol}: it needs a little BNB for gas (${COPY_GAS} BNB, ≈ $${(COPY_GAS * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
+    const useStable = stFree >= want * 0.98 || (bnbFree < want && stFree >= bnbFree);
+    const usd = +Math.min(want, useStable ? stFree * 0.995 : bnbFree).toFixed(2);
+    if (usd < 0.5) { await flog("skip", `Wallet ${slot} skipped ${info.symbol}: only $${(bnbFree + stFree).toFixed(2)} to buy with (send BNB or USDT on BNB Chain).`); return null; }
+    const pay = useStable ? st!.symbol : "BNB";
     try {
-      const r = await c.liveBuyOn("bsc", w, token, bnb, 10);
+      const r = useStable ? await c.liveBuyOn("bsc", w, token, usd, 10, st) : await c.liveBuyOn("bsc", w, token, usd / bnbUsd, 10);
       if (!(r.raw > 0n)) throw new Error("the swap went through but no coins arrived");
       const qty = Number(r.raw) / 10 ** r.decimals;
-      await row(usd, usd / qty, qty, r.hash, slot);
-      await flog("open", `👥 Wallet ${slot} bought ${info.symbol} for ${bnb.toFixed(4)} BNB ($${usd.toFixed(2)}): ${who} just bought it. ${link}`);
+      await row(usd, usd / qty, qty, r.hash, slot, pay);
+      await flog("open", `👥 Wallet ${slot} bought ${info.symbol} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had)" : ""}: ${who} just bought it. ${link}`);
       return slot;
     } catch (e) {
       await flog("error", `Wallet ${slot} couldn't buy ${info.symbol}: ${(e as Error).message.slice(0, 160)}`);
@@ -348,8 +358,9 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
       const own = mine > 0n && mine < bal.raw ? mine : bal.raw;
       const raw = all ? own : BigInt(Math.floor(Number(own) * part));
       if (raw > 0n) {
-        const r = await c.liveSellOn("bsc", w, token, raw, 10, /stop/i.test(reason) ? 2000 : 0);
-        got = r.receivedNative * (await c.nativeUsd("bsc"));
+        const st = c.stableBySymbol("bsc", (p as any).copy_pay);
+        const r = await c.liveSellOn("bsc", w, token, raw, 10, /stop/i.test(reason) ? 2000 : 0, st);
+        got = st ? r.receivedNative : r.receivedNative * (await c.nativeUsd("bsc")); // stablecoin sells come back in dollars
         tx = r.hash;
         if (n(p.size) > 0) px = got / (n(p.size) * part);
       } else reason = `${reason} (the wallet held none of it any more)`;
