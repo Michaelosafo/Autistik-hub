@@ -314,16 +314,15 @@ function watchRequests(name: string, provider: any) {
   provider.request = async (args: any) => {
     const what = APPROVE[args?.method];
     if (!what) return orig(args);
-    const isWc = provider === wc, mobileWc = isWc && isMobile();
+    const phone = isMobile();
+    const isWc = provider === wc;
     const label = isWc ? wcWalletName() : name;
-    const href = mobileWc ? wcRequestHref() : undefined;
-    const mine = { name: label, what, href, since: Date.now(), mobileWc };
-    // Phones: bring the wallet app to the front now (works while the tap is still fresh; otherwise the bar's button does it).
-    let shown = false;
-    const show = () => { shown = true; set({ pending: mine }); };
-    if (mobileWc) { show(); if (href) setTimeout(() => openWalletApp(href), 300); }
-    // Extensions and wallet browsers usually pop up at once: only show the bar if nothing's been answered after a moment.
-    const t = mobileWc ? null : setTimeout(show, 2500);
+    const href = phone ? wcRequestHref() : undefined;
+    const mine = { name: label, what, href, since: Date.now(), mobileWc: phone };
+    // Every approval (swap, liquidity, a buy) shows the same bar at once, on every page.
+    const show = () => set({ pending: mine });
+    show();
+    if (phone && href) setTimeout(() => openWalletApp(href), 300);
     try { return await orig(args); }
     catch (e: any) {
       if (e?.code === -32002 || /already pending/i.test(String(e?.message))) {
@@ -331,8 +330,7 @@ function watchRequests(name: string, provider: any) {
       }
       throw e;
     } finally {
-      if (t) clearTimeout(t);
-      if (shown && state.pending === mine) set({ pending: null });
+      if (state.pending === mine) set({ pending: null });
     }
   };
 }
