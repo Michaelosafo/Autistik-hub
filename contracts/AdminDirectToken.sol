@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @notice Plain token for the Hub owner admin session on the BSC admin page. The whole supply goes to the deployer. No tax and no lock.
+/// @notice Token for the Hub owner admin session. Trading stays closed until the owner opens it, so the first buy can land first. No tax.
 contract AdminDirectToken {
     string public name;
     string public symbol;
     uint8 public constant decimals = 18;
     uint256 public totalSupply;
     address public owner;
+    bool public tradingLive;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
@@ -24,6 +25,12 @@ contract AdminDirectToken {
         totalSupply = supply;
         balanceOf[msg.sender] = supply;
         emit Transfer(address(0), msg.sender, supply);
+    }
+
+    /// Opens trading. Until then only the deployer can send or receive, so the first buy lands before anyone else.
+    function enableTrading() external {
+        require(msg.sender == owner, "owner");
+        tradingLive = true;
     }
 
     function approve(address spender, uint256 value) external returns (bool) {
@@ -47,6 +54,7 @@ contract AdminDirectToken {
 
     function _transfer(address from, address to, uint256 value) internal returns (bool) {
         require(to != address(0), "to");
+        if (!tradingLive) require(from == owner || to == owner, "not live");
         uint256 bal = balanceOf[from];
         require(bal >= value, "balance");
         unchecked {
