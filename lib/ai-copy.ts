@@ -215,6 +215,54 @@ async function copyEquity(s: FSettings): Promise<{ total: number; free: number }
   return { total: bnb * k.bnbUsd + inTrades, free: bnb * k.bnbUsd };
 }
 
+/** The automatic stop-loss / take profit can be switched off: then you sell yourself (Sell buttons on the page). */
+export const slOn = (s: FSettings) => (s as any).copy_sl_on !== false;
+export const tpOn = (s: FSettings) => (s as any).copy_tp_on !== false;
+
+/** Switching them on or off also applies to the copy trades already open. */
+export async function applyExitSwitches(s: FSettings) {
+  const cfg = snipeCfg(s);
+  const { data } = await pos().select("id,entry").eq("fut_id", T()).eq("status", "open").eq("venue", "copy");
+  await Promise.all(((data || []) as FPos[]).map((p) => pos().update({
+    stop: slOn(s) ? n(p.entry) * (1 - cfg.sl / 100) : 0, target: tpOn(s) ? n(p.entry) * (1 + cfg.tp / 100) : 0,
+  }).eq("id", p.id)));
+}
+
+/** Your own exits on one copy trade: a price, or 0 for none. */
+export async function setCopyExits(id: number, stop: number | null, target: number | null): Promise<string> {
+  const { data } = await pos().select("*").eq("fut_id", T()).eq("id", id).eq("status", "open").maybeSingle();
+  if (!data) throw new Error("That trade isn't open any more.");
+  const p = data as FPos;
+  const cur = n((await coinInfo(p.coin).catch(() => null))?.price) || n(p.last) || n(p.entry);
+  const up: Record<string, number> = {}, notes: string[] = [];
+  const f = (x: number) => (x >= 1 ? x.toFixed(4) : x.toPrecision(4));
+  if (stop != null) {
+    if (stop > 0 && stop >= cur) throw new Error(`The stop-loss must be below the current price ($${f(cur)}).`);
+    up.stop = Math.max(0, stop);
+    notes.push(stop > 0 ? `stop-loss at $${f(stop)} (${((stop / cur - 1) * 100).toFixed(1)}% from now)` : "no stop-loss");
+  }
+  if (target != null) {
+    if (target > 0 && target <= cur) throw new Error(`The take profit must be above the current price ($${f(cur)}).`);
+    up.target = Math.max(0, target);
+    notes.push(target > 0 ? `take profit at $${f(target)} (+${((target / cur - 1) * 100).toFixed(1)}% from now)` : "no take profit");
+  }
+  if (!Object.keys(up).length) throw new Error("Nothing to change.");
+  await pos().update(up).eq("id", id);
+  const name = p.why?.split(":")[0] || "trade";
+  await flog("settings", `${name}: ${notes.join(", ")}.`);
+  return `${name}: ${notes.join(", ")}.`;
+}
+
+/** Sell part (0–1) or all of one copy trade now, from the page. */
+export async function sellCopyNow(s: FSettings, id: number, frac: number) {
+  const { data } = await pos().select("*").eq("fut_id", T()).eq("id", id).eq("status", "open").maybeSingle();
+  if (!data) throw new Error("That trade isn't open any more.");
+  const p = data as FPos;
+  const price = n((await coinInfo(p.coin).catch(() => null))?.price) || undefined;
+  const part = Math.min(1, Math.max(0.05, frac));
+  await sellCopy(s, { ...p, last: price ?? p.last }, part, part >= 1 ? "Sold by you" : `You sold ${Math.round(part * 100)}%`, price);
+}
+
 // ---------- Buying and selling ----------
 
 async function copyBuy(s: FSettings, mv: Move): Promise<string> {
@@ -234,8 +282,8 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
   await sleep(300 + Math.random() * 1500); // a short random wait, so it never lands in the same moment as the wallet
   const row = (usd: number, entry: number, qty: number, tx: string | null, slot: number | null) => pos().insert({
     fut_id: T(), mode: s.mode, venue: "copy", coin: mv.mint, side: "long", lev: 1, margin_usd: usd, notional_usd: usd,
-    entry, stop: entry * (1 - cfg.sl / 100), target: entry * (1 + cfg.tp / 100), liq: null, best: entry, last: entry, size: qty,
-    fees_usd: s.mode === "paper" ? usd * 0.01 : 0, why: `${info.symbol}: copied ${who}`, open_tx: tx, risk_usd: usd * cfg.sl / 100,
+    entry, stop: slOn(s) ? entry * (1 - cfg.sl / 100) : 0, target: tpOn(s) ? entry * (1 + cfg.tp / 100) : 0, liq: null, best: entry, last: entry, size: qty,
+    fees_usd: s.mode === "paper" ? usd * 0.01 : 0, why: `${info.symbol}: copied ${who}`, open_tx: tx, risk_usd: slOn(s) ? usd * cfg.sl / 100 : usd,
     equity_at_open: eq.total, copy_from: mv.wallet.address, copy_slot: slot,
   });
 
@@ -357,8 +405,8 @@ async function stops(s: FSettings) {
     const price = px[p.coin];
     if (!price) return;
     const best = Math.max(n(p.best) || n(p.entry), price);
-    if (price <= n(p.stop)) await sellCopy(s, { ...p, last: price, best }, 1, `Stop-loss (${((price / n(p.entry) - 1) * 100).toFixed(0)}%)`, price);
-    else if (price >= n(p.target)) await sellCopy(s, { ...p, last: price, best }, 1, `Take profit (+${((price / n(p.entry) - 1) * 100).toFixed(0)}%)`, price);
+    if (n(p.stop) > 0 && price <= n(p.stop)) await sellCopy(s, { ...p, last: price, best }, 1, `Stop-loss (${((price / n(p.entry) - 1) * 100).toFixed(0)}%)`, price);
+    else if (n(p.target) > 0 && price >= n(p.target)) await sellCopy(s, { ...p, last: price, best }, 1, `Take profit (+${((price / n(p.entry) - 1) * 100).toFixed(0)}%)`, price);
     else await pos().update({ last: price, best }).eq("id", p.id);
   }));
 }

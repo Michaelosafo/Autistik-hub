@@ -3,7 +3,7 @@
  * Admin: AI Futures. A futures trader separate from the copy-trading bot: its own wallet, settings and trades.
  * Practice or Live (Hyperliquid), never above 3x, every trade with a stop-loss well before liquidation.
  */
-import CopyBsc, { type CopyKeys } from "@/components/CopyBsc";
+import CopyBsc, { CopyTrades, type CopyKeys, type CopyPos } from "@/components/CopyBsc";
 import Clamp from "@/components/Clamp";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -544,6 +544,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
         </section>
       )}
 
+      {copyDesk && <CopyTrades list={d.open as unknown as CopyPos[]} busy={busy} act={act} />}
       {copyDesk && <CopyBsc s={s as any} keys={d.copyKeys || null} cfg={d.snipe?.cfg} busy={busy} act={act} set={set} />}
 
       {snipeDesk && !copyDesk && (
@@ -606,7 +607,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
 
       {d.perf && <Performance p={d.perf} live={live} />}
 
-      <section className="card stack">
+      {!copyDesk && <section className="card stack">
         <b>Open positions</b>
         {!d.open.length ? <small className="muted">None right now.</small> : <Clamp>{d.open.map((p) => (
           <div key={p.id} className="aic-row on" style={{ alignItems: "flex-start" }}>
@@ -638,7 +639,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
             </div>
           </div>
         ))}</Clamp>}
-      </section>
+      </section>}
       </>)}
 
 {!snipeDesk && (<>
