@@ -50,7 +50,7 @@ export const MAX_KEYS = 5;
 export const keyUsd = (s: FSettings, slot: number): number | null => { const v = n(((s as any).copy_key_usd || {})[String(slot)]); return v > 0 ? v : null; };
 export const SLOTS = [1, 2, 3, 4, 5] as const;
 /** BNB kept for gas in each wallet (a swap on BNB Chain costs well under a cent; this covers many). */
-const COPY_GAS = 0.0006;
+const COPY_GAS = 0.0004;
 const keyCache = new Map<string, { key: string; a: PrivateKeyAccount }>();
 export async function copyKey(slot: number): Promise<PrivateKeyAccount | null> {
   const { data } = await sb().rpc("ai_copy_key_get", { p_id: T(), p_slot: slot });
@@ -371,7 +371,7 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     // Pay with whatever the wallet holds: USDT / USDC on BNB Chain first, else BNB. Less than the buy size: all of it.
     const [have, sts] = await Promise.all([c.chainBalance("bsc", w).catch(() => 0), c.stableBalances("bsc", w).catch(() => [])]);
     const st = sts.sort((x, y) => y.balance - x.balance)[0] || null;
-    const keep = Math.max(COPY_GAS, 250_000 * gweiOf(s) * 1e-9 * 1.2); // one swap at your gas speed
+    const keep = Math.max(COPY_GAS, 550_000 * gweiOf(s) * 1e-9); // the buy, the approve and the sell at your gas speed
     const bnbFree = Math.max(0, have - keep) * bnbUsd, stFree = st ? st.balance : 0;
     if (have < keep) { await flog("skip", `Wallet ${slot} skipped ${sym}: it needs ${keep.toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (≈ $${(keep * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
     const useStable = stFree >= want * 0.98 || (bnbFree < want && stFree >= bnbFree);
@@ -388,7 +388,7 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
       if (!(r.raw > 0n)) throw new Error("the swap went through but no coins arrived");
       const qty = Number(r.raw) / 10 ** r.decimals;
       await row(usd, usd / qty, qty, r.hash, slot, pay);
-      await flog("open", `👥 Wallet ${slot} bought ${sym} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had)" : ""}: ${who} just bought it. ${link}`);
+      await flog("open", `👥 Wallet ${slot} bought ${sym} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it could spend, the rest kept for gas)" : ""}: ${who} just bought it. ${link}`);
       return slot;
     } catch (e) {
       await flog("error", `Wallet ${slot} couldn't buy ${sym}: ${(e as Error).message.slice(0, 160)}`);
