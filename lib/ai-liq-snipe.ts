@@ -65,7 +65,8 @@ const pc = () => (client ||= createPublicClient({ chain: bsc, batch: { multicall
 const WSS = [process.env.COPY_BSC_WSS, "wss://bsc-rpc.publicnode.com"].filter(Boolean) as string[];
 const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 
-export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string };
+/** wallets: which of your wallets (slots 1–5) snipe this token; missing / empty = all of them. */
+export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[] };
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(String(t?.token || "")));
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
 const sellPctOf = (s: FSettings) => Math.min(100, Math.max(5, n((s as any).liq_sell_pct) || 100));
@@ -154,8 +155,12 @@ async function receipt(hash: string) {
 }
 
 /** Snipe one token from every wallet at once. Returns how many wallets bought (0: not tradable yet → try next block). */
-async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean }> {
+async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean }> {
   const c = pc();
+  // Only the wallets you picked for this token (none picked = all).
+  const pick = Array.isArray(t.wallets) && t.wallets.length ? new Set(t.wallets.map(Number)) : null;
+  const guns = pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns;
+  if (s.mode === "live" && !guns.length) return { bought: 0, why: `none of the wallets picked for it (${[...(pick || [])].map((x) => `#${x}`).join(", ")}) exist any more` };
   const token = getAddress(t.token);
   const bnbUsd = await bnbPrice();
   const usdEach = Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);

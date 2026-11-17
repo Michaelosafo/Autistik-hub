@@ -93,6 +93,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
               up.liq_targets = b.liq_targets.map((t: any) => ({
                 token: String(t?.token || "").trim(), label: String(t?.label || "").trim().slice(0, 24) || undefined, usd: clamp(t?.usd, 0.5, 100000),
                 on: t?.on !== false, state: ["waiting", "done", "failed"].includes(t?.state) ? t.state : "waiting", added: String(t?.added || new Date().toISOString()),
+                // Which wallets snipe it (1–5); none = all.
+                wallets: Array.isArray(t?.wallets) ? [...new Set(t.wallets.map(Number).filter((x: number) => x >= 1 && x <= 5))].sort() : undefined,
               })).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(t.token) && !seen.has(t.token.toLowerCase()) && seen.add(t.token.toLowerCase())).slice(0, 30);
             }
           }
