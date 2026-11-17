@@ -35,7 +35,8 @@ const USDT = getAddress("0x55d398326f99059fF775485246999027B3197955");
 const ZERO = "0x0000000000000000000000000000000000000000";
 const V3_FEES = [100, 500, 2500, 10000] as const;
 const GAS_LIMIT = 700_000n;
-const GAS_KEEP = 0.0015; // BNB left in each wallet for the buy, the approve and the sell
+const GAS_KEEP = 0.0005; // BNB left in each wallet for the buy, the approve and the sell (a swap costs well under a cent)
+const MIN_USD = 0.1;
 
 const ROUTER_ABI = parseAbi([
   "function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[] amounts)",
@@ -147,7 +148,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
   const c = pc();
   const token = getAddress(t.token);
   const bnbUsd = await bnbPrice();
-  const usdEach = Math.max(0.5, n(t.usd) || n((s as any).snipe_usd) || 5);
+  const usdEach = Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);
   const slip = slipOf(s);
   const [sym, dec] = await Promise.all([
     c.readContract({ address: token, abi: ERC20, functionName: "symbol" }).catch(() => token.slice(0, 8)),
@@ -176,7 +177,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
         const ch = await import("@/lib/ai-trader-chains");
         const w = { evm: g.a, sol: null };
         const bnb = Math.min((keyUsd(s, g.slot) ?? usdEach) / bnbUsd, g.bnb - GAS_KEEP);
-        if (bnb * bnbUsd < 0.5) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
+        if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
         mine = sent = true;
         const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
         g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }));
@@ -189,25 +190,11 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
       const amt = keyUsd(s, g.slot) ?? usdEach; // this wallet's own amount, else the token's / the normal one
       const useUsdt = g.usdtOk && g.usdt >= amt * 0.98;
       let usd = useUsdt ? amt : Math.min(amt, (g.bnb - GAS_KEEP) * bnbUsd);
-      if (usd < 0.5) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keep ${GAS_KEEP} BNB for gas)`); return false; }
+      if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keep ${GAS_KEEP} BNB for gas)`); return false; }
       usd = +usd.toFixed(2);
-      const path = useUsdt ? (route.via === "USDT" ? [USDT, token] : [USDT, WBNB, token]) : route.path;
-      const amountIn = useUsdt ? BigInt(Math.floor(usd * 1e6)) * 10n ** 12n : BigInt(Math.floor((usd / bnbUsd) * 1e18));
-      const amts = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [amountIn, path] });
-      const minOut = (BigInt(amts[amts.length - 1]) * BigInt(Math.round((100 - slip) * 100))) / 10_000n;
-      const data = useUsdt
-        ? encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens", args: [amountIn, minOut, path, g.a.address, deadline] })
-        : encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", args: [minOut, path, g.a.address, deadline] });
-      const value = useUsdt ? 0n : amountIn;
-      // Test-run first: trading not open yet, max-wallet limits, a tax bigger than the slippage… nothing is sent.
-      try { await c.call({ account: g.a.address, to: ROUTER, data, value, gas: GAS_LIMIT }); }
-      catch (e) { notOpen = String((e as any)?.shortMessage || (e as Error).message).slice(0, 120); return false; }
-      const before = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }).catch(() => 0n));
-      mine = sent = true;
-      const hash = await fire(g, s, { to: ROUTER, data, value });
-      await receipt(hash);
-      const after = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }));
-      const got = Number(after - before) / 10 ** dec;
+      const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; });
+      if ("notOpen" in r) { notOpen = r.notOpen; return false; }
+      const { hash, got } = r;
       if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
       await record(s, t, name, usd, got, hash, g.slot, useUsdt ? "USDT" : "BNB", route);
       await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought. https://bscscan.com/tx/${hash}`);
@@ -223,6 +210,104 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
   }));
   const bought = done.filter(Boolean).length;
   return { bought, sent, why: bought ? "" : notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.length ? `not enough money: ${short.join("; ")}` : "no wallet could buy" };
+}
+
+/**
+ * Buy through the PancakeSwap v2 router: quote, test-run, sign, send (MEV Guard), wait. If the test-run fails, the
+ * slippage steps up (yours → +10 → 35%, never past 49) in case it's a buy tax; nothing is sent until a test passes.
+ */
+async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extract<Route, { kind: "v2" }>, usd: number, useUsdt: boolean, slip: number, bnbUsd: number, dec: number, onSend: () => void): Promise<{ hash: string; got: number; slip: number } | { notOpen: string }> {
+  const c = pc();
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
+  const path = useUsdt ? (route.via === "USDT" ? [USDT, token] : [USDT, WBNB, token]) : route.path;
+  const amountIn = useUsdt ? BigInt(Math.floor(usd * 1e6)) * 10n ** 12n : BigInt(Math.floor((usd / bnbUsd) * 1e18));
+  const amts = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [amountIn, path] });
+  const quoted = BigInt(amts[amts.length - 1]);
+  const value = useUsdt ? 0n : amountIn;
+  let data: `0x${string}` | null = null, used = slip, why = "";
+  for (const sl of [...new Set([slip, Math.min(49, slip + 10), Math.max(slip, 35)])]) {
+    const minOut = (quoted * BigInt(Math.round((100 - sl) * 100))) / 10_000n;
+    const d = useUsdt
+      ? encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens", args: [amountIn, minOut, path, g.a.address, deadline] })
+      : encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", args: [minOut, path, g.a.address, deadline] });
+    // Test-run: trading not open yet, max-wallet limits, a tax bigger than the slippage… nothing is sent.
+    try { await c.call({ account: g.a.address, to: ROUTER, data: d, value, gas: GAS_LIMIT }); data = d; used = sl; break; }
+    catch (e) {
+      why = String((e as any)?.shortMessage || (e as Error).message).slice(0, 120);
+      if (!/INSUFFICIENT_OUTPUT_AMOUNT|TransferHelper|reverted/i.test(why)) break; // not a slippage problem: stepping up won't help
+    }
+  }
+  if (!data) return { notOpen: why };
+  const before = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }).catch(() => 0n));
+  onSend();
+  const hash = await fire(g, s, { to: ROUTER, data, value });
+  await receipt(hash);
+  const after = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }));
+  return { hash, got: Number(after - before) / 10 ** dec, slip: used };
+}
+
+/**
+ * Copy: buy straight through PancakeSwap (fast, works on tokens minutes old that the route service doesn't know yet).
+ * null: no PancakeSwap v2 pool, so the caller uses the route service instead.
+ */
+export async function directBuy(a: PrivateKeyAccount, s: FSettings, tokenIn: string, usd: number, useUsdt: boolean, slip: number): Promise<{ raw: bigint; decimals: number; hash: string; slip: number } | null> {
+  const token = getAddress(tokenIn);
+  const route = (await routes([token])).get(token.toLowerCase());
+  if (!route || route.kind !== "v2") return null;
+  const c = pc();
+  const [nonce, allow, dec] = await Promise.all([
+    c.getTransactionCount({ address: a.address, blockTag: "pending" }),
+    useUsdt ? c.readContract({ address: USDT, abi: ERC20, functionName: "allowance", args: [a.address, ROUTER] }).catch(() => 0n) : Promise.resolve(2n ** 255n),
+    c.readContract({ address: token, abi: ERC20, functionName: "decimals" }).then(Number).catch(() => 18),
+  ]);
+  const g: Gun = { slot: 0, a, nonce: Number(nonce), bnb: 0, usdt: 0, usdtOk: BigInt(allow) > 10n ** 30n };
+  if (useUsdt && !g.usdtOk) {
+    await receipt(await fire(g, { ...s, copy_mev: false } as FSettings, { to: USDT, data: encodeFunctionData({ abi: ERC20, functionName: "approve", args: [ROUTER, 2n ** 256n - 1n] }), value: 0n }));
+  }
+  const r = await routerBuy(g, s, token, route, usd, useUsdt, slip, await bnbPrice(), dec, () => {});
+  if ("notOpen" in r) throw new Error(`PancakeSwap refused the test buy: ${r.notOpen}`);
+  approveForSell(g, s, token).catch(() => {});
+  return { raw: BigInt(Math.floor(r.got * 10 ** dec)), decimals: dec, hash: r.hash, slip: r.slip };
+}
+
+/** Sell through PancakeSwap v2 straight away, back into USDT or BNB. null: no v2 pool (use the route service). */
+export async function directSell(a: PrivateKeyAccount, s: FSettings, tokenIn: string, raw: bigint, toUsdt: boolean, slip: number): Promise<{ hash: string; got: number } | null> {
+  const token = getAddress(tokenIn);
+  const route = (await routes([token])).get(token.toLowerCase());
+  if (!route || route.kind !== "v2") return null;
+  const c = pc();
+  const SELL_ABI = parseAbi([
+    "function swapExactTokensForETHSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)",
+    "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)",
+  ]);
+  const [nonce, allow] = await Promise.all([
+    c.getTransactionCount({ address: a.address, blockTag: "pending" }),
+    c.readContract({ address: token, abi: ERC20, functionName: "allowance", args: [a.address, ROUTER] }).catch(() => 0n),
+  ]);
+  const g: Gun = { slot: 0, a, nonce: Number(nonce), bnb: 0, usdt: 0, usdtOk: true };
+  if (BigInt(allow) < raw) await receipt(await fire(g, { ...s, copy_mev: false } as FSettings, { to: token, data: encodeFunctionData({ abi: ERC20, functionName: "approve", args: [ROUTER, 2n ** 256n - 1n] }), value: 0n }));
+  // Path out: the pool's own side, then on to what you paid with.
+  const viaUsdt = route.via === "USDT";
+  const path = toUsdt ? (viaUsdt ? [token, USDT] : [token, WBNB, USDT]) : (viaUsdt ? [token, USDT, WBNB] : [token, WBNB]);
+  const amts = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [raw, path] });
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
+  let data: `0x${string}` | null = null, why = "";
+  for (const sl of [...new Set([slip, Math.min(49, slip + 10), Math.max(slip, 35)])]) {
+    const minOut = (BigInt(amts[amts.length - 1]) * BigInt(Math.round((100 - sl) * 100))) / 10_000n;
+    const d = toUsdt
+      ? encodeFunctionData({ abi: SELL_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens", args: [raw, minOut, path, a.address, deadline] })
+      : encodeFunctionData({ abi: SELL_ABI, functionName: "swapExactTokensForETHSupportingFeeOnTransferTokens", args: [raw, minOut, path, a.address, deadline] });
+    try { await c.call({ account: a.address, to: ROUTER, data: d, gas: GAS_LIMIT }); data = d; break; }
+    catch (e) { why = String((e as any)?.shortMessage || (e as Error).message).slice(0, 120); }
+  }
+  if (!data) throw new Error(`PancakeSwap refused the test sell: ${why}`);
+  const before = toUsdt ? BigInt(await c.readContract({ address: USDT, abi: ERC20, functionName: "balanceOf", args: [a.address] })) : BigInt(await c.getBalance({ address: a.address }));
+  const hash = await fire(g, s, { to: ROUTER, data, value: 0n });
+  const rc = await receipt(hash);
+  const after = toUsdt ? BigInt(await c.readContract({ address: USDT, abi: ERC20, functionName: "balanceOf", args: [a.address] })) : BigInt(await c.getBalance({ address: a.address }));
+  const gas = toUsdt ? 0n : BigInt(rc.gasUsed) * BigInt(rc.effectiveGasPrice ?? 0n);
+  const got = Number(after - before + gas) / 1e18; // USDT on BNB Chain has 18 decimals
+  return { hash, got: toUsdt ? got : got * (await bnbPrice()) };
 }
 
 async function approveForSell(g: Gun, s: FSettings, token: `0x${string}`) {
