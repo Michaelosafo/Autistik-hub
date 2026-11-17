@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
 import ApproveBar from "./ApproveBar";
-import { choosePhoneWallets, chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, isAndroid, warmUp } from "@/lib/connect";
+import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -22,7 +22,7 @@ export default function WalletPicker() {
   const [netQ, setNetQ] = useState("");
   const [qrImg, setQrImg] = useState("");
   // Every WalletConnect wallet (600+), loaded when asked for or searched.
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
   const [all, setAll] = useState<{ list: ListedWallet[]; total: number; page: number; loading: boolean }>({ list: [], total: 0, page: 0, loading: false });
   const loadAll = (page: number, search: string, add: boolean) => {
     setAll((a) => ({ ...a, loading: true }));
@@ -75,20 +75,13 @@ export default function WalletPicker() {
           go: () => chooseInjected(w.name, inj) });
         continue;
       }
-      const viaWc = !!WALLETCONNECT_ID;
-      if (w.id === "okx" && mobile && isAndroid() && viaWc) continue; // pinned at the top on Android
-      // Phones: open this site inside the wallet app. WalletConnect often never opens the app.
-      const phoneDapp = mobile && !!w.dapp;
-      const phoneWc = mobile && viaWc && !!(w.wc || w.native) && !phoneDapp;
+      const viaWc = !!WALLETCONNECT_ID && !!(w.wc || w.native);
       out.push({
         key: w.id, name: w.name, logo: `/wallets/${w.id}.svg`, color: w.color,
         badge: w.name === last ? "Last used" : undefined,
-        sub: phoneWc ? `Opens ${w.name} to approve, then back here` : phoneDapp ? `Opens autistik.io inside ${w.name}` : mobile ? (viaWc ? "Pick it in the WalletConnect list" : "Get the app")
-          : viaWc ? `Scan with ${w.name} on your phone` : "Get the app",
+        sub: viaWc ? (mobile ? `Opens ${w.name} to sign, then back here` : `Scan with ${w.name} on your phone`) : "Get the app",
         go: () => {
-          if (phoneWc) { chooseWalletConnect(w.id); return; }
-          if (phoneDapp) { location.href = w.dapp!(directUrl()); return; }
-          if (viaWc) { chooseWalletConnect(mobile ? undefined : w.id); return; }
+          if (viaWc) { chooseWalletConnect(w.id); return; }
           window.open(w.install, "_blank", "noopener,noreferrer");
         },
       });
@@ -112,7 +105,7 @@ export default function WalletPicker() {
       }
       // Bitget, Trust, OKX: approve in the wallet app (or scan its code) and stay in this browser, like WalletConnect
       // on the other networks. Phantom, Solflare, Backpack, Coinbase: open this site inside the app on a phone.
-      const viaWc = !!WALLETCONNECT_ID && !!(a.wc || a.native) && !(mobile && a.dapp);
+      const viaWc = !!WALLETCONNECT_ID && !!(a.wc || a.native);
       out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, badge: mobile && !viaWc ? "⚡ Direct" : undefined,
         sub: viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Direct: opens autistik.io inside ${a.name}, connects in one tap` : "Not on this browser: get the app",
         go: () => {
@@ -156,7 +149,7 @@ export default function WalletPicker() {
       <div className="wp" role="dialog" aria-modal="true" aria-label="Connect a wallet" onClick={(e) => e.stopPropagation()}>
         <div className="wp-main">
           <div className="wp-head">
-            <div><b>Connect a wallet</b><small>Pick your network, then your wallet</small></div>
+            <div><b>Connect a wallet</b><small>WalletConnect. Tap your wallet, sign in the app, come back.</small></div>
             <button type="button" className="wp-x" onClick={closePicker} aria-label="Close">×</button>
           </div>
           <div className="wp-nets" role="radiogroup" aria-label="Network">
@@ -202,39 +195,22 @@ export default function WalletPicker() {
           {!s.qr && <>
           <input className="wp-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search wallets" aria-label="Search wallets" autoComplete="off" spellCheck={false} />
           <div className="wp-list">
-            {/* Android: the phone shows its own list of the wallet apps installed; pick one there. */}
-            {!solMode && mobile && isAndroid() && WALLETCONNECT_ID && !q && (
-              <button type="button" className="wp-row" disabled={!!s.busy} onClick={() => { choosePhoneWallets(); }} style={{ border: "2px solid #F0B90B" }}>
-                <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
-                <span className="wp-row-t"><b>Choose a wallet on my phone</b><small>{s.busy === "your wallet" ? "Getting ready…" : "Your phone lists the wallet apps you have. Pick one, approve, come back."}</small></span>
-                <span className="wp-badge gold">Easiest</span>
-                <i className="wp-chev" aria-hidden="true" />
-              </button>
-            )}
-            {/* OKX doesn't show in the phone's own list on some phones: always one tap away here. */}
-            {!solMode && mobile && isAndroid() && WALLETCONNECT_ID && !q && (
-              <button type="button" className="wp-row" disabled={!!s.busy} onClick={() => { chooseWalletConnect("okx"); }}>
-                <img src="/wallets/okx.svg" alt="" width={40} height={40} />
-                <span className="wp-row-t"><b>OKX Wallet</b><small>{s.busy === "OKX Wallet" ? "Opening…" : "Opens OKX Wallet to approve, then back here"}</small></span>
-                <i className="wp-chev" aria-hidden="true" />
-              </button>
-            )}
             {installed.length > 0 && <div className="wp-label">On this device</div>}
             {installed.map((r) => <RowBtn key={r.key} r={r} />)}
-            {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : mobile ? "Tap your wallet: it opens, you approve, you come back" : "Popular"}</div>}
+            {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : "Wallets"}</div>}
             {others.map((r) => <RowBtn key={r.key} r={r} />)}
-            {!solMode && <>
+            {!solMode && !mobile && <>
             <div className="wp-label">Other wallets</div>
-            <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => { if (mobile) { setShowAll(true); setTimeout(() => document.querySelector(".wp-more, .wp-list .wp-label:last-of-type")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); } else chooseWalletConnect(); }}>
+            <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => chooseWalletConnect()}>
             <img src="/wallets/walletconnect.svg" alt="" width={40} height={40} />
-            <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : (mobile ? `Only if your wallet isn't above · 600+ wallet apps` : `300+ wallets on ${netOf(s.network).name} · QR code`)) : "Coming soon"}</small></span>
+            <span className="grow"><b>WalletConnect</b><small>{WALLETCONNECT_ID ? (s.busy === "WalletConnect" ? "Opening…" : `Scan with any wallet on ${netOf(s.network).name}`) : "Coming soon"}</small></span>
             <i className="wp-chev" aria-hidden="true" />
           </button>
             </>}
             {!solMode && WALLETCONNECT_ID && (() => {
               const known = new Set(rows.map((r) => r.name.toLowerCase()));
               const extra = all.list.filter((w) => !known.has(w.name.toLowerCase()));
-              if (!showAll && !q) return <button type="button" className="wp-more" onClick={() => setShowAll(true)}>Show all wallets (600+) ▾</button>;
+              if (!showAll && !q) return <button type="button" className="wp-more" onClick={() => setShowAll(true)}>Show all wallets ▾</button>;
               return <>
                 <div className="wp-label">{q ? "More wallets" : `All wallets${all.total ? ` (${all.total})` : ""}`}</div>
                 {extra.map((w) => {
@@ -260,16 +236,6 @@ export default function WalletPicker() {
           </div>
           </>}
           {s.error && <div className="wp-err" role="alert">{s.error}</div>}
-          {!solMode && mobile && !s.qr && (
-            <div className="wp-label" style={{ marginTop: 8 }}>{s.error ? "Still not connecting? Open this site inside your wallet app" : "Or open autistik.io inside your wallet app"}</div>
-          )}
-          {!solMode && mobile && !s.qr && TOP_WALLETS.filter((w) => w.dapp).slice(0, 5).map((w) => (
-            <a key={w.id} className="wp-row" href={w.dapp!(directUrl())}>
-              <img src={`/wallets/${w.id}.svg`} alt="" width={40} height={40} loading="lazy" decoding="async" />
-              <span className="wp-row-t"><b>{w.name}</b><small>Opens autistik.io in the app&apos;s browser</small></span>
-              <i className="wp-chev" aria-hidden="true" />
-            </a>
-          ))}
         </div>
 
         <aside className="wp-side" aria-label="About wallets">
