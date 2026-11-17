@@ -75,7 +75,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
             if (b.copy_key_usd && typeof b.copy_key_usd === "object") {
               // { "1": 5, "3": 20 }: $ per buy for those wallets; missing / empty = the normal amount.
               const m: Record<string, number> = {};
-              for (const [k, v] of Object.entries(b.copy_key_usd)) { const slot = Number(k), x = clamp(v, 0.5, 100000); if (slot >= 1 && slot <= 5 && x != null && Number(v) > 0) m[String(slot)] = x; }
+              for (const [k, v] of Object.entries(b.copy_key_usd)) { const slot = Number(k), x = clamp(v, 0.5, 100000); if (slot >= 1 && slot <= 10 && x != null && Number(v) > 0) m[String(slot)] = x; }
               up.copy_key_usd = m;
             }
             if (typeof b.copy_mev === "boolean") up.copy_mev = b.copy_mev;
@@ -93,8 +93,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
               up.liq_targets = b.liq_targets.map((t: any) => ({
                 token: String(t?.token || "").trim(), label: String(t?.label || "").trim().slice(0, 24) || undefined, usd: clamp(t?.usd, 0.5, 100000),
                 on: t?.on !== false, state: ["waiting", "done", "failed"].includes(t?.state) ? t.state : "waiting", added: String(t?.added || new Date().toISOString()),
-                // Which wallets snipe it (1–5); none = all.
-                wallets: Array.isArray(t?.wallets) ? [...new Set(t.wallets.map(Number).filter((x: number) => x >= 1 && x <= 5))].sort() : undefined,
+                // Which wallets snipe it (1–10); none = all.
+                wallets: Array.isArray(t?.wallets) ? [...new Set(t.wallets.map(Number).filter((x: number) => x >= 1 && x <= 10))].sort((a: number, b: number) => a - b) : undefined,
               })).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(t.token) && !seen.has(t.token.toLowerCase()) && seen.add(t.token.toLowerCase())).slice(0, 30);
             }
           }
@@ -186,7 +186,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
         case "copy-key-new": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
           const { createCopyKey } = await import("@/lib/ai-copy");
-          const count = Math.min(5, Math.max(1, Math.floor(Number(b.count) || 1)));
+          const count = Math.min(10, Math.max(1, Math.floor(Number(b.count) || 1)));
           if (count > 1) {
             // Fill the free slots, one after another.
             const made: { slot: number; address: string }[] = [];

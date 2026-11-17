@@ -19,7 +19,7 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
   const pickList = Array.isArray(pick) ? pick : [];
   const [editing, setEditing] = useState<string | null>(null);
   const who = (w?: number[]) => (w && w.length && w.length < slots.length ? `wallet ${w.map((x) => `#${x}`).join(" + ")}` : "all wallets");
-  const toggle = (list: number[], x: number) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x].sort());
+  const toggle = (list: number[], x: number) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x].sort((a, b) => a - b));
   const list = s.liq_targets || [];
   const save = (next: Target[], done?: string) => set({ liq_targets: next }, done);
   const per = Number(s.snipe_usd || 5), x = Number(s.liq_x || 2), pct = Number(s.liq_sell_pct || 100), slip = Number(s.liq_slip || 20), tp = s.liq_tp_on !== false;

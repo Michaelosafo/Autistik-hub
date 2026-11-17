@@ -65,7 +65,7 @@ const pc = () => (client ||= createPublicClient({ chain: bsc, batch: { multicall
 const WSS = [process.env.COPY_BSC_WSS, "wss://bsc-rpc.publicnode.com"].filter(Boolean) as string[];
 const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 
-/** wallets: which of your wallets (slots 1–5) snipe this token; missing / empty = all of them. */
+/** wallets: which of your wallets (slots 1–10) snipe this token; missing / empty = all of them. */
 export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[] };
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(String(t?.token || "")));
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
