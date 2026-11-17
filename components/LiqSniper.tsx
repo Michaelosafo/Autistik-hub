@@ -13,7 +13,10 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string; set: (b: any, done?: string) => Promise<void>; slots: number[] }) {
   const [ca, setCa] = useState(""), [label, setLabel] = useState(""), [amt, setAmt] = useState(""), [err, setErr] = useState("");
   // Wallets picked for the token being added (empty = all).
-  const [pick, setPick] = useState<number[]>([]);
+  // Wallets for the token being added: null = not chosen yet (required when you have more than one), "all", or a list.
+  const [pick, setPick] = useState<number[] | "all" | null>(null);
+  const needPick = slots.length > 1 && pick === null;
+  const pickList = Array.isArray(pick) ? pick : [];
   const [editing, setEditing] = useState<string | null>(null);
   const who = (w?: number[]) => (w && w.length && w.length < slots.length ? `wallet ${w.map((x) => `#${x}`).join(" + ")}` : "all wallets");
   const toggle = (list: number[], x: number) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x].sort());
@@ -26,9 +29,11 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
     const a = m ? m[0] : "";
     if (!isAddr(a)) { setErr("Paste the token's contract address (0x followed by 40 letters / numbers)."); return; }
     if (list.some((t) => t.token.toLowerCase() === a.toLowerCase())) { setErr("That token is already on the list."); return; }
+    if (needPick) { setErr("Choose which wallet(s) snipe this token first (tap #1, #2… or All)."); return; }
     const usd = Number(amt);
     setErr(""); setCa(""); setLabel(""); setAmt("");
-    const w = pick.length && pick.length < slots.length ? pick : undefined; // the choice stays for the next token
+    const w = pickList.length && pickList.length < slots.length ? [...pickList] : undefined;
+    setPick(null); // every new token gets its own choice
     save([...list, { token: a, label: label.trim() || undefined, usd: usd > 0 ? usd : undefined, on: true, state: "waiting", added: new Date().toISOString(), wallets: w }],
       `Waiting for liquidity on ${label.trim() || short(a)} with ${who(w)}. It buys within a block of liquidity landing${s.enabled ? "" : " (press ▶ START)"}.`);
   };
@@ -42,14 +47,14 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <input className="input" style={{ flex: "1 1 120px" }} placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={24} aria-label="Name" />
           <input className="input" style={{ flex: "0 1 130px" }} inputMode="decimal" placeholder={`$ per wallet (${per})`} value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars per wallet" />
-          <button type="submit" className="btn primary" disabled={!!busy || !ca.trim()}>Snipe it{slots.length > 1 ? ` (${pick.length ? pick.map((x) => `#${x}`).join("+") : "all"})` : ""}</button>
+          <button type="submit" className="btn primary" disabled={!!busy || !ca.trim() || needPick}>{needPick ? "Choose wallet(s) below" : `Snipe it${slots.length > 1 ? ` with ${pick === "all" ? "all wallets" : pickList.map((x) => `#${x}`).join(" + ")}` : ""}`}</button>
         </div>
         {slots.length > 1 && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <small><b>Which wallets snipe it:</b></small>
-            <button type="button" className={"btn small" + (pick.length === 0 ? " primary" : " ghost")} onClick={() => setPick([])} aria-pressed={pick.length === 0}>All</button>
-            {slots.map((x) => <button key={x} type="button" className={"btn small" + (pick.includes(x) ? " primary" : " ghost")} onClick={() => { const next = pick.length === 0 ? [x] : toggle(pick, x); setPick(next.length === slots.length ? [] : next); }} aria-pressed={pick.includes(x)}>#{x}</button>)}
-            <small className="muted">{pick.length === 0 ? "all wallets" : who(pick)}</small>
+            <small><b>Which wallet snipes it:</b></small>
+            {slots.map((x) => <button key={x} type="button" className={"btn small" + (pickList.includes(x) ? " primary" : " ghost")} onClick={() => { const next = toggle(pickList, x); setPick(next.length ? next : null); }} aria-pressed={pickList.includes(x)}>#{x}</button>)}
+            <button type="button" className={"btn small" + (pick === "all" ? " primary" : " ghost")} onClick={() => setPick(pick === "all" ? null : "all")} aria-pressed={pick === "all"}>All</button>
+            <small className={needPick ? "aic-warn" : "muted"}>{needPick ? "tap the wallet(s) for this token" : pick === "all" ? "every wallet" : `only ${pickList.map((x) => `#${x}`).join(" + ")}`}</small>
           </div>
         )}
       </form>
