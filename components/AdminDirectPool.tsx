@@ -17,6 +17,8 @@ const ROUTER_ABI = parseAbi([
   "function WETH() view returns (address)",
   "function addLiquidityETH(address token, uint256 amountTokenDesired, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) payable returns (uint256, uint256, uint256)",
   "function removeLiquidityETHSupportingFeeOnTransferTokens(address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) returns (uint256)",
+  "function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[] amounts)",
+  "function swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable",
 ]);
 const FACTORY_ABI = parseAbi(["function getPair(address, address) view returns (address)"]);
 const PAIR_ABI = parseAbi([
@@ -53,6 +55,7 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
   const [info, setInfo] = useState<Info | null>(null);
   const [amtToken, setAmtToken] = useState("");
   const [amtCoin, setAmtCoin] = useState("");
+  const [buyAmt, setBuyAmt] = useState("");
   const [pct, setPct] = useState(100);
   const [askRemove, setAskRemove] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -181,6 +184,29 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
+  async function firstBuy() {
+    if (!info || !token) { setMsg("Put the token address in first."); return; }
+    if (!(info.rToken > 0n && info.rCoin > 0n)) { setMsg("Add liquidity first. Then this wallet can buy."); return; }
+    let coin: bigint;
+    try { coin = parseEther(buyAmt); } catch { setMsg("Type the first-buy amount in BNB."); return; }
+    if (coin <= 0n) { setMsg("Type the first-buy amount in BNB."); return; }
+    setBusy(true);
+    try {
+      const { w, acc } = await wallet();
+      const weth = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
+      const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [coin, [weth, token]] })) as bigint[];
+      const outMin = slip(amounts[amounts.length - 1] ?? 0n);
+      const hash = await send(w, acc, {
+        address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", value: coin,
+        args: [outMin, [weth, token], acc, deadline()],
+      }, "First buy");
+      reportActivity("swap", CHAIN.key, hash, `First buy ${buyAmt} ${CHAIN.coin} of ${info.symbol}`);
+      setMsg(`✅ First buy sent from this wallet only. ${CHAIN.explorer}/tx/${hash}`);
+      setBuyAmt("");
+      setTick((x) => x + 1);
+    } catch (e) { fail(e); } finally { setBusy(false); }
+  }
+
   async function remove() {
     if (!info?.pair || !token || info.lp <= 0n) return;
     const amount = (info.lp * BigInt(pct)) / 100n;
@@ -253,6 +279,10 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
               <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin} onClick={add}>Add liquidity</button>
+              <b>First buy</b>
+              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Only the wallet you connect. Set the BNB amount, then approve that buy in the wallet.</p>
+              <label className="field"><span>Amount (BNB)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label="First buy amount in BNB" /></label>
+              <button className="btn primary" type="button" disabled={busy || !buyAmt} onClick={firstBuy}>Buy first</button>
             </>
           )}
           {showRemove && (askRemove || mode !== "all" || info.lp > 0n) && (
