@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createPublicClient, createWalletClient, custom, encodeDeployData, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
 
 /**
- * Owner admin session only. Deploys a plain token, adds PancakeSwap v2 liquidity into this wallet,
- * and removes that liquidity later. Does not touch LP that a normal launch burned or locked.
+ * Owner admin session only. One flow: deploy, add liquidity, then ask to remove it.
+ * Does not touch LP that a normal launch burned or locked.
  */
 const CHAIN = CHAINS.bsc;
 const ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E" as const;
@@ -42,7 +42,7 @@ type Info = {
   rToken: bigint; rCoin: bigint; lp: bigint; lpTotal: bigint; tokenBal: bigint; coinBal: bigint;
 };
 
-export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "remove" }) {
+export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "add" | "remove" | "all" }) {
   const vc = useMemo(() => viemChain(CHAIN), []);
   const pub = useMemo(() => createPublicClient({ chain: vc, transport: http(CHAIN.rpc) }) as any, [vc]);
   const [name, setName] = useState("");
@@ -54,6 +54,7 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
   const [amtToken, setAmtToken] = useState("");
   const [amtCoin, setAmtCoin] = useState("");
   const [pct, setPct] = useState(100);
+  const [askRemove, setAskRemove] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [tick, setTick] = useState(0);
@@ -154,8 +155,8 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
       const at = getAddress(r.contractAddress);
       try { localStorage.setItem(SAVED, at); } catch { /* ignore */ }
       setTokenIn(at);
-      setMsg(`✅ ${s} deployed. The whole supply is in this wallet. ${CHAIN.explorer}/token/${at}`);
-      setTick((t) => t + 1);
+      setMsg(`✅ ${s} deployed. Now add the liquidity below. ${CHAIN.explorer}/token/${at}`);
+      setTick((x) => x + 1);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -174,8 +175,9 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
         args: [token, tokens, priced ? slip(tokens) : 0n, priced ? slip(coin) : 0n, acc, deadline()],
       }, "Add liquidity");
       reportActivity("liquidity", CHAIN.key, hash, `Admin added ${amtToken} ${info.symbol} + ${amtCoin} ${CHAIN.coin}`);
-      setMsg(`✅ Liquidity added. The LP tokens stayed in this wallet, so you can remove them from the Remove LP tab. ${CHAIN.explorer}/tx/${hash}`);
-      setAmtToken(""); setAmtCoin(""); setTick((t) => t + 1);
+      setMsg(`✅ Liquidity added. The LP stayed in this wallet. ${CHAIN.explorer}/tx/${hash}`);
+      setAmtToken(""); setAmtCoin(""); setTick((x) => x + 1);
+      if (mode === "all" && confirm("Liquidity is in. Remove it now?")) setAskRemove(true);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -196,7 +198,7 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
       }, `Remove ${pct}% of your liquidity`);
       reportActivity("liquidity", CHAIN.key, hash, `Admin removed ${pct}% of ${info.symbol} liquidity`);
       setMsg(`✅ Removed ${pct}% of the liquidity in this wallet. ${CHAIN.explorer}/tx/${hash}`);
-      setTick((t) => t + 1);
+      setTick((x) => x + 1);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -208,11 +210,16 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
   }
   const share = info && info.lpTotal > 0n ? { token: (info.rToken * info.lp) / info.lpTotal, coin: (info.rCoin * info.lp) / info.lpTotal } : null;
 
-  const title = mode === "deploy" ? "Rage" : mode === "add" ? "Add LP" : "Remove LP";
-  const blurb = mode === "deploy"
-    ? "Deploy the token on live BNB Chain. The whole supply comes to this wallet. Adding and removing liquidity are the next tabs."
+  const showDeploy = mode === "all" || mode === "deploy";
+  const showAdd = mode === "all" || mode === "add";
+  const showRemove = mode === "all" || mode === "remove";
+  const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : "Rage";
+  const blurb = mode === "all"
+    ? "Deploy the token, add the liquidity, then it asks if you want to remove that liquidity. The LP stays in this wallet."
+    : mode === "deploy"
+    ? "Deploy the token on live BNB Chain. The whole supply comes to this wallet."
     : mode === "add"
-    ? "Add BNB and tokens on PancakeSwap. The LP stays in this wallet. Take it back out from the Remove LP tab."
+    ? "Add BNB and tokens on PancakeSwap. The LP stays in this wallet."
     : "Remove LP sitting in this wallet. The tokens and BNB come back here. Liquidity that was burned or locked on a normal launch cannot be pulled.";
   return (
     <div className="card stack" style={{ gap: 10 }}>
@@ -221,9 +228,9 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
       {!account && <button className="btn small" type="button" disabled={busy} onClick={() => wallet().catch(fail)}>Connect wallet</button>}
       {account && <small className="muted">Wallet <span className="mono">{account.slice(0, 6)}…{account.slice(-4)}</span> on {CHAIN.name}</small>}
 
-      {mode === "deploy" && (
+      {showDeploy && (
         <>
-          <b>Deploy the token</b>
+          <b>1. Deploy the token</b>
           <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
           <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={12} /></label>
           <label className="field"><span>Supply (whole tokens)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
@@ -231,27 +238,29 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
         </>
       )}
 
-      <b>Token</b>
-      <input value={tokenIn} onChange={(e) => { setTokenIn(e.target.value); try { if (isAddress(e.target.value.trim())) localStorage.setItem(SAVED, getAddress(e.target.value.trim())); } catch { /* ignore */ } }} placeholder="Token address (filled in after a Rage deploy)" spellCheck={false} aria-label="Token address" />
+      <b>2. Token</b>
+      <input value={tokenIn} onChange={(e) => { setTokenIn(e.target.value); try { if (isAddress(e.target.value.trim())) localStorage.setItem(SAVED, getAddress(e.target.value.trim())); } catch { /* ignore */ } }} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
       {info && (
         <>
           <div className="notice">
-            🪙 <b>{info.symbol}</b> · {priced ? <>pool: {fmt(info.rToken, info.decimals)} {info.symbol} + {fmt(info.rCoin, 18)} {CHAIN.coin}</> : <>no pool yet</>}
+            🪙 <b>{info.symbol}</b> · {priced ? <>pool: {fmt(info.rToken, info.decimals)} {info.symbol} + {fmt(info.rCoin, 18)} {CHAIN.coin}</> : <>no pool yet: the amounts you add set the starting price</>}
             {account && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol} and {fmt(info.coinBal, 18)} {CHAIN.coin}</small></>}
             {info.pair && <><br /><small>Pool <a href={`${CHAIN.explorer}/address/${info.pair}`} target="_blank" rel="noreferrer">{info.pair.slice(0, 8)}…{info.pair.slice(-4)}</a></small></>}
           </div>
-          {mode === "add" && (
+          {showAdd && (
             <>
+              <b>3. Add liquidity</b>
               <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin} onClick={add}>Add liquidity</button>
             </>
           )}
-          {mode === "remove" && (
+          {showRemove && (askRemove || mode !== "all" || info.lp > 0n) && (
             info.pair ? (
               account ? (
                 info.lp > 0n ? (
                   <>
+                    <b>4. Remove liquidity?</b>
                     <small>LP in this wallet: {fmt(info.lp, 18)}{share ? <> (about {fmt(share.token, info.decimals)} {info.symbol} + {fmt(share.coin, 18)} {CHAIN.coin})</> : null}</small>
                     <label className="field"><span>Remove <b>{pct}%</b></span><input type="range" min={1} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} aria-label="Share of liquidity to remove" /></label>
                     <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
@@ -259,7 +268,7 @@ export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "re
                     </div>
                     <button className="btn" type="button" disabled={busy} onClick={remove}>Remove liquidity</button>
                   </>
-                ) : <small className="muted">This wallet holds no LP for this pool. Only LP sitting in the connected wallet can be removed.</small>
+                ) : <small className="muted">Waiting for the LP to show in this wallet.</small>
               ) : <small className="muted">Connect the wallet that holds the LP.</small>
             ) : <small className="muted">This token has no pool yet. Add liquidity first.</small>
           )}
