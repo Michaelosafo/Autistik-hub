@@ -514,13 +514,13 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       <section className={"card ait-top" + (s.enabled ? " on" : "")}>
         <div className="ait-state">
           <span className={"ait-dot" + (s.enabled ? " on" : "")} aria-hidden="true" />
-          <div><b>{s.enabled ? "Started: looking for trades" : "Stopped: not opening trades"}</b> · {live ? (snipeDesk ? "LIVE (real money, Solana)" : "LIVE (real money, Hyperliquid)") : "Practice (pretend dollars, real prices)"}<br /><small className="muted">{s.last_note || "Hasn't run yet."} {s.last_run ? `· ${ago(s.last_run)}` : ""}</small></div>
+          <div><b>{s.enabled ? "Started: looking for trades" : "Stopped: not opening trades"}</b> · {live ? (copyDesk ? "LIVE (real money, BNB Chain)" : snipeDesk ? "LIVE (real money, Solana)" : "LIVE (real money, Hyperliquid)") : "Practice (pretend dollars, real prices)"}<br /><small className="muted">{s.last_note || "Hasn't run yet."} {s.last_run ? `· ${ago(s.last_run)}` : ""}</small></div>
         </div>
         <button type="button" className={"ait-go" + (s.enabled ? " stop" : "")} disabled={!!busy} onClick={() => set({ enabled: !s.enabled })}>{s.enabled ? "■ STOP" : "▶ START"}</button>
         <div className="ait-seg" role="radiogroup" aria-label="Mode">
           <button type="button" role="radio" aria-checked={!live} className={!live ? "on" : ""} disabled={!!busy || !live} onClick={() => set({ mode: "paper" })}>Practice</button>
           <button type="button" role="radio" aria-checked={live} className={live ? "on" : ""} disabled={!!busy || live}
-            onClick={() => { if (confirm(snipeDesk ? `Go LIVE? ${NAME} will buy real coins with its budget in the shared Solana wallet. You can lose money. Only use money you can afford to lose.` : `Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${madDesk ? "up to " : ""}${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
+            onClick={() => { if (confirm(copyDesk ? "Go LIVE? Your Copy wallets will buy real coins with their BNB whenever a wallet you copy buys. You can lose money. Only use money you can afford to lose." : snipeDesk ? `Go LIVE? ${NAME} will buy real coins with its budget in the shared Solana wallet. You can lose money. Only use money you can afford to lose.` : `Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${madDesk ? "up to " : ""}${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
         </div>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
         {msg && <small className="aic-note" role="status">{msg}</small>}
