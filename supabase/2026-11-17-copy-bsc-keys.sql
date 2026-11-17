@@ -35,3 +35,8 @@ alter table public.ai_futures_settings add column if not exists copy_tp_on boole
 
 -- Copy: what each copy buy was paid with (BNB, USDT or USDC); it sells back into the same.
 alter table public.ai_futures_positions add column if not exists copy_pay text;
+
+-- Copy: speed and MEV protection.
+alter table public.ai_futures_settings add column if not exists copy_gwei numeric not null default 0.3;
+alter table public.ai_futures_settings add column if not exists copy_slip numeric not null default 12;
+alter table public.ai_futures_settings add column if not exists copy_mev boolean not null default true;

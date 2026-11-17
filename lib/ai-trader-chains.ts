@@ -10,7 +10,8 @@
  * Relay (relayBridge), which needs RELAY_API_KEY. Each buy reports exactly how many tokens arrived
  * and each sell exactly how much of the chain's coin came back.
  */
-import { createPublicClient, createWalletClient, defineChain, encodeFunctionData, erc20Abi, getAddress, http, parseAbi, parseUnits, type PrivateKeyAccount } from "viem";
+import { createPublicClient, createWalletClient, defineChain, encodeFunctionData, erc20Abi, getAddress, http, maxUint256, parseAbi, parseUnits, type PrivateKeyAccount } from "viem";
+import { AsyncLocalStorage } from "async_hooks";
 import { Connection, Keypair, PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction, type AddressLookupTableAccount } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } from "@solana/spl-token";
 import { WCHAINS, WSOL } from "@/lib/wallet-chains";
@@ -119,22 +120,53 @@ export const walletAddress = (chain: LiveChain, w: Wallets) => (chain === "solan
 
 // ---------------------------------------------------------------- EVM
 
+/**
+ * Fast sending (Copy on BNB Chain), set around a buy / sell with withFastSend():
+ * - mev: the signed transaction goes to a private, MEV-protected relay (PancakeSwap MEV Guard by default), so
+ *   sandwich bots never see it in the public mempool. If the relay refuses it, it's sent the normal way.
+ * - gwei: a higher gas price, so it lands in the next block.
+ * - approveMax: a stablecoin / coin is approved once for good, so later buys and sells skip the approve step.
+ */
+export type FastSend = { mev?: string | null; gwei?: number; approveMax?: boolean };
+const fastStore = new AsyncLocalStorage<FastSend>();
+export const withFastSend = <R,>(o: FastSend, fn: () => Promise<R>): Promise<R> => fastStore.run(o, fn);
+export const MEV_GUARD_BSC = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
+
 async function sendEvm(chain: Exclude<LiveChain, "solana">, account: PrivateKeyAccount, tx: { to: string; data: string; value: bigint; gas?: bigint }, approve?: { token: string; spender: string; amount: bigint }) {
   const pc = pub(chain), wc = wallet(chain, account);
+  const fast = chain === "bsc" ? fastStore.getStore() : undefined;
+  const gasPrice = fast?.gwei ? BigInt(Math.round(fast.gwei * 1e9)) : undefined;
+  const wait = (hash: string) => pc.waitForTransactionReceipt({ hash, timeout: 90_000, pollingInterval: fast ? 400 : 1000 });
+  /** Send one transaction: through the private relay when asked (falls back to the normal way). */
+  const send = async (req: { to: string; data: string; value: bigint; gas?: bigint }) => {
+    if (fast?.mev) {
+      try {
+        const prepared = await pc.prepareTransactionRequest({ account, chain: pc.chain, to: req.to, data: req.data, value: req.value, ...(req.gas ? { gas: req.gas } : {}), ...(gasPrice ? { gasPrice, type: "legacy" } : {}) });
+        const { account: _a, chain: _c, from: _f, ...txn } = prepared as any;
+        const raw = await account.signTransaction(txn);
+        const r = await fetch(fast.mev, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_sendRawTransaction", params: [raw] }), signal: AbortSignal.timeout(5000) });
+        const j = await r.json().catch(() => null);
+        if (j?.result) return j.result as string;
+        if (/nonce too low|already known/i.test(String(j?.error?.message || ""))) throw new Error(j.error.message);
+      } catch (e) { if (/nonce too low|already known/i.test((e as Error).message)) throw e; /* relay down: send normally */ }
+    }
+    return wc.sendTransaction({ to: req.to, data: req.data, value: req.value, ...(req.gas ? { gas: req.gas } : {}), ...(gasPrice ? { gasPrice } : {}) });
+  };
   if (approve) {
     const have: bigint = await pc.readContract({ address: approve.token, abi: erc20Abi, functionName: "allowance", args: [account.address, approve.spender] });
     if (have < approve.amount) {
       // USDT on Ethereum refuses to change an allowance that isn't 0: reset it first.
       if (have > 0n && chain === "ethereum") {
         const z = await wc.writeContract({ address: approve.token, abi: erc20Abi, functionName: "approve", args: [approve.spender, 0n] });
-        await pc.waitForTransactionReceipt({ hash: z, timeout: 90_000 });
+        await wait(z);
       }
-      const h = await wc.writeContract({ address: approve.token, abi: erc20Abi, functionName: "approve", args: [approve.spender, approve.amount] });
-      await pc.waitForTransactionReceipt({ hash: h, timeout: 90_000 });
+      const amt = fast?.approveMax ? maxUint256 : approve.amount;
+      const h = await send({ to: approve.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [approve.spender as `0x${string}`, amt] }), value: 0n });
+      await wait(h);
     }
   }
-  const hash = await wc.sendTransaction({ to: tx.to, data: tx.data, value: tx.value, ...(tx.gas ? { gas: tx.gas } : {}) });
-  const r = await pc.waitForTransactionReceipt({ hash, timeout: 90_000 });
+  const hash = await send({ to: tx.to, data: tx.data, value: tx.value, ...(tx.gas ? { gas: tx.gas } : {}) });
+  const r = await wait(hash);
   if (r.status !== "success") throw new Error("The swap transaction failed on-chain.");
   return { hash: hash as string, gas: BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice ?? 0n) };
 }
