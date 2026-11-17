@@ -548,7 +548,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
       )}
 
       {copyDesk && <CopyTrades list={d.open as unknown as CopyPos[]} busy={busy} act={act} />}
-      {liqDesk && <LiqSniper s={s as any} busy={busy} set={set} />}
+      {liqDesk && <LiqSniper s={s as any} busy={busy} set={set} slots={(d.copyKeys?.keys || []).filter((k) => k.address).map((k) => k.slot)} />}
       {copyDesk && <CopyBsc sniper={liqDesk} s={s as any} keys={d.copyKeys || null} cfg={d.snipe?.cfg} busy={busy} act={act} set={set} />}
 
       {snipeDesk && !copyDesk && (
