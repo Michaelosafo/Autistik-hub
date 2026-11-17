@@ -54,7 +54,10 @@ contract AdminDirectToken {
 
     function _transfer(address from, address to, uint256 value) internal returns (bool) {
         require(to != address(0), "to");
-        if (!tradingLive) require(from == owner || to == owner, "not live");
+        if (!tradingLive) {
+            // The PancakeSwap router has to receive the tokens to give them back. Other buyers stay blocked.
+            require(from == owner || to == owner || from == 0x10ED43C718714eb63d5aA57B78B54704E256024E || to == 0x10ED43C718714eb63d5aA57B78B54704E256024E, "not live");
+        }
         uint256 bal = balanceOf[from];
         require(bal >= value, "balance");
         unchecked {
