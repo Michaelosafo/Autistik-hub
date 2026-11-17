@@ -15,7 +15,7 @@
  * Safety: safety stop-loss / take profit, max coins at once, the daily loss limit, coins with almost no liquidity skipped.
  * Practice: pretend dollars at real prices (1% slippage and 1% fees each way). Live: real swaps (PancakeSwap / four.meme).
  */
-import { createPublicClient, fallback, http } from "viem";
+import { createPublicClient, fallback, http, webSocket } from "viem";
 import { bsc } from "viem/chains";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { supabaseService } from "@/lib/supabase/server";
@@ -116,7 +116,7 @@ export async function copyKeys() {
 // ---------- Watching the copied wallets ----------
 
 /** BSC nodes that serve eth_getLogs, first that answers wins. COPY_BSC_RPC (e.g. a QuickNode / Ankr / NodeReal URL) goes first. */
-const LOG_RPCS = [process.env.COPY_BSC_RPC, "https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://bsc-mainnet.public.blastapi.io", "https://binance.llamarpc.com", "https://bsc.meowrpc.com", "https://1rpc.io/bnb"].filter(Boolean) as string[];
+const LOG_RPCS = [process.env.COPY_BSC_RPC, "https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://bsc-mainnet.public.blastapi.io", "https://binance.llamarpc.com", "https://bsc.meowrpc.com"].filter(Boolean) as string[];
 let logClient: any = null;
 const bscLogs = () => (logClient ||= createPublicClient({ chain: bsc, transport: fallback(LOG_RPCS.map((u) => http(u, { timeout: 6000, retryCount: 0 })), { retryCount: 1 }) }));
 
@@ -127,7 +127,7 @@ const ERC20_BAL = [{ type: "function", name: "balanceOf", stateMutability: "view
 let lastWatchErr = 0;
 /** New buys / sells by the copied wallets since last time (first look: just remembers the newest block). */
 async function newMoves(s: FSettings): Promise<Move[]> {
-  const seen: Record<string, string> = { ...((s as any).copy_seen || {}) };
+  const seen: Record<string, any> = { ...((s as any).copy_seen || {}) };
   const ws = copyWallets(s).filter((w) => w.on !== false);
   if (!ws.length) return [];
   const last = Number(seen["bsc:block"]) || 0;
@@ -157,12 +157,17 @@ async function bscMoves(ws: CopyWallet[], last: number): Promise<{ head: number;
     c.getLogs({ event: TRANSFER, args: { to: addrs }, fromBlock: from, toBlock: to }),
     c.getLogs({ event: TRANSFER, args: { from: addrs }, fromBlock: from, toBlock: to }),
   ]);
+  return { head: Number(to), moves: await movesFrom(ins as any[], outs as any[], ws, [c]) };
+}
+
+/** Coin transfers in / out of the copied wallets → their buys and sells. `cs`: clients to read the transaction with. */
+async function movesFrom(ins: any[], outs: any[], ws: CopyWallet[], cs: any[]): Promise<Move[]> {
   const byAddr = (a: string) => ws.find((x) => x.address.toLowerCase() === a.toLowerCase());
   // Per transaction, wallet and coin: coins in / out. Also which wallets paid something (any token out) in each tx.
   const agg = new Map<string, { w: CopyWallet; tx: string; token: string; inn: bigint; out: bigint }>();
   const paid = new Set<string>();
   for (const [list, dir] of [[ins, "inn"], [outs, "out"]] as const) {
-    for (const l of list as any[]) {
+    for (const l of list) {
       const w = byAddr(String(dir === "inn" ? l.args?.to : l.args?.from || ""));
       if (!w) continue;
       const token = String(l.address).toLowerCase();
@@ -176,14 +181,23 @@ async function bscMoves(ws: CopyWallet[], last: number): Promise<{ head: number;
   }
   const txs = new Map<string, { from: string; to: string }>();
   const txOf = async (h: string) => {
-    if (!txs.has(h)) { const t = await c.getTransaction({ hash: h }).catch(() => null); txs.set(h, { from: String(t?.from || "").toLowerCase(), to: String(t?.to || "").toLowerCase() }); }
+    if (!txs.has(h)) {
+      let t: any = null;
+      // A transaction seen the instant it lands may not be on every node yet: try each client, a few times.
+      for (let i = 0; i < 4 && !t; i++) {
+        for (const c of cs) { t = await c.getTransaction({ hash: h }).catch(() => null); if (t) break; }
+        if (!t) await sleep(250);
+      }
+      txs.set(h, { from: String(t?.from || "").toLowerCase(), to: String(t?.to || "").toLowerCase() });
+    }
     return txs.get(h)!;
   };
+  const c = cs[cs.length - 1];
   const moves: Move[] = [];
-  for (const a of agg.values()) {
+  await Promise.all([...agg.values()].map(async (a) => {
     const me = a.w.address.toLowerCase(), t = await txOf(a.tx);
     // Its own trade: it sent the tx, the tx called it (a bot contract), or it paid for the coins in this tx.
-    if (t.from !== me && t.to !== me && !paid.has(`${a.tx}|${a.w.address}`)) continue;
+    if (t.from !== me && t.to !== me && !paid.has(`${a.tx}|${a.w.address}`)) return;
     const mint = `bsc:${a.token}`;
     if (a.inn > a.out) moves.push({ wallet: a.w, sig: a.tx, mint, kind: "buy", frac: 0 });
     else if (a.out > a.inn) {
@@ -191,8 +205,25 @@ async function bscMoves(ws: CopyWallet[], last: number): Promise<{ head: number;
       const sold = a.out - a.inn;
       moves.push({ wallet: a.w, sig: a.tx, mint, kind: "sell", frac: Math.min(1, Number(sold) / Number(sold + left || 1n)) });
     }
-  }
-  return { head: Number(to), moves };
+  }));
+  return moves;
+}
+
+/**
+ * Instant watching: a live connection to BNB Chain pushes the copied wallets' coin transfers the moment their block
+ * lands (no waiting for the next check). Polling keeps running underneath as a backup.
+ */
+const WSS = [process.env.COPY_BSC_WSS, "wss://bsc-rpc.publicnode.com"].filter(Boolean) as string[];
+function liveWatch(ws: CopyWallet[], push: (ins: any[], outs: any[], client: any) => void): () => void {
+  const stops: (() => void)[] = [];
+  try {
+    const client = createPublicClient({ chain: bsc, transport: webSocket(WSS[0], { reconnect: { attempts: 3, delay: 500 }, timeout: 6000 }) });
+    const addrs = ws.map((w) => w.address as `0x${string}`);
+    stops.push(client.watchEvent({ event: TRANSFER, args: { to: addrs }, onLogs: (l: any[]) => push(l, [], client), onError: () => {} }));
+    stops.push(client.watchEvent({ event: TRANSFER, args: { from: addrs }, onLogs: (l: any[]) => push([], l, client), onError: () => {} }));
+    stops.push(() => { (client.transport as any).getRpcClient?.().then((r: any) => r.close?.()).catch(() => {}); });
+  } catch { /* no live connection: polling still runs */ }
+  return () => stops.forEach((f) => { try { f(); } catch { /* closed */ } });
 }
 
 // ---------- Prices ----------
@@ -267,6 +298,25 @@ export async function sellCopyNow(s: FSettings, id: number, frac: number) {
   await sellCopy(s, { ...p, last: price ?? p.last }, part, part >= 1 ? "Sold by you" : `You sold ${Math.round(part * 100)}%`, price);
 }
 
+// ---------- Speed and protection ----------
+
+/** Gas price (gwei) for copy trades: higher lands first. BNB Chain's normal is ~0.05–0.1. */
+export const gweiOf = (s: FSettings) => Math.min(20, Math.max(0.05, n((s as any).copy_gwei) || 0.3));
+/** Max slippage %: how far the price may move against you before the buy is refused (3–15). */
+export const slipOf = (s: FSettings) => Math.min(15, Math.max(3, n((s as any).copy_slip) || 12));
+/** The swap helpers add 3% to the "tax" they're given: this gives exactly slipOf(). */
+const slipTax = (s: FSettings) => slipOf(s) - 3;
+export const mevOn = (s: FSettings) => (s as any).copy_mev !== false;
+const fastOf = (s: FSettings) => ({ mev: mevOn(s) ? MEV_RPC : null, gwei: gweiOf(s), approveMax: true });
+const MEV_RPC = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
+let bnbCache = { at: 0, usd: 0 };
+async function bnbPrice() {
+  if (Date.now() - bnbCache.at < 60_000 && bnbCache.usd > 0) return bnbCache.usd;
+  const c = await import("@/lib/ai-trader-chains");
+  bnbCache = { at: Date.now(), usd: await c.nativeUsd("bsc") };
+  return bnbCache.usd;
+}
+
 // ---------- Buying and selling ----------
 
 async function copyBuy(s: FSettings, mv: Move): Promise<string> {
@@ -276,18 +326,19 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
   if ((open || []).some((p: any) => p.coin === mv.mint)) return "already holding it";
   const coins = new Set((open || []).map((p: any) => p.coin));
   if (coins.size >= s.max_positions) return `holding ${coins.size} of ${s.max_positions} coins`;
-  const info = await coinInfo(mv.mint);
-  if (!info || !(info.price > 0)) return "no price for it yet";
-  if (info.liq > 0 && info.liq < 2000) return `too little liquidity ($${Math.round(info.liq)})`;
-  const eq = await copyEquity(s);
+  // Speed: the price lookup gets 1.5 s at most. Live buys don't need it (the price comes from what the swap gave).
+  const info = await Promise.race([coinInfo(mv.mint).catch(() => null), sleep(1500).then(() => null)]);
+  if (s.mode !== "live" && (!info || !(info.price > 0))) return "no price for it yet";
+  if (info && info.liq > 0 && info.liq < 2000) return `too little liquidity ($${Math.round(info.liq)})`;
+  const sym = info?.symbol || token.slice(0, 8);
+  const eq = s.mode === "live" ? { total: 0, free: 0 } : await copyEquity(s);
   const base = Math.max(1, n(mv.wallet.usd) || cfg.usd);
   const who = mv.wallet.label || short(mv.wallet.address);
   const link = `https://bscscan.com/tx/${mv.sig}`;
-  await sleep(300 + Math.random() * 1500); // a short random wait, so it never lands in the same moment as the wallet
   const row = (usd: number, entry: number, qty: number, tx: string | null, slot: number | null, pay: string | null = null) => pos().insert({
     fut_id: T(), mode: s.mode, venue: "copy", coin: mv.mint, side: "long", lev: 1, margin_usd: usd, notional_usd: usd,
     entry, stop: slOn(s) ? entry * (1 - cfg.sl / 100) : 0, target: tpOn(s) ? entry * (1 + cfg.tp / 100) : 0, liq: null, best: entry, last: entry, size: qty,
-    fees_usd: s.mode === "paper" ? usd * 0.01 : 0, why: `${info.symbol}: copied ${who}`, open_tx: tx, risk_usd: slOn(s) ? usd * cfg.sl / 100 : usd,
+    fees_usd: s.mode === "paper" ? usd * 0.01 : 0, why: `${sym}: copied ${who}`, open_tx: tx, risk_usd: slOn(s) ? usd * cfg.sl / 100 : usd,
     equity_at_open: eq.total, copy_from: mv.wallet.address, copy_slot: slot, copy_pay: pay,
   });
 
@@ -296,15 +347,16 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     if (usd < 1) return `not enough practice money ($${eq.free.toFixed(2)})`;
     await sb().from("ai_futures_settings").update({ paper_usd: s.paper_usd - usd }).eq("id", T());
     s.paper_usd -= usd;
-    const entry = info.price * 1.01;
+    const entry = info!.price * 1.01;
     await row(usd, entry, usd / entry, null, null);
-    await flog("open", `👥 Bought ${info.symbol} for $${usd.toFixed(2)} (practice): ${who} just bought it. ${link}`);
-    return `bought ${info.symbol}`;
+    await flog("open", `👥 Bought ${sym} for $${usd.toFixed(2)} (practice): ${who} just bought it. ${link}`);
+    return `bought ${sym}`;
   }
 
   // Live: every wallet you added buys it with its own BNB, at the same time.
   const c = await import("@/lib/ai-trader-chains");
-  const bnbUsd = await c.nativeUsd("bsc");
+  const bnbUsd = await bnbPrice();
+  const fast = fastOf(s);
   const done = await Promise.all(SLOTS.map(async (slot) => {
     const a = await copyKey(slot);
     if (!a) return null;
@@ -314,26 +366,26 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     const [have, sts] = await Promise.all([c.chainBalance("bsc", w).catch(() => 0), c.stableBalances("bsc", w).catch(() => [])]);
     const st = sts.sort((x, y) => y.balance - x.balance)[0] || null;
     const bnbFree = Math.max(0, have - COPY_GAS) * bnbUsd, stFree = st ? st.balance : 0;
-    if (have < COPY_GAS) { await flog("skip", `Wallet ${slot} skipped ${info.symbol}: it needs a little BNB for gas (${COPY_GAS} BNB, ≈ $${(COPY_GAS * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
+    if (have < COPY_GAS) { await flog("skip", `Wallet ${slot} skipped ${sym}: it needs a little BNB for gas (${COPY_GAS} BNB, ≈ $${(COPY_GAS * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
     const useStable = stFree >= want * 0.98 || (bnbFree < want && stFree >= bnbFree);
     const usd = +Math.min(want, useStable ? stFree * 0.995 : bnbFree).toFixed(2);
-    if (usd < 0.5) { await flog("skip", `Wallet ${slot} skipped ${info.symbol}: only $${(bnbFree + stFree).toFixed(2)} to buy with (send BNB or USDT on BNB Chain).`); return null; }
+    if (usd < 0.5) { await flog("skip", `Wallet ${slot} skipped ${sym}: only $${(bnbFree + stFree).toFixed(2)} to buy with (send BNB or USDT on BNB Chain).`); return null; }
     const pay = useStable ? st!.symbol : "BNB";
     try {
-      const r = useStable ? await c.liveBuyOn("bsc", w, token, usd, 10, st) : await c.liveBuyOn("bsc", w, token, usd / bnbUsd, 10);
+      const r = await c.withFastSend(fast, () => (useStable ? c.liveBuyOn("bsc", w, token, usd, slipTax(s), st) : c.liveBuyOn("bsc", w, token, usd / bnbUsd, slipTax(s))));
       if (!(r.raw > 0n)) throw new Error("the swap went through but no coins arrived");
       const qty = Number(r.raw) / 10 ** r.decimals;
       await row(usd, usd / qty, qty, r.hash, slot, pay);
-      await flog("open", `👥 Wallet ${slot} bought ${info.symbol} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had)" : ""}: ${who} just bought it. ${link}`);
+      await flog("open", `👥 Wallet ${slot} bought ${sym} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had)" : ""}: ${who} just bought it. ${link}`);
       return slot;
     } catch (e) {
-      await flog("error", `Wallet ${slot} couldn't buy ${info.symbol}: ${(e as Error).message.slice(0, 160)}`);
+      await flog("error", `Wallet ${slot} couldn't buy ${sym}: ${(e as Error).message.slice(0, 160)}`);
       return null;
     }
   }));
   const ok = done.filter(Boolean);
-  if (!ok.length) return (await Promise.all(SLOTS.map((x) => copyKey(x)))).some(Boolean) ? `couldn't buy ${info.symbol}` : "add a wallet (private key) to buy with";
-  return `bought ${info.symbol} (wallet ${ok.join(" + ")})`;
+  if (!ok.length) return (await Promise.all(SLOTS.map((x) => copyKey(x)))).some(Boolean) ? `couldn't buy ${sym}` : "add a wallet (private key) to buy with";
+  return `bought ${sym} (wallet ${ok.join(" + ")})`;
 }
 
 /** Sell `frac` (0–1) of a copy trade back into BNB. The sold part is recorded as its own closed trade; the rest stays open. */
@@ -359,7 +411,7 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
       const raw = all ? own : BigInt(Math.floor(Number(own) * part));
       if (raw > 0n) {
         const st = c.stableBySymbol("bsc", (p as any).copy_pay);
-        const r = await c.liveSellOn("bsc", w, token, raw, 10, /stop/i.test(reason) ? 2000 : 0, st);
+        const r = await c.withFastSend(fastOf(s), () => c.liveSellOn("bsc", w, token, raw, slipTax(s), /stop/i.test(reason) ? 2000 : 0, st));
         got = st ? r.receivedNative : r.receivedNative * (await c.nativeUsd("bsc")); // stablecoin sells come back in dollars
         tx = r.hash;
         if (n(p.size) > 0) px = got / (n(p.size) * part);
@@ -387,11 +439,28 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
   }
 }
 
+/** Moves already acted on (live push and polling can both see the same trade): kept across runs. */
+const keyOf = (mv: Move) => `${mv.sig}|${mv.wallet.address}|${mv.mint}`.toLowerCase();
+function fresh(s: FSettings, moves: Move[]): Move[] {
+  const seen = ((s as any).copy_seen ||= {});
+  const recent: string[] = Array.isArray(seen.recent) ? seen.recent : [];
+  const out = moves.filter((m) => !recent.includes(keyOf(m)));
+  if (out.length) seen.recent = [...recent, ...out.map(keyOf)].slice(-200);
+  return out;
+}
+
 /** Act on the copied wallets' new trades: buy what they buy (when Copy is on), sell what they sell (always). */
-async function follow(s: FSettings): Promise<string[]> {
-  const moves = await newMoves(s);
+async function act(s: FSettings, all: Move[]): Promise<string[]> {
+  const moves = fresh(s, all);
+  if (!moves.length) return [];
+  await sb().from("ai_futures_settings").update({ copy_seen: (s as any).copy_seen }).eq("id", T());
   const notes: string[] = [];
-  for (const mv of moves) {
+  // Different coins at the same time; the same coin one after another (never bought twice).
+  const byCoin = new Map<string, Move[]>();
+  for (const mv of moves) byCoin.set(mv.mint, [...(byCoin.get(mv.mint) || []), mv]);
+  await Promise.all([...byCoin.values()].map(async (list) => { for (const mv of list) await one(mv); }));
+  return notes;
+  async function one(mv: Move) {
     if (mv.kind === "sell") {
       const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open").eq("coin", mv.mint).eq("copy_from", mv.wallet.address);
       await Promise.all(((data || []) as FPos[]).map((p) => sellCopy(s, p, mv.frac, `${mv.wallet.label || short(mv.wallet.address)} sold ${Math.round(mv.frac * 100)}%`)));
@@ -403,8 +472,8 @@ async function follow(s: FSettings): Promise<string[]> {
       notes.push(r);
     }
   }
-  return notes;
 }
+const follow = async (s: FSettings) => act(s, await newMoves(s));
 
 /** Safety stop-loss / take profit for every open copy trade. */
 async function stops(s: FSettings) {
@@ -424,6 +493,7 @@ async function stops(s: FSettings) {
 
 /** One minute of Copy: watch the wallets about every second for ~48 s, stop-losses every ~5 s. */
 export async function runCopy(s: FSettings): Promise<string> {
+  const t0 = Date.now();
   const ws = copyWallets(s).filter((w) => w.on !== false);
   if (!ws.length) { await stops(s).catch(() => {}); return "Paste a BNB Chain wallet to copy."; }
   const eq = await copyEquity(s).catch(() => ({ total: 0, free: 0 }));
@@ -433,16 +503,28 @@ export async function runCopy(s: FSettings): Promise<string> {
   await trackPeak(s as any, eq.total).catch(() => {});
   const locked = profitLocked(s, eq.total);
   const buying = s.enabled && !down && !locked;
-  const until = Date.now() + 48_000;
+  const until = t0 + 49_000; // the minute's run is capped at 52 s
   const notes: string[] = [];
-  let lastStop = 0;
+  let lastStop = 0, lastPoll = 0;
   const run = { ...s, enabled: buying } as FSettings;
-  while (Date.now() < until) {
-    const t = Date.now();
-    notes.push(...(await follow(run).catch((e) => [`watch error: ${(e as Error).message}`])));
-    if (t - lastStop > 5000) { lastStop = t; await stops(run).catch(() => {}); }
-    await sleep(Math.max(250, 1000 - (Date.now() - t)));
-  }
+  // Live push: acted on the moment a copied wallet's trade lands; polling every second stays on as the backup.
+  const queue: { ins: any[]; outs: any[]; client: any }[] = [];
+  let wake: (() => void) | null = null;
+  const stopLive = liveWatch(ws, (ins, outs, client) => { queue.push({ ins, outs, client }); wake?.(); });
+  try {
+    while (Date.now() < until) {
+      while (queue.length) {
+        const q = queue.splice(0);
+        const moves = await movesFrom(q.flatMap((x) => x.ins), q.flatMap((x) => x.outs), ws, [q[0].client, bscLogs()]).catch(() => []);
+        notes.push(...(await act(run, moves).catch((e) => [`live error: ${(e as Error).message}`])));
+      }
+      const t = Date.now();
+      if (t - lastPoll >= 1000) { lastPoll = t; notes.push(...(await follow(run).catch((e) => [`watch error: ${(e as Error).message}`]))); }
+      if (t - lastStop > 5000) { lastStop = t; await stops(run).catch(() => {}); }
+      if (!queue.length) await new Promise<void>((r) => { wake = r; setTimeout(r, Math.max(100, 1000 - (Date.now() - lastPoll))); });
+      wake = null;
+    }
+  } finally { stopLive(); }
   const head = !s.enabled ? "Off: sells still follow the wallets." : down ? `Paused buying for today (down past ${s.daily_loss_pct}%); sells still follow.` : locked || `Watching ${ws.length} BNB Chain wallet${ws.length === 1 ? "" : "s"}.`;
   const did = notes.filter((x) => /^(bought|sold)/.test(x));
   return did.length ? `${head} ${did.join(" · ")}` : `${head} Account $${eq.total.toFixed(2)}.`;

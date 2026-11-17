@@ -12,7 +12,7 @@ const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
-  s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
+  s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
   busy: string; act: Act; set: (b: any, done?: string) => Promise<void>;
 }) {
   const [addr, setAddr] = useState(""), [label, setLabel] = useState(""), [err, setErr] = useState("");
@@ -94,6 +94,26 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
         </div>
       ))}
       {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live (top of the page) once {mine.length ? "your wallet holds BNB" : "you've created or added a wallet and sent it BNB"}.</small>}
+
+      <b style={{ marginTop: 8 }}>⚡ Speed and bot protection</b>
+      <small className="muted">Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away.</small>
+      <label className="ait-check" style={{ margin: 0 }}>
+        <input type="checkbox" checked={s.copy_mev !== false} disabled={!!busy} onChange={(e) => set({ copy_mev: e.target.checked }, e.target.checked ? "MEV protection on: buys and sells go through PancakeSwap MEV Guard, hidden from sandwich bots." : "MEV protection off: trades go to the public mempool.")} />
+        <span>🛡 MEV bot protection <small className="muted">(sends through PancakeSwap MEV Guard, a private route: sandwich bots can&apos;t see or front-run your trade)</small></span>
+      </label>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <small><b>Gas speed:</b></small>
+        {([["Normal", 0.1], ["Fast", 0.3], ["Turbo", 1], ["Max", 3]] as const).map(([l, g]) => {
+          const on = Math.abs(Number(s.copy_gwei ?? 0.3) - g) < 1e-9;
+          return <button key={l} type="button" className={"btn small" + (on ? " primary" : " ghost")} disabled={!!busy || on} onClick={() => set({ copy_gwei: g }, `Gas speed ${l} (${g} gwei, about $${(g * 250_000 * 1e-9 * (bnbUsd || 600)).toFixed(2)} a swap).`)}>{l}</button>;
+        })}
+        <small className="muted">{Number(s.copy_gwei ?? 0.3)} gwei ≈ ${(Number(s.copy_gwei ?? 0.3) * 250_000 * 1e-9 * (bnbUsd || 600)).toFixed(2)} a swap. Higher lands first in the block.</small>
+      </div>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <small><b>Max slippage:</b> {Number(s.copy_slip ?? 12)}%</small>
+        {[5, 8, 12, 15].map((v) => <button key={v} type="button" className={"btn small" + (Number(s.copy_slip ?? 12) === v ? " primary" : " ghost")} disabled={!!busy || Number(s.copy_slip ?? 12) === v} onClick={() => set({ copy_slip: v }, `Max slippage ${v}%.`)}>{v}%</button>)}
+        <small className="muted">Higher fills on fast-moving coins; with MEV protection on, bots can&apos;t use it against you.</small>
+      </div>
 
       <b style={{ marginTop: 8 }}>💵 Each buy</b>
       {([["copy_sl_on", "Automatic stop-loss", s.copy_sl_on !== false, `sells by itself at -${cfg?.sl ?? 50}%`], ["copy_tp_on", "Automatic take profit", s.copy_tp_on !== false, `sells by itself at +${cfg?.tp ?? 100}%`]] as const).map(([k, l, on, hint]) => (

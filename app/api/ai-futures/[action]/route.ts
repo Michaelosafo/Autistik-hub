@@ -71,6 +71,11 @@ export async function POST(req: Request, { params }: { params: { action: string 
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
           let exits = false;
           if (isCopyDesk()) for (const k of ["copy_sl_on", "copy_tp_on"]) if (typeof b[k] === "boolean") { up[k] = b[k]; exits = true; }
+          if (isCopyDesk()) {
+            if (typeof b.copy_mev === "boolean") up.copy_mev = b.copy_mev;
+            if (b.copy_gwei != null) { const v = clamp(b.copy_gwei, 0.05, 20); if (v != null) up.copy_gwei = v; }
+            if (b.copy_slip != null) { const v = clamp(b.copy_slip, 3, 15); if (v != null) up.copy_slip = v; }
+          }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
             // BNB Chain only: 0x… addresses.
             const seen = new Set<string>();
