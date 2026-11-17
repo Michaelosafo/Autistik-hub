@@ -135,7 +135,7 @@ async function newMoves(s: FSettings): Promise<Move[]> {
   try { r = await bscMoves(ws, last); }
   catch (e) {
     // Never fail silently again: log it (at most once every 5 minutes).
-    if (Date.now() - lastWatchErr > 300_000) { lastWatchErr = Date.now(); await flog("error", `Couldn't read BNB Chain: ${(e as Error).message.slice(0, 140)}. Set COPY_BSC_RPC in Vercel to a BSC node that allows eth_getLogs.`); }
+    if (!/invalid param|missing or invalid/i.test((e as Error).message) && Date.now() - lastWatchErr > 300_000) { lastWatchErr = Date.now(); await flog("error", `Couldn't read BNB Chain: ${(e as Error).message.slice(0, 140)}. Set COPY_BSC_RPC in Vercel to a BSC node that allows eth_getLogs.`); }
     return [];
   }
   if (String(r.head) !== String(seen["bsc:block"])) {
@@ -150,8 +150,11 @@ async function bscMoves(ws: CopyWallet[], last: number): Promise<{ head: number;
   const c = bscLogs();
   const head = Number(await c.getBlockNumber());
   if (!last || head - last > 400) return { head, moves: [] }; // first look (or a gap over ~3 min): never copy old trades
-  if (head <= last) return { head: last, moves: [] };
-  const from = BigInt(last + 1), to = BigInt(Math.min(head, last + 50));
+  // One block behind the newest: the public nodes are a moment apart, and asking a node for a block it hasn't got yet
+  // fails ("invalid parameters"). The live push covers the newest block anyway.
+  const top = head - 1;
+  if (top <= last) return { head: last, moves: [] };
+  const from = BigInt(last + 1), to = BigInt(Math.min(top, last + 50));
   const addrs = ws.map((w) => w.address as `0x${string}`);
   const [ins, outs] = await Promise.all([
     c.getLogs({ event: TRANSFER, args: { to: addrs }, fromBlock: from, toBlock: to }),
