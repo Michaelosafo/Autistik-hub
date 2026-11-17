@@ -23,10 +23,19 @@ type Detected = { info: WalletInfo; provider: any };
 const ANDROID_APP: Record<string, string> = { "bkcode.vip": "com.bitkeep.wallet" };
 export function pinAndroid(href: string): string {
   if (typeof navigator === "undefined" || !/Android/i.test(navigator.userAgent)) return href;
+  // bitkeep:// is Bitget's own scheme. An https link is also claimed by Chrome, which is the
+  // "Choose activity" dialog. Naming the package opens Bitget only.
+  if (/^bitkeep:\/\//i.test(href)) {
+    return `intent://${href.slice("bitkeep://".length)}#Intent;scheme=bitkeep;package=com.bitkeep.wallet;end`;
+  }
   const m = /^https:\/\/([^/?#]+)(.*)$/.exec(href);
+  if (m?.[1] === "bkcode.vip") {
+    const tail = (m[2] || "").replace(/^\//, "");
+    return `intent://${tail}#Intent;scheme=bitkeep;package=com.bitkeep.wallet;end`;
+  }
   const pkg = m && ANDROID_APP[m[1]];
   if (!pkg) return href;
-  return `intent://${m![1]}${m![2]}#Intent;scheme=https;package=${pkg};end`;
+  return `intent://${m[1]}${m[2]}#Intent;scheme=https;package=${pkg};end`;
 }
 
 /** Top wallets, in the order shown. `rdns` matches what the wallet announces when installed. */
@@ -36,9 +45,8 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
   // Bitget and Trust first: both handle every network and switch between them easily.
-  // Bitget: only its https://bkcode.vip link (Bitget's own docs: Android only supports that one; bitkeep:// and the
-  // old bkapp.vip link were slow to hand the connection over).
-  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => pinAndroid(`https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}`) },
+  // Bitget: its own bitkeep:// link, pinned to the Bitget app on Android so Chrome is not offered.
+  { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => pinAndroid(`bitkeep://bkconnect?action=DApp&url=${encodeURIComponent(u)}`) },
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
@@ -408,7 +416,7 @@ export function wcHref(base: string, uri: string) {
   const u = encodeURIComponent(uri);
   if (base.includes("://") && !/^https?:/.test(base)) {
     const b = base.endsWith("://") ? base : base.endsWith("/") ? base : base + "/";
-    return `${b}wc?uri=${u}`;
+    return pinAndroid(`${b}wc?uri=${u}`);
   }
   return pinAndroid(`${base.replace(/\/$/, "")}/wc?uri=${u}`);
 }
