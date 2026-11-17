@@ -1,6 +1,6 @@
 /**
  * 👥 Copy (server only), BNB Chain only. Paste the wallets to copy; when one of them buys a coin on BSC, Copy buys it
- * too from YOUR wallets (up to 5 private keys you add, each paying with its own BNB); when that wallet sells, Copy
+ * too from YOUR wallets (up to 10 private keys you add, each paying with its own BNB); when that wallet sells, Copy
  * sells the same share (they sell half, Copy sells half; they sell it all, Copy sells it all) back into BNB.
  *
  * Watching: every ~second, coin Transfer logs in and out of the copied wallets are read from a BSC node that serves
@@ -8,7 +8,7 @@
  * wallet made itself count: it sent the transaction, the transaction called it (bot contracts), or it paid for the
  * coins in the same transaction. Airdrop spam sent to it is ignored. Old trades are never copied.
  *
- * Each of your wallets (slots 1–5) gets its own trade, so with two keys every copy is bought twice. A key's buy is
+ * Each of your wallets (slots 1–10) gets its own trade, so with two keys every copy is bought twice. A key's buy is
  * skipped if it doesn't hold the buy amount plus a little BNB for gas.
  *
  * Low profile: each copy waits a random 0.3–1.8 s and buys a slightly different amount (±12%).
@@ -45,10 +45,10 @@ const MONEY = new Set(["0x55d398326f99059ff775485246999027b3197955", "0x8ac76a51
 
 // ---------- Your wallets (private keys in Vault, slots 1–5) ----------
 
-export const MAX_KEYS = 5;
+export const MAX_KEYS = 10;
 /** $ one of your wallets spends per buy, if you set one for it (else null: the normal amount). */
 export const keyUsd = (s: FSettings, slot: number): number | null => { const v = n(((s as any).copy_key_usd || {})[String(slot)]); return v > 0 ? v : null; };
-export const SLOTS = [1, 2, 3, 4, 5] as const;
+export const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 /** BNB kept for gas in each wallet (a swap on BNB Chain costs well under a cent; this covers many). */
 const COPY_GAS = 0.0002;
 const keyCache = new Map<string, { key: string; a: PrivateKeyAccount }>();

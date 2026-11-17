@@ -65,12 +65,12 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
       {dropped > 0 && <small className="muted">{dropped} older Solana / Ethereum wallet{dropped === 1 ? " is" : "s are"} no longer copied (Copy is BNB Chain only now). Saving any change clears {dropped === 1 ? "it" : "them"}.</small>}
 
       </>}
-      <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 5)</b>
+      <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 10)</b>
       {(keys?.keys || []).some((k) => !k.address) && (
         <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => {
           const free = (keys?.keys || []).filter((k) => !k.address).length;
-          if (confirm(`Create ${free} new wallet${free === 1 ? "" : "s"} now, so you have all 5? Each one needs its own money (BNB / USDT on BNB Chain) to buy.`)) act("cfill", "copy-key-new", { count: free }, `Created ${free} wallet${free === 1 ? "" : "s"}. Fund each one to use it.`);
-        }}>{busy === "cfill" ? "Creating…" : `＋ Create all ${(keys?.keys || []).filter((k) => !k.address).length} remaining wallets (up to 5)`}</button>
+          if (confirm(`Create ${free} new wallet${free === 1 ? "" : "s"} now, so you have all 10? Each one needs its own money (BNB / USDT on BNB Chain) to buy.`)) act("cfill", "copy-key-new", { count: free }, `Created ${free} wallet${free === 1 ? "" : "s"}. Fund each one to use it.`);
+        }}>{busy === "cfill" ? "Creating…" : `＋ Create all ${(keys?.keys || []).filter((k) => !k.address).length} remaining wallets (up to 10)`}</button>
       )}
       <small className="muted">Each wallet you add buys every copied coin with its own money (USDT / USDC on BNB Chain, else BNB), so with 3 wallets each copy is bought 3 times. Keep a little BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
       {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
