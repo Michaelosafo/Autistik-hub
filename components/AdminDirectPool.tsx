@@ -42,7 +42,7 @@ type Info = {
   rToken: bigint; rCoin: bigint; lp: bigint; lpTotal: bigint; tokenBal: bigint; coinBal: bigint;
 };
 
-export default function AdminDirectPool() {
+export default function AdminDirectPool({ mode }: { mode: "deploy" | "add" | "remove" }) {
   const vc = useMemo(() => viemChain(CHAIN), []);
   const pub = useMemo(() => createPublicClient({ chain: vc, transport: http(CHAIN.rpc) }) as any, [vc]);
   const [name, setName] = useState("");
@@ -174,7 +174,7 @@ export default function AdminDirectPool() {
         args: [token, tokens, priced ? slip(tokens) : 0n, priced ? slip(coin) : 0n, acc, deadline()],
       }, "Add liquidity");
       reportActivity("liquidity", CHAIN.key, hash, `Admin added ${amtToken} ${info.symbol} + ${amtCoin} ${CHAIN.coin}`);
-      setMsg(`✅ Liquidity added. The LP tokens stayed in this wallet, so you can remove them below. ${CHAIN.explorer}/tx/${hash}`);
+      setMsg(`✅ Liquidity added. The LP tokens stayed in this wallet, so you can remove them from the Remove LP tab. ${CHAIN.explorer}/tx/${hash}`);
       setAmtToken(""); setAmtCoin(""); setTick((t) => t + 1);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
@@ -208,38 +208,48 @@ export default function AdminDirectPool() {
   }
   const share = info && info.lpTotal > 0n ? { token: (info.rToken * info.lp) / info.lpTotal, coin: (info.rCoin * info.lp) / info.lpTotal } : null;
 
+  const title = mode === "deploy" ? "Rage" : mode === "add" ? "Add LP" : "Remove LP";
+  const blurb = mode === "deploy"
+    ? "Deploy the token on live BNB Chain. The whole supply comes to this wallet. Adding and removing liquidity are the next tabs."
+    : mode === "add"
+    ? "Add BNB and tokens on PancakeSwap. The LP stays in this wallet. Take it back out from the Remove LP tab."
+    : "Remove LP sitting in this wallet. The tokens and BNB come back here. Liquidity that was burned or locked on a normal launch cannot be pulled.";
   return (
     <div className="card stack" style={{ gap: 10 }}>
-      <h3 style={{ margin: 0 }}>Rage</h3>
-      <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
-        Live BNB Chain. This is not the test card below. Deploy a token, add {CHAIN.coin} and tokens on {CHAIN.dex}, then remove that liquidity whenever you want. The LP stays in this wallet. A normal launch that burned or locked its liquidity is not changed.
-      </p>
+      <h3 style={{ margin: 0 }}>{title}</h3>
+      <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>{blurb}</p>
       {!account && <button className="btn small" type="button" disabled={busy} onClick={() => wallet().catch(fail)}>Connect wallet</button>}
       {account && <small className="muted">Wallet <span className="mono">{account.slice(0, 6)}…{account.slice(-4)}</span> on {CHAIN.name}</small>}
 
-      <b>1. Deploy the token</b>
-      <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
-      <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={12} /></label>
-      <label className="field"><span>Supply (whole tokens)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
-      <button className="btn primary" type="button" disabled={busy || !name.trim() || !symbol.trim()} onClick={deploy}>Deploy token</button>
+      {mode === "deploy" && (
+        <>
+          <b>Deploy the token</b>
+          <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
+          <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={12} /></label>
+          <label className="field"><span>Supply (whole tokens)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
+          <button className="btn primary" type="button" disabled={busy || !name.trim() || !symbol.trim()} onClick={deploy}>Deploy token</button>
+        </>
+      )}
 
-      <b>2. Token and pool</b>
-      <input value={tokenIn} onChange={(e) => { setTokenIn(e.target.value); try { if (isAddress(e.target.value.trim())) localStorage.setItem(SAVED, getAddress(e.target.value.trim())); } catch { /* ignore */ } }} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
+      <b>Token</b>
+      <input value={tokenIn} onChange={(e) => { setTokenIn(e.target.value); try { if (isAddress(e.target.value.trim())) localStorage.setItem(SAVED, getAddress(e.target.value.trim())); } catch { /* ignore */ } }} placeholder="Token address (filled in after a Rage deploy)" spellCheck={false} aria-label="Token address" />
       {info && (
         <>
           <div className="notice">
-            🪙 <b>{info.symbol}</b> · {priced ? <>pool: {fmt(info.rToken, info.decimals)} {info.symbol} + {fmt(info.rCoin, 18)} {CHAIN.coin}</> : <>no pool yet: the amounts you add set the starting price</>}
+            🪙 <b>{info.symbol}</b> · {priced ? <>pool: {fmt(info.rToken, info.decimals)} {info.symbol} + {fmt(info.rCoin, 18)} {CHAIN.coin}</> : <>no pool yet</>}
             {account && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol} and {fmt(info.coinBal, 18)} {CHAIN.coin}</small></>}
             {info.pair && <><br /><small>Pool <a href={`${CHAIN.explorer}/address/${info.pair}`} target="_blank" rel="noreferrer">{info.pair.slice(0, 8)}…{info.pair.slice(-4)}</a></small></>}
           </div>
-          <b>3. Add liquidity</b>
-          <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
-          <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
-          <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin} onClick={add}>Add liquidity</button>
-          {info.pair && (
+          {mode === "add" && (
             <>
-              <b>4. Remove liquidity</b>
-              {account ? (
+              <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
+              <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
+              <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin} onClick={add}>Add liquidity</button>
+            </>
+          )}
+          {mode === "remove" && (
+            info.pair ? (
+              account ? (
                 info.lp > 0n ? (
                   <>
                     <small>LP in this wallet: {fmt(info.lp, 18)}{share ? <> (about {fmt(share.token, info.decimals)} {info.symbol} + {fmt(share.coin, 18)} {CHAIN.coin})</> : null}</small>
@@ -250,8 +260,8 @@ export default function AdminDirectPool() {
                     <button className="btn" type="button" disabled={busy} onClick={remove}>Remove liquidity</button>
                   </>
                 ) : <small className="muted">This wallet holds no LP for this pool. Only LP sitting in the connected wallet can be removed.</small>
-              ) : <small className="muted">Connect the wallet that holds the LP.</small>}
-            </>
+              ) : <small className="muted">Connect the wallet that holds the LP.</small>
+            ) : <small className="muted">This token has no pool yet. Add liquidity first.</small>
           )}
         </>
       )}
