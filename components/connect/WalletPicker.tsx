@@ -77,10 +77,9 @@ export default function WalletPicker() {
       }
       const viaWc = !!WALLETCONNECT_ID;
       if (w.id === "okx" && mobile && isAndroid() && viaWc) continue; // pinned at the top on Android
-      // Phones: tap a wallet, its app opens with the request, approve, and come back here connected (you stay in
-      // this browser). Only wallets with no WalletConnect app link (Coinbase, Phantom) open autistik.io inside the
-      // wallet app instead. "Open autistik.io inside your wallet" stays below the list as the backup.
-      const phoneWc = mobile && viaWc && !!(w.wc || w.native), phoneDapp = mobile && !phoneWc && !!w.dapp;
+      // Bitget's WalletConnect link does not open the dapp on Android. Open this site inside Bitget instead.
+      const bitgetDirect = mobile && w.id === "bitget" && !!w.dapp;
+      const phoneWc = mobile && viaWc && !!(w.wc || w.native) && !bitgetDirect, phoneDapp = bitgetDirect || (mobile && !phoneWc && !!w.dapp);
       out.push({
         key: w.id, name: w.name, logo: `/wallets/${w.id}.svg`, color: w.color,
         badge: w.name === last ? "Last used" : undefined,
