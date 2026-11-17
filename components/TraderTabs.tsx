@@ -1,5 +1,5 @@
 "use client";
-/** The switch at the top of the AI pages. Rage deploys. Add LP and Remove LP are separate. */
+/** The switch at the top of the AI pages. Rage deploys, adds liquidity, then asks to remove it. */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,9 +8,7 @@ export const TRADER_TABS = [
   { href: "/admin/ai-futures", label: "📊 Futures", sub: "Crypto · Hyperliquid", acc: "#10b981" },
   { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz", acc: "#06b6d4" },
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
-  { href: "/admin/rage", label: "💧 Rage", sub: "Deploy the token", acc: "#ef4444" },
-  { href: "/admin/add-lp", label: "➕ Add LP", sub: "Add liquidity", acc: "#f0b90b" },
-  { href: "/admin/remove-lp", label: "➖ Remove LP", sub: "Take liquidity out", acc: "#f97316" },
+  { href: "/admin/rage", label: "💧 Rage", sub: "Deploy · add · remove", acc: "#ef4444" },
   { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
 ];
 
