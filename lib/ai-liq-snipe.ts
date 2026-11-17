@@ -184,6 +184,8 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   const token = getAddress(t.token);
   const bnbUsd = await bnbPrice();
   const usdEach = Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);
+  // Each wallet's $: an amount typed for this token wins, else the wallet's own amount (set on the Sniper), else the normal one.
+  const amtFor = (slot: number) => (n(t.usd) > 0 ? usdEach : Math.max(MIN_USD, keyUsd(s, slot) ?? usdEach));
   const slip = slipOf(s);
   const [sym, dec] = await Promise.all([
     c.readContract({ address: token, abi: ERC20, functionName: "symbol" }).catch(() => token.slice(0, 8)),
@@ -211,7 +213,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
         // v3-only pool: through the swap aggregator, with the same fast and private sending.
         const ch = await import("@/lib/ai-trader-chains");
         const w = { evm: g.a, sol: null };
-        const bnb = Math.min((keyUsd(s, g.slot) ?? usdEach) / bnbUsd, g.bnb - gasKeep(s));
+        const bnb = Math.min(amtFor(g.slot) / bnbUsd, g.bnb - gasKeep(s));
         if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
         mine = sent = true;
         const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
@@ -222,7 +224,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
         return true;
       }
       // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
-      const amt = keyUsd(s, g.slot) ?? usdEach; // this wallet's own amount, else the token's / the normal one
+      const amt = amtFor(g.slot); // the token's typed amount, else this wallet's own, else the normal one
       // Buy as much as the wallet allows, up to the amount, leaving only the buy's gas: the full amount in USDT if it
       // has it, else whichever of USDT / spare BNB is bigger (a smaller buy beats no buy).
       const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
