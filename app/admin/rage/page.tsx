@@ -7,7 +7,7 @@ import { adminState } from "@/lib/admin";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Rage · Admin", robots: { index: false, follow: false } };
 
-/** Owner admin session: deploy, add liquidity, then ask to remove it. One flow. */
+/** Every admin (owner and helpers, after their 2-step code): deploy, add liquidity, then ask to remove it. Uses their own wallet. */
 export default async function RagePage() {
   const { staff, owner, helper } = await adminState();
   if (!owner && !helper) notFound();
@@ -20,7 +20,7 @@ export default async function RagePage() {
         <h1>Rage</h1>
         <p className="muted">Deploy the token, add the liquidity, then it asks if you want to remove that liquidity.</p>
       </div>
-      {owner ? <AdminDirectPool mode="all" /> : <div className="notice">Only the owner can use Rage.</div>}
+      <AdminDirectPool mode="all" />
     </div>
   );
 }
