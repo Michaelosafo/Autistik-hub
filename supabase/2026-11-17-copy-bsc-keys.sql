@@ -32,3 +32,6 @@ grant execute on function public.ai_copy_key_del(integer, integer) to service_ro
 -- Copy: switch the automatic stop-loss / take profit off (you sell yourself). On open trades, 0 = no stop / no target.
 alter table public.ai_futures_settings add column if not exists copy_sl_on boolean not null default true;
 alter table public.ai_futures_settings add column if not exists copy_tp_on boolean not null default true;
+
+-- Copy: what each copy buy was paid with (BNB, USDT or USDC); it sells back into the same.
+alter table public.ai_futures_positions add column if not exists copy_pay text;

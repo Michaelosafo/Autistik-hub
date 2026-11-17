@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 
-export type CopyKeys = { bnbUsd: number; keys: { slot: number; address: string | null; bnb: number | null }[] };
+export type CopyKeys = { bnbUsd: number; keys: { slot: number; address: string | null; bnb: number | null; usd?: number | null }[] };
 type W = { address: string; chain?: string; label?: string; usd?: number; on?: boolean };
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
 const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
@@ -63,15 +63,17 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
       {dropped > 0 && <small className="muted">{dropped} older Solana / Ethereum wallet{dropped === 1 ? " is" : "s are"} no longer copied (Copy is BNB Chain only now). Saving any change clears {dropped === 1 ? "it" : "them"}.</small>}
 
       <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 5)</b>
-      <small className="muted">Each wallet you add buys every copied coin with its own BNB, so with 3 wallets each copy is bought 3 times. Keep some extra BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
+      <small className="muted">Each wallet you add buys every copied coin with its own money (USDT / USDC on BNB Chain, else BNB), so with 3 wallets each copy is bought 3 times. Keep a little BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
       {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
         <div key={k.slot} className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
           <small><b>Wallet {k.slot}</b>{!k.address && mine.length ? <span className="muted"> (add another, optional)</span> : null}</small>
           {k.address ? (
             <>
               <code style={{ wordBreak: "break-all" }}>{k.address}</code>
-              <small className="muted">{k.bnb == null ? "–" : `${k.bnb.toFixed(4)} BNB`}{k.bnb != null && bnbUsd ? ` (≈ $${(k.bnb * bnbUsd).toFixed(2)})` : ""}{k.bnb != null && bnbUsd && k.bnb * bnbUsd < per ? ` · not enough for a $${per} buy, send BNB to it` : ""}</small>
-              <small className="muted">To fund it: send BNB on <b>BNB Chain (BEP20)</b> to the address above.</small>
+              {(() => { const b = Number(k.bnb || 0), u = Number(k.usd || 0), tot = b * bnbUsd + u; return (
+                <small className="muted">{k.bnb == null ? "–" : `${b.toFixed(4)} BNB`}{bnbUsd ? ` (≈ $${(b * bnbUsd).toFixed(2)})` : ""} · ${u.toFixed(2)} USDT/USDC · <b>≈ ${tot.toFixed(2)} in all</b>{b < 0.0006 ? " · needs ~0.0006 BNB for gas" : tot < per ? ` · less than a $${per} buy: it buys with what it has` : ""}</small>
+              ); })()}
+              <small className="muted">To fund it: send USDT, USDC or BNB on <b>BNB Chain (BEP20)</b> to the address above, plus a little BNB (~0.001) for gas. It buys with USDT / USDC first, else BNB, and sells back into the same.</small>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>
                 <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>
