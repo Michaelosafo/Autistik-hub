@@ -28,3 +28,7 @@ revoke all on function public.ai_copy_key_del(integer, integer) from public, ano
 grant execute on function public.ai_copy_key_get(integer, integer) to service_role;
 grant execute on function public.ai_copy_key_set(integer, integer, text) to service_role;
 grant execute on function public.ai_copy_key_del(integer, integer) to service_role;
+
+-- Copy: switch the automatic stop-loss / take profit off (you sell yourself). On open trades, 0 = no stop / no target.
+alter table public.ai_futures_settings add column if not exists copy_sl_on boolean not null default true;
+alter table public.ai_futures_settings add column if not exists copy_tp_on boolean not null default true;

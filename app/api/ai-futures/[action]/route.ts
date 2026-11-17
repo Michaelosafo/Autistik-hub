@@ -69,6 +69,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
           for (const k of ["use_ta", "use_news", "use_x", "no_liq", "auto_fund"]) if (typeof b[k] === "boolean") up[k] = b[k];
           const nums: Record<string, [number, number]> = { max_lev: [1, 50], max_loss_pct: [1, 90], risk_pct: [0.25, 3], max_positions: [1, 8], daily_loss_pct: [1, 25], max_hold_hours: [1, 168], snipe_usd: [1, 10000], snipe_tp: [10, 1000], snipe_sl: [5, 90], snipe_budget: [0, 1_000_000], profit_lock_pct: [0, 500], stop_pct: [0, 50] };
           for (const [k, [lo, hi]] of Object.entries(nums)) if (b[k] != null) { const v = clamp(b[k], lo, hi); if (v != null) up[k] = k === "max_positions" ? Math.round(v) : v; }
+          let exits = false;
+          if (isCopyDesk()) for (const k of ["copy_sl_on", "copy_tp_on"]) if (typeof b[k] === "boolean") { up[k] = b[k]; exits = true; }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
             // BNB Chain only: 0x… addresses.
             const seen = new Set<string>();
@@ -131,6 +133,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (!Object.keys(up).length) return json({ error: "Nothing to change." }, 400);
           const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
           if (error) return json({ error: error.message }, 400);
+          if (exits) await (await import("@/lib/ai-copy")).applyExitSwitches(await getF());
           await flog("settings", `Settings changed: ${Object.entries(up).filter(([k]) => !["day", "day_start_usd"].includes(k)).map(([k, v]) => `${k} = ${Array.isArray(v) ? v.map((x: any) => (x && typeof x === "object" ? x.label || x.address : x)).join(", ") : v}`).join("; ")}`);
           return json({ ok: true, note: up.mode === "live" ? "LIVE: the AI now trades real money on Hyperliquid." : up.enabled === true ? "AI Futures is on." : up.enabled === false ? "Off. Open positions are still watched." : "Saved." });
         }
@@ -139,6 +142,19 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const { setCopyKey } = await import("@/lib/ai-copy");
           const address = await setCopyKey(Number(b.slot), String(b.key || ""));
           return json({ ok: true, address, note: `Wallet ${Number(b.slot)} added: ${address.slice(0, 6)}…${address.slice(-4)}. Send BNB to it so it can buy.` });
+        }
+        case "copy-sell": {
+          if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
+          const frac = Number(b.frac) > 0 ? Math.min(1, Number(b.frac)) : 1;
+          await (await import("@/lib/ai-copy")).sellCopyNow(await getF(), Number(b.id), frac);
+          return json({ ok: true, note: frac >= 1 ? "Sold. See the log for the result." : `Sold ${Math.round(frac * 100)}%. See the log for the result.` });
+        }
+        case "copy-exits": {
+          if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
+          const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+          const st = num(b.stop), tg = num(b.target);
+          if ((st != null && !isFinite(st)) || (tg != null && !isFinite(tg))) return json({ error: "Type a number." }, 400);
+          return json({ ok: true, note: await (await import("@/lib/ai-copy")).setCopyExits(Number(b.id), st, tg) });
         }
         case "copy-key-new": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
