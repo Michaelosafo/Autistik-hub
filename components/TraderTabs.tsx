@@ -9,6 +9,7 @@ export const TRADER_TABS = [
   { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz", acc: "#06b6d4" },
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
   { href: "/admin/rage", label: "💧 Rage", sub: "Deploy · add · remove", acc: "#ef4444" },
+  { href: "/admin/monitor", label: "👁️ Monitor", sub: "BSC · wallets", acc: "#64748b" },
   { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
 ];
 
