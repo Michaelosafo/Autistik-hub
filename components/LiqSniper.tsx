@@ -28,8 +28,7 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
     if (list.some((t) => t.token.toLowerCase() === a.toLowerCase())) { setErr("That token is already on the list."); return; }
     const usd = Number(amt);
     setErr(""); setCa(""); setLabel(""); setAmt("");
-    const w = pick.length && pick.length < slots.length ? pick : undefined;
-    setPick([]);
+    const w = pick.length && pick.length < slots.length ? pick : undefined; // the choice stays for the next token
     save([...list, { token: a, label: label.trim() || undefined, usd: usd > 0 ? usd : undefined, on: true, state: "waiting", added: new Date().toISOString(), wallets: w }],
       `Waiting for liquidity on ${label.trim() || short(a)} with ${who(w)}. It buys within a block of liquidity landing${s.enabled ? "" : " (press ▶ START)"}.`);
   };
@@ -43,7 +42,7 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <input className="input" style={{ flex: "1 1 120px" }} placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={24} aria-label="Name" />
           <input className="input" style={{ flex: "0 1 130px" }} inputMode="decimal" placeholder={`$ per wallet (${per})`} value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars per wallet" />
-          <button type="submit" className="btn primary" disabled={!!busy || !ca.trim()}>Snipe it</button>
+          <button type="submit" className="btn primary" disabled={!!busy || !ca.trim()}>Snipe it{slots.length > 1 ? ` (${pick.length ? pick.map((x) => `#${x}`).join("+") : "all"})` : ""}</button>
         </div>
         {slots.length > 1 && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -69,14 +68,18 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
             {editing === t.token && (
               <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", width: "100%" }}>
                 <small>Snipe {t.label || short(t.token)} with:</small>
-                {slots.map((x) => {
-                  const cur = t.wallets && t.wallets.length ? t.wallets : slots;
-                  const on = cur.includes(x);
-                  return <button key={x} type="button" className={"btn small" + (on ? " primary" : " ghost")} disabled={!!busy || (on && cur.length === 1)} onClick={() => {
-                    const next = toggle(cur, x);
-                    save(list.map((y) => (y === t ? { ...y, wallets: next.length && next.length < slots.length ? next : undefined } : y)), `${t.label || short(t.token)}: ${who(next.length < slots.length ? next : undefined)}.`);
-                  }}>#{x}</button>;
-                })}
+                {(() => {
+                  const cur = t.wallets && t.wallets.length && t.wallets.length < slots.length ? t.wallets : []; // [] = all
+                  const put = (next: number[]) => { const w = next.length && next.length < slots.length ? next : undefined; save(list.map((y) => (y === t ? { ...y, wallets: w } : y)), `${t.label || short(t.token)}: ${who(w)}.`); };
+                  return <>
+                    <button type="button" className={"btn small" + (cur.length === 0 ? " primary" : " ghost")} disabled={!!busy || cur.length === 0} onClick={() => put([])}>All</button>
+                    {slots.map((x) => {
+                      const on = cur.includes(x);
+                      // From "All", a tap means only that wallet; after that, taps add / drop wallets (never none).
+                      return <button key={x} type="button" className={"btn small" + (on ? " primary" : " ghost")} disabled={!!busy || (on && cur.length === 1)} onClick={() => put(cur.length === 0 ? [x] : toggle(cur, x))}>#{x}</button>;
+                    })}
+                  </>;
+                })()}
               </div>
             )}
           </div>

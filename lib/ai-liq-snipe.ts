@@ -148,6 +148,26 @@ async function fire(g: Gun, s: FSettings, tx: { to: `0x${string}`; data: `0x${st
   g.nonce++;
   return hash;
 }
+/**
+ * Coins that reached the wallet in this transaction, from its own Transfer logs (exact, no waiting). A balance
+ * read can come from a node a moment behind and show nothing yet, so it's only the fallback.
+ */
+async function received(rc: any, token: string, to: string, before: bigint): Promise<bigint> {
+  const TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+  const me = to.toLowerCase().slice(2);
+  let sum = 0n;
+  for (const l of rc.logs || []) {
+    if (String(l.address).toLowerCase() !== token.toLowerCase() || l.topics?.[0] !== TOPIC) continue;
+    if (String(l.topics?.[2] || "").toLowerCase().endsWith(me)) sum += BigInt(l.data);
+  }
+  if (sum > 0n) return sum;
+  for (let i = 0; i < 6; i++) {
+    const now = BigInt(await pc().readContract({ address: token as `0x${string}`, abi: ERC20, functionName: "balanceOf", args: [to as `0x${string}`] }).catch(() => before));
+    if (now > before) return now - before;
+    await sleep(500);
+  }
+  return 0n;
+}
 async function receipt(hash: string) {
   const r = await pc().waitForTransactionReceipt({ hash, timeout: 60_000, pollingInterval: 300 });
   if (r.status !== "success") throw new Error("the transaction failed on-chain");
@@ -260,9 +280,8 @@ async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extr
   const before = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }).catch(() => 0n));
   const hash = await fire(g, s, { to: ROUTER, data, value }); // throws if no node took it: nothing went out
   onSend(); // from here a buy is on its way: never fire at this token again on its own
-  await receipt(hash);
-  const after = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }));
-  return { hash, got: Number(after - before) / 10 ** dec, slip: used };
+  const rc = await receipt(hash);
+  return { hash, got: Number(await received(rc, token, g.a.address, before)) / 10 ** dec, slip: used };
 }
 
 /**
@@ -358,6 +377,36 @@ async function record(s: FSettings, t: LiqTarget, name: string, usd: number, qty
   }
 }
 
+/**
+ * A wallet holds a sniped token but there's no open trade for it (the buy went through but its amount couldn't be
+ * read): record it now at today's value, so it gets Sell buttons and the auto-sell.
+ */
+async function pickUp(s: FSettings) {
+  if (s.mode !== "live") return;
+  const targets = liqTargets(s).filter((t) => (t.state || "waiting") !== "waiting");
+  if (!targets.length) return;
+  const c = pc(), bnbUsd = await bnbPrice();
+  const { data: openRows } = await pos().select("coin,copy_slot").eq("fut_id", T()).eq("mode", "live").in("status", ["open", "closing"]);
+  const have = new Set((openRows || []).map((p: any) => `${p.coin}|${p.copy_slot}`));
+  const accts = (await Promise.all(SLOTS.map(async (slot) => ({ slot, a: await copyKey(slot).catch(() => null) })))).filter((x) => x.a);
+  for (const t of targets) {
+    const coin = `bsc:${t.token.toLowerCase()}`, token = getAddress(t.token);
+    const todo = accts.filter((x) => !have.has(`${coin}|${x.slot}`) && (!t.wallets?.length || t.wallets.includes(x.slot)));
+    if (!todo.length) continue;
+    const dec = Number(await c.readContract({ address: token, abi: ERC20, functionName: "decimals" }).catch(() => 18));
+    for (const x of todo) {
+      const bal = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [x.a!.address] }).catch(() => 0n));
+      if (bal <= 0n) continue;
+      const out = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [bal, [token, WBNB]] }).catch(() => null);
+      const usd = out ? (Number(out[1]) / 1e18) * bnbUsd : 0;
+      const qty = Number(bal) / 10 ** dec;
+      if (!(usd > 0.05)) continue; // ignore dust left after a sell
+      await record(s, t, t.label || token.slice(0, 8), usd, qty, null, x.slot, "BNB", { kind: "v2", path: [WBNB, token], via: "WBNB" });
+      await flog("open", `⚡ Wallet ${x.slot} holds ${t.label || token.slice(0, 10)} (worth $${usd.toFixed(2)}) from a snipe whose amount wasn't recorded: added to your trades so you can sell it here.`);
+    }
+  }
+}
+
 /** Value of every open snipe straight from the pool (no price site needed); sells at the target or stop. */
 async function watchExits(s: FSettings) {
   const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open").eq("venue", "copy");
@@ -410,7 +459,7 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   }
   const notes: string[] = [];
   const failing = new Map<string, number>(); // token → last time "can't be bought yet" was logged
-  let tick: (() => void) | null = null, lastExit = 0, lastCheck = 0;
+  let tick: (() => void) | null = null, lastExit = 0, lastCheck = 0, pickedUp = false;
   const stop = blocks(() => tick?.());
   // Marks one token done / failed in what's saved now (you may have added tokens since this run started).
   const mark = async (token: string, state: "done" | "failed") => {
@@ -438,6 +487,7 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
         }));
       }
       if (Date.now() - lastExit > 1500) { lastExit = Date.now(); await watchExits(s).catch(() => {}); }
+      if (!pickedUp && Date.now() - t0 > 3000) { pickedUp = true; await pickUp(s).catch(() => {}); }
       // Wait for the next block (pushed live), or 400 ms at most.
       await new Promise<void>((res) => { tick = res; setTimeout(res, Math.max(50, 400 - (Date.now() - lastCheck))); });
       tick = null;
