@@ -42,7 +42,11 @@ const slip = (v: bigint) => (v * 9500n) / 10_000n;
 type Info = {
   symbol: string; decimals: number; pair: `0x${string}` | null;
   rToken: bigint; rCoin: bigint; lp: bigint; lpTotal: bigint; tokenBal: bigint; coinBal: bigint;
+  /** Rage tokens: false while trading is closed (liquidity in, first buy / open trading still to do). null: not a Rage token. */
+  live: boolean | null;
 };
+/** BNB kept for gas on each step (BNB Chain gas is cheap; this covers a swap at normal gas prices with room). */
+const GAS_BNB = 0.0015;
 
 export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "add" | "remove" | "all" }) {
   const vc = useMemo(() => viemChain(CHAIN), []);
@@ -101,7 +105,8 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
             pub.getBalance({ address: account }),
           ]) as [bigint, bigint];
         }
-        if (!gone) setInfo({ symbol: String(sym), decimals: Number(decimals), pair: pair === ZERO ? null : pair, rToken, rCoin, lp, lpTotal, tokenBal, coinBal });
+        const live = await pub.readContract({ address: token, abi: parseAbi(["function tradingLive() view returns (bool)"]), functionName: "tradingLive" }).then((x: unknown) => Boolean(x)).catch(() => null);
+        if (!gone) setInfo({ symbol: String(sym), decimals: Number(decimals), pair: pair === ZERO ? null : pair, rToken, rCoin, lp, lpTotal, tokenBal, coinBal, live });
       } catch {
         if (!gone) setMsg("Couldn't read that token on BNB Chain. Check the address.");
       }
@@ -168,13 +173,21 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
     let tokens: bigint, coin: bigint;
     try { tokens = parseUnits(amtToken, info.decimals); coin = parseEther(amtCoin); } catch { setMsg("Type both amounts as numbers."); return; }
     if (tokens <= 0n || coin <= 0n) { setMsg("Type both amounts."); return; }
-    let buyCoin: bigint | null = null;
     if (!buyAmt.trim()) { setMsg("Set the first-buy amount first. That buy is sent right after the liquidity, before any other trade."); return; }
-    try { buyCoin = parseEther(buyAmt); } catch { setMsg("Type the first-buy amount in BNB."); return; }
+    let parsedBuy: bigint;
+    try { parsedBuy = parseEther(buyAmt); } catch { setMsg("Type the first-buy amount in BNB."); return; }
+    const buyCoin: bigint = parsedBuy;
     if (buyCoin <= 0n) { setMsg("Type the first-buy amount in BNB."); return; }
     setBusy(true);
     try {
       const { w, acc } = await wallet();
+      // Enough BNB for the liquidity, the first buy and the gas of every step? Say so before signing anything.
+      const bal = (await pub.getBalance({ address: acc })) as bigint;
+      const need = coin + buyCoin + parseEther(String(GAS_BNB * 3));
+      if (bal < need) {
+        setMsg(`Not enough BNB: you have ${fmt(bal, 18)} BNB, and this needs about ${fmt(need, 18)} (${amtCoin} for the liquidity + ${buyAmt} for the first buy + ~${(GAS_BNB * 3).toFixed(4)} for gas). Add BNB, or lower the liquidity or first-buy amount.`);
+        return;
+      }
       const priced = info.rToken > 0n && info.rCoin > 0n;
       await approveIfNeeded(w, acc, token, tokens, `Allow ${CHAIN.dex} to use your ${info.symbol}`);
       const hash = await send(w, acc, {
@@ -183,29 +196,72 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
       }, "Add liquidity");
       reportActivity("liquidity", CHAIN.key, hash, `Admin added ${amtToken} ${info.symbol} + ${amtCoin} ${CHAIN.coin}`);
       setAmtToken(""); setAmtCoin(""); setTick((x) => x + 1);
-      if (buyCoin) {
-        setMsg("Liquidity is in. Approve the first buy in your wallet. It goes out before any other trade.");
-        const weth = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
-        const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [buyCoin, [weth, token]] })) as bigint[];
-        const outMin = slip(amounts[amounts.length - 1] ?? 0n);
-        const buyHash = await send(w, acc, {
-          address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", value: buyCoin,
-          args: [outMin, [weth, token], acc, deadline()],
-        }, "First buy");
-        reportActivity("swap", CHAIN.key, buyHash, `First buy ${buyAmt} ${CHAIN.coin} of ${info.symbol}`);
-        const closed = await pub.readContract({ address: token, abi: parseAbi(["function tradingLive() view returns (bool)"]), functionName: "tradingLive" }).catch(() => null);
-        if (closed === false) {
-          await send(w, acc, { address: token, abi: parseAbi(["function enableTrading()"]), functionName: "enableTrading" }, "Open trading");
-          setMsg(`✅ First buy is in, and trading is open now. ${CHAIN.explorer}/tx/${buyHash}`);
-        } else {
-          setMsg(`✅ This wallet bought first, right after the liquidity. ${CHAIN.explorer}/tx/${buyHash}`);
-        }
-        setBuyAmt("");
-      } else {
-        setMsg(`✅ Liquidity added. The LP stayed in this wallet. ${CHAIN.explorer}/tx/${hash}`);
-      }
+      setMsg("Liquidity is in. Approve the first buy in your wallet. It goes out before any other trade.");
+      const ok = await firstBuyWith(w, acc, buyCoin);
+      if (!ok) return; // the Continue panel below lets you sign it again
       if (mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
     } catch (e) { fail(e); } finally { setBusy(false); }
+  }
+
+  /** The first buy, then open trading. Returns false if a step didn't go through (the Continue panel stays up). */
+  async function firstBuyWith(w: any, acc: `0x${string}`, buyCoin: bigint): Promise<boolean> {
+    if (!token || !info) return false;
+    try {
+      const bal = (await pub.getBalance({ address: acc })) as bigint;
+      const gas = parseEther(String(GAS_BNB));
+      if (bal < buyCoin + gas) {
+        const fit = bal > gas ? bal - gas : 0n;
+        setMsg(`The first buy needs ${fmt(buyCoin, 18)} BNB + gas, but this wallet has ${fmt(bal, 18)} BNB left. Add BNB and tap "Sign first buy" again${fit > 0n ? `, or tap "Buy with what's left" (${fmt(fit, 18)} BNB)` : ""}. The liquidity is safe in the pool.`);
+        return false;
+      }
+      const weth = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
+      const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [buyCoin, [weth, token]] })) as bigint[];
+      const outMin = slip(amounts[amounts.length - 1] ?? 0n);
+      const buyHash = await send(w, acc, {
+        address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", value: buyCoin,
+        args: [outMin, [weth, token], acc, deadline()],
+      }, "First buy");
+      reportActivity("swap", CHAIN.key, buyHash, `First buy ${fmt(buyCoin, 18)} ${CHAIN.coin} of ${info.symbol}`);
+      setTick((x) => x + 1);
+      const opened = await openTradingWith(w, acc);
+      if (!opened) { setMsg(`✅ First buy is in (${CHAIN.explorer}/tx/${buyHash}). Now tap "Open trading" to finish.`); return false; }
+      setMsg(`✅ First buy is in, and trading is open now. ${CHAIN.explorer}/tx/${buyHash}`);
+      setBuyAmt("");
+      return true;
+    } catch (e) { fail(e); setMsg((m) => `${m} The liquidity is safe in the pool: tap "Sign first buy" to try again.`); return false; }
+  }
+  async function openTradingWith(w: any, acc: `0x${string}`): Promise<boolean> {
+    if (!token) return false;
+    const live = await pub.readContract({ address: token, abi: parseAbi(["function tradingLive() view returns (bool)"]), functionName: "tradingLive" }).catch(() => null);
+    if (live !== false) return true;
+    try {
+      await send(w, acc, { address: token, abi: parseAbi(["function enableTrading()"]), functionName: "enableTrading" }, "Open trading");
+      setTick((x) => x + 1);
+      return true;
+    } catch (e) { fail(e); return false; }
+  }
+  /** Continue panel buttons: sign the first buy (typed amount or all that's left), or just open trading. */
+  async function continueBuy(useAll: boolean) {
+    setBusy(true);
+    try {
+      const { w, acc } = await wallet();
+      let amt: bigint;
+      if (useAll) {
+        const bal = (await pub.getBalance({ address: acc })) as bigint, gas = parseEther(String(GAS_BNB));
+        if (bal <= gas) { setMsg(`This wallet has ${fmt(bal, 18)} BNB: not enough for a buy plus gas. Add BNB first.`); return; }
+        amt = bal - gas;
+      } else {
+        try { amt = parseEther(buyAmt || "0"); } catch { setMsg("Type the first-buy amount in BNB."); return; }
+        if (amt <= 0n) { setMsg("Type the first-buy amount in BNB."); return; }
+      }
+      const ok = await firstBuyWith(w, acc, amt);
+      if (ok && mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
+    } finally { setBusy(false); }
+  }
+  async function continueOpen() {
+    if (!confirm("Open trading without the first buy? Anyone can buy straight away.")) return;
+    setBusy(true);
+    try { const { w, acc } = await wallet(); if (await openTradingWith(w, acc)) setMsg("✅ Trading is open."); } finally { setBusy(false); }
   }
 
   async function remove() {
@@ -299,6 +355,18 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
             {account && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol} and {fmt(info.coinBal, 18)} {CHAIN.coin}</small></>}
             {info.pair && <><br /><small>Pool <a href={`${CHAIN.explorer}/address/${info.pair}`} target="_blank" rel="noreferrer">{info.pair.slice(0, 8)}…{info.pair.slice(-4)}</a></small></>}
           </div>
+          {showAdd && info.live === false && info.rToken > 0n && (
+            <div className="notice stack" style={{ gap: 6, borderColor: "#f0b90b" }}>
+              <b>▶ Continue: liquidity is in, trading is still closed</b>
+              <small>Finish with the first buy (it goes out before anyone else can trade), then trading opens. If a step fails, just sign it again here: nothing is lost.</small>
+              <label className="field"><span>First buy (BNB)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label="First buy amount in BNB" /></label>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button className="btn primary" type="button" disabled={busy || !buyAmt} onClick={() => continueBuy(false)}>Sign first buy</button>
+                <button className="btn" type="button" disabled={busy} onClick={() => continueBuy(true)}>Buy with what&apos;s left{account && info.coinBal > parseEther(String(GAS_BNB)) ? ` (${fmt(info.coinBal - parseEther(String(GAS_BNB)), 18)} BNB)` : ""}</button>
+                <button className="btn ghost" type="button" disabled={busy} onClick={continueOpen}>Skip the buy, just open trading</button>
+              </div>
+            </div>
+          )}
           {showAdd && (
             <>
               <b>First buy</b>
