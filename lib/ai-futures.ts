@@ -117,7 +117,7 @@ const fq = (table: "ai_futures_positions" | "ai_futures_log" | "ai_futures_news"
 export async function flog(kind: string, text: string) { await fq("ai_futures_log").insert({ kind, text: text.slice(0, 600) }); }
 
 export async function getF(): Promise<FSettings> {
-  const first = isLiqDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 50, use_news: false, use_x: false, auto_fund: false, snipe_usd: 5, snipe_sl: 50, snipe_tp: 100, copy_sl_on: false, copy_tp_on: false, copy_gwei: 1 }
+  const first = isLiqDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false, snipe_usd: 5, snipe_sl: 50, snipe_tp: 100, copy_sl_on: false, copy_tp_on: false, copy_gwei: 1 }
     : isCopyDesk() ? { id: T(), venues: [], coins: [], max_positions: 8, max_hold_hours: 168, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false, snipe_usd: 20, snipe_sl: 50, snipe_tp: 1000 }
     : isSnipeDesk() ? { id: T(), venues: [], coins: [], max_positions: 5, max_hold_hours: 2, daily_loss_pct: 25, use_news: false, use_x: false, auto_fund: false }
     : isMadDesk() ? { id: T(), venues: ["hyperliquid"], max_lev: 50, no_liq: true, risk_pct: 3, max_loss_pct: 25, max_positions: 3, max_hold_hours: 6, daily_loss_pct: 25, use_ta: true, use_news: true }
