@@ -36,8 +36,8 @@ const ZERO = "0x0000000000000000000000000000000000000000";
 const V3_FEES = [100, 500, 2500, 10000] as const;
 const GAS_LIMIT = 700_000n;
 const GAS_KEEP = 0.0005; // least BNB left in each wallet for the buy, the approve and the sell
-/** BNB to keep for one swap at your gas speed (~250k gas, +20%), never under GAS_KEEP. */
-const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, 250_000 * gweiOf(s) * 1e-9 * 1.2);
+/** BNB kept back at your gas speed: the buy, the approve and the sell later (~550k gas in all), never under GAS_KEEP. */
+const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, 550_000 * gweiOf(s) * 1e-9);
 const MIN_USD = 0.1;
 
 const ROUTER_ABI = parseAbi([
@@ -192,8 +192,11 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
       }
       // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
       const amt = keyUsd(s, g.slot) ?? usdEach; // this wallet's own amount, else the token's / the normal one
-      const useUsdt = g.usdtOk && g.usdt >= amt * 0.98;
-      let usd = useUsdt ? amt : Math.min(amt, (g.bnb - gasKeep(s)) * bnbUsd);
+      // Buy as much as the wallet allows, up to the amount, always leaving the gas: the full amount in USDT if it has
+      // it, else whichever of USDT / spare BNB is bigger (a smaller buy beats no buy).
+      const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
+      const useUsdt = usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
+      let usd = Math.min(amt, useUsdt ? usdtFree : bnbFree);
       if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return false; }
       if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return false; }
       usd = +usd.toFixed(2);
@@ -202,7 +205,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
       const { hash, got } = r;
       if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
       await record(s, t, name, usd, got, hash, g.slot, useUsdt ? "USDT" : "BNB", route);
-      await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought. https://bscscan.com/tx/${hash}`);
+      await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought${usd < amt * 0.95 ? ` (all it could spend, the rest kept for gas)` : ""}. https://bscscan.com/tx/${hash}`);
       // Ready to sell fast later: approve the router for this coin now (in the background).
       approveForSell(g, s, token).catch(() => {});
       return true;
