@@ -35,6 +35,9 @@ const ONE_APP: { test: RegExp; scheme: string; pkg: string }[] = [
 /** Android: open that one wallet app. An https link also offers Chrome, so this uses the app's own scheme and package. */
 export function pinAndroid(href: string): string {
   if (typeof navigator === "undefined" || !/Android/i.test(navigator.userAgent)) return href;
+  // In-app browsers (Telegram, X, Instagram…) don't run intent:// links themselves: they hand them on as a web link,
+  // and Android asks "Chrome or the wallet?". The app's own scheme (bitkeep://, trust://…) can only open that app.
+  if (inAppBrowser() && !/^https?:/i.test(href)) return href;
   const hit = ONE_APP.find((a) => a.test.test(href));
   if (!hit) return href;
   const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
@@ -632,7 +635,9 @@ export const inAppBrowser = () => {
  */
 export function walletBase(t: { wc?: string; native?: string }): string | undefined {
   const https = t.wc && /^https:/.test(t.wc) ? t.wc : undefined;
-  if (isIOS() || inAppBrowser()) return https || t.native || t.wc;
+  if (isIOS()) return https || t.native || t.wc;
+  // Android in-app browser: the app's own scheme, so only the wallet opens (an https link offers Chrome too).
+  if (inAppBrowser()) return t.native || https || t.wc;
   return t.native || t.wc;
 }
 
