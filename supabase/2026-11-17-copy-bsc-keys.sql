@@ -47,3 +47,6 @@ alter table public.ai_futures_settings add column if not exists liq_x numeric no
 alter table public.ai_futures_settings add column if not exists liq_sell_pct numeric not null default 100;
 alter table public.ai_futures_settings add column if not exists liq_slip numeric not null default 20;
 alter table public.ai_futures_settings add column if not exists liq_tp_on boolean not null default true;
+
+-- Copy / Sniper: $ each of your wallets spends per buy (slot -> dollars). Missing = the normal buy amount.
+alter table public.ai_futures_settings add column if not exists copy_key_usd jsonb not null default '{}'::jsonb;
