@@ -54,24 +54,26 @@ export const TURBO_DESK = 300000;
 export const SNIPE_DESK = 400000;
 /** Copy (500000 + id): copies BNB Chain wallets you paste, buying from 1–2 of your own wallets (lib/ai-copy.ts). */
 export const COPY_DESK = 500000;
-/**
- * BSC Sniper (550000 + id): inside the Copy range on purpose, so it shares Copy's wallets (keys per desk), Live switch,
- * Sell / exit buttons, gas and MEV settings. Paste a token's address before its liquidity is added; the moment
- * liquidity lands, every wallet buys (lib/ai-liq-snipe.ts).
- */
-export const LIQ_DESK = 550000;
+
 /**
  * Madness (600000 + id): Hyperliquid futures at the highest leverage each coin allows that still keeps liquidation
  * at least 3x further away than a very tight stop-loss (0.25%–0.6%), on the most-traded coins, only when the news and
  * the chart agree. The stop rests on Hyperliquid, so it is hit long before liquidation. Own wallet and money.
  */
 export const MAD_DESK = 600000;
+/**
+ * BSC Sniper (700000 + id; desk ids must be a multiple of 100000 plus the owner's id). It counts as a Copy-type desk
+ * (isCopyDesk), so it shares Copy's wallets (keys per desk), Live switch, Sell / exit buttons, gas and MEV settings.
+ * Paste a token's address before its liquidity is added; the moment liquidity lands, every wallet buys
+ * (lib/ai-liq-snipe.ts).
+ */
+export const LIQ_DESK = 700000;
 export const isFxDesk = () => T() >= FX_DESK && T() < EARN_DESK;
 export const isEarnDesk = () => T() >= EARN_DESK && T() < TURBO_DESK;
 export const isTurboDesk = () => T() >= TURBO_DESK && T() < SNIPE_DESK;
 export const isSnipeDesk = () => T() >= SNIPE_DESK && T() < COPY_DESK;
-export const isCopyDesk = () => T() >= COPY_DESK && T() < MAD_DESK;
-export const isLiqDesk = () => T() >= LIQ_DESK && T() < MAD_DESK;
+export const isLiqDesk = () => T() >= LIQ_DESK && T() < LIQ_DESK + FX_DESK;
+export const isCopyDesk = () => (T() >= COPY_DESK && T() < MAD_DESK) || isLiqDesk();
 export const isMadDesk = () => T() >= MAD_DESK && T() < MAD_DESK + FX_DESK;
 /** The main Futures desk (crypto on Hyperliquid/Aster, none of the special desks above). */
 export const isFutDesk = () => !isFxDesk() && !isEarnDesk() && !isTurboDesk() && !isSnipeDesk() && !isCopyDesk() && !isMadDesk();
