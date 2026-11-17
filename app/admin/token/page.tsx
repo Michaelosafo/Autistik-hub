@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Launchpad from "@/components/Launchpad";
 import AddLiquidity from "@/components/AddLiquidity";
 import TestnetLiquidity from "@/components/TestnetLiquidity";
+import TraderTabs from "@/components/TraderTabs";
 import { adminState } from "@/lib/admin";
 import { currentUser } from "@/lib/supabase/server";
 import { padInfo } from "@/lib/launchpad-server";
@@ -23,6 +24,7 @@ export default async function AdminTokenPage() {
   const bsc: Pads = pads.bsc ? { bsc: pads.bsc } : {};
   return (
     <div className="stack">
+      <TraderTabs />
       <div className="page-head">
         <div className="label">Admin · BNB Chain</div>
         <h1>🪙 Launch a BSC token</h1>
