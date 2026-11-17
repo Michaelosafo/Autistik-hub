@@ -375,10 +375,15 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     if (have < COPY_GAS) { await flog("skip", `Wallet ${slot} skipped ${sym}: it needs a little BNB for gas (${COPY_GAS} BNB, ≈ $${(COPY_GAS * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
     const useStable = stFree >= want * 0.98 || (bnbFree < want && stFree >= bnbFree);
     const usd = +Math.min(want, useStable ? stFree * 0.995 : bnbFree).toFixed(2);
-    if (usd < 0.5) { await flog("skip", `Wallet ${slot} skipped ${sym}: only $${(bnbFree + stFree).toFixed(2)} to buy with (send BNB or USDT on BNB Chain).`); return null; }
+    if (usd < 0.1) { await flog("skip", `Wallet ${slot} skipped ${sym}: only $${(bnbFree + stFree).toFixed(2)} to buy with (send BNB or USDT on BNB Chain).`); return null; }
     const pay = useStable ? st!.symbol : "BNB";
+    let directErr = "";
     try {
-      const r = await c.withFastSend(fast, () => (useStable ? c.liveBuyOn("bsc", w, token, usd, slipTax(s), st) : c.liveBuyOn("bsc", w, token, usd / bnbUsd, slipTax(s))));
+      // PancakeSwap straight away (fast, and works on tokens the route service doesn't know yet); else the route service.
+      const { directBuy } = await import("@/lib/ai-liq-snipe");
+      const usdtPay = useStable && st!.symbol === "USDT";
+      const direct = (!useStable || usdtPay) ? await directBuy(a, s, token, usd, usdtPay, slipOf(s)).catch((e) => { directErr = (e as Error).message; return null; }) : null;
+      const r = direct || await c.withFastSend(fast, () => (useStable ? c.liveBuyOn("bsc", w, token, usd, slipTax(s), st) : c.liveBuyOn("bsc", w, token, usd / bnbUsd, slipTax(s)))).catch((e) => { throw new Error(directErr ? `${directErr}; route service: ${(e as Error).message}` : (e as Error).message); });
       if (!(r.raw > 0n)) throw new Error("the swap went through but no coins arrived");
       const qty = Number(r.raw) / 10 ** r.decimals;
       await row(usd, usd / qty, qty, r.hash, slot, pay);
@@ -417,9 +422,16 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
       const raw = all ? own : BigInt(Math.floor(Number(own) * part));
       if (raw > 0n) {
         const st = c.stableBySymbol("bsc", (p as any).copy_pay);
-        const r = await c.withFastSend(fastOf(s), () => c.liveSellOn("bsc", w, token, raw, slipTax(s), /stop/i.test(reason) ? 2000 : 0, st));
-        got = st ? r.receivedNative : r.receivedNative * (await c.nativeUsd("bsc")); // stablecoin sells come back in dollars
-        tx = r.hash;
+        // PancakeSwap straight away first (works on brand-new tokens); else the route service.
+        const { directSell } = await import("@/lib/ai-liq-snipe");
+        const slipSell = /stop/i.test(reason) ? 30 : slipOf(s);
+        const d = (!st || st.symbol === "USDT") ? await directSell(a, s, token, raw, !!st, slipSell).catch(() => null) : null;
+        if (d) { got = d.got; tx = d.hash; }
+        else {
+          const r = await c.withFastSend(fastOf(s), () => c.liveSellOn("bsc", w, token, raw, slipTax(s), /stop/i.test(reason) ? 2000 : 0, st));
+          got = st ? r.receivedNative : r.receivedNative * (await c.nativeUsd("bsc")); // stablecoin sells come back in dollars
+          tx = r.hash;
+        }
         if (n(p.size) > 0) px = got / (n(p.size) * part);
       } else reason = `${reason} (the wallet held none of it any more)`;
     } else {
