@@ -72,6 +72,12 @@ export async function POST(req: Request, { params }: { params: { action: string 
           let exits = false;
           if (isCopyDesk()) for (const k of ["copy_sl_on", "copy_tp_on"]) if (typeof b[k] === "boolean") { up[k] = b[k]; exits = true; }
           if (isCopyDesk()) {
+            if (b.copy_key_usd && typeof b.copy_key_usd === "object") {
+              // { "1": 5, "3": 20 }: $ per buy for those wallets; missing / empty = the normal amount.
+              const m: Record<string, number> = {};
+              for (const [k, v] of Object.entries(b.copy_key_usd)) { const slot = Number(k), x = clamp(v, 0.5, 100000); if (slot >= 1 && slot <= 5 && x != null && Number(v) > 0) m[String(slot)] = x; }
+              up.copy_key_usd = m;
+            }
             if (typeof b.copy_mev === "boolean") up.copy_mev = b.copy_mev;
             if (b.copy_gwei != null) { const v = clamp(b.copy_gwei, 0.05, 20); if (v != null) up.copy_gwei = v; }
             if (b.copy_slip != null) { const v = clamp(b.copy_slip, 3, 15); if (v != null) up.copy_slip = v; }

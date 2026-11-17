@@ -20,7 +20,7 @@ import type { PrivateKeyAccount } from "viem/accounts";
 import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { flog, type FPos, type FSettings } from "@/lib/ai-futures";
-import { SLOTS, bnbPrice, copyKey, copyKeys, gweiOf, mevOn, sellCopy } from "@/lib/ai-copy";
+import { SLOTS, bnbPrice, copyKey, copyKeys, gweiOf, keyUsd, mevOn, sellCopy } from "@/lib/ai-copy";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const sb = () => supabaseService();
@@ -175,7 +175,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
         // v3-only pool: through the swap aggregator, with the same fast and private sending.
         const ch = await import("@/lib/ai-trader-chains");
         const w = { evm: g.a, sol: null };
-        const bnb = Math.min(usdEach / bnbUsd, g.bnb - GAS_KEEP);
+        const bnb = Math.min((keyUsd(s, g.slot) ?? usdEach) / bnbUsd, g.bnb - GAS_KEEP);
         if (bnb * bnbUsd < 0.5) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
         mine = sent = true;
         const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
@@ -186,8 +186,9 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
         return true;
       }
       // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
-      const useUsdt = g.usdtOk && g.usdt >= usdEach * 0.98;
-      let usd = useUsdt ? usdEach : Math.min(usdEach, (g.bnb - GAS_KEEP) * bnbUsd);
+      const amt = keyUsd(s, g.slot) ?? usdEach; // this wallet's own amount, else the token's / the normal one
+      const useUsdt = g.usdtOk && g.usdt >= amt * 0.98;
+      let usd = useUsdt ? amt : Math.min(amt, (g.bnb - GAS_KEEP) * bnbUsd);
       if (usd < 0.5) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keep ${GAS_KEEP} BNB for gas)`); return false; }
       usd = +usd.toFixed(2);
       const path = useUsdt ? (route.via === "USDT" ? [USDT, token] : [USDT, WBNB, token]) : route.path;

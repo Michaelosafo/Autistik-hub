@@ -12,7 +12,7 @@ const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
-  s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
+  s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number; copy_key_usd?: Record<string, number>; snipe_usd?: number }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
   busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean;
 }) {
   const [addr, setAddr] = useState(""), [label, setLabel] = useState(""), [err, setErr] = useState("");
@@ -82,6 +82,21 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
               {(() => { const b = Number(k.bnb || 0), u = Number(k.usd || 0), tot = b * bnbUsd + u; return (
                 <small className="muted">{k.bnb == null ? "–" : `${b.toFixed(4)} BNB`}{bnbUsd ? ` (≈ $${(b * bnbUsd).toFixed(2)})` : ""} · ${u.toFixed(2)} USDT/USDC · <b>≈ ${tot.toFixed(2)} in all</b>{b < 0.0006 ? " · needs ~0.0006 BNB for gas" : tot < per ? ` · less than a $${per} buy: it buys with what it has` : ""}</small>
               ); })()}
+              {(() => {
+                const amounts = s.copy_key_usd || {}, own = Number(amounts[String(k.slot)] || 0), normal = Number(s.snipe_usd || per);
+                return (
+                  <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <small>💵 <b>Buys: ${own > 0 ? own : normal}</b> <span className="muted">{own > 0 ? "(this wallet's own amount)" : "(the normal amount, same as the others)"}</span></small>
+                    <button type="button" className="btn small" disabled={!!busy} onClick={() => {
+                      const v = prompt(`$ wallet ${k.slot} spends on each buy. Leave empty to use the normal amount ($${normal}), the same as the others:`, own > 0 ? String(own) : "");
+                      if (v == null) return;
+                      const next = { ...amounts };
+                      if (Number(v) > 0) next[String(k.slot)] = Number(v); else delete next[String(k.slot)];
+                      set({ copy_key_usd: next }, Number(v) > 0 ? `Wallet ${k.slot} now buys $${Number(v)} each time.` : `Wallet ${k.slot} buys the normal amount ($${normal}).`);
+                    }}>Set amount</button>
+                  </div>
+                );
+              })()}
               <small className="muted">To fund it: send USDT, USDC or BNB on <b>BNB Chain (BEP20)</b> to the address above, plus a little BNB (~0.001) for gas. It buys with USDT / USDC first, else BNB, and sells back into the same.</small>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>

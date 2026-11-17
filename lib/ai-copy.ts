@@ -46,6 +46,8 @@ const MONEY = new Set(["0x55d398326f99059ff775485246999027b3197955", "0x8ac76a51
 // ---------- Your wallets (private keys in Vault, slots 1–5) ----------
 
 export const MAX_KEYS = 5;
+/** $ one of your wallets spends per buy, if you set one for it (else null: the normal amount). */
+export const keyUsd = (s: FSettings, slot: number): number | null => { const v = n(((s as any).copy_key_usd || {})[String(slot)]); return v > 0 ? v : null; };
 export const SLOTS = [1, 2, 3, 4, 5] as const;
 /** BNB kept for gas in each wallet (a swap on BNB Chain costs well under a cent; this covers many). */
 const COPY_GAS = 0.0006;
@@ -364,7 +366,8 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     const a = await copyKey(slot);
     if (!a) return null;
     const w = { evm: a, sol: null };
-    const want = +(base * (0.88 + Math.random() * 0.24)).toFixed(2); // ±12%: never exactly the same size
+    // This wallet's own amount if you set one, else the copied wallet's amount, else the normal buy. ±12% so it's never exactly the same size.
+    const want = +((keyUsd(s, slot) ?? base) * (0.88 + Math.random() * 0.24)).toFixed(2);
     // Pay with whatever the wallet holds: USDT / USDC on BNB Chain first, else BNB. Less than the buy size: all of it.
     const [have, sts] = await Promise.all([c.chainBalance("bsc", w).catch(() => 0), c.stableBalances("bsc", w).catch(() => [])]);
     const st = sts.sort((x, y) => y.balance - x.balance)[0] || null;
