@@ -168,6 +168,10 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
     let tokens: bigint, coin: bigint;
     try { tokens = parseUnits(amtToken, info.decimals); coin = parseEther(amtCoin); } catch { setMsg("Type both amounts as numbers."); return; }
     if (tokens <= 0n || coin <= 0n) { setMsg("Type both amounts."); return; }
+    let buyCoin: bigint | null = null;
+    if (!buyAmt.trim()) { setMsg("Set the first-buy amount first. That buy is sent right after the liquidity, before any other trade."); return; }
+    try { buyCoin = parseEther(buyAmt); } catch { setMsg("Type the first-buy amount in BNB."); return; }
+    if (buyCoin <= 0n) { setMsg("Type the first-buy amount in BNB."); return; }
     setBusy(true);
     try {
       const { w, acc } = await wallet();
@@ -178,32 +182,23 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
         args: [token, tokens, priced ? slip(tokens) : 0n, priced ? slip(coin) : 0n, acc, deadline()],
       }, "Add liquidity");
       reportActivity("liquidity", CHAIN.key, hash, `Admin added ${amtToken} ${info.symbol} + ${amtCoin} ${CHAIN.coin}`);
-      setMsg(`✅ Liquidity added. The LP stayed in this wallet. ${CHAIN.explorer}/tx/${hash}`);
       setAmtToken(""); setAmtCoin(""); setTick((x) => x + 1);
-      if (mode === "all" && confirm("Liquidity is in. Remove it now?")) setAskRemove(true);
-    } catch (e) { fail(e); } finally { setBusy(false); }
-  }
-
-  async function firstBuy() {
-    if (!info || !token) { setMsg("Put the token address in first."); return; }
-    if (!(info.rToken > 0n && info.rCoin > 0n)) { setMsg("Add liquidity first. Then this wallet can buy."); return; }
-    let coin: bigint;
-    try { coin = parseEther(buyAmt); } catch { setMsg("Type the first-buy amount in BNB."); return; }
-    if (coin <= 0n) { setMsg("Type the first-buy amount in BNB."); return; }
-    setBusy(true);
-    try {
-      const { w, acc } = await wallet();
-      const weth = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
-      const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [coin, [weth, token]] })) as bigint[];
-      const outMin = slip(amounts[amounts.length - 1] ?? 0n);
-      const hash = await send(w, acc, {
-        address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", value: coin,
-        args: [outMin, [weth, token], acc, deadline()],
-      }, "First buy");
-      reportActivity("swap", CHAIN.key, hash, `First buy ${buyAmt} ${CHAIN.coin} of ${info.symbol}`);
-      setMsg(`✅ First buy sent from this wallet only. ${CHAIN.explorer}/tx/${hash}`);
-      setBuyAmt("");
-      setTick((x) => x + 1);
+      if (buyCoin) {
+        setMsg("Liquidity is in. Approve the first buy in your wallet. It goes out before any other trade.");
+        const weth = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
+        const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [buyCoin, [weth, token]] })) as bigint[];
+        const outMin = slip(amounts[amounts.length - 1] ?? 0n);
+        const buyHash = await send(w, acc, {
+          address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", value: buyCoin,
+          args: [outMin, [weth, token], acc, deadline()],
+        }, "First buy");
+        reportActivity("swap", CHAIN.key, buyHash, `First buy ${buyAmt} ${CHAIN.coin} of ${info.symbol}`);
+        setMsg(`✅ This wallet bought first, right after the liquidity. ${CHAIN.explorer}/tx/${buyHash}`);
+        setBuyAmt("");
+      } else {
+        setMsg(`✅ Liquidity added. The LP stayed in this wallet. ${CHAIN.explorer}/tx/${hash}`);
+      }
+      if (mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
@@ -275,14 +270,13 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
           </div>
           {showAdd && (
             <>
+              <b>First buy</b>
+              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. The same wallet buys this amount right after, before any other trade. You approve both in the wallet.</p>
+              <label className="field"><span>Amount (BNB)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label="First buy amount in BNB" /></label>
               <b>3. Add liquidity</b>
               <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
-              <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin} onClick={add}>Add liquidity</button>
-              <b>First buy</b>
-              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Only the wallet you connect. Set the BNB amount, then approve that buy in the wallet.</p>
-              <label className="field"><span>Amount (BNB)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label="First buy amount in BNB" /></label>
-              <button className="btn primary" type="button" disabled={busy || !buyAmt} onClick={firstBuy}>Buy first</button>
+              <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin || !buyAmt} onClick={add}>Add liquidity</button>
             </>
           )}
           {showRemove && (askRemove || mode !== "all" || info.lp > 0n) && (
