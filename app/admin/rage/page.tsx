@@ -7,7 +7,7 @@ import { adminState } from "@/lib/admin";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Rage · Admin", robots: { index: false, follow: false } };
 
-/** Owner admin session: deploy a token, add PancakeSwap liquidity, and remove it. The old BSC launch is unchanged. */
+/** Owner admin session: deploy a token only. Adding and removing liquidity are separate tabs. */
 export default async function RagePage() {
   const { staff, owner, helper } = await adminState();
   if (!owner && !helper) notFound();
@@ -18,9 +18,9 @@ export default async function RagePage() {
       <div className="page-head">
         <div className="label">Admin · live BNB Chain</div>
         <h1>Rage</h1>
-        <p className="muted">Deploy a token, add liquidity, and remove that liquidity. The old BSC launch is unchanged.</p>
+        <p className="muted">Deploy the token. Add liquidity and remove liquidity are the next tabs.</p>
       </div>
-      {owner ? <AdminDirectPool /> : <div className="notice">Only the owner can use Rage.</div>}
+      {owner ? <AdminDirectPool mode="deploy" /> : <div className="notice">Only the owner can use Rage.</div>}
     </div>
   );
 }
