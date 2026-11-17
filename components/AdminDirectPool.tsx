@@ -193,7 +193,13 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
           args: [outMin, [weth, token], acc, deadline()],
         }, "First buy");
         reportActivity("swap", CHAIN.key, buyHash, `First buy ${buyAmt} ${CHAIN.coin} of ${info.symbol}`);
-        setMsg(`✅ This wallet bought first, right after the liquidity. ${CHAIN.explorer}/tx/${buyHash}`);
+        const closed = await pub.readContract({ address: token, abi: parseAbi(["function tradingLive() view returns (bool)"]), functionName: "tradingLive" }).catch(() => null);
+        if (closed === false) {
+          await send(w, acc, { address: token, abi: parseAbi(["function enableTrading()"]), functionName: "enableTrading" }, "Open trading");
+          setMsg(`✅ First buy is in, and trading is open now. ${CHAIN.explorer}/tx/${buyHash}`);
+        } else {
+          setMsg(`✅ This wallet bought first, right after the liquidity. ${CHAIN.explorer}/tx/${buyHash}`);
+        }
         setBuyAmt("");
       } else {
         setMsg(`✅ Liquidity added. The LP stayed in this wallet. ${CHAIN.explorer}/tx/${hash}`);
@@ -271,7 +277,7 @@ export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "a
           {showAdd && (
             <>
               <b>First buy</b>
-              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. The same wallet buys this amount right after, before any other trade. You approve both in the wallet.</p>
+              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. Trading stays closed until this wallet's buy is in, then it opens. You approve each step in the wallet.</p>
               <label className="field"><span>Amount (BNB)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label="First buy amount in BNB" /></label>
               <b>3. Add liquidity</b>
               <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
