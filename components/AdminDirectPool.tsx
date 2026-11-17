@@ -210,9 +210,9 @@ export default function AdminDirectPool() {
 
   return (
     <div className="card stack" style={{ gap: 10 }}>
-      <h3 style={{ margin: 0 }}>💧 Deploy, add liquidity, remove liquidity</h3>
+      <h3 style={{ margin: 0 }}>Rage</h3>
       <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
-        This stays on the admin panel. Deploy a token from the connected wallet, add {CHAIN.coin} and tokens on {CHAIN.dex}, and take that liquidity back out whenever you want. The LP tokens stay in this wallet. A normal launch that burned or locked its liquidity is not changed and cannot be pulled here.
+        Live BNB Chain. This is not the test card below. Deploy a token, add {CHAIN.coin} and tokens on {CHAIN.dex}, then remove that liquidity whenever you want. The LP stays in this wallet. A normal launch that burned or locked its liquidity is not changed.
       </p>
       {!account && <button className="btn small" type="button" disabled={busy} onClick={() => wallet().catch(fail)}>Connect wallet</button>}
       {account && <small className="muted">Wallet <span className="mono">{account.slice(0, 6)}…{account.slice(-4)}</span> on {CHAIN.name}</small>}
