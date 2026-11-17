@@ -23,19 +23,25 @@ type Detected = { info: WalletInfo; provider: any };
 const ANDROID_APP: Record<string, string> = { "bkcode.vip": "com.bitkeep.wallet" };
 export function pinAndroid(href: string): string {
   if (typeof navigator === "undefined" || !/Android/i.test(navigator.userAgent)) return href;
-  // bitkeep:// is Bitget's own scheme. An https link is also claimed by Chrome, which is the
-  // "Choose activity" dialog. Naming the package opens Bitget only.
-  if (/^bitkeep:\/\//i.test(href)) {
-    return `intent://${href.slice("bitkeep://".length)}#Intent;scheme=bitkeep;package=com.bitkeep.wallet;end`;
-  }
+  if (/^bitkeep:\/\//i.test(href)) return href;
   const m = /^https:\/\/([^/?#]+)(.*)$/.exec(href);
+  // Android only opens Bitget through https://bkcode.vip. A bitkeep:// link does not, so the
+  // app stays on its home screen. package= keeps Chrome out of the chooser.
   if (m?.[1] === "bkcode.vip") {
-    const tail = (m[2] || "").replace(/^\//, "");
-    return `intent://${tail}#Intent;scheme=bitkeep;package=com.bitkeep.wallet;end`;
+    return `intent://${m[1]}${m[2]}#Intent;scheme=https;package=com.bitkeep.wallet;S.browser_fallback_url=${encodeURIComponent("https://web3.bitget.com/en/wallet-download")};end`;
   }
   const pkg = m && ANDROID_APP[m[1]];
   if (!pkg) return href;
   return `intent://${m[1]}${m[2]}#Intent;scheme=https;package=${pkg};end`;
+}
+
+/** Official Bitget "open this dapp" link. Android only accepts https://bkcode.vip. */
+export function bitgetOpenDapp(dappUrl: string): string {
+  const actionID = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `act-${Date.now().toString(36)}`;
+  const params = new URLSearchParams({ action: "DApp", actionID, version: "1.0", dappName: "AUTISTIK Hub", url: dappUrl });
+  const ios = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (ios) return `bitkeep://bkconnect?${params.toString()}`;
+  return pinAndroid(`https://bkcode.vip?${params.toString()}`);
 }
 
 /** Top wallets, in the order shown. `rdns` matches what the wallet announces when installed. */
@@ -45,8 +51,9 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
   // Bitget and Trust first: both handle every network and switch between them easily.
-  // Bitget: its own bitkeep:// link, pinned to the Bitget app on Android so Chrome is not offered.
-  { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => pinAndroid(`bitkeep://bkconnect?action=DApp&url=${encodeURIComponent(u)}`) },
+  // Bitget on a phone opens this site inside the app (official bkcode.vip link). WalletConnect's
+  // bitkeep://wc link does not open the dapp on Android, so people had to find it by hand.
+  { id: "bitget", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => bitgetOpenDapp(u) },
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(u)}` },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => `https://metamask.app.link/dapp/${u.replace(/^https?:\/\//, "")}` },
   { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi" },
