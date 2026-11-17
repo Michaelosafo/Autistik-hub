@@ -4,7 +4,6 @@ import Launchpad from "@/components/Launchpad";
 import AddLiquidity from "@/components/AddLiquidity";
 import TestnetLiquidity from "@/components/TestnetLiquidity";
 import TraderTabs from "@/components/TraderTabs";
-import AdminDirectPool from "@/components/AdminDirectPool";
 import { adminState } from "@/lib/admin";
 import { currentUser } from "@/lib/supabase/server";
 import { padInfo } from "@/lib/launchpad-server";
@@ -16,7 +15,6 @@ export const metadata = { title: "BSC token · Admin", robots: { index: false, f
 /**
  * Admin only: launch a BNB Chain token (buy and sell tax, tax wallet, liquidity added and locked in one go), add more
  * liquidity straight through PancakeSwap, and try add + remove liquidity on testnet first.
- * The owner session can also deploy a plain token here and add or remove its PancakeSwap liquidity directly.
  */
 export default async function AdminTokenPage() {
   const { staff, owner, helper } = await adminState();
@@ -30,7 +28,7 @@ export default async function AdminTokenPage() {
       <div className="page-head">
         <div className="label">Admin · BNB Chain</div>
         <h1>🪙 Launch a BSC token</h1>
-        <p className="muted">Set the name, supply, buy tax and sell tax (max 10% each) and the wallet that receives the tax. The token deploys and its PancakeSwap pool is created in one step. Then add more liquidity below from the same wallet. Rage, just above the test card, is the live deploy and remove tool. The test card under it is only practice.</p>
+        <p className="muted">Set the name, supply, buy tax and sell tax (max 10% each) and the wallet that receives the tax. The token deploys and its PancakeSwap pool is created in one step. Then add more liquidity below from the same wallet. Test add and remove on testnet first, at the bottom.</p>
       </div>
       {bsc.bsc ? (
         <>
@@ -40,7 +38,6 @@ export default async function AdminTokenPage() {
       ) : (
         <div className="notice warn">The Launch Pad isn't deployed on BNB Chain yet. Deploy it from the admin tools at the bottom of <Link href="/launchpad/new">the Launch page</Link>.</div>
       )}
-      {owner && <AdminDirectPool />}
       <TestnetLiquidity />
     </div>
   );

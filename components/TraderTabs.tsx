@@ -1,5 +1,5 @@
 "use client";
-/** The switch at the top of the AI pages: the AIs and the BSC token launcher, each with its own colour. Each has its own Practice / Live mode. */
+/** The switch at the top of the AI pages: the AIs, the BSC token launcher, and Rage. */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,6 +9,7 @@ export const TRADER_TABS = [
   { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz", acc: "#06b6d4" },
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
   { href: "/admin/token", label: "🪙 BSC Token", sub: "Launch · tax · liquidity", acc: "#f0b90b" },
+  { href: "/admin/rage", label: "💧 Rage", sub: "Deploy · add · remove LP", acc: "#ef4444" },
   { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
 ];
 
