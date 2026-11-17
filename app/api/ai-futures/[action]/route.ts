@@ -177,8 +177,17 @@ export async function POST(req: Request, { params }: { params: { action: string 
         }
         case "copy-key-new": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
-          const r = await (await import("@/lib/ai-copy")).createCopyKey(Number(b.slot) || undefined);
-          return json({ ok: true, ...r, note: `Wallet ${r.slot} created: ${r.address}. Send BNB (BNB Chain / BEP20) to it and it starts buying.` });
+          const { createCopyKey } = await import("@/lib/ai-copy");
+          const count = Math.min(5, Math.max(1, Math.floor(Number(b.count) || 1)));
+          if (count > 1) {
+            // Fill the free slots, one after another.
+            const made: { slot: number; address: string }[] = [];
+            for (let i = 0; i < count; i++) made.push(await createCopyKey().catch(() => null as any));
+            const ok = made.filter(Boolean);
+            return json({ ok: true, made: ok, note: `Created ${ok.length} wallet${ok.length === 1 ? "" : "s"} (${ok.map((m) => `#${m.slot}`).join(", ")}). Fund each with BNB / USDT on BNB Chain.` });
+          }
+          const r = await createCopyKey(Number(b.slot) || undefined);
+          return json({ ok: true, ...r, note: `Wallet ${r.slot} created: ${r.address}. Send BNB or USDT (BNB Chain / BEP20) to it and it starts buying.` });
         }
         case "copy-key-reveal": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);

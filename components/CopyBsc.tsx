@@ -20,10 +20,11 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
   const [copied, setCopied] = useState(0);
   const reveal = async (slot: number) => {
     if (!confirm(`Show wallet ${slot}'s private key? Anyone who sees it can take the money. Use it to import the wallet into Bitget, MetaMask or Trust.`)) return;
-    const r = await fetch("/api/ai-futures/copy-key-reveal?desk=copy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
+    const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { alert(j.error || "Couldn't show it."); return; }
-    prompt(`Wallet ${slot} private key (keep it secret):`, j.key);
+    const copied = await navigator.clipboard?.writeText(j.key).then(() => true, () => false);
+    prompt(`Wallet ${slot} private key${copied ? " (also copied, ready to paste)" : ""}. Keep it secret:`, j.key);
   };
   const all: W[] = s.copy_wallets || [];
   const ws = all.filter((w) => isAddr(w.address) && (!w.chain || w.chain === "bsc"));
@@ -65,6 +66,12 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
 
       </>}
       <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 5)</b>
+      {(keys?.keys || []).some((k) => !k.address) && (
+        <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => {
+          const free = (keys?.keys || []).filter((k) => !k.address).length;
+          if (confirm(`Create ${free} new wallet${free === 1 ? "" : "s"} now, so you have all 5? Each one needs its own money (BNB / USDT on BNB Chain) to buy.`)) act("cfill", "copy-key-new", { count: free }, `Created ${free} wallet${free === 1 ? "" : "s"}. Fund each one to use it.`);
+        }}>{busy === "cfill" ? "Creating…" : `＋ Create all ${(keys?.keys || []).filter((k) => !k.address).length} remaining wallets (up to 5)`}</button>
+      )}
       <small className="muted">Each wallet you add buys every copied coin with its own money (USDT / USDC on BNB Chain, else BNB), so with 3 wallets each copy is bought 3 times. Keep a little BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
       {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
         <div key={k.slot} className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
