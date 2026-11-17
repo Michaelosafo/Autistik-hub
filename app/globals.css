@@ -7634,3 +7634,7 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
   .wp-side .wp-get{margin:0;align-self:center;padding:8px 18px;border-radius:99px;background:var(--gold,#F0B90B);color:#191326}
   .wp-learn{color:var(--gold,#F0B90B);font-weight:800;text-decoration:none;font-size:.92em}
 }
+/* Phone sheet: the network row and search row keep their full height (they were squashed by the scrolling list). */
+.wp-main > .wp-nets,.wp-main > .wp-searchrow,.wp-main > .wp-head,.wp-main > .wp-allnets{flex:none}
+.wp-phone .wp-nets{padding:2px 0 6px;min-height:42px}
+.wp-phone .wp-net{white-space:nowrap}
