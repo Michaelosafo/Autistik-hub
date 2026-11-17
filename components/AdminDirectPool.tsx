@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPublicClient, createWalletClient, custom, encodeDeployData, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
 
 /**
- * Owner admin session only. One flow: deploy, add liquidity, then ask to remove it.
+ * Any admin (after their 2-step code). One flow: deploy, add liquidity, then ask to remove it.
  * Does not touch LP that a normal launch burned or locked.
  */
 const CHAIN = CHAINS.bsc;
