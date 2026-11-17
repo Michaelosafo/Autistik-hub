@@ -97,12 +97,12 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 const k = await copyKeys();
                 const have = k.keys.filter((x) => x.address);
                 if (!have.length) return json({ error: "Add at least one wallet (private key) for Copy to buy with first." }, 400);
-                if (!have.some((x) => Number(x.bnb) > 0.005)) return json({ error: `Your Copy wallet${have.length > 1 ? "s hold" : " holds"} almost no BNB. Send BNB (on BNB Chain) to ${have.map((x) => x.address).join(" or ")} first.` }, 400);
+                const funded = have.some((x) => Number(x.bnb) > 0.005);
                 if (open?.length) await closeAllNow("paper");
                 up.mode = b.mode; up.day = null; up.day_start_usd = null;
                 const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
                 if (error) return json({ error: error.message }, 400);
-                return json({ ok: true, note: `Copy is LIVE: ${have.length > 1 ? `${have.length} wallets buy` : `wallet ${have[0].slot} buys`} with BNB on BNB Chain.` });
+                return json({ ok: true, note: `Copy is LIVE: ${have.length > 1 ? `${have.length} wallets buy` : `wallet ${have[0].slot} buys`} with BNB on BNB Chain.${funded ? "" : ` They hold almost no BNB yet: send BNB (BNB Chain / BEP20) to ${have.map((x) => x.address).join(" or ")} so they can buy.`}` });
               }
               if (isSpotDesk()) {
                 const nm = isCopyDesk() ? "Copy" : "Sniper";
@@ -139,6 +139,15 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const { setCopyKey } = await import("@/lib/ai-copy");
           const address = await setCopyKey(Number(b.slot), String(b.key || ""));
           return json({ ok: true, address, note: `Wallet ${Number(b.slot)} added: ${address.slice(0, 6)}…${address.slice(-4)}. Send BNB to it so it can buy.` });
+        }
+        case "copy-key-new": {
+          if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
+          const r = await (await import("@/lib/ai-copy")).createCopyKey(Number(b.slot) || undefined);
+          return json({ ok: true, ...r, note: `Wallet ${r.slot} created: ${r.address}. Send BNB (BNB Chain / BEP20) to it and it starts buying.` });
+        }
+        case "copy-key-reveal": {
+          if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
+          return json({ ok: true, key: await (await import("@/lib/ai-copy")).revealCopyKey(Number(b.slot)) });
         }
         case "copy-key-remove": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);

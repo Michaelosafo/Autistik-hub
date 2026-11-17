@@ -17,6 +17,14 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
 }) {
   const [addr, setAddr] = useState(""), [label, setLabel] = useState(""), [err, setErr] = useState("");
   const [keyIn, setKeyIn] = useState<Record<number, string>>({});
+  const [copied, setCopied] = useState(0);
+  const reveal = async (slot: number) => {
+    if (!confirm(`Show wallet ${slot}'s private key? Anyone who sees it can take the money. Use it to import the wallet into Bitget, MetaMask or Trust.`)) return;
+    const r = await fetch("/api/ai-futures/copy-key-reveal?desk=copy", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { alert(j.error || "Couldn't show it."); return; }
+    prompt(`Wallet ${slot} private key (keep it secret):`, j.key);
+  };
   const all: W[] = s.copy_wallets || [];
   const ws = all.filter((w) => isAddr(w.address) && (!w.chain || w.chain === "bsc"));
   const dropped = all.length - ws.length;
@@ -63,20 +71,27 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
             <>
               <code style={{ wordBreak: "break-all" }}>{k.address}</code>
               <small className="muted">{k.bnb == null ? "–" : `${k.bnb.toFixed(4)} BNB`}{k.bnb != null && bnbUsd ? ` (≈ $${(k.bnb * bnbUsd).toFixed(2)})` : ""}{k.bnb != null && bnbUsd && k.bnb * bnbUsd < per ? ` · not enough for a $${per} buy, send BNB to it` : ""}</small>
-              <div className="row" style={{ gap: 6 }}>
+              <small className="muted">To fund it: send BNB on <b>BNB Chain (BEP20)</b> to the address above.</small>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>
                 <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>
+                <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { if (confirm(`Remove wallet ${k.slot} from Copy? The wallet and its money stay yours; Copy just stops buying with it.`)) act(`ck${k.slot}`, "copy-key-remove", { slot: k.slot }); }}>Remove</button>
               </div>
             </>
           ) : (
+            <>
+            <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act(`cn${k.slot}`, "copy-key-new", { slot: k.slot })}>{busy === `cn${k.slot}` ? "Creating…" : "＋ Create new wallet"}</button>
+            <small className="muted">Makes a fresh BNB Chain wallet just for Copy; you fund it with BNB. Or paste the private key of a wallet you already have:</small>
             <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); const v = (keyIn[k.slot] || "").trim(); if (!v) return; setKeyIn({ ...keyIn, [k.slot]: "" }); act(`ck${k.slot}`, "copy-key-set", { slot: k.slot, key: v }); }}>
               <input className="input" type="password" style={{ flex: "1 1 260px", fontFamily: "monospace" }} placeholder="Paste private key" value={keyIn[k.slot] || ""} onChange={(e) => setKeyIn({ ...keyIn, [k.slot]: e.target.value })} aria-label={`Private key for wallet ${k.slot}`} autoComplete="off" spellCheck={false} />
               <button type="submit" className="btn small" disabled={!!busy || !(keyIn[k.slot] || "").trim()}>Add wallet {k.slot}</button>
             </form>
+            </>
           )}
         </div>
       ))}
-      {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live once {mine.length ? "your wallet holds BNB" : "you've added a wallet with BNB"}.</small>}
+      {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live (top of the page) once {mine.length ? "your wallet holds BNB" : "you've created or added a wallet and sent it BNB"}.</small>}
 
       <b style={{ marginTop: 8 }}>💵 Each buy</b>
       {([["snipe_usd", "Buy", "$ per coin, per wallet", cfg?.usd], ["snipe_tp", "Safety take profit at", "% up", cfg?.tp], ["snipe_sl", "Safety stop-loss at", "% down", cfg?.sl]] as const).map(([k, l, unit, v]) => (

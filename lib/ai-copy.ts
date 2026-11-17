@@ -17,7 +17,7 @@
  */
 import { createPublicClient, fallback, http } from "viem";
 import { bsc } from "viem/chains";
-import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
+import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { supabaseService } from "@/lib/supabase/server";
 import { T } from "@/lib/ai-trader-ctx";
 import { flog, type FPos, type FSettings } from "@/lib/ai-futures";
@@ -69,6 +69,22 @@ export async function setCopyKey(slot: number, raw: string): Promise<string> {
   keyCache.delete(`${T()}:${slot}`);
   await flog("settings", `Copy wallet ${slot} set: ${a.address}. It buys with its own BNB on BNB Chain.`);
   return a.address;
+}
+/** A brand-new wallet in the first free slot (or the one asked for): fund it with BNB and it starts buying. */
+export async function createCopyKey(slot?: number): Promise<{ slot: number; address: string }> {
+  let use = Number(slot) || 0;
+  if (!use) for (const x of SLOTS) if (!(await copyKey(x))) { use = x; break; }
+  if (!use) throw new Error(`All ${MAX_KEYS} wallets are in use. Remove one first.`);
+  if (await copyKey(use)) throw new Error(`Wallet ${use} already exists.`);
+  const address = await setCopyKey(use, generatePrivateKey());
+  return { slot: use, address };
+}
+/** The private key, so you can import the wallet into Bitget / MetaMask / Trust and take the money out. */
+export async function revealCopyKey(slot: number): Promise<string> {
+  const { data } = await sb().rpc("ai_copy_key_get", { p_id: T(), p_slot: slot });
+  if (typeof data !== "string") throw new Error(`Wallet ${slot} doesn't exist.`);
+  await flog("settings", `Private key of copy wallet ${slot} was shown.`);
+  return data;
 }
 export async function removeCopyKey(slot: number) {
   await mustBeIdle(slot);
