@@ -52,7 +52,7 @@ export const EARN_DESK = 200000;
  */
 export const TURBO_DESK = 300000;
 export const SNIPE_DESK = 400000;
-/** Copy (500000 + id): copies Solana wallets you pick, buys when they buy and sells when they sell (lib/ai-copy.ts). */
+/** Copy (500000 + id): copies BNB Chain wallets you paste, buying from 1–2 of your own wallets (lib/ai-copy.ts). */
 export const COPY_DESK = 500000;
 /**
  * Madness (600000 + id): Hyperliquid futures at the highest leverage each coin allows that still keeps liquidation
@@ -1129,7 +1129,7 @@ export async function futStatus() {
     earn: isEarnDesk() ? await earnState() : null,
     // Turbo: the part of the shared Solana wallet that is Sniper's budget (can't be sent to Hyperliquid).
     sharedReserve: isTurboDesk() ? await (await import("@/lib/ai-sniper")).sharedReserve(T() % FX_DESK).catch(() => 0) : null,
-    copyEvm: isCopyDesk() ? await (await import("@/lib/ai-copy")).copyEvm().catch(() => null) : null,
+    copyKeys: isCopyDesk() ? await (await import("@/lib/ai-copy")).copyKeys().catch(() => null) : null,
     snipe: isSpotDesk() ? await (async () => { const sn = await import("@/lib/ai-sniper"); return { cfg: sn.snipeCfg(s), wallet: await sn.snipeWallet().catch(() => null), reserve: await sn.sniperReserve(T()).catch(() => 0) }; })() : null,
     fx: { pairs: [...m.fx.values()].map((a) => ({ coin: a.name, label: fxLabel(a.name, a.mark), price: a.mark, maxLev: a.maxLev })), open: fxOpen() },
     open: openNow,
