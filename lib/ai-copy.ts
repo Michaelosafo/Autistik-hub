@@ -1,6 +1,6 @@
 /**
  * 👥 Copy (server only), BNB Chain only. Paste the wallets to copy; when one of them buys a coin on BSC, Copy buys it
- * too from YOUR wallets (one or two private keys you add, each paying with its own BNB); when that wallet sells, Copy
+ * too from YOUR wallets (up to 5 private keys you add, each paying with its own BNB); when that wallet sells, Copy
  * sells the same share (they sell half, Copy sells half; they sell it all, Copy sells it all) back into BNB.
  *
  * Watching: every ~second, coin Transfer logs in and out of the copied wallets are read from a BSC node that serves
@@ -8,7 +8,7 @@
  * wallet made itself count: it sent the transaction, the transaction called it (bot contracts), or it paid for the
  * coins in the same transaction. Airdrop spam sent to it is ignored. Old trades are never copied.
  *
- * Each of your wallets (slot 1 and 2) gets its own trade, so with two keys every copy is bought twice. A key's buy is
+ * Each of your wallets (slots 1–5) gets its own trade, so with two keys every copy is bought twice. A key's buy is
  * skipped if it doesn't hold the buy amount plus a little BNB for gas.
  *
  * Low profile: each copy waits a random 0.3–1.8 s and buys a slightly different amount (±12%).
@@ -43,9 +43,10 @@ const tokenOf = (coin: string) => /^bsc:(0x[0-9a-fA-F]{40})$/.exec(coin)?.[1] ||
 /** Moving these is paying, not a coin "buy" to copy: USDT, USDC, WBNB, BUSD, USD1, FDUSD. */
 const MONEY = new Set(["0x55d398326f99059ff775485246999027b3197955", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", "0xe9e7cea3dedca5984780bafc599bd69add087d56", "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d", "0xc5f0f7b66764f6ec8c8dff7ba683102295e16409"]);
 
-// ---------- Your wallets (private keys in Vault, slot 1 and 2) ----------
+// ---------- Your wallets (private keys in Vault, slots 1–5) ----------
 
-export const SLOTS = [1, 2] as const;
+export const MAX_KEYS = 5;
+export const SLOTS = [1, 2, 3, 4, 5] as const;
 const keyCache = new Map<string, { key: string; a: PrivateKeyAccount }>();
 export async function copyKey(slot: number): Promise<PrivateKeyAccount | null> {
   const { data } = await sb().rpc("ai_copy_key_get", { p_id: T(), p_slot: slot });
@@ -57,12 +58,11 @@ export async function copyKey(slot: number): Promise<PrivateKeyAccount | null> {
   return a;
 }
 export async function setCopyKey(slot: number, raw: string): Promise<string> {
-  if (!SLOTS.includes(slot as 1 | 2)) throw new Error("Pick wallet 1 or 2.");
+  if (!SLOTS.includes(slot as any)) throw new Error(`Pick a wallet from 1 to ${MAX_KEYS}.`);
   const key = (raw.trim().startsWith("0x") ? raw.trim() : `0x${raw.trim()}`) as `0x${string}`;
   if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("That isn't a private key (64 letters and numbers, from your wallet's Export private key).");
   const a = privateKeyToAccount(key);
-  const other = await copyKey(slot === 1 ? 2 : 1);
-  if (other && other.address === a.address) throw new Error("That wallet is already added as the other one.");
+  for (const o of SLOTS) if (o !== slot && (await copyKey(o))?.address === a.address) throw new Error(`That wallet is already added as wallet ${o}.`);
   await mustBeIdle(slot);
   const { error } = await sb().rpc("ai_copy_key_set", { p_id: T(), p_slot: slot, p_key: key });
   if (error) throw new Error(error.message);
@@ -258,7 +258,7 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     }
   }));
   const ok = done.filter(Boolean);
-  if (!ok.length) return (await copyKey(1)) || (await copyKey(2)) ? `couldn't buy ${info.symbol}` : "add a wallet (private key) to buy with";
+  if (!ok.length) return (await Promise.all(SLOTS.map((x) => copyKey(x)))).some(Boolean) ? `couldn't buy ${info.symbol}` : "add a wallet (private key) to buy with";
   return `bought ${info.symbol} (wallet ${ok.join(" + ")})`;
 }
 

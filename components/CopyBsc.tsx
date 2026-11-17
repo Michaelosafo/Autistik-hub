@@ -54,11 +54,11 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set }: {
       ))}
       {dropped > 0 && <small className="muted">{dropped} older Solana / Ethereum wallet{dropped === 1 ? " is" : "s are"} no longer copied (Copy is BNB Chain only now). Saving any change clears {dropped === 1 ? "it" : "them"}.</small>}
 
-      <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (1 or 2)</b>
-      <small className="muted">Each wallet you add buys every copied coin with its own BNB, so with two wallets each copy is bought twice. Keep some extra BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
-      {(keys?.keys || [{ slot: 1, address: null, bnb: null }, { slot: 2, address: null, bnb: null }]).map((k) => (
+      <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 5)</b>
+      <small className="muted">Each wallet you add buys every copied coin with its own BNB, so with 3 wallets each copy is bought 3 times. Keep some extra BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
+      {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
         <div key={k.slot} className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
-          <small><b>Wallet {k.slot}</b>{k.slot === 2 && !k.address ? <span className="muted"> (optional)</span> : null}</small>
+          <small><b>Wallet {k.slot}</b>{!k.address && mine.length ? <span className="muted"> (add another, optional)</span> : null}</small>
           {k.address ? (
             <>
               <code style={{ wordBreak: "break-all" }}>{k.address}</code>

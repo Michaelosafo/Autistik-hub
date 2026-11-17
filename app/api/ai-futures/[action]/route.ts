@@ -102,7 +102,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 up.mode = b.mode; up.day = null; up.day_start_usd = null;
                 const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
                 if (error) return json({ error: error.message }, 400);
-                return json({ ok: true, note: `Copy is LIVE: ${have.length === 2 ? "both wallets buy" : `wallet ${have[0].slot} buys`} with BNB on BNB Chain.` });
+                return json({ ok: true, note: `Copy is LIVE: ${have.length > 1 ? `${have.length} wallets buy` : `wallet ${have[0].slot} buys`} with BNB on BNB Chain.` });
               }
               if (isSpotDesk()) {
                 const nm = isCopyDesk() ? "Copy" : "Sniper";

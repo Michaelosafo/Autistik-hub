@@ -1,5 +1,5 @@
--- Copy desk (BNB Chain): up to 2 of your own wallets (private keys in Vault) that buy whatever the copied wallets buy.
--- Slot 1 and 2 per Copy desk id. Keys never leave the database except to the server (service_role only).
+-- Copy desk (BNB Chain): up to 5 of your own wallets (private keys in Vault) that buy whatever the copied wallets buy.
+-- Slots 1–5 per Copy desk id. Keys never leave the database except to the server (service_role only).
 
 alter table public.ai_futures_positions add column if not exists copy_slot smallint;
 
@@ -11,7 +11,7 @@ $$;
 create or replace function public.ai_copy_key_set(p_id integer, p_slot integer, p_key text) returns void
 language plpgsql security definer set search_path = '' as $$
 begin
-  if p_slot not in (1, 2) then raise exception 'slot must be 1 or 2'; end if;
+  if p_slot < 1 or p_slot > 5 then raise exception 'slot must be 1 to 5'; end if;
   if p_key !~ '^0x[0-9a-fA-F]{64}$' then raise exception 'bad key'; end if;
   delete from vault.secrets where name = 'ai_copy_key_' || p_id || '_' || p_slot;
   perform vault.create_secret(p_key, 'ai_copy_key_' || p_id || '_' || p_slot, 'Copy desk BSC wallet ' || p_slot);
