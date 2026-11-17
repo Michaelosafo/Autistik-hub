@@ -7585,3 +7585,52 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .chain-msg { border-color: #B57CFF !important; }
 .chain .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
 @media (max-width: 640px) { .chain-blocks li { grid-template-columns: 60px 1fr auto; } .chain-blocks li > :nth-child(4), .chain-blocks li > :nth-child(5) { display: none; } }
+
+/* ---- Wallet picker: phone = "All Wallets" bottom sheet with a grid; computer = "Connect a Wallet" two panes ---- */
+.wp-searchrow{display:flex;gap:8px;align-items:center}
+.wp-sbox{position:relative;flex:1;display:flex;align-items:center}
+.wp-sbox svg{position:absolute;left:14px;color:var(--muted);pointer-events:none}
+.wp-sbox .wp-search{padding-left:42px;border-radius:99px}
+.wp-qrbtn{flex:none;display:grid;place-items:center;width:48px;height:46px;border-radius:14px;border:0;background:rgba(59,153,252,.16);color:#3B99FC;cursor:pointer}
+.wp-qrbtn:disabled{opacity:.6}
+/* Phone */
+.wp-phone .wp{max-height:86dvh;border-radius:28px 28px 0 0;animation:wpUp .22s cubic-bezier(.2,.8,.2,1)}
+.wp-phone .wp-main{max-height:86dvh;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.wp-phone .wp-head{position:relative;justify-content:center;align-items:center;min-height:40px}
+.wp-phone .wp-head .wp-x{position:absolute;right:0;top:50%;transform:translateY(-50%);background:transparent;font-size:1.8em}
+.wp-title{font-family:var(--f-display);font-size:1.35em;text-align:center}
+.wp-phone .wp-head::before{content:"";position:absolute;top:-8px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:4px;background:var(--line)}
+.wp-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.wp-grid .wp-more,.wp-grid .wp-empty{grid-column:1/-1}
+.wp-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 6px 12px;border-radius:20px;border:0;background:var(--lt-s2,#1e1a29);color:var(--ink);font:inherit;cursor:pointer;min-width:0;transition:transform .12s,background .12s}
+.wp-tile:active{transform:scale(.96)}
+.wp-tile:disabled{opacity:.6}
+.wp-tile img,.wp-tile .wp-ph{width:58px;height:58px;border-radius:16px;object-fit:cover;background:#fff1}
+.wp-tile-n{max-width:100%;font-size:.86em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wp-dot{position:absolute;top:10px;right:10px;width:9px;height:9px;border-radius:50%;background:#31D0AA;box-shadow:0 0 0 3px rgba(49,208,170,.2)}
+.wp-dot.gold{background:#F0B90B;box-shadow:0 0 0 3px rgba(240,185,11,.2)}
+@keyframes wpUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+/* Computer */
+@media (min-width:720px){
+  .wp-bg:not(.wp-phone) .wp{max-width:720px;grid-template-columns:300px 1fr;border-radius:24px}
+  .wp-bg:not(.wp-phone) .wp-main{border-right:1px solid var(--line)}
+  .wp-bg:not(.wp-phone) .wp-list{gap:2px}
+  .wp-bg:not(.wp-phone) .wp-row{padding:8px 10px;border:0;border-radius:12px;background:transparent;gap:12px}
+  .wp-bg:not(.wp-phone) .wp-row:hover:not(:disabled){background:rgba(127,127,127,.12);transform:none}
+  .wp-bg:not(.wp-phone) .wp-row img,.wp-bg:not(.wp-phone) .wp-row .wp-ph{width:30px;height:30px;border-radius:8px}
+  .wp-bg:not(.wp-phone) .wp-row-t small{display:none}
+  .wp-bg:not(.wp-phone) .wp-row .wp-chev{display:none}
+  .wp-bg:not(.wp-phone) .wp-label{text-transform:none;letter-spacing:0;font-size:.85em;color:var(--muted)}
+  .wp-side{display:flex;flex-direction:column;justify-content:center;gap:22px;padding:34px 34px;border-left:0}
+  .wp-side-t{text-align:center;font-size:1.2em}
+  .wp-feat{display:flex;gap:16px;align-items:flex-start}
+  .wp-feat strong{display:block;margin-bottom:2px;color:var(--ink)}
+  .wp-feat span:last-child{color:var(--muted);font-size:.9em;line-height:1.4}
+  .wp-feat-ic{flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:14px;color:#fff}
+  .wp-feat-ic.a{background:linear-gradient(135deg,#3B99FC,#8b5cf6)}
+  .wp-feat-ic.b{background:linear-gradient(135deg,#ec4899,#22d3ee)}
+  .wp-side .wp-safe{font-size:.82em;font-weight:600;margin:0}
+  .wp-side-cta{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .wp-side .wp-get{margin:0;align-self:center;padding:8px 18px;border-radius:99px;background:var(--gold,#F0B90B);color:#191326}
+  .wp-learn{color:var(--gold,#F0B90B);font-weight:800;text-decoration:none;font-size:.92em}
+}

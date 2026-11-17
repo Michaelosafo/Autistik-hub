@@ -47,7 +47,7 @@ export default function WalletPicker() {
   }, [s.network, s.open]);
   useEffect(() => {
     if (!s.open) return;
-    setQ(""); setLast(lastWalletName()); setShowAll(false);
+    setQ(""); setLast(lastWalletName()); setShowAll(isMobile());
     warmUp();
     const k = (e: KeyboardEvent) => e.key === "Escape" && closePicker();
     addEventListener("keydown", k);
@@ -144,12 +144,21 @@ export default function WalletPicker() {
     </button>
   );
 
+  const Tile = ({ r }: { r: Row }) => (
+    <button type="button" className="wp-tile" disabled={!!s.busy} onClick={r.go} aria-label={r.badge ? `${r.name} (${r.badge})` : r.name}>
+      {r.logo ? <img src={r.logo} alt="" width={64} height={64} loading="lazy" decoding="async" /> : <span className="wp-ph">{r.name.slice(0, 1)}</span>}
+      <span className="wp-tile-n">{s.busy === r.name ? "Opening…" : r.name}</span>
+      {r.badge && <span className={"wp-dot" + (r.badge === "Last used" ? " gold" : "")} title={r.badge} />}
+    </button>
+  );
+  const Item = mobile ? Tile : RowBtn;
+
   return (
-    <div className="wp-bg" onClick={closePicker}>
+    <div className={"wp-bg" + (mobile ? " wp-phone" : "")} onClick={closePicker}>
       <div className="wp" role="dialog" aria-modal="true" aria-label="Connect a wallet" onClick={(e) => e.stopPropagation()}>
         <div className="wp-main">
           <div className="wp-head">
-            <div><b>Connect a wallet</b><small>WalletConnect. Tap your wallet, sign in the app, come back.</small></div>
+            {mobile ? <b className="wp-title">All Wallets</b> : <div><b>Connect a Wallet</b><small>Pick your wallet and approve in it.</small></div>}
             <button type="button" className="wp-x" onClick={closePicker} aria-label="Close">×</button>
           </div>
           <div className="wp-nets" role="radiogroup" aria-label="Network">
@@ -193,12 +202,20 @@ export default function WalletPicker() {
             </div>
           )}
           {!s.qr && <>
-          <input className="wp-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search wallets" aria-label="Search wallets" autoComplete="off" spellCheck={false} />
-          <div className="wp-list">
-            {installed.length > 0 && <div className="wp-label">On this device</div>}
-            {installed.map((r) => <RowBtn key={r.key} r={r} />)}
-            {others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : "Wallets"}</div>}
-            {others.map((r) => <RowBtn key={r.key} r={r} />)}
+          <div className="wp-searchrow">
+            <span className="wp-sbox"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" /><path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+              <input className="wp-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search wallet" aria-label="Search wallets" autoComplete="off" spellCheck={false} /></span>
+            {mobile && !solMode && WALLETCONNECT_ID && (
+              <button type="button" className="wp-qrbtn" disabled={!!s.busy} onClick={() => chooseWalletConnect()} aria-label="Show a QR code to scan with a wallet on another phone" title="QR code">
+                <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h2v2h-2v-2zm2 2h2v2h-2v-2zm2-2h2v2h-2v-2zm2 2h2v2h-2v-2zm-6 4h2v2h-2v-2zm4 0h2v2h-2v-2zm2-2h2v2h-2v-2z" /></svg>
+              </button>
+            )}
+          </div>
+          <div className={mobile ? "wp-grid" : "wp-list"}>
+            {!mobile && installed.length > 0 && <div className="wp-label">On this device</div>}
+            {installed.map((r) => <Item key={r.key} r={r} />)}
+            {!mobile && others.length > 0 && <div className="wp-label">{solMode ? "Solana wallets" : "Recommended"}</div>}
+            {others.map((r) => <Item key={r.key} r={r} />)}
             {!solMode && !mobile && <>
             <div className="wp-label">Other wallets</div>
             <button type="button" className="wp-wc" disabled={!!s.busy} onClick={() => chooseWalletConnect()}>
@@ -212,7 +229,7 @@ export default function WalletPicker() {
               const extra = all.list.filter((w) => !known.has(w.name.toLowerCase()));
               if (!showAll && !q) return <button type="button" className="wp-more" onClick={() => setShowAll(true)}>Show all wallets ▾</button>;
               return <>
-                <div className="wp-label">{q ? "More wallets" : `All wallets${all.total ? ` (${all.total})` : ""}`}</div>
+                {!mobile && <div className="wp-label">{q ? "More wallets" : `All wallets${all.total ? ` (${all.total})` : ""}`}</div>}
                 {extra.map((w) => {
                   const here = w.rdns ? s.detected.find((d) => d.info.rdns === w.rdns) : undefined;
                   const r: Row = {
@@ -224,7 +241,7 @@ export default function WalletPicker() {
                       chooseWalletConnect(mobile && !w.wc && !w.native ? undefined : { name: w.name, logo: w.logo, wc: w.wc, native: w.native, install: w.install });
                     },
                   };
-                  return <RowBtn key={r.key} r={r} />;
+                  return <Item key={r.key} r={r} />;
                 })}
                 {all.loading && <div className="wp-empty">Loading wallets…</div>}
                 {!all.loading && all.list.length < all.total && (
@@ -239,12 +256,20 @@ export default function WalletPicker() {
         </div>
 
         <aside className="wp-side" aria-label="About wallets">
-          <div className="wp-side-art" aria-hidden="true"><svg width="88" height="44"><use href="#i-inf" /></svg></div>
-          <b>What is a wallet?</b>
-          <p><strong>Your own account for crypto.</strong> It holds your coins and signs every action, so nobody else can move them.</p>
-          <p><strong>A new way to sign in.</strong> No password: you approve each step in your wallet app.</p>
-          <p className="wp-safe">AUTISTIK will never ask for your seed phrase or private key. Connecting only shares your address: nothing moves unless you approve it in your wallet. <a href="/terms" target="_blank" rel="noopener">Terms</a></p>
-          <a href="https://metamask.io/download/" target="_blank" rel="noopener noreferrer" className="wp-get">Get a wallet</a>
+          <b className="wp-side-t">What is a Wallet?</b>
+          <div className="wp-feat">
+            <span className="wp-feat-ic a" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M4 6a2 2 0 0 1 2-2h11a1 1 0 0 1 0 2H6v12h13V9h-5a3 3 0 0 0 0 6h3v-2h-3a1 1 0 0 1 0-2h5v9H6a2 2 0 0 1-2-2V6z" /></svg></span>
+            <span><strong>A Home for your Digital Assets</strong>Wallets are used to send, receive, store, and display digital assets like BNB, Ethereum and Solana coins.</span>
+          </div>
+          <div className="wp-feat">
+            <span className="wp-feat-ic b" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9zm3 3a2 2 0 0 1 1 3.7V19h-2v-2.3A2 2 0 0 1 12 13z" /></svg></span>
+            <span><strong>A New Way to Log In</strong>Instead of creating new accounts and passwords on every website, just connect your wallet.</span>
+          </div>
+          <p className="wp-safe">AUTISTIK never asks for your seed phrase or private key. Connecting only shares your address: nothing moves unless you approve it.</p>
+          <div className="wp-side-cta">
+            <a href="https://web3.bitget.com/" target="_blank" rel="noopener noreferrer" className="wp-get">Get a Wallet</a>
+            <a href="https://ethereum.org/en/wallets/" target="_blank" rel="noopener noreferrer" className="wp-learn">Learn More</a>
+          </div>
         </aside>
       </div>
     </div>
