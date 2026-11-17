@@ -496,7 +496,10 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
         }));
       }
       if (Date.now() - lastExit > 1500) { lastExit = Date.now(); await watchExits(s).catch(() => {}); }
-      if (!pickedUp && Date.now() - t0 > 3000) { pickedUp = true; await pickUp(s).catch(() => {}); }
+      if (!pickedUp && Date.now() - t0 > 3000) {
+        pickedUp = true;
+        await pickUp(s).catch(async (e) => { if (!pickNoted.has("err")) { pickNoted.add("err"); await flog("error", `Checking held snipes failed: ${(e as Error).message.slice(0, 200)}`); } });
+      }
       // Wait for the next block (pushed live), or 400 ms at most.
       await new Promise<void>((res) => { tick = res; setTimeout(res, Math.max(50, 400 - (Date.now() - lastCheck))); });
       tick = null;
