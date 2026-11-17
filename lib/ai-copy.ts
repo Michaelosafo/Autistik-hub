@@ -371,8 +371,9 @@ async function copyBuy(s: FSettings, mv: Move): Promise<string> {
     // Pay with whatever the wallet holds: USDT / USDC on BNB Chain first, else BNB. Less than the buy size: all of it.
     const [have, sts] = await Promise.all([c.chainBalance("bsc", w).catch(() => 0), c.stableBalances("bsc", w).catch(() => [])]);
     const st = sts.sort((x, y) => y.balance - x.balance)[0] || null;
-    const bnbFree = Math.max(0, have - COPY_GAS) * bnbUsd, stFree = st ? st.balance : 0;
-    if (have < COPY_GAS) { await flog("skip", `Wallet ${slot} skipped ${sym}: it needs a little BNB for gas (${COPY_GAS} BNB, ≈ $${(COPY_GAS * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
+    const keep = Math.max(COPY_GAS, 250_000 * gweiOf(s) * 1e-9 * 1.2); // one swap at your gas speed
+    const bnbFree = Math.max(0, have - keep) * bnbUsd, stFree = st ? st.balance : 0;
+    if (have < keep) { await flog("skip", `Wallet ${slot} skipped ${sym}: it needs ${keep.toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (≈ $${(keep * bnbUsd).toFixed(2)}); it has ${have.toFixed(4)}.`); return null; }
     const useStable = stFree >= want * 0.98 || (bnbFree < want && stFree >= bnbFree);
     const usd = +Math.min(want, useStable ? stFree * 0.995 : bnbFree).toFixed(2);
     if (usd < 0.1) { await flog("skip", `Wallet ${slot} skipped ${sym}: only $${(bnbFree + stFree).toFixed(2)} to buy with (send BNB or USDT on BNB Chain).`); return null; }

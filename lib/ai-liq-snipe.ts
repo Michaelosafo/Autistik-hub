@@ -35,7 +35,9 @@ const USDT = getAddress("0x55d398326f99059fF775485246999027B3197955");
 const ZERO = "0x0000000000000000000000000000000000000000";
 const V3_FEES = [100, 500, 2500, 10000] as const;
 const GAS_LIMIT = 700_000n;
-const GAS_KEEP = 0.0005; // BNB left in each wallet for the buy, the approve and the sell (a swap costs well under a cent)
+const GAS_KEEP = 0.0005; // least BNB left in each wallet for the buy, the approve and the sell
+/** BNB to keep for one swap at your gas speed (~250k gas, +20%), never under GAS_KEEP. */
+const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, 250_000 * gweiOf(s) * 1e-9 * 1.2);
 const MIN_USD = 0.1;
 
 const ROUTER_ABI = parseAbi([
@@ -119,20 +121,22 @@ async function loadGuns(): Promise<Gun[]> {
 }
 
 /** Sign here and send: the MEV-protected relay first (private), else the normal way. Returns the tx hash. */
-async function fire(g: Gun, s: FSettings, tx: { to: `0x${string}`; data: `0x${string}`; value: bigint }): Promise<string> {
+async function fire(g: Gun, s: FSettings, tx: { to: `0x${string}`; data: `0x${string}`; value: bigint; gas?: bigint }): Promise<string> {
   const gasPrice = BigInt(Math.round(gweiOf(s) * 1e9));
-  const raw = await g.a.signTransaction({ chainId: 56, type: "legacy", nonce: g.nonce, gas: GAS_LIMIT, gasPrice, to: tx.to, data: tx.data, value: tx.value });
+  // The network wants gas limit × gas price + value in the wallet, so the limit is the real estimate (+30%), not a guess.
+  const gas = tx.gas || (await pc().estimateGas({ account: g.a.address, to: tx.to, data: tx.data, value: tx.value }).then((x: bigint) => (x * 13n) / 10n).catch(() => 300_000n));
+  const raw = await g.a.signTransaction({ chainId: 56, type: "legacy", nonce: g.nonce, gas, gasPrice, to: tx.to, data: tx.data, value: tx.value });
   const post = async (url: string) => {
     const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_sendRawTransaction", params: [raw] }), signal: AbortSignal.timeout(4000) });
     const j = await r.json().catch(() => null);
     if (j?.result) return String(j.result);
     throw new Error(String(j?.error?.message || `HTTP ${r.status}`));
   };
-  let hash = "";
-  if (mevOn(s)) hash = await post(MEV).catch(() => "");
+  let hash = "", last = "";
+  if (mevOn(s)) hash = await post(MEV).catch((e) => { last = (e as Error).message; return ""; });
   if (!hash) {
-    for (const u of RPCS) { hash = await post(u).catch((e) => (/already known/i.test((e as Error).message) ? "known" : "")); if (hash) break; }
-    if (hash === "known" || !hash) throw new Error("the transaction couldn't be sent");
+    for (const u of RPCS) { hash = await post(u).catch((e) => { last = (e as Error).message; return /already known/i.test(last) ? "known" : ""; }); if (hash) break; }
+    if (hash === "known" || !hash) throw new Error(/insufficient funds/i.test(last) ? `not enough BNB for gas at ${gweiOf(s)} gwei (lower the gas speed or add BNB)` : `the transaction couldn't be sent (${last.slice(0, 100)})`);
   }
   g.nonce++;
   return hash;
@@ -176,7 +180,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
         // v3-only pool: through the swap aggregator, with the same fast and private sending.
         const ch = await import("@/lib/ai-trader-chains");
         const w = { evm: g.a, sol: null };
-        const bnb = Math.min((keyUsd(s, g.slot) ?? usdEach) / bnbUsd, g.bnb - GAS_KEEP);
+        const bnb = Math.min((keyUsd(s, g.slot) ?? usdEach) / bnbUsd, g.bnb - gasKeep(s));
         if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
         mine = sent = true;
         const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
@@ -189,8 +193,9 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, guns: Gun[]): Pro
       // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
       const amt = keyUsd(s, g.slot) ?? usdEach; // this wallet's own amount, else the token's / the normal one
       const useUsdt = g.usdtOk && g.usdt >= amt * 0.98;
-      let usd = useUsdt ? amt : Math.min(amt, (g.bnb - GAS_KEEP) * bnbUsd);
-      if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keep ${GAS_KEEP} BNB for gas)`); return false; }
+      let usd = useUsdt ? amt : Math.min(amt, (g.bnb - gasKeep(s)) * bnbUsd);
+      if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return false; }
+      if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return false; }
       usd = +usd.toFixed(2);
       const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; });
       if ("notOpen" in r) { notOpen = r.notOpen; return false; }
@@ -231,7 +236,7 @@ async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extr
       ? encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens", args: [amountIn, minOut, path, g.a.address, deadline] })
       : encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", args: [minOut, path, g.a.address, deadline] });
     // Test-run: trading not open yet, max-wallet limits, a tax bigger than the slippage… nothing is sent.
-    try { await c.call({ account: g.a.address, to: ROUTER, data: d, value, gas: GAS_LIMIT }); data = d; used = sl; break; }
+    try { await c.call({ account: g.a.address, to: ROUTER, data: d, value, gas: GAS_LIMIT }); data = d; used = sl; break; } // eslint-disable-line
     catch (e) {
       why = String((e as any)?.shortMessage || (e as Error).message).slice(0, 120);
       if (!/INSUFFICIENT_OUTPUT_AMOUNT|TransferHelper|reverted/i.test(why)) break; // not a slippage problem: stepping up won't help
@@ -239,8 +244,8 @@ async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extr
   }
   if (!data) return { notOpen: why };
   const before = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }).catch(() => 0n));
-  onSend();
-  const hash = await fire(g, s, { to: ROUTER, data, value });
+  const hash = await fire(g, s, { to: ROUTER, data, value }); // throws if no node took it: nothing went out
+  onSend(); // from here a buy is on its way: never fire at this token again on its own
   await receipt(hash);
   const after = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }));
   return { hash, got: Number(after - before) / 10 ** dec, slip: used };
