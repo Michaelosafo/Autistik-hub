@@ -6,7 +6,7 @@
 import { useState } from "react";
 
 type Target = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[] };
-type S = { liq_targets?: Target[]; liq_x?: number; liq_sell_pct?: number; liq_slip?: number; liq_tp_on?: boolean; snipe_usd?: number; enabled: boolean; mode: string; last_note?: string | null };
+type S = { liq_targets?: Target[]; liq_x?: number; liq_sell_pct?: number; liq_slip?: number; liq_tp_on?: boolean; snipe_usd?: number; copy_key_usd?: Record<string, number>; enabled: boolean; mode: string; last_note?: string | null };
 const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
@@ -23,6 +23,20 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
   const list = s.liq_targets || [];
   const save = (next: Target[], done?: string) => set({ liq_targets: next }, done);
   const per = Number(s.snipe_usd || 5), x = Number(s.liq_x || 2), pct = Number(s.liq_sell_pct || 100), slip = Number(s.liq_slip || 20), tp = s.liq_tp_on !== false;
+  // Each wallet's own $ per snipe (the same amounts as on the wallet cards below); none = the normal amount.
+  const amounts = s.copy_key_usd || {};
+  const own = (w: number) => Number(amounts[String(w)] || 0);
+  const amtOf = (w: number) => (own(w) > 0 ? own(w) : per);
+  const setOwn = (w: number) => {
+    const v = prompt(`$ wallet #${w} spends on each snipe. Leave empty to use the normal amount ($${per}):`, own(w) > 0 ? String(own(w)) : "");
+    if (v == null) return;
+    const next = { ...amounts };
+    if (Number(v) >= 0.5) next[String(w)] = Number(v); else delete next[String(w)];
+    set({ copy_key_usd: next }, Number(v) >= 0.5 ? `Wallet #${w} now snipes $${Number(v)} each time.` : `Wallet #${w} snipes the normal amount ($${per}).`);
+  };
+  const typed = Number(amt) > 0 ? Number(amt) : 0;
+  // The wallets that will buy the token being added: the ones tapped, or all.
+  const shown = slots.length <= 1 ? slots : pick === "all" ? slots : pickList;
 
   const add = () => {
     const m = ca.trim().match(/0x[0-9a-fA-F]{40}/); // pasted links (BscScan, DexScreener…) work too
@@ -46,15 +60,30 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
         <input className="input" style={{ fontFamily: "monospace" }} placeholder="Paste token contract address 0x…" value={ca} onChange={(e) => { setCa(e.target.value); setErr(""); }} aria-label="Token contract address" autoComplete="off" spellCheck={false} />
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <input className="input" style={{ flex: "1 1 120px" }} placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={24} aria-label="Name" />
-          <input className="input" style={{ flex: "0 1 130px" }} inputMode="decimal" placeholder={`$ per wallet (${per})`} value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars per wallet" />
+          <input className="input" style={{ flex: "0 1 130px" }} inputMode="decimal" placeholder="$ (optional)" value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars per wallet for this token only (optional)" />
           <button type="submit" className="btn primary" disabled={!!busy || !ca.trim() || needPick}>{needPick ? "Choose wallet(s) below" : `Snipe it${slots.length > 1 ? ` with ${pick === "all" ? "all wallets" : pickList.map((x) => `#${x}`).join(" + ")}` : ""}`}</button>
         </div>
         {slots.length > 1 && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
             <small><b>Which wallet snipes it:</b></small>
-            {slots.map((x) => <button key={x} type="button" className={"btn small" + (pickList.includes(x) ? " primary" : " ghost")} onClick={() => { const next = toggle(pickList, x); setPick(next.length ? next : null); }} aria-pressed={pickList.includes(x)}>#{x}</button>)}
+            {slots.map((x) => <button key={x} type="button" className={"btn small" + (pickList.includes(x) ? " primary" : " ghost")} onClick={() => { const next = toggle(pickList, x); setPick(next.length ? next : null); }} aria-pressed={pickList.includes(x)}>#{x} · ${typed || amtOf(x)}</button>)}
             <button type="button" className={"btn small" + (pick === "all" ? " primary" : " ghost")} onClick={() => setPick(pick === "all" ? null : "all")} aria-pressed={pick === "all"}>All</button>
             <small className={needPick ? "aic-warn" : "muted"}>{needPick ? "tap the wallet(s) for this token" : pick === "all" ? "every wallet" : `only ${pickList.map((x) => `#${x}`).join(" + ")}`}</small>
+          </div>
+        )}
+        {shown.length > 0 && (
+          <div className="stack" style={{ gap: 4 }}>
+            {typed > 0
+              ? <small className="muted">This token only: each wallet buys <b>${typed}</b> (clear the $ box to use each wallet&apos;s own amount).</small>
+              : <>
+                  {shown.map((w) => (
+                    <div key={w} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <small>💵 Wallet #{w} buys <b>${amtOf(w)}</b> <span className="muted">{own(w) > 0 ? "(its own amount)" : "(normal amount)"}</span></small>
+                      <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => setOwn(w)}>Change</button>
+                    </div>
+                  ))}
+                  <small className="muted">Total for this token: ${+shown.reduce((a, w) => a + amtOf(w), 0).toFixed(2)}. Saved per wallet, so you set it once.</small>
+                </>}
           </div>
         )}
       </form>
@@ -94,8 +123,8 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
 
       <b style={{ marginTop: 8 }}>💰 Buy and sell</b>
       <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <small><b>Buy:</b> ${per} per wallet</small>
-        <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt("$ each wallet spends per snipe (paid in USDT if the wallet holds enough, else BNB):", String(per)); if (v != null && Number(v) >= 0.5) set({ snipe_usd: Number(v) }); }}>Change</button>
+        <small><b>Normal buy:</b> ${per} per wallet <span className="muted">(for wallets without their own amount)</span></small>
+        <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt("$ a wallet spends per snipe when it has no amount of its own (paid in USDT if the wallet holds enough, else BNB):", String(per)); if (v != null && Number(v) >= 0.5) set({ snipe_usd: Number(v) }); }}>Change</button>
       </div>
       <label className="ait-check" style={{ margin: 0 }}>
         <input type="checkbox" checked={tp} disabled={!!busy} onChange={(e) => set({ liq_tp_on: e.target.checked }, e.target.checked ? `Sells at ${x}x by itself.` : "Auto-sell off: you sell yourself (buttons on each trade).")} />
