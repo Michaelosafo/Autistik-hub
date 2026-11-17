@@ -9,7 +9,7 @@ export const TRADER_TABS = [
   { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz", acc: "#06b6d4" },
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
   { href: "/admin/rage", label: "💧 Rage", sub: "Deploy · add · remove", acc: "#ef4444" },
-  { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
+  { href: "/admin/lobby", label: "🎯 Lobby", sub: "Snipe at liquidity", acc: "#eab308" },
 ];
 
 export default function TraderTabs() {
