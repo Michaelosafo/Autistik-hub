@@ -30,7 +30,7 @@ export default function Safety() {
           <li>Use content notes for heavy topics like self-harm, abuse or meltdowns.</li>
           <li>No price talk, shilling or financial promises in group channels.</li>
           <li>Don&apos;t share other people&apos;s private information.</li>
-          <li>Report anything that feels wrong. Admins review every report.</li>
+          <li>Report anything that feels wrong. Admins review every report. Read our <a href="/child-safety">Child Safety Standards</a>.</li>
         </ol>
       </div>
       <div className="card stack">
