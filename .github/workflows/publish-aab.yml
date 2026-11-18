@@ -1,0 +1,36 @@
+name: Publish .aab as a direct download
+
+# Takes the .aab (only the .aab, never the keystore) from a finished "Build Android app (.aab)" run and attaches it
+# to a GitHub Release, so it can be downloaded on a phone as a single file instead of a zip.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Run ID of the build to publish"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: art
+      - name: Attach the .aab to a release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.inputs.run_id }}
+        run: |
+          AAB=$(find art -name "*.aab" | head -1)
+          [ -n "$AAB" ] || { echo "::error::No .aab in that run"; exit 1; }
+          NAME=$(basename "$AAB" .aab)
+          gh release create "android-$RUN_ID" "$AAB" -R "$GITHUB_REPOSITORY" \
+            --title "$NAME (Android app bundle)" --notes "Google Play upload file. Signing key is NOT included." --prerelease
+          echo "Download: https://github.com/$GITHUB_REPOSITORY/releases/download/android-$RUN_ID/$(basename "$AAB")"
