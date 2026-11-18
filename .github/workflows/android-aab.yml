@@ -78,6 +78,7 @@ jobs:
             m.appVersionCode = Number(process.env.VERSION_CODE);
             m.fallbackType = "customtabs";
             m.enableNotifications = true;
+            m.minSdkVersion = 24;
             m.signingKey = { path: path.resolve("../android.keystore"), alias: process.env.KEY_ALIAS };
             const errs = m.validate && m.validate();
             if (errs) throw new Error("Manifest problem: " + errs);
@@ -92,6 +93,9 @@ jobs:
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
           chmod +x gradlew
+          # androidbrowserhelper needs Android 7.0 (API 24) or newer
+          sed -i -E 's/minSdkVersion[ =]+[0-9]+/minSdkVersion 24/; s/minSdk[ =]+[0-9]+/minSdk 24/' app/build.gradle
+          grep -nE "minSdk" app/build.gradle || true
           ./gradlew bundleRelease --no-daemon --stacktrace
 
       - name: Sign it
