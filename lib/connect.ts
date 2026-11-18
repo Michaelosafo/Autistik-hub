@@ -1,1 +1,1 @@
-PLACEHOLDER
+$(cat /tmp/connect_fixed.ts)
