@@ -1,0 +1,111 @@
+name: Build Android app (.aab)
+
+# Builds the Google Play package for autistik.io with Google's Bubblewrap (the same tool PWABuilder uses).
+# Run it from GitHub: Actions -> "Build Android app (.aab)" -> Run workflow. Download the result under "Artifacts".
+#
+# Needs one repository secret: ANDROID_KEYSTORE_PASSWORD (any long password you keep safe).
+# First run: no keystore exists yet, so one is created and included in the download. Keep it (Google Drive) and,
+# for later updates, save its base64 text (keystore-base64.txt in the download) as the secret ANDROID_KEYSTORE_BASE64
+# so every build is signed with the same key.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version name shown to users"
+        default: "1.0.0"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PACKAGE_ID: io.autistik.app
+      MANIFEST_URL: https://autistik.io/manifest.webmanifest
+      KEY_ALIAS: autistik
+      KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      VERSION_NAME: ${{ github.event.inputs.version_name }}
+      VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - name: Check the password secret
+        run: |
+          if [ -z "$KS_PASS" ] || [ ${#KS_PASS} -lt 8 ]; then
+            echo "::error::Add the repository secret ANDROID_KEYSTORE_PASSWORD (at least 8 characters) first."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Signing key
+        run: |
+          mkdir -p out
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > android.keystore
+            echo "Using the saved keystore."
+          else
+            keytool -genkeypair -v -keystore android.keystore -storetype PKCS12 -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=Believer, O=AUTISTIK, C=US"
+            cp android.keystore out/android.keystore
+            base64 -w0 android.keystore > out/keystore-base64.txt
+            echo "New keystore created. It is in the download: keep it safe."
+          fi
+
+      - name: Generate the Android project
+        run: |
+          mkdir -p twa-gen && cd twa-gen
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund @bubblewrap/core@1
+          cat > gen.js <<'EOF'
+          const path = require("path");
+          const { TwaManifest, TwaGenerator, ConsoleLog } = require("@bubblewrap/core");
+          (async () => {
+            const m = await TwaManifest.fromWebManifest(process.env.MANIFEST_URL);
+            m.packageId = process.env.PACKAGE_ID;
+            m.name = "AUTISTIK";
+            m.launcherName = "AUTISTIK";
+            m.appVersionName = process.env.VERSION_NAME;
+            m.appVersion = process.env.VERSION_NAME;
+            m.appVersionCode = Number(process.env.VERSION_CODE);
+            m.fallbackType = "customtabs";
+            m.enableNotifications = true;
+            m.signingKey = { path: path.resolve("../android.keystore"), alias: process.env.KEY_ALIAS };
+            const errs = m.validate && m.validate();
+            if (errs) throw new Error("Manifest problem: " + errs);
+            await new TwaGenerator().createTwaProject(path.resolve("../twa"), m, new ConsoleLog("bubblewrap"));
+            console.log("Project ready:", m.packageId, m.appVersionName, "code", m.appVersionCode, "start", m.startUrl);
+          })().catch((e) => { console.error(e); process.exit(1); });
+          EOF
+          node gen.js
+
+      - name: Build the .aab
+        working-directory: twa
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Sign it
+        run: |
+          AAB=twa/app/build/outputs/bundle/release/app-release.aab
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore android.keystore \
+            -storepass "$KS_PASS" -keypass "$KS_PASS" "$AAB" "$KEY_ALIAS"
+          jarsigner -verify "$AAB"
+          cp "$AAB" "out/autistik-${VERSION_NAME}-${VERSION_CODE}.aab"
+          keytool -list -v -keystore android.keystore -storepass "$KS_PASS" -alias "$KEY_ALIAS" | grep -E "SHA256:" > out/upload-key-sha256.txt || true
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autistik-android-${{ github.run_number }}
+          path: out/
+          retention-days: 7
