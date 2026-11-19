@@ -7743,8 +7743,8 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .snp [data-net="arbitrum"]{--chain:var(--arb)}
 .snp [data-net="solana"]{--chain:var(--sol)}
 .snp-hero{position:relative;overflow:hidden;border-radius:22px;padding:18px 18px 14px;color:#fff;
-  background:radial-gradient(120% 140% at 0% 0%,#22c55e 0%,transparent 55%),radial-gradient(120% 140% at 100% 0%,#9945FF 0%,transparent 55%),radial-gradient(140% 120% at 50% 120%,#0ea5e9 0%,transparent 60%),#0f172a;
-  box-shadow:0 18px 40px -24px rgba(34,197,94,.6)}
+  background:radial-gradient(120% 140% at 0% 0%,var(--acc,#22c55e) 0%,transparent 55%),radial-gradient(120% 140% at 100% 0%,var(--acc2,#9945FF) 0%,transparent 55%),radial-gradient(140% 120% at 50% 120%,color-mix(in srgb,var(--acc,#22c55e) 50%,#0ea5e9) 0%,transparent 60%),#0f172a;
+  box-shadow:0 18px 40px -24px var(--acc,#22c55e)}
 .snp-hero h1{margin:4px 0 4px;font-size:1.9rem;letter-spacing:-.02em;color:#fff}
 .snp-hero p{margin:0;opacity:.92;font-size:.95em}
 .snp-hero details{margin-top:8px;font-size:.88em}
@@ -7767,14 +7767,14 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .snp-tab:active{transform:scale(.96)}
 .snp-tab em{position:absolute;top:4px;right:10px;font-style:normal;font-size:.75em;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:99px;background:#E5484D;color:#fff}
 .snp-tab.on{color:#fff}
-.snp-tab.t-snipe.on{background:linear-gradient(135deg,#22c55e,#0ea5e9)}
-.snp-tab.t-wallets.on{background:linear-gradient(135deg,#F0B90B,#f97316)}
+.snp-tab.t-home.on{background:linear-gradient(135deg,var(--acc,#22c55e),var(--acc2,#0ea5e9))}
+.snp-tab.t-wallet.on{background:linear-gradient(135deg,#F0B90B,#f97316)}
 .snp-tab.t-trades.on{background:linear-gradient(135deg,#6366f1,#9945FF)}
 .snp-tab.t-settings.on{background:linear-gradient(135deg,#64748b,#334155)}
 .snp .card{border-radius:20px}
 .snp-card{border-top:4px solid var(--acc,#22c55e)}
 .snp .btn{border-radius:12px}
-.snp .btn.primary{background:linear-gradient(135deg,#22c55e,#16a34a);border-color:transparent;color:#fff}
+.snp .btn.primary{background:linear-gradient(135deg,var(--acc,#22c55e),color-mix(in srgb,var(--acc,#22c55e) 70%,#000));border-color:transparent;color:#fff}
 .snp .btn.small{min-height:36px}
 .snp .input{border-radius:12px}
 /* network switch */
@@ -7790,3 +7790,22 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .snp-chip{font-size:.72em;font-weight:900;padding:3px 9px;border-radius:99px;background:var(--chain);color:#fff}
 .snp-chip[data-net="bsc"]{color:#1a1300}
 .snp-wcard code{font-size:.82em;padding:6px 8px;border-radius:10px;background:var(--surface-2)}
+
+.snp .ait-stats > div{border-radius:18px;border-top:3px solid var(--acc,#22c55e)}
+.snp .fut-profit{border-radius:20px}
+
+/* ===== Rage (token deploy): same colourful look, numbered steps ===== */
+.rg{--acc:#ef4444;--acc2:#f97316;gap:14px}
+.rg .snp-hero{background:radial-gradient(120% 140% at 0% 0%,#ef4444 0%,transparent 55%),radial-gradient(120% 140% at 100% 0%,#f97316 0%,transparent 55%),radial-gradient(140% 120% at 50% 120%,#F0B90B 0%,transparent 60%),#1a0f0f;box-shadow:0 18px 40px -24px #ef4444}
+.rg .card{border-radius:20px;border-top:4px solid var(--acc)}
+.rg .btn{border-radius:12px}
+.rg .btn.primary{background:linear-gradient(135deg,#ef4444,#f97316);border-color:transparent;color:#fff}
+.rg .field input,.rg input{border-radius:12px}
+.rg .notice{border-radius:14px}
+.rg-step{display:flex;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:14px;font-size:1.02em;color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 8px 18px -12px var(--c1)}
+.rg-step i{font-style:normal;display:grid;place-items:center;width:26px;height:26px;border-radius:99px;background:rgba(255,255,255,.25);font-weight:900}
+.rg-step.s1{--c1:#ef4444;--c2:#f97316}
+.rg-step.s2{--c1:#f97316;--c2:#F0B90B}
+.rg-step.sb{--c1:#22c55e;--c2:#0ea5e9}
+.rg-step.s3{--c1:#0ea5e9;--c2:#6366f1}
+.rg-step.s4{--c1:#9945FF;--c2:#ec4899}

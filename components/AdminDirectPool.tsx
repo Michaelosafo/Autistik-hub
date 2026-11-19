@@ -585,7 +585,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
 
       {showDeploy && (
         <>
-          <b>1. Deploy the token</b>
+          <b className="rg-step s1"><i>1</i>Deploy the token</b>
           <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
           <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={12} /></label>
           <label className="field"><span>Supply (whole tokens)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
@@ -598,7 +598,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
         </>
       )}
 
-      <b>2. Token</b>
+      <b className="rg-step s2"><i>2</i>Token</b>
       <input value={tokenIn} onChange={(e) => { setTokenIn(e.target.value); try { if (isAddress(e.target.value.trim())) remember(getAddress(e.target.value.trim())); } catch { /* ignore */ } }} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
       {token && (
         <div className="stack" style={{ gap: 4 }}>
@@ -638,10 +638,10 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
           )}
           {showAdd && (
             <>
-              <b>First buy</b>
+              <b className="rg-step sb"><i>⚡</i>First buy</b>
               <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. Trading stays closed until this wallet&apos;s buy is in, then it opens. You approve each step in the wallet.</p>
               <label className="field"><span>Amount ({CHAIN.coin})</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label={`First buy amount in ${CHAIN.coin}`} /></label>
-              <b>3. Add liquidity</b>
+              <b className="rg-step s3"><i>3</i>Add liquidity</b>
               <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin || !buyAmt} onClick={add}>Add liquidity</button>
@@ -652,7 +652,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
               account ? (
                 info.lp > 0n ? (
                   <>
-                    <b>4. Remove liquidity?</b>
+                    <b className="rg-step s4"><i>4</i>Remove liquidity?</b>
                     <small>LP in this wallet: {fmt(info.lp, 18)}{share ? <> (about {fmt(share.token, info.decimals)} {info.symbol} + {fmt(share.coin, 18)} {CHAIN.coin})</> : null}</small>
                     <label className="field"><span>Remove <b>{pct}%</b></span><input type="range" min={1} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} aria-label="Share of liquidity to remove" /></label>
                     <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
