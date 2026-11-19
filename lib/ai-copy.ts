@@ -90,12 +90,27 @@ export async function revealCopyKey(slot: number): Promise<string> {
   await flog("settings", `Private key of copy wallet ${slot} was shown.`);
   return data;
 }
-export async function removeCopyKey(slot: number) {
-  await mustBeIdle(slot);
+/**
+ * Remove a wallet, whatever state its trades are in (open, stuck "closing", rugged). Its trades are taken off the
+ * board (the coins stay in that wallet: import its private key into a wallet app to deal with them) and it never
+ * buys or sells here again. Returns how many trades were taken off.
+ */
+export async function removeCopyKey(slot: number): Promise<number> {
+  if (!SLOTS.includes(slot as any)) throw new Error(`Pick a wallet from 1 to ${MAX_KEYS}.`);
+  // Delete the key first, so a run that's going right now can't buy with it any more.
   const { error } = await sb().rpc("ai_copy_key_del", { p_id: T(), p_slot: slot });
   if (error) throw new Error(error.message);
   keyCache.delete(`${T()}:${slot}`);
-  await flog("settings", `Copy wallet ${slot} removed.`);
+  const { data } = await pos().select("*").eq("fut_id", T()).eq("copy_slot", slot).in("status", ["open", "closing"]);
+  const rows = (data || []) as FPos[];
+  const now = new Date().toISOString();
+  await Promise.all(rows.map((p) => {
+    const last = n(p.last) || n(p.entry);
+    const pnl = n(p.entry) > 0 ? n(p.notional_usd) * (last / n(p.entry) - 1) : 0;
+    return pos().update({ status: "closed", exit: last, pnl_usd: pnl, reason: `Wallet ${slot} removed: coins left in that wallet (written off)`, closed_at: now }).eq("id", p.id);
+  }));
+  await flog("settings", `Copy wallet ${slot} removed${rows.length ? `; ${rows.length} trade${rows.length === 1 ? "" : "s"} taken off the board (the coins stay in that wallet)` : ""}.`);
+  return rows.length;
 }
 async function mustBeIdle(slot: number) {
   const { data } = await pos().select("id").eq("fut_id", T()).eq("mode", "live").eq("copy_slot", slot).in("status", ["open", "closing"]).limit(1);
@@ -294,13 +309,15 @@ export async function setCopyExits(id: number, stop: number | null, target: numb
 }
 
 /** Sell part (0–1) or all of one copy trade now, from the page. */
-export async function sellCopyNow(s: FSettings, id: number, frac: number) {
-  const { data } = await pos().select("*").eq("fut_id", T()).eq("id", id).eq("status", "open").maybeSingle();
+export async function sellCopyNow(s: FSettings, id: number, frac: number): Promise<string> {
+  // Stuck "closing" trades (a sell that timed out) can be sold too.
+  const { data } = await pos().select("*").eq("fut_id", T()).eq("id", id).in("status", ["open", "closing"]).maybeSingle();
   if (!data) throw new Error("That trade isn't open any more.");
   const p = data as FPos;
-  const price = n((await coinInfo(p.coin).catch(() => null))?.price) || undefined;
+  // A rugged coin may have no price at all: never wait more than 3 s for one.
+  const price = n(await Promise.race([coinInfo(p.coin).then((x) => x?.price).catch(() => 0), sleep(3000).then(() => 0)])) || undefined;
   const part = Math.min(1, Math.max(0.05, frac));
-  await sellCopy(s, { ...p, last: price ?? p.last }, part, part >= 1 ? "Sold by you" : `You sold ${Math.round(part * 100)}%`, price);
+  return sellCopy(s, { ...p, last: price ?? p.last }, part, part >= 1 ? "Sold by you" : `You sold ${Math.round(part * 100)}%`, price, true);
 }
 
 // ---------- Speed and protection ----------
@@ -402,13 +419,18 @@ async function copyBuy(s: FSettings, mv: Move, quiet = false): Promise<string> {
   return `bought ${sym} (wallet ${ok.join(" + ")})`;
 }
 
-/** Sell `frac` (0–1) of a copy trade back into BNB. The sold part is recorded as its own closed trade; the rest stays open. */
-export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: string, price?: number) {
+/**
+ * Sell `frac` (0–1) of a copy trade back into BNB. The sold part is recorded as its own closed trade; the rest stays open.
+ * `force` (you pressed Sell): highest slippage, also takes a stuck "closing" trade, and if the coin can't be swapped
+ * at all (rugged, honeypot, pool pulled, wallet removed) a full sell still closes the trade (written off).
+ */
+export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: string, price?: number, force = false): Promise<string> {
   const all = frac >= 0.85; // they sold most of it: sell everything (leftover dust is useless)
-  const { data: claimed } = await pos().update({ status: "closing" }).eq("id", p.id).eq("status", "open").select("id");
-  if (!claimed?.length) return;
+  const { data: claimed } = await pos().update({ status: "closing" }).eq("id", p.id).in("status", force ? ["open", "closing"] : ["open"]).select("id");
+  if (!claimed?.length) { if (force) throw new Error("That trade isn't open any more."); return ""; }
   const part = all ? 1 : frac;
   const slot = Number((p as any).copy_slot) || 0;
+  const name = p.why?.split(":")[0] || p.coin.slice(4, 10);
   try {
     let px = price || n(p.last) || n(p.entry), got = 0, tx: string | null = null;
     const token = tokenOf(p.coin);
@@ -427,11 +449,15 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
         const st = c.stableBySymbol("bsc", (p as any).copy_pay);
         // PancakeSwap straight away first (works on brand-new tokens); else the route service.
         const { directSell } = await import("@/lib/ai-liq-snipe");
-        const slipSell = /stop/i.test(reason) ? 30 : slipOf(s);
-        const d = (!st || st.symbol === "USDT") ? await directSell(a, s, token, raw, !!st, slipSell).catch(() => null) : null;
+        // Your own sell gets out at almost any price (a dumping coin still sells); stops 30%; the rest the normal slippage.
+        const urgent = force || /stop/i.test(reason);
+        const slipSell = force ? 49 : /stop/i.test(reason) ? 30 : slipOf(s);
+        let directErr = "";
+        const d = (!st || st.symbol === "USDT") ? await directSell(a, s, token, raw, !!st, slipSell).catch((e) => { directErr = (e as Error).message; return null; }) : null;
         if (d) { got = d.got; tx = d.hash; }
         else {
-          const r = await c.withFastSend(fastOf(s), () => c.liveSellOn("bsc", w, token, raw, slipTax(s), /stop/i.test(reason) ? 2000 : 0, st));
+          const r = await c.withFastSend(fastOf(s), () => c.liveSellOn("bsc", w, token, raw, force ? 46 : slipTax(s), urgent ? 2000 : 0, st))
+            .catch((e) => { throw new Error(directErr ? `${directErr}; route service: ${(e as Error).message}` : (e as Error).message); });
           got = st ? r.receivedNative : r.receivedNative * (await c.nativeUsd("bsc")); // stablecoin sells come back in dollars
           tx = r.hash;
         }
@@ -452,11 +478,23 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
       await pos().insert({ ...rest, status: "closed", size: n(p.size) * part, notional_usd: cost, margin_usd: n(p.margin_usd) * part, fees_usd: n(p.fees_usd) * part, exit: px, pnl_usd: pnl, reason, closed_at: now, close_tx: tx });
       await pos().update({ status: "open", size: n(p.size) * (1 - part), notional_usd: n(p.notional_usd) * (1 - part), margin_usd: n(p.margin_usd) * (1 - part), fees_usd: n(p.fees_usd) * (1 - part), risk_usd: n((p as any).risk_usd) * (1 - part) }).eq("id", p.id);
     }
-    const name = p.why?.split(":")[0] || p.coin.slice(4, 10);
-    await flog(pnl >= 0 ? "win" : "loss", `${pnl >= 0 ? "✅" : "🔻"} ${slot ? `Wallet ${slot} sold` : "Sold"} ${part >= 1 ? "all" : `${Math.round(part * 100)}%`} of ${name}: ${reason}. ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${cost ? ((got / cost - 1) * 100).toFixed(0) : 0}%)${p.mode === "paper" ? " (practice)" : ""}.`);
+    const msg = `${pnl >= 0 ? "✅" : "🔻"} ${slot ? `Wallet ${slot} sold` : "Sold"} ${part >= 1 ? "all" : `${Math.round(part * 100)}%`} of ${name}: ${reason}. ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)} (${cost ? ((got / cost - 1) * 100).toFixed(0) : 0}%)${p.mode === "paper" ? " (practice)" : ""}.`;
+    await flog(pnl >= 0 ? "win" : "loss", msg);
+    return msg;
   } catch (e) {
+    const why = (e as Error).message.slice(0, 200);
+    if (force && part >= 1) {
+      // You said sell: it can't be swapped (rugged / honeypot / no pool / no gas), so close it anyway.
+      const cost = n(p.notional_usd), fees = p.mode === "paper" ? n(p.fees_usd) : 0;
+      await pos().update({ status: "closed", exit: 0, pnl_usd: -(cost + fees), reason: `${reason}: couldn't swap (written off), coins left in wallet ${slot || "?"}`, closed_at: new Date().toISOString() }).eq("id", p.id);
+      const msg = `🔻 ${name} closed: it couldn't be sold (${why}). Written off at -$${(cost + fees).toFixed(2)}; any coins left stay in wallet ${slot || "?"}.`;
+      await flog("loss", msg);
+      return msg;
+    }
     await pos().update({ status: "open" }).eq("id", p.id);
-    await flog("error", `Couldn't sell ${p.why?.split(":")[0] || p.coin}: ${(e as Error).message}`);
+    await flog("error", `Couldn't sell ${name}: ${why}`);
+    if (force) throw new Error(`Couldn't sell ${name}: ${why}. Tap "Sell all" to close it anyway.`);
+    return "";
   }
 }
 

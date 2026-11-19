@@ -399,7 +399,9 @@ async function pickUp(s: FSettings) {
   if (!targets.length) return;
   const c = pc(), bnbUsd = await bnbPrice();
   const { data: openRows } = await pos().select("coin,copy_slot").eq("fut_id", T()).eq("mode", "live").in("status", ["open", "closing"]);
-  const have = new Set((openRows || []).map((p: any) => `${p.coin}|${p.copy_slot}`));
+  // Trades you sold / wrote off (rugged, couldn't swap) are never put back on the board.
+  const { data: goneRows } = await pos().select("coin,copy_slot").eq("fut_id", T()).eq("mode", "live").eq("status", "closed").ilike("reason", "%written off%");
+  const have = new Set([...(openRows || []), ...(goneRows || [])].map((p: any) => `${p.coin}|${p.copy_slot}`));
   const accts = (await Promise.all(SLOTS.map(async (slot) => ({ slot, a: await copyKey(slot).catch(() => null) })))).filter((x) => x.a);
   for (const t of targets) {
     const coin = `bsc:${t.token.toLowerCase()}`, token = getAddress(t.token);
@@ -494,8 +496,19 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
     return guns.filter((g) => (!pick || pick.has(g.slot)) && !done.has(g.slot)).map((g) => g.slot);
   };
   const okSlots = new Map<string, Set<number>>(); // token → wallets whose buy went through (this run)
+  // STOP, Pause, Remove (token or wallet) and setting changes take effect within a second, not at the next minute's run.
+  let lastFresh = Date.now();
+  const refresh = async () => {
+    const { data } = await sb().from("ai_futures_settings").select("enabled,liq_targets,liq_x,liq_sell_pct,liq_tp_on,liq_slip,copy_key_usd,snipe_usd,copy_sl_on").eq("id", T()).maybeSingle();
+    if (data) Object.assign(s, data);
+    if (guns.length) {
+      const still = await Promise.all(guns.map((g) => copyKey(g.slot).then((a) => a?.address === g.a.address, () => true)));
+      guns = guns.filter((_, i) => still[i]);
+    }
+  };
   try {
     while (Date.now() - t0 < 49_000) {
+      if (Date.now() - lastFresh >= 1000) { lastFresh = Date.now(); await refresh().catch(() => {}); }
       let w = s.enabled ? waiting() : [];
       if (live && w.length && guns.length) {
         // A token whose first buy already went out: stop retrying the rest once the window has passed.

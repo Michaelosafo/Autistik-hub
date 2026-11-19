@@ -26,6 +26,17 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
     const copied = await navigator.clipboard?.writeText(j.key).then(() => true, () => false);
     prompt(`Wallet ${slot} private key${copied ? " (also copied, ready to paste)" : ""}. Keep it secret:`, j.key);
   };
+  /** Remove a wallet no matter what (open, stuck or rugged trades). Its key is shown first: it's deleted from here. */
+  const remove = async (slot: number) => {
+    if (!confirm(`Remove wallet ${slot}? It stops buying and selling right away, and any open trades on it are taken off the board (the coins stay in the wallet). Next you'll see its private key to save.`)) return;
+    const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.key) {
+      const copied = await navigator.clipboard?.writeText(j.key).then(() => true, () => false);
+      if (prompt(`SAVE THIS: wallet ${slot}'s private key${copied ? " (also copied)" : ""}. Once removed it's gone from here, and this key is the only way to reach the money left in it. Press OK to remove, Cancel to keep the wallet.`, j.key) == null) return;
+    }
+    await act(`ck${slot}`, "copy-key-remove", { slot });
+  };
   const all: W[] = s.copy_wallets || [];
   const ws = all.filter((w) => isAddr(w.address) && (!w.chain || w.chain === "bsc"));
   const dropped = all.length - ws.length;
@@ -102,7 +113,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
                 <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>
                 <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>
-                <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { if (confirm(`Remove wallet ${k.slot} from Copy? The wallet and its money stay yours; Copy just stops buying with it.`)) act(`ck${k.slot}`, "copy-key-remove", { slot: k.slot }); }}>Remove</button>
+                <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove"}</button>
               </div>
             </>
           ) : (
@@ -195,7 +206,7 @@ export function CopyTrades({ list, busy, act }: { list: CopyPos[]; busy: string;
             <small className="muted">Bought {money(p.notional_usd)} at {price(p.entry)} · now {price(now)} · {since(p.opened_at)} · <a href={`https://dexscreener.com/bsc/${token}`} target="_blank" rel="noreferrer">chart</a></small>
             <small>🛑 Stop-loss: <b>{p.stop > 0 ? `${price(p.stop)} (${((p.stop / now - 1) * 100).toFixed(1)}%)` : "off"}</b> · 🎯 Take profit: <b>{p.target > 0 ? `${price(p.target)} (+${((p.target / now - 1) * 100).toFixed(1)}%)` : "off"}</b></small>
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              <button type="button" className="btn small primary" disabled={!!busy} onClick={() => { if (confirm(`Sell all of ${name} now?`)) act(`sa${p.id}`, "copy-sell", { id: p.id, frac: 1 }); }}>{b("sa") ? "Selling…" : "Sell all"}</button>
+              <button type="button" className="btn small primary" disabled={!!busy} onClick={() => { if (confirm(`Sell all of ${name} now? If it can't be sold (rugged / honeypot), the trade is closed anyway and written off.`)) act(`sa${p.id}`, "copy-sell", { id: p.id, frac: 1 }); }}>{b("sa") ? "Selling…" : "Sell all"}</button>
               <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Sell half of ${name} now?`)) act(`sh${p.id}`, "copy-sell", { id: p.id, frac: 0.5 }); }}>{b("sh") ? "Selling…" : "Sell 50%"}</button>
               <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { const x = ask(`Stop-loss for ${name} (sells if the price falls to it)`, now, p.stop, true); if (x != null) act(`ss${p.id}`, "copy-exits", { id: p.id, stop: x }); }}>{b("ss") ? "Saving…" : p.stop > 0 ? "Change stop-loss" : "Set stop-loss"}</button>
               <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => { const x = ask(`Take profit for ${name} (sells if the price rises to it)`, now, p.target, false); if (x != null) act(`st${p.id}`, "copy-exits", { id: p.id, target: x }); }}>{b("st") ? "Saving…" : p.target > 0 ? "Change take profit" : "Set take profit"}</button>
