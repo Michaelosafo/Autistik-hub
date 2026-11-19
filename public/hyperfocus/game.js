@@ -1115,12 +1115,37 @@ function drawSegment(c,s,fog){
 }
 let tClock=0;
 function drawSky(c,skyOff){
-  const g=c.createLinearGradient(0,0,0,H*0.55);g.addColorStop(0,'#07061a');g.addColorStop(0.7,'#1f1240');g.addColorStop(1,'#4a1f3a');c.fillStyle=g;c.fillRect(0,0,W,H);
-  c.fillStyle='#e9e2ff';sky.stars.forEach(([x,y,s])=>{c.globalAlpha=0.35+0.4*Math.sin(x+tClock*1.3)**2;c.fillRect(((x-skyOff*0.2)%W+W)%W,y*H,s,s);});c.globalAlpha=1;
+  // Cinematic fallback sky: animated aurora, layered cloud bands and warm horizon bloom.
+  const skyG=c.createLinearGradient(0,0,0,H*0.64);
+  skyG.addColorStop(0,'#070714');skyG.addColorStop(0.34,'#161c48');skyG.addColorStop(0.72,'#39265d');skyG.addColorStop(1,'#c04b49');
+  c.fillStyle=skyG;c.fillRect(0,0,W,H);
+  const aur=((tClock*18)%W);
+  c.save();c.globalCompositeOperation='screen';
+  const ag=c.createLinearGradient(0,H*0.13,0,H*0.48);
+  ag.addColorStop(0,'rgba(0,0,0,0)');ag.addColorStop(0.25,'rgba(61,208,201,0.06)');ag.addColorStop(0.55,'rgba(133,96,255,0.14)');ag.addColorStop(1,'rgba(255,94,139,0)');
+  c.fillStyle=ag;c.fillRect(0,H*0.12,W,H*0.4);
+  for(let band=0;band<3;band++){c.beginPath();c.strokeStyle=band===0?'rgba(84,231,216,0.16)':band===1?'rgba(168,115,255,0.12)':'rgba(255,148,193,0.08)';c.lineWidth=18-band*5;
+    for(let x=-20;x<W+20;x+=16){const y=H*(0.25+band*0.045)+Math.sin((x+aur*0.25)/85+band)*11+Math.sin(x/180+band)*6;if(x===-20)c.moveTo(x,y);else c.lineTo(x,y);}c.stroke();}
+  c.restore();
+  // Stars twinkle softly and drift with a restrained parallax.
+  c.fillStyle='#e9e2ff';sky.stars.forEach(([x,y,s])=>{const tw=0.28+0.65*Math.sin(x*0.08+tClock*1.2)**2;c.globalAlpha=tw;c.fillRect(((x-skyOff*0.18)%W+W)%W,y*H,s,s);});c.globalAlpha=1;
   const hz=H*0.5+6,off=((skyOff*0.6)%2400+2400)%2400;
-  for(const b of sky.city){let x=b.x-off;if(x<-120)x+=2400;if(x>W)continue;c.fillStyle='#120d26';c.fillRect(x,hz-b.h,b.w,b.h);c.fillStyle=rgba(COL.gas,0.5);
-    for(let yy=hz-b.h+5;yy<hz-4;yy+=8)for(let xx=x+4;xx<x+b.w-4;xx+=8){if(((b.win+yy*7+xx*13)|0)%7<2)c.fillRect(xx,yy,2,3);}}
-  const gl=c.createLinearGradient(0,hz-30,0,hz);gl.addColorStop(0,'rgba(255,122,47,0)');gl.addColorStop(1,'rgba(255,122,47,0.22)');c.fillStyle=gl;c.fillRect(0,hz-30,W,30);
+  // Warm sunset disc and soft atmospheric halo.
+  const sunX=W*0.74, sunY=hz-55, sunR=32;
+  const halo=c.createRadialGradient(sunX,sunY,2,sunX,sunY,112);halo.addColorStop(0,'rgba(255,208,151,0.24)');halo.addColorStop(1,'rgba(255,125,72,0)');
+  c.fillStyle=halo;c.fillRect(sunX-112,sunY-112,224,224);
+  c.fillStyle='rgba(255,224,178,0.78)';c.beginPath();c.arc(sunX,sunY,sunR,0,Math.PI*2);c.fill();
+  c.save();c.globalCompositeOperation='screen';
+  for(const b of sky.city){let x=b.x-off;if(x<-120)x+=2400;if(x>W)continue;
+    c.fillStyle='#100c25';c.fillRect(x,hz-b.h,b.w,b.h);
+    c.fillStyle='rgba(255,196,105,0.56)';
+    for(let yy=hz-b.h+5;yy<hz-4;yy+=8)for(let xx=x+4;xx<x+b.w-4;xx+=8){if(((b.win+yy*7+xx*13)|0)%7<2)c.fillRect(xx,yy,2,3);}
+    c.fillStyle='rgba(115,103,255,0.13)';c.fillRect(x,hz-b.h,b.w,2);
+  }
+  // A few cloud streaks add scale without obscuring the road.
+  for(let i=0;i<6;i++){const cx=((i*207+off*0.12)% (W+220))-110,cy=H*(0.31+i%3*0.055);const cg=c.createRadialGradient(cx,cy,4,cx,cy,95);cg.addColorStop(0,'rgba(221,171,255,0.055)');cg.addColorStop(1,'rgba(221,171,255,0)');c.fillStyle=cg;c.fillRect(cx-95,cy-22,190,44);}
+  c.restore();
+  const gl=c.createLinearGradient(0,hz-40,0,hz);gl.addColorStop(0,'rgba(255,122,47,0)');gl.addColorStop(1,'rgba(255,122,47,0.24)');c.fillStyle=gl;c.fillRect(0,hz-40,W,40);
 }
 function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
 function drawCar(c,x,y,w,o){
