@@ -101,20 +101,30 @@ export async function isVerified(chain: ChainKey, token: string): Promise<boolea
   return typeof src === "string" ? src.length > 0 : null;
 }
 
-/** Sends the source to the explorer. Returns the explorer's ticket (guid) to check, or a message when it's done or can't be. */
-export async function submitVerify(chain: ChainKey, token: `0x${string}`, txHash: `0x${string}`): Promise<{ guid: string } | { message: string; ok?: boolean }> {
+export type VerifyJob = {
+  address: string;
+  /** Standard JSON input, already a string. */
+  sourceCode: string;
+  contractname: string;
+  compilerversion: string;
+  /** ABI-encoded constructor args, hex without 0x. Empty when the constructor takes nothing. */
+  constructorArguements: string;
+};
+
+/**
+ * Sends one contract's standard JSON to the chain explorer. Etherscan-family explorers use ETHERSCAN_API_KEY.
+ * Blockscout explorers (Robinhood Chain) take the same call on their own /api, with no key.
+ * Returns the explorer's ticket (guid) to check, or a message when it's done or can't be.
+ */
+export async function submitSource(chain: ChainKey, job: VerifyJob): Promise<{ guid: string } | { message: string; ok?: boolean }> {
   const c = CHAINS[chain];
   if (!c.chainId || c.kind === "solana") return { message: `${c.name} tokens don't need this.` };
   const a = api(chain);
   if (!a) return { message: "Automatic verify needs an Etherscan API key in Vercel (ETHERSCAN_API_KEY)." };
-  const inst = await instantSource(chain, token);
-  const v3 = inst ? false : await isV3Token(chain, token);
   const body = new URLSearchParams({
-    module: "contract", action: "verifysourcecode", ...(blockscout(chain) ? {} : { apikey: key(), chainid: String(c.chainId) }), contractaddress: token,
-    sourceCode: JSON.stringify(inst ? inst.input : v3 ? inputV3 : input), codeformat: "solidity-standard-json-input",
-    contractname: inst ? inst.name : v3 ? "AutistikLaunchpadV3.sol:AutistikToken" : "AutistikLaunchpadV2.sol:AutistikToken",
-    compilerversion: inst ? INSTANT_COMPILER : PAD_COMPILER,
-    constructorArguements: inst ? inst.args : v3 ? "" : await constructorArgs(chain, token, txHash),
+    module: "contract", action: "verifysourcecode", ...(blockscout(chain) ? {} : { apikey: key(), chainid: String(c.chainId) }),
+    contractaddress: job.address, sourceCode: job.sourceCode, codeformat: "solidity-standard-json-input",
+    contractname: job.contractname, compilerversion: job.compilerversion, constructorArguements: job.constructorArguements,
   });
   const sub = await fetch(`${a.url}?${a.q}module=contract&action=verifysourcecode`, { method: "POST", body, signal: AbortSignal.timeout(20_000) }).then((r) => r.json());
   if (sub?.status === "1") return { guid: String(sub.result) };
@@ -123,17 +133,40 @@ export async function submitVerify(chain: ChainKey, token: `0x${string}`, txHash
   return { message: `The ${explorerName(chain)} said: ${why.slice(0, 200)}` };
 }
 
+/** Sends the Launch Pad token's source to the explorer. */
+export async function submitVerify(chain: ChainKey, token: `0x${string}`, txHash: `0x${string}`): Promise<{ guid: string } | { message: string; ok?: boolean }> {
+  const c = CHAINS[chain];
+  if (!c.chainId || c.kind === "solana") return { message: `${c.name} tokens don't need this.` };
+  const inst = await instantSource(chain, token);
+  const v3 = inst ? false : await isV3Token(chain, token);
+  return submitSource(chain, {
+    address: token,
+    sourceCode: JSON.stringify(inst ? inst.input : v3 ? inputV3 : input),
+    contractname: inst ? inst.name : v3 ? "AutistikLaunchpadV3.sol:AutistikToken" : "AutistikLaunchpadV2.sol:AutistikToken",
+    compilerversion: inst ? INSTANT_COMPILER : PAD_COMPILER,
+    constructorArguements: inst ? inst.args : v3 ? "" : await constructorArgs(chain, token, txHash),
+  });
+}
+
+/** One check of an explorer ticket. pending means it is still in the queue. */
+export async function checkVerify(chain: ChainKey, guid: string): Promise<{ message: string; ok?: boolean; pending?: boolean }> {
+  const a = api(chain);
+  if (!a) return { message: "Automatic verify needs an Etherscan API key in Vercel (ETHERSCAN_API_KEY)." };
+  const st = await fetch(`${a.url}?${a.q}module=contract&action=checkverifystatus&guid=${encodeURIComponent(guid)}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => null);
+  const res = String(st?.result || "");
+  if (/pass|already verified/i.test(res)) return { message: `✓ Verified: the code is now open source on the ${explorerName(chain)}.`, ok: true };
+  if (!st || /pending|queue/i.test(res)) return { message: "The explorer is still checking. It usually finishes within a few minutes.", pending: true };
+  return { message: `The ${explorerName(chain)} said: ${res.slice(0, 200)}` };
+}
+
 /** Waits (up to about 40 seconds) for the explorer to finish checking. */
-export async function waitVerify(chain: ChainKey, guid: string): Promise<{ message: string; ok?: boolean }> {
-  const a = api(chain)!;
+export async function waitVerify(chain: ChainKey, guid: string): Promise<{ message: string; ok?: boolean; pending?: boolean }> {
   for (let i = 0; i < 8; i++) {
     await new Promise((r) => setTimeout(r, 5000));
-    const st = await fetch(`${a.url}?${a.q}module=contract&action=checkverifystatus&guid=${encodeURIComponent(guid)}`, { signal: AbortSignal.timeout(10_000) }).then((r) => r.json()).catch(() => null);
-    const res = String(st?.result || "");
-    if (/pass|already verified/i.test(res)) return { message: `✓ Verified: the code is now open source on the ${explorerName(chain)}.`, ok: true };
-    if (!/pending|queue/i.test(res)) return { message: `The ${explorerName(chain)} said: ${res.slice(0, 200)}` };
+    const st = await checkVerify(chain, guid);
+    if (!st.pending) return st;
   }
-  return { message: "The explorer is still checking. It usually finishes within a few minutes." };
+  return { message: "The explorer is still checking. It usually finishes within a few minutes.", pending: true };
 }
 
 /**

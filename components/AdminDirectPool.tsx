@@ -36,6 +36,44 @@ const ERC20 = parseAbi([
 ]);
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
 const SAVED = "autistik-admin-direct-token";
+const RECORD = "autistik-rage-deploy";
+
+type CtorArgs = {
+  name: string;
+  symbol: string;
+  supply: string;
+  buyBps: number;
+  sellBps: number;
+  taxWallet: string;
+  router: string;
+};
+type VerifyState = "verifying" | "verified" | "failed" | "unsupported" | "";
+type DeployRecord = CtorArgs & {
+  address: string;
+  chain: string;
+  verifyStatus: VerifyState;
+  verifyMessage: string;
+  guid: string;
+  url: string;
+};
+
+function recordKey(chain: string, address: string) {
+  return `${RECORD}:${chain}:${address.toLowerCase()}`;
+}
+function loadRecord(chain: string, address: string): DeployRecord | null {
+  try {
+    const raw = localStorage.getItem(recordKey(chain, address));
+    if (!raw) return null;
+    const j = JSON.parse(raw) as DeployRecord;
+    if (!j || String(j.address || "").toLowerCase() !== address.toLowerCase()) return null;
+    return j;
+  } catch {
+    return null;
+  }
+}
+function saveRecord(r: DeployRecord) {
+  try { localStorage.setItem(recordKey(r.chain, r.address), JSON.stringify(r)); } catch { /* private mode */ }
+}
 const fmt = (v: bigint, d: number) => Number(formatUnits(v, d)).toLocaleString("en-US", { maximumFractionDigits: 6 });
 const deadline = () => BigInt(Math.floor(Date.now() / 1000) + 20 * 60);
 const slip = (v: bigint) => (v * 9500n) / 10_000n;
@@ -121,6 +159,8 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [tick, setTick] = useState(0);
+  const [verify, setVerify] = useState<DeployRecord | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const token = isAddress(tokenIn.trim()) ? getAddress(tokenIn.trim()) : null;
   const buyBps = rageTaxBps(buyTax);
   const sellBps = rageTaxBps(sellTax);
@@ -131,6 +171,46 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
       if (saved && isAddress(saved)) setTokenIn(getAddress(saved));
     } catch { /* private mode */ }
   }, [chainKey]);
+
+  useEffect(() => {
+    if (!token) { setVerify(null); return; }
+    setVerify(loadRecord(chainKey, token));
+  }, [token, chainKey]);
+
+  useEffect(() => {
+    if (!token || !verify || verify.address.toLowerCase() !== token.toLowerCase()) return;
+    if (verify.verifyStatus !== "verifying" || !verify.guid) return;
+    let gone = false;
+    let n = 0;
+    const tickStatus = async () => {
+      n += 1;
+      if (n > 40) {
+        const stalled: DeployRecord = { ...verify, verifyStatus: "failed", verifyMessage: "The explorer didn't finish in time. Tap Retry verify.", guid: "" };
+        if (!gone) { saveRecord(stalled); setVerify(stalled); }
+        return;
+      }
+      try {
+        const res = await fetch("/api/admin/rage-verify", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ chain: chainKey, address: token, guid: verify.guid }),
+        });
+        const j = await res.json().catch(() => null);
+        if (gone || !j?.status || j.status === "verifying") return;
+        const next: DeployRecord = {
+          ...verify,
+          verifyStatus: j.status,
+          verifyMessage: String(j.message || ""),
+          guid: String(j.guid || ""),
+          url: String(j.url || verify.url),
+        };
+        saveRecord(next);
+        setVerify(next);
+      } catch { /* the next check tries again */ }
+    };
+    const id = setInterval(tickStatus, 4000);
+    return () => { gone = true; clearInterval(id); };
+  }, [token, chainKey, verify]);
 
   useEffect(() => {
     setInfo(null);
@@ -184,6 +264,94 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
       localStorage.setItem(`${SAVED}:${chainKey}`, at);
       if (chainKey === "bsc") localStorage.setItem(SAVED, at);
     } catch { /* ignore */ }
+  }
+
+  async function submitVerify(address: string, args: CtorArgs): Promise<DeployRecord> {
+    const pending: DeployRecord = {
+      ...args,
+      address,
+      chain: chainKey,
+      verifyStatus: "verifying",
+      verifyMessage: "Verifying…",
+      guid: "",
+      url: `${CHAIN.explorer}/address/${address}#code`,
+    };
+    saveRecord(pending);
+    setVerify(pending);
+    setVerifyBusy(true);
+    try {
+      const res = await fetch("/api/admin/rage-verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chain: chainKey, address, args }),
+      });
+      const j = await res.json().catch(() => null);
+      const next: DeployRecord = {
+        ...pending,
+        verifyStatus: j?.status || "failed",
+        verifyMessage: String(j?.message || j?.error || "Verification failed."),
+        guid: String(j?.guid || ""),
+        url: String(j?.url || pending.url),
+      };
+      saveRecord(next);
+      setVerify(next);
+      return next;
+    } catch (e) {
+      const next: DeployRecord = { ...pending, verifyStatus: "failed", verifyMessage: e instanceof Error ? e.message : "Verification failed.", guid: "" };
+      saveRecord(next);
+      setVerify(next);
+      return next;
+    } finally {
+      setVerifyBusy(false);
+    }
+  }
+
+  async function verifyExisting() {
+    if (!token || !ROUTER) { setMsg(`${CHAIN.name} has no exchange router set.`); return; }
+    const saved = loadRecord(chainKey, token);
+    try {
+      if (saved?.name && saved.supply && saved.router) {
+        await submitVerify(token, {
+          name: saved.name, symbol: saved.symbol, supply: saved.supply,
+          buyBps: saved.buyBps, sellBps: saved.sellBps, taxWallet: saved.taxWallet, router: saved.router,
+        });
+        return;
+      }
+      const [n, sym, supplyRaw, buy, sell, tax, router] = await Promise.all([
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "name" }),
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "symbol" }),
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "totalSupply" }),
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "buyTaxBps" }),
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "sellTaxBps" }),
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "taxWallet" }),
+        pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "router" }),
+      ]);
+      const onChainTax = getAddress(tax as string);
+      const typed = taxWallet.trim() && isAddress(taxWallet.trim()) ? getAddress(taxWallet.trim()) : null;
+      // A blank tax wallet is sent as the zero address. The contract then stores the deployer, so a failed match is tried once with that address.
+      const primary = typed ?? ZERO;
+      const alt = primary.toLowerCase() === onChainTax.toLowerCase() ? null : onChainTax;
+      const args: CtorArgs = {
+        name: String(n),
+        symbol: String(sym),
+        supply: (supplyRaw as bigint).toString(),
+        buyBps: Number(buy),
+        sellBps: Number(sell),
+        taxWallet: primary,
+        router: getAddress(router as string),
+      };
+      const first = await submitVerify(token, args);
+      if (alt && first.verifyStatus === "failed" && /match|constructor|unable to verify|bytecode/i.test(first.verifyMessage)) {
+        await submitVerify(token, { ...args, taxWallet: alt });
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Couldn't read that token.";
+      setVerify({
+        name: "", symbol: "", supply: "0", buyBps: 0, sellBps: 0, taxWallet: ZERO, router: ROUTER,
+        address: token, chain: chainKey, verifyStatus: "failed", verifyMessage: message, guid: "",
+        url: `${CHAIN.explorer}/address/${token}#code`,
+      });
+    }
   }
 
   async function wallet() {
@@ -240,6 +408,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
       remember(at);
       setTokenIn(at);
       setMsg(`✅ ${s} deployed on ${CHAIN.name}. Now add the liquidity below. ${CHAIN.explorer}/token/${at}`);
+      void submitVerify(at, { name: n, symbol: s, supply: units.toString(), buyBps, sellBps, taxWallet: taxTo, router: ROUTER });
       setTick((x) => x + 1);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
@@ -393,6 +562,8 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
   }
   const share = info && info.lpTotal > 0n ? { token: (info.rToken * info.lp) / info.lpTotal, coin: (info.rCoin * info.lp) / info.lpTotal } : null;
 
+  const shownVerify = token && verify?.address.toLowerCase() === token.toLowerCase() ? verify : null;
+  const verifyPolling = shownVerify?.verifyStatus === "verifying" && !!shownVerify.guid;
   const showDeploy = mode === "all" || mode === "deploy";
   const showAdd = mode === "all" || mode === "add";
   const showRemove = mode === "all" || mode === "remove";
@@ -429,6 +600,21 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
 
       <b>2. Token</b>
       <input value={tokenIn} onChange={(e) => { setTokenIn(e.target.value); try { if (isAddress(e.target.value.trim())) remember(getAddress(e.target.value.trim())); } catch { /* ignore */ } }} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
+      {token && (
+        <div className="stack" style={{ gap: 4 }}>
+          {(shownVerify?.verifyStatus === "verifying" || verifyBusy) && <small>Verifying source on the explorer…</small>}
+          {shownVerify?.verifyStatus === "verified" && (
+            <small>Verified · <a href={shownVerify.url || `${CHAIN.explorer}/address/${token}#code`} target="_blank" rel="noreferrer">View source</a></small>
+          )}
+          {shownVerify?.verifyStatus === "failed" && <small>Verification failed: {shownVerify.verifyMessage}</small>}
+          {shownVerify?.verifyStatus === "unsupported" && <small>{shownVerify.verifyMessage}</small>}
+          {shownVerify?.verifyStatus !== "verified" && shownVerify?.verifyStatus !== "unsupported" && (
+            <button className="btn small" type="button" disabled={busy || verifyBusy || verifyPolling} onClick={() => { void verifyExisting(); }}>
+              {shownVerify?.verifyStatus === "failed" || shownVerify?.verifyStatus === "verifying" ? "Retry verify" : "Verify"}
+            </button>
+          )}
+        </div>
+      )}
       {info && (
         <>
           <div className="notice">
