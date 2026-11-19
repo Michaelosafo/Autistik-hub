@@ -445,6 +445,37 @@ function QuickWallet({ d, busy, act, spot, reload }: { d: D; busy: string; act: 
   );
 }
 
+type Hist = { t: number; action: string; text: string; ok: boolean };
+const HIST_LABEL: Record<string, string> = {
+  "sniper-bridge": "🌉 Bridge", "sniper-transfer": "↔ Transfer", "sniper-swap": "🔁 Swap", "sniper-withdraw": "⬆ Withdraw",
+  "copy-transfer": "↔ Transfer", "copy-sell": "💸 Sell", "sell": "💸 Sell", "close": "💸 Close", "move": "💱 Move money", "earn": "💰 HLP", "close-all": "💸 Close all", "deposit": "⬇ Deposit", "withdraw": "⬆ Withdraw", "fund-sol": "◎ Send to Solana",
+};
+/** Turns links in a note into tappable links. */
+function linkify(text: string) {
+  return text.split(/(https?:\/\/\S+)/g).map((p, i) => (/^https?:\/\//.test(p) ? <a key={i} href={p.replace(/[).,]+$/, "")} target="_blank" rel="noreferrer">{p.length > 40 ? p.slice(0, 40) + "…" : p}</a> : p));
+}
+function HistoryList({ list, clear }: { list: Hist[]; clear: () => void }) {
+  return (
+    <section className="card stack">
+      <div className="row" style={{ gap: 6, alignItems: "center", justifyContent: "space-between" }}>
+        <b>🧾 History</b>
+        {list.length > 0 && <button type="button" className="btn small ghost" onClick={() => { if (confirm("Clear the history on this device?")) clear(); }}>Clear</button>}
+      </div>
+      <small className="muted">Bridges, transfers, swaps, withdrawals and sells you started here, newest first. Kept on this device.</small>
+      {list.length === 0 ? <small className="muted">Nothing yet.</small> : list.map((h) => (
+        <div key={h.t + h.action} className="snp-hist">
+          <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            <b>{HIST_LABEL[h.action] || h.action}</b>
+            <span className={"chip " + (h.ok ? "up" : "down")}>{h.ok ? "✓ Sent" : "⚠ Failed"}</span>
+            <small className="muted" style={{ marginLeft: "auto" }}>{new Date(h.t).toLocaleString()}</small>
+          </div>
+          <small style={{ wordBreak: "break-word" }}>{linkify(h.text)}</small>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 /** Which trader this page drives: "" = Futures (crypto), "?desk=fx" = the Forex trader. Set by the page. */
 let DESK = "";
 async function call(action: string, body: unknown) {
@@ -478,8 +509,22 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
   const [copiedSol, setCopiedSol] = useState(false);
   // Sniper (BSC): the page works like an app, one tab at a time.
   // Every desk works like an app: one tab at a time.
-  type Tab = "home" | "wallet" | "trades" | "settings";
+  type Tab = "home" | "wallet" | "history" | "trades" | "settings";
   const [tab, setTab] = useState<Tab>("home");
+  // Money moves (bridge, transfer, swap, withdraw, sell…) kept on this device, newest first.
+  const HKEY = `ait-hist:${desk || "futures"}`;
+  const [hist, setHist] = useState<Hist[]>([]);
+  useEffect(() => { try { setHist(JSON.parse(localStorage.getItem(HKEY) || "[]")); } catch { /* storage off */ } }, [HKEY]);
+  const logHist = (action: string, text: string, ok: boolean) => {
+    if (!HIST_LABEL[action]) return;
+    setHist((h) => {
+      const next = [{ t: Date.now(), action, text, ok }, ...h].slice(0, 60);
+      try { localStorage.setItem(HKEY, JSON.stringify(next)); } catch { /* storage off */ }
+      return next;
+    });
+  };
+  // The note under the tabs fades on its own after a few seconds.
+  useEffect(() => { if (!msg) return; const t = setTimeout(() => setMsg(""), 6000); return () => clearTimeout(t); }, [msg]);
   const on = (t: Tab) => tab === t;
   const load = async () => {
     const r = await fetch(`/api/ai-futures/status${DESK}`, { cache: "no-store" });
@@ -490,8 +535,8 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
   useEffect(() => { load(); const t = setInterval(load, 15_000); return () => clearInterval(t); }, []);
   const act = async (name: string, action: string, body: unknown, done?: string) => {
     setBusy(name); setMsg("");
-    try { const r = await call(action, body); setMsg(done || r.note || "Done."); await load(); }
-    catch (e) { setMsg((e as Error).message); }
+    try { const r = await call(action, body); const t = done || r.note || "Done."; setMsg(t); logHist(action, t, true); await load(); }
+    catch (e) { const t = (e as Error).message; setMsg(t); logHist(action, t, false); }
     setBusy("");
   };
 
@@ -532,14 +577,16 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
           </div>
         )}
         <nav className="snp-tabs" role="tablist" aria-label={`${NAME} sections`}>
-          {([["home", liqDesk ? "🎯" : copyDesk ? "👥" : "🏠", liqDesk ? "Snipe" : copyDesk ? "Copy" : "Home"], ["wallet", "👛", "Wallet"], ["trades", "📈", earnDesk ? "Activity" : "Trades"], ["settings", "⚙️", "Settings"]] as const).map(([id, ic, nm]) => (
+          {([["home", liqDesk ? "🎯" : copyDesk ? "👥" : "🏠", liqDesk ? "Snipe" : copyDesk ? "Copy" : "Home"], ["wallet", "👛", "Wallet"], ["history", "🧾", "History"], ["trades", "📈", earnDesk ? "Activity" : "Trades"], ["settings", "⚙️", "Settings"]] as const).map(([id, ic, nm]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} className={"snp-tab t-" + id + (tab === id ? " on" : "")} onClick={() => { setTab(id); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
               <span aria-hidden="true">{ic}</span>{nm}{id === "trades" && d.open.length ? <em>{d.open.length}</em> : null}
             </button>
           ))}
         </nav>
-        {msg && tab !== "home" && <small className="aic-note" role="status">{msg}</small>}
+        {msg && tab !== "home" && <small className="aic-note snp-toast" role="status">{msg} <button type="button" aria-label="Dismiss" onClick={() => setMsg("")}>✕</button></small>}
       </div>
+
+      {on("history") && <HistoryList list={hist} clear={() => { setHist([]); try { localStorage.removeItem(HKEY); } catch { /* storage off */ } }} />}
 
       {on("wallet") && <QuickWallet d={d} busy={busy} act={act} spot={snipeDesk} reload={load} />}
 
@@ -558,7 +605,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
             onClick={() => { if (confirm(liqDesk ? "Go LIVE? Your Sniper wallets will buy real tokens the moment their liquidity is added. New tokens can be scams or have huge taxes: only use money you can afford to lose." : copyDesk ? "Go LIVE? Your Copy wallets will buy real coins with their BNB whenever a wallet you copy buys. You can lose money. Only use money you can afford to lose." : snipeDesk ? `Go LIVE? ${NAME} will buy real coins with its budget in the shared Solana wallet. You can lose money. Only use money you can afford to lose.` : `Go LIVE? The AI will trade real money from its wallet on Hyperliquid at ${madDesk ? "up to " : ""}${s.max_lev}x leverage, auto-selling any trade at -${s.max_loss_pct}%. You can lose money. Only use money you can afford to lose.`)) set({ mode: "live" }); }}>Live</button>
         </div>
         {s.enabled && <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act("run", "run", {})}>{busy === "run" ? "Checking…" : "Check now"}</button>}
-        {msg && <small className="aic-note" role="status">{msg}</small>}
+        {msg && <small className="aic-note snp-toast" role="status">{msg} <button type="button" aria-label="Dismiss" onClick={() => setMsg("")}>✕</button></small>}
       </section>
       </>)}
 
