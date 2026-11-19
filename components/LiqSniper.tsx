@@ -21,7 +21,7 @@ async function ask<T>(action: string, body: unknown): Promise<T> {
   return d as T;
 }
 
-export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string; set: (b: any, done?: string) => Promise<void>; slots: number[] }) {
+export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: string; set: (b: any, done?: string) => Promise<void>; slots: number[]; part?: "targets" | "settings" }) {
   const [ca, setCa] = useState(""), [label, setLabel] = useState(""), [amt, setAmt] = useState(""), [err, setErr] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [chain, setChain] = useState("");
@@ -161,7 +161,8 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
   }
 
   return (
-    <section className="card stack">
+    <section className="card stack snp-card">
+      {part !== "settings" && <>
       <b>🎯 Tokens to snipe</b>
       <small className="muted">Paste a token address. The chain is detected on its own, and the wallets below switch to that chain.</small>
       <form className="stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); add(); }}>
@@ -263,7 +264,9 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
       })}
       {s.enabled && s.last_note ? <small className="muted">Now: {s.last_note}</small> : null}
 
-      <b style={{ marginTop: 8 }}>💰 Buy and sell</b>
+      </>}
+      {part !== "targets" && <>
+      <b style={{ marginTop: part === "settings" ? 0 : 8 }}>💰 Buy and sell</b>
       <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <small><b>Normal buy:</b> ${per} per wallet <span className="muted">(for wallets without their own amount)</span></small>
         <button type="button" className="btn small" disabled={!!busy} onClick={() => { const v = prompt("$ a wallet spends per snipe when it has no amount of its own (paid in USDT if the wallet holds enough, else BNB):", String(per)); if (v != null && Number(v) >= 0.5) set({ snipe_usd: Number(v) }); }}>Change</button>
@@ -289,6 +292,7 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
         {([["Auto", 20], ["10%", 10], ["30%", 30], ["49%", 49]] as const).map(([l, v]) => <button key={l} type="button" className={"btn small" + (slip === v ? " primary" : " ghost")} disabled={!!busy || slip === v} onClick={() => set({ liq_slip: v }, `Slippage ${l}.`)}>{l}</button>)}
       </div>
       <small className="muted">Launches move fast and many tokens have a buy tax: the slippage must be higher than the tax or the buy is refused (the test-run catches it, no gas spent). With MEV protection on, bots can&apos;t use a high slippage against you.</small>
+      </>}
     </section>
   );
 }
