@@ -594,6 +594,103 @@ export async function choosePhoneWallets() {
   else set({ busy: "", error: "Couldn't get the wallet link. Check your internet and try again, or tap your wallet below." });
 }
 
+// ---- Bitget on phones, EVM networks: built the way the Solana connection is, which Bitget handles.
+// The request is made at the tap with a short list of what we ask for; the general EVM WalletConnect (prepared in
+// the background, with a long list) left Bitget loading without ever showing the request.
+let evmUp: any = null;
+const EVM_UP_KEY = "aw-evm-up";
+const EVM_METHODS = ["eth_sendTransaction", "personal_sign", "eth_signTypedData_v4", "wallet_switchEthereumChain", "wallet_addEthereumChain"];
+const EVM_EVENTS = ["chainChanged", "accountsChanged"];
+const rpcOf = (id: number) => (NETWORKS.find((n) => n.chainId === id)?.add as any)?.rpcUrls?.[0] as string | undefined;
+async function initEvmUp() {
+  if (evmUp) return evmUp;
+  const { UniversalProvider } = await import("@walletconnect/universal-provider");
+  evmUp = await UniversalProvider.init({
+    projectId: WALLETCONNECT_ID,
+    customStoragePrefix: "autistik-evm-up",
+    metadata: {
+      name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icons/icon-512.png`, `${location.origin}/icon.svg`],
+      redirect: { native: location.origin + location.pathname, universal: location.origin + location.pathname },
+    } as any,
+  } as any);
+  evmUp.on("session_delete", () => {
+    try { localStorage.removeItem(EVM_UP_KEY); } catch { /* private mode */ }
+    if (state.current?.provider?.__up === evmUp) set({ current: null });
+  });
+  return evmUp;
+}
+/** The WalletConnect session as a normal EVM wallet (request + events), like the rest of the site expects. */
+function upProvider(up: any, t: WcTarget) {
+  const hex = (c: any) => "0x" + Number(String(c).split(":").pop()).toString(16);
+  const wrapped = new Map<any, any>();
+  const p: any = {
+    __up: up, isWalletConnect: true,
+    get session() { return up.session; },
+    request: async (args: { method: string; params?: any }) => {
+      const r = await up.request(args);
+      if (args.method === "wallet_switchEthereumChain") { try { up.setDefaultChain(`eip155:${parseInt(args.params?.[0]?.chainId, 16)}`); } catch { /* not in the session */ } }
+      return r;
+    },
+    on: (e: string, f: any) => {
+      const g = e === "chainChanged" ? (c: any) => f(hex(c)) : f;
+      wrapped.set(f, g); up.on(e, g); return p;
+    },
+    removeListener: (e: string, f: any) => { const g = wrapped.get(f) || f; (up.removeListener || up.off)?.call(up, e, g); return p; },
+    disconnect: () => up.disconnect(),
+  };
+  // Requests bring Bitget forward on the phone, like the Solana signing does.
+  try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: walletBase(t), name: t.name })); } catch { /* private mode */ }
+  return p;
+}
+async function finishEvmUp(t: WcTarget, up: any) {
+  const accts: string[] = up.session?.namespaces?.eip155?.accounts || [];
+  if (!accts.length) throw new Error("The wallet didn't share an account.");
+  const want = netOf(state.network).chainId || 56;
+  const has = accts.some((a) => a.startsWith(`eip155:${want}:`));
+  try { up.setDefaultChain(`eip155:${has ? want : accts[0].split(":")[1]}`); } catch { /* keep the wallet's */ }
+  try { localStorage.setItem(EVM_UP_KEY, JSON.stringify(t)); } catch { /* private mode */ }
+  choose(t.name, upProvider(up, t));
+}
+async function chooseEvmUp(t: WcTarget) {
+  // Drop a link prepared in the background for the general route, so the two don't clash.
+  if (pre && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
+  set({ busy: t.name, error: "", qr: null });
+  const id = netOf(state.network).chainId || 56;
+  try {
+    const up = await initEvmUp();
+    if (up.session?.namespaces?.eip155?.accounts?.length) { await finishEvmUp(t, up); return; }
+    up.once?.("display_uri", (uri: string) => {
+      const base = walletBase(t);
+      const href = base ? wcHref(base, uri, t.pkg) : uri;
+      set({ open: true, qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" });
+      openWalletApp(href);
+    });
+    const others = [56, 1, 8453, 42161].filter((c) => c !== id);
+    const rpcMap = Object.fromEntries([id, ...others].map((c) => [c, rpcOf(c)] as [number, string | undefined]).filter(([, u]) => !!u)) as Record<number, string>;
+    await up.connect({
+      namespaces: { eip155: { chains: [`eip155:${id}`], methods: EVM_METHODS, events: EVM_EVENTS, rpcMap } },
+      optionalNamespaces: { eip155: { chains: others.map((c) => `eip155:${c}`), methods: EVM_METHODS, events: EVM_EVENTS, rpcMap } },
+    });
+    await finishEvmUp(t, up);
+  } catch (e: any) {
+    if (state.current) return;
+    if (cancelled) { cancelled = false; return; }
+    set({ open: true, busy: "", qr: null, error: /reset|reject|closed|cancel/i.test(String(e?.message)) ? "Closed in the wallet. Try again, or pick another wallet." : String(e?.message || e).slice(0, 160) });
+  }
+}
+/** A Bitget EVM session from before a reload (or the trip to the wallet app). */
+async function restoreEvmUp(): Promise<any | null> {
+  let t: WcTarget | null = null;
+  try { t = JSON.parse(localStorage.getItem(EVM_UP_KEY) || "null"); } catch { /* private mode */ }
+  if (!t || !WALLETCONNECT_ID) return null;
+  try {
+    const up = await initEvmUp();
+    if (!up.session?.namespaces?.eip155?.accounts?.length) { try { localStorage.removeItem(EVM_UP_KEY); } catch { /* private mode */ } return null; }
+    if (!state.current) await finishEvmUp(t, up);
+    return state.current?.provider || null;
+  } catch { return null; }
+}
+
 export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
   const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
@@ -606,6 +703,8 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
     set({ busy: "", error: `${top!.name} isn't ready in this browser yet. Wait a second and tap it again.` });
     return;
   }
+  // Bitget on a phone: the same WalletConnect route that already works for Bitget on Solana (see chooseEvmUp).
+  if (isMobile() && top?.name === "Bitget Wallet") { await chooseEvmUp(top); return; }
   // Bitget on a phone goes through WalletConnect like every other wallet (and like Bitget on Solana): its app opens
   // with the connection request and the member comes back here connected. It used to open this site inside
   // Bitget's own browser instead, which asked for a network again rather than showing the request to approve.
@@ -692,6 +791,7 @@ export async function disconnectWallet() {
   set({ current: null });
   try { sessionStorage.removeItem("aw-wallet"); } catch { /* private mode */ }
   if (p && p === wc) { flagWc(false); await wc.disconnect().catch(() => {}); }
+  if (p?.__up) { try { localStorage.removeItem(EVM_UP_KEY); } catch { /* private mode */ } await p.__up.disconnect?.().catch(() => {}); }
   try { window.dispatchEvent(new CustomEvent("aw-wallet-changed", { detail: null })); } catch { /* old browsers */ }
 }
 
@@ -699,6 +799,8 @@ export async function disconnectWallet() {
 export async function restoreWallet(): Promise<any | null> {
   startDiscovery();
   if (state.current) return state.current.provider;
+  const up = await restoreEvmUp();
+  if (up) return up;
   let name = "";
   try { name = sessionStorage.getItem("aw-wallet") || ""; } catch { /* private mode */ }
   // A WalletConnect session lives on after the page reloads or the wallet app opens a new tab.

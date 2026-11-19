@@ -196,8 +196,17 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     const a = pick(pay);
     return a && a.amount > 0 && a.valueUsd ? a.valueUsd / a.amount : 0;
   }
+  /** Where wallet x would receive the bridge on the picked network (its Solana or EVM address), if it has one. */
+  function destOf(x: number): string | null {
+    const c = cards[x];
+    return bridgeChain === "solana" ? c?.sol || null : c?.evm || (x === slot ? address : others.find((o) => o.slot === x)?.address) || null;
+  }
+  /** Wallet x can receive: it has an address there, and it isn't this wallet on the network it's already on. */
+  const canLand = (x: number) => !!destOf(x) && !(x === slot && bridgeChain === chain);
   async function reviewBridge(max: boolean) {
-    const dests = bridgeTos.length ? bridgeTos : [slot];
+    // Only wallets that can receive: this wallet is never added on its own when it has no address on that network.
+    const dests = (bridgeTos.length ? bridgeTos : [slot]).filter(canLand);
+    if (!dests.length) { setErr(bridgeChain === "solana" ? "Tick a wallet that has a Solana address to receive it." : "Tick a wallet to receive it."); return; }
     if (bridgeChain === chain && dests.includes(slot)) { setErr("This wallet is already on this network: untick it or pick a different network."); return; }
     if (max && dests.length > 1) { setErr("Max works with one wallet. For several, type the $ each wallet gets."); return; }
     let coinAmt: number | "max" = "max";
@@ -409,15 +418,15 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
                 <small><b>Your {NETS.find((n) => n.id === bridgeChain)?.name} wallets to receive it:</b> <span className="muted">tap one or several (several = the same $ to each)</span></small>
                 {[slot, ...others.map((o) => o.slot)].map((x) => {
                   const c = cards[x];
-                  const dest = bridgeChain === "solana" ? c?.sol || null : c?.evm || (x === slot ? address : others.find((o) => o.slot === x)?.address) || null;
-                  const sel = bridgeTos.length ? bridgeTos.includes(x) : x === slot && bridgeChain !== chain;
+                  const dest = destOf(x);
+                  const sel = bridgeTos.length ? bridgeTos.includes(x) : x === slot && canLand(x);
                   if (!c && bridgeChain === "solana") return <small key={x} className="muted">#{x} · reading…</small>;
                   if (!dest) return <small key={x} className="muted">#{x}{x === slot ? " (this wallet)" : ""} · no Solana address yet: open wallet #{x} → Solana → Create or Import</small>;
-                  return <button key={x} type="button" className={"btn small" + (sel ? " primary" : " ghost")} style={{ justifyContent: "flex-start" }} onClick={() => { const cur = bridgeTos.length ? bridgeTos : bridgeChain !== chain ? [slot] : []; setBridgeTos(cur.includes(x) ? cur.filter((y) => y !== x) : [...cur, x].sort((a, b) => a - b)); setBridges([]); }}>{sel ? "☑" : "☐"} #{x}{x === slot ? " (this wallet)" : ""} · {short(dest)}</button>;
+                  return <button key={x} type="button" className={"btn small" + (sel ? " primary" : " ghost")} style={{ justifyContent: "flex-start" }} onClick={() => { const cur = bridgeTos.length ? bridgeTos : canLand(slot) ? [slot] : []; setBridgeTos(cur.includes(x) ? cur.filter((y) => y !== x) : [...cur, x].sort((a, b) => a - b)); setBridges([]); }}>{sel ? "☑" : "☐"} #{x}{x === slot ? " (this wallet)" : ""} · {short(dest)}</button>;
                 })}
                 {others.length > 0 && (
                   <div className="row" style={{ gap: 6 }}>
-                    <button type="button" className="btn small ghost" onClick={() => { const all = [slot, ...others.map((o) => o.slot)].filter((x) => { const c = cards[x]; const d = bridgeChain === "solana" ? c?.sol : c?.evm || (x === slot ? address : others.find((o) => o.slot === x)?.address); return !!d && !(x === slot && bridgeChain === chain); }); setBridgeTos(all.sort((a, b) => a - b)); setBridges([]); }}>Tick all</button>
+                    <button type="button" className="btn small ghost" onClick={() => { const all = [slot, ...others.map((o) => o.slot)].filter(canLand); setBridgeTos(all.sort((a, b) => a - b)); setBridges([]); }}>Tick all</button>
                     <button type="button" className="btn small ghost" onClick={() => { setBridgeTos([]); setBridges([]); }}>Clear</button>
                   </div>
                 )}
