@@ -4,7 +4,7 @@ import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
 import ApproveBar from "./ApproveBar";
 import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
-import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, startDiscovery, subscribe } from "@/lib/connect";
+import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, insideWallet, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, showWalletOpen, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
 
@@ -81,7 +81,13 @@ export default function WalletPicker() {
         badge: w.name === last ? "Last used" : undefined,
         sub: viaWc ? (mobile ? `Opens ${w.name} to sign, then back here` : `Scan with ${w.name} on your phone`) : "Get the app",
         go: () => {
+          if (mobile && insideWallet(w.id)) {
+            const inj = injectedFor(w.id) || legacyInjected();
+            if (inj) chooseInjected(w.name, inj);
+            return;
+          }
           if (viaWc) { chooseWalletConnect(w.id); return; }
+          if (mobile && w.dapp) { showWalletOpen(w.name, `/wallets/${w.id}.svg`, w.dapp(directUrl()), w.install); return; }
           window.open(w.install, "_blank", "noopener,noreferrer");
         },
       });
@@ -109,8 +115,10 @@ export default function WalletPicker() {
       out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, badge: mobile && !viaWc ? "⚡ Direct" : undefined,
         sub: viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Direct: opens autistik.io inside ${a.name}, connects in one tap` : "Not on this browser: get the app",
         go: () => {
+          if (insideWallet(a.id)) { showWalletOpen(a.name, a.logo, a.dapp(directUrl()), a.install); return; }
           if (viaWc) { chooseSolWalletConnect({ name: a.name, logo: a.logo, wc: a.wc, native: a.native, install: a.install }); return; }
-          if (mobile) location.href = a.dapp(directUrl()); else window.open(a.install, "_blank", "noopener,noreferrer");
+          if (mobile) showWalletOpen(a.name, a.logo, a.dapp(directUrl()), a.install);
+          else window.open(a.install, "_blank", "noopener,noreferrer");
         } });
     }
     return out;
@@ -238,7 +246,7 @@ export default function WalletPicker() {
                     sub: here ? "Ready on this device" : mobile ? (w.wc || w.native ? `Opens ${w.name}` : "Pick it in the WalletConnect list") : `Scan with ${w.name} on your phone`,
                     go: () => {
                       if (here) { chooseInjected(here.info.name, here.provider); return; }
-                      chooseWalletConnect(mobile && !w.wc && !w.native ? undefined : { name: w.name, logo: w.logo, wc: w.wc, native: w.native, install: w.install });
+                      chooseWalletConnect(mobile && !w.wc && !w.native ? undefined : { name: w.name, logo: w.logo, wc: w.wc, native: w.native, install: w.install, pkg: w.pkg });
                     },
                   };
                   return <Item key={r.key} r={r} />;
