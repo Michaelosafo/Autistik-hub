@@ -176,8 +176,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
         case "copy-sell": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
           const frac = Number(b.frac) > 0 ? Math.min(1, Number(b.frac)) : 1;
-          await (await import("@/lib/ai-copy")).sellCopyNow(await getF(), Number(b.id), frac);
-          return json({ ok: true, note: frac >= 1 ? "Sold. See the log for the result." : `Sold ${Math.round(frac * 100)}%. See the log for the result.` });
+          const note = await (await import("@/lib/ai-copy")).sellCopyNow(await getF(), Number(b.id), frac);
+          return json({ ok: true, note: note || (frac >= 1 ? "Sold. See the log for the result." : `Sold ${Math.round(frac * 100)}%. See the log for the result.`) });
         }
         case "copy-exits": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
@@ -206,8 +206,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
         }
         case "copy-key-remove": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
-          await (await import("@/lib/ai-copy")).removeCopyKey(Number(b.slot));
-          return json({ ok: true, note: `Wallet ${Number(b.slot)} removed.` });
+          const k = await (await import("@/lib/ai-copy")).removeCopyKey(Number(b.slot));
+          return json({ ok: true, note: `Wallet ${Number(b.slot)} removed${k ? `; its ${k} open trade${k === 1 ? "" : "s"} taken off (the coins stay in that wallet)` : ""}.` });
         }
         case "wallet": { const address = await createFutWallet(); return json({ ok: true, address, note: "Wallet created. See How to fund." }); }
         case "key-reveal": return json({ ok: true, key: await revealFutKey() });
