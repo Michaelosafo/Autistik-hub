@@ -16,7 +16,7 @@ type Held = { coin: string; why?: string | null; copy_slot?: number | null; size
 type Tf = { from: number; to: number | null; asset: string; other: string; amt: string };
 
 export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: {
-  s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number; copy_key_usd?: Record<string, number>; snipe_usd?: number }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
+  s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number; copy_key_usd?: Record<string, number>; snipe_usd?: number; snipe_amounts?: Record<string, Record<string, number>> }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
   busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean; held?: Held[];
 }) {
   // Moving money between your own wallets: one wallet's panel open at a time.
@@ -114,7 +114,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
               {(() => { const b = Number(k.bnb || 0), u = Number(k.usd || 0), tot = b * bnbUsd + u; return (
                 <small className="muted">{k.bnb == null ? "–" : `${b.toFixed(4)} BNB`}{bnbUsd ? ` (≈ $${(b * bnbUsd).toFixed(2)})` : ""} · ${u.toFixed(2)} USDT/USDC · <b>≈ ${tot.toFixed(2)} in all</b>{b < 0.0006 ? " · needs ~0.0006 BNB for gas" : tot < per ? ` · less than a $${per} buy: it buys with what it has` : ""}</small>
               ); })()}
-              {(() => {
+              {!sniper && (() => {
                 const amounts = s.copy_key_usd || {}, own = Number(amounts[String(k.slot)] || 0), normal = Number(s.snipe_usd || per);
                 return (
                   <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -137,7 +137,15 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove"}</button>
               </div>
-              {sniper && <SniperWalletTools slot={k.slot} address={k.address} others={mine.filter((x) => x.slot !== k.slot && x.address).map((x) => ({ slot: x.slot, address: x.address! }))} busy={!!busy} act={act} />}
+              {sniper && <SniperWalletTools slot={k.slot} address={k.address} others={mine.filter((x) => x.slot !== k.slot && x.address).map((x) => ({ slot: x.slot, address: x.address! }))} busy={!!busy} act={act}
+                amounts={(s.snipe_amounts || {})[String(k.slot)] || {}}
+                setAmount={(chain, v) => {
+                  const all = { ...(s.snipe_amounts || {}) };
+                  const row = { ...(all[String(k.slot)] || {}) };
+                  if (v && v > 0) row[chain] = v; else delete row[chain];
+                  if (Object.keys(row).length) all[String(k.slot)] = row; else delete all[String(k.slot)];
+                  set({ snipe_amounts: all }, v ? `Wallet ${k.slot} snipes with ${v} on ${chain === "bsc" ? "BNB Chain" : chain[0].toUpperCase() + chain.slice(1)}.` : `Wallet ${k.slot}: amount on ${chain} cleared.`);
+                }} />}
               {!sniper && tf?.from === k.slot && (
                 <div className="stack" style={{ gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px dashed var(--line, rgba(127,127,127,.35))" }}>
                   <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>

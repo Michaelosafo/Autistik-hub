@@ -41,25 +41,26 @@ function tokenIn(chain: SnipeChain, pay: "native" | "usdt" | "usdc") {
 }
 
 /** What each selected wallet holds on this chain, and whether it can pay the buy. */
-export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, slots: number[]): Promise<{ chain: SnipeChain; unit: string; wallets: ReadyWallet[] }> {
+export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, slots: number[], amounts: Record<string, number> = {}): Promise<{ chain: SnipeChain; unit: string; wallets: ReadyWallet[] }> {
   const unit = unitOf(chain, pay);
-  const need = Number(amount) > 0 ? Number(amount) : 0;
   const reserve = pay === "native" ? RESERVE[chain] : (chain === "solana" ? 0.01 : RESERVE[chain]);
   const wallets = await Promise.all(slots.map(async (slot): Promise<ReadyWallet> => {
+    // This wallet's own amount for the token, else the one typed for all.
+    const need = amountOf(slot, amount, amounts);
     try {
       if (chain === "solana") {
         const kp = await sniperSol(slot);
         if (!kp) return { slot, address: null, balance: null, unit, need, ok: false, reason: "No Solana address" };
         const owner = kp.publicKey.toBase58();
         const bal = await solUi(owner, pay === "native" ? "SOL" : tokenIn(chain, pay));
-        const ok = bal + 1e-12 >= need + (pay === "native" ? reserve : 0.01);
-        return { slot, address: owner, balance: bal, unit, need, ok, reason: ok ? "Ready" : bal <= 0 ? `No ${unit}` : `Needs ${(need + (pay === "native" ? reserve : 0.01)).toFixed(4)} ${unit}` };
+        const ok = need > 0 && bal + 1e-12 >= need + (pay === "native" ? reserve : 0.01);
+        return { slot, address: owner, balance: bal, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : bal <= 0 ? `No ${unit}` : `Needs ${(need + (pay === "native" ? reserve : 0.01)).toFixed(4)} ${unit}` };
       }
       const a = await copyKey(slot);
       if (!a) return { slot, address: null, balance: null, unit, need, ok: false, reason: "No wallet" };
       const bal = await evmUi(chain, a.address, pay);
-      const ok = bal + 1e-12 >= need + reserve;
-      return { slot, address: a.address, balance: bal, unit, need, ok, reason: ok ? "Ready" : `Needs ${(need + reserve).toFixed(4)} ${unit}` };
+      const ok = need > 0 && bal + 1e-12 >= need + reserve;
+      return { slot, address: a.address, balance: bal, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : `Needs ${(need + reserve).toFixed(4)} ${unit}` };
     } catch (e) {
       return { slot, address: null, balance: null, unit, need, ok: false, reason: (e as Error).message.slice(0, 80) };
     }
@@ -85,6 +86,12 @@ async function solUi(owner: string, mintOrSol: string): Promise<number> {
   return ((h?.tokens?.[mintOrSol] || []) as { uiAmount?: number }[]).reduce((a, x) => a + (Number(x.uiAmount) || 0), 0);
 }
 
+/** A wallet's own amount (set for this token or this chain), else the shared one. */
+export function amountOf(slot: number, amount: number, amounts: Record<string, number> | undefined) {
+  const own = n(amounts?.[String(slot)]);
+  return own > 0 ? own : Number(amount) > 0 ? Number(amount) : 0;
+}
+
 type Fire = { bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] };
 
 /** Buy `t` on its chain from every picked wallet that can pay. Others are skipped, not failed. */
@@ -93,28 +100,29 @@ export async function fireChain(s: FSettings, t: any): Promise<Fire> {
   if (!WCHAINS[chain] || chain === "bsc") return { bought: 0, why: "BNB Chain uses its own buyer" };
   const pay = payOf(t);
   const amount = n(t.amount);
-  if (!(amount > 0)) return { bought: 0, why: "set how much to spend" };
+  const amounts: Record<string, number> = t.amounts && typeof t.amounts === "object" ? t.amounts : {};
+  if (!(amount > 0) && !Object.values(amounts).some((v) => n(v) > 0)) return { bought: 0, why: "set how much to spend" };
   const pick: number[] = Array.isArray(t.wallets) && t.wallets.length ? t.wallets.map(Number) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
   const already = new Set((t.fired || []).map(Number));
   const slots = pick.filter((x) => !already.has(x));
   if (!slots.length) return { bought: 0, why: "every picked wallet already bought" };
-  const ready = await snipeReady(chain, pay, amount, slots);
+  const ready = await snipeReady(chain, pay, amount, slots, amounts);
   const skip = ready.wallets.filter((w) => !w.ok);
   const go = ready.wallets.filter((w) => w.ok);
   if (!go.length) return { bought: 0, why: skip.map((w) => `#${w.slot} ${w.reason}`).join("; ") || "no wallet can pay" };
   try {
-    if (chain === "solana") return await fireSol(s, t, pay, amount, go, skip);
-    return await fireEvm(s, t, chain, pay, amount, go, skip);
+    if (chain === "solana") return await fireSol(s, t, pay, go, skip);
+    return await fireEvm(s, t, chain, pay, go, skip);
   } catch (e) {
     return { bought: 0, why: (e as Error).message.slice(0, 160) };
   }
 }
 
-async function fireEvm(s: FSettings, t: any, chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, go: ReadyWallet[], skip: ReadyWallet[]): Promise<Fire> {
+async function fireEvm(s: FSettings, t: any, chain: SnipeChain, pay: "native" | "usdt" | "usdc", go: ReadyWallet[], skip: ReadyWallet[]): Promise<Fire> {
   const c = WCHAINS[chain];
   const inn = tokenIn(chain, pay);
   const dec = pay === "native" ? 18 : (c.tokens.find((x) => x.symbol.toUpperCase() === pay.toUpperCase())?.decimals || 6);
-  const raw = parseUnits(amount.toFixed(Math.min(dec, 8)), dec);
+  const rawOf = (w: ReadyWallet) => parseUnits(w.need.toFixed(Math.min(dec, 8)), dec);
   const slip = Math.min(4900, Math.max(30, Math.round((n((s as any).liq_slip) || 20) * 100)));
   const pc: any = createPublicClient({ chain: c.viem, transport: http(c.rpc, { timeout: 12_000 }) });
   const gas = await pc.getGasPrice().catch(() => 1_000_000_000n);
@@ -122,7 +130,7 @@ async function fireEvm(s: FSettings, t: any, chain: SnipeChain, pay: "native" | 
     const account = await copyKey(w.slot);
     if (!account || !w.address) return null;
     try {
-      const q = await quote(c, inn, t.token, raw, 0);
+      const q = await quote(c, inn, t.token, rawOf(w), 0);
       const tx = await build(c, q, w.address, slip, true);
       if (tx.kind !== "evm") return null;
       const nonce = Number(await pc.getTransactionCount({ address: account.address, blockTag: "pending" }));
@@ -142,8 +150,8 @@ async function fireEvm(s: FSettings, t: any, chain: SnipeChain, pay: "native" | 
       const rc = await pc.waitForTransactionReceipt({ hash, timeout: 90_000 });
       if (rc.status !== "success") throw new Error("failed on-chain");
       ok.push(p.w.slot);
-      await flog("open", `⚡ Wallet ${p.w.slot} sniped ${t.label || String(t.token).slice(0, 8)} on ${c.name} for ${amount} ${unitOf(chain, pay)} from ${p.w.address}. ${c.explorer}/tx/${hash}`);
-      await remember(s, t, chain, amount, unitOf(chain, pay), p.w.slot, hash);
+      await flog("open", `⚡ Wallet ${p.w.slot} sniped ${t.label || String(t.token).slice(0, 8)} on ${c.name} for ${p.w.need} ${unitOf(chain, pay)} from ${p.w.address}. ${c.explorer}/tx/${hash}`);
+      await remember(s, t, chain, p.w.need, unitOf(chain, pay), p.w.slot, hash);
     } catch (e) {
       await flog("error", `Wallet ${p.w.slot} couldn't buy on ${c.name}: ${(e as Error).message.slice(0, 140)}`);
     }
@@ -151,10 +159,9 @@ async function fireEvm(s: FSettings, t: any, chain: SnipeChain, pay: "native" | 
   return { bought: ok.length, why: skip.length ? `skipped ${skip.map((w) => `#${w.slot} (${w.reason})`).join(", ")}` : "", sent: fired.length > 0, fired, ok };
 }
 
-async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", amount: number, go: ReadyWallet[], skip: ReadyWallet[]): Promise<Fire> {
+async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", go: ReadyWallet[], skip: ReadyWallet[]): Promise<Fire> {
   const inn = tokenIn("solana", pay);
   const dec = pay === "native" ? 9 : 6;
-  const raw = parseUnits(amount.toFixed(Math.min(dec, 6)), dec);
   const slip = Math.min(4900, Math.max(30, Math.round((n((s as any).liq_slip) || 20) * 100)));
   const prio = PRIO[String(t.prio || "high")] || PRIO.high;
   const conn = new Connection(SOL_RPC, "confirmed");
@@ -162,6 +169,7 @@ async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", am
     const kp = await sniperSol(w.slot);
     if (!kp) { skip.push({ ...w, ok: false, reason: "No Solana address" }); return null; }
     try {
+      const raw = parseUnits(w.need.toFixed(Math.min(dec, 6)), dec);
       const q = await fetch(`${JUP}/swap/v1/quote?inputMint=${inn}&outputMint=${t.token}&amount=${raw}&slippageBps=${slip}&restrictIntermediateTokens=true`, { cache: "no-store", signal: AbortSignal.timeout(12_000) }).then((r) => r.json());
       if (!q?.outAmount) throw new Error(q?.error || "no pool yet");
       const j = await fetch(`${JUP}/swap/v1/swap`, { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(15_000), body: JSON.stringify({
@@ -197,8 +205,8 @@ async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", am
       if (st?.err) { await flog("error", `Wallet ${p.w.slot} Solana buy failed on-chain.`); return; }
       if (st?.confirmationStatus === "confirmed" || st?.confirmationStatus === "finalized") {
         ok.push(p.w.slot);
-        await flog("open", `⚡ Wallet ${p.w.slot} sniped ${t.label || String(t.token).slice(0, 6)} on Solana for ${amount} ${unitOf("solana", pay)} from ${p.w.address}. https://solscan.io/tx/${p.sig}`);
-        await remember(s, t, "solana", amount, unitOf("solana", pay), p.w.slot, p.sig);
+        await flog("open", `⚡ Wallet ${p.w.slot} sniped ${t.label || String(t.token).slice(0, 6)} on Solana for ${p.w.need} ${unitOf("solana", pay)} from ${p.w.address}. https://solscan.io/tx/${p.sig}`);
+        await remember(s, t, "solana", p.w.need, unitOf("solana", pay), p.w.slot, p.sig);
         return;
       }
     }

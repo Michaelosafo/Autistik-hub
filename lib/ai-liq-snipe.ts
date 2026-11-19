@@ -70,7 +70,7 @@ const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
  * wallets: which of your wallets (slots 1–10) snipe this token; missing / empty = all of them.
  * fired: wallets that already sent their buy for it (never fire again on their own); first_at: when the first went out.
  */
-export type LiqTarget = { token: string; chain?: string; pay?: string; amount?: number; prio?: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
+export type LiqTarget = { token: string; chain?: string; pay?: string; amount?: number; amounts?: Record<string, number>; prio?: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 /** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
 const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the first wallet got in
 const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
@@ -209,7 +209,13 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   const payKind = String((t as any).pay || "");
   const usdEach = payKind === "usdt" || payKind === "usdc" ? Math.max(MIN_USD, pinned) : payKind === "native" && pinned > 0 ? Math.max(MIN_USD, pinned * bnbUsd) : Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);
   // Each wallet's $: an amount typed for this token wins, else the wallet's own amount (set on the Sniper), else the normal one.
-  const amtFor = (slot: number) => (pinned > 0 || n(t.usd) > 0 ? usdEach : Math.max(MIN_USD, keyUsd(s, slot) ?? usdEach));
+  // A wallet's own amount for this token (BNB, or USDT / USDC) wins over everything.
+  const ownFor = (slot: number) => {
+    const v = n(t.amounts?.[String(slot)]);
+    if (!(v > 0)) return 0;
+    return payKind === "usdt" || payKind === "usdc" ? Math.max(MIN_USD, v) : Math.max(MIN_USD, v * bnbUsd);
+  };
+  const amtFor = (slot: number) => ownFor(slot) || (pinned > 0 || n(t.usd) > 0 ? usdEach : Math.max(MIN_USD, keyUsd(s, slot) ?? usdEach));
   const slip = slipOf(s);
   const [sym, dec] = await Promise.all([
     c.readContract({ address: token, abi: ERC20, functionName: "symbol" }).catch(() => token.slice(0, 8)),
