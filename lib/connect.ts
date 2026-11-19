@@ -21,7 +21,7 @@ type Detected = { info: WalletInfo; provider: any };
  * the phone goes to its Play Store page.
  */
 const ONE_APP: { test: RegExp; scheme: string; pkg: string }[] = [
-  { test: /bitkeep:|bkcode\.vip/i, scheme: "bitkeep", pkg: "com.bitkeep.wallet" },
+  { test: /bitkeep:|bkcode\.vip/i, scheme: "bitkeep", pkg: "com.bitget.web3" },
   { test: /trust:|link\.trustwallet\.com/i, scheme: "trust", pkg: "com.wallet.crypto.trustapp" },
   { test: /metamask:|metamask\.app\.link/i, scheme: "metamask", pkg: "io.metamask" },
   { test: /okex:|okx:|www\.okx\.com/i, scheme: "okex", pkg: "com.okx.wallet" },
