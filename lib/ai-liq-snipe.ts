@@ -7,14 +7,15 @@
  *    USDT if the wallet holds enough of it. v3-only pools go through the swap aggregator.
  *  - The buy is test-run first (eth_call): if trading isn't open yet, nothing is sent and it tries again next block,
  *    so no gas is burnt on failed buys. It buys in the first block trading works.
- *  - Signed here with a nonce read ahead of time, at your gas speed, and sent through PancakeSwap MEV Guard (private:
- *    sandwich bots never see it). If the relay refuses, it's sent the normal way.
+ *  - Every selected wallet is quoted and signed first (its own nonce and gas). The signed buys are then broadcast
+ *    together, to the private relay and COPY_BSC_RPC at the same time, so they land in the same block or the next one.
+ *    One wallet failing does not hold the others back.
  *  - Slippage is yours (auto 20%): the least it accepts is the router's quote minus that.
  *
  * After the buy: its value is read from the pool every ~1.5 s; at your target (e.g. 2x) it sells the share you chose.
  * Sell buttons and your own stop-loss / take profit work like on Copy. Practice mode: pretend buys at the pool price.
  */
-import { createPublicClient, encodeFunctionData, fallback, getAddress, http, parseAbi, webSocket } from "viem";
+import { createPublicClient, encodeFunctionData, fallback, getAddress, http, keccak256, parseAbi, webSocket } from "viem";
 import { bsc } from "viem/chains";
 import type { PrivateKeyAccount } from "viem/accounts";
 import { supabaseService } from "@/lib/supabase/server";
@@ -131,25 +132,31 @@ async function loadGuns(): Promise<Gun[]> {
   return guns.filter(Boolean) as Gun[];
 }
 
-/** Sign here and send: the MEV-protected relay first (private), else the normal way. Returns the tx hash. */
-async function fire(g: Gun, s: FSettings, tx: { to: `0x${string}`; data: `0x${string}`; value: bigint; gas?: bigint }): Promise<string> {
-  const gasPrice = BigInt(Math.round(gweiOf(s) * 1e9));
-  // The network wants gas limit × gas price + value in the wallet, so the limit is the real estimate (+30%), not a guess.
-  const gas = tx.gas || (await pc().estimateGas({ account: g.a.address, to: tx.to, data: tx.data, value: tx.value })
-    .then((x: bigint) => { const pad = (x * 13n) / 10n; return pad <= BUY_GAS ? pad : x <= BUY_GAS ? BUY_GAS : (x * 11n) / 10n; }).catch(() => BUY_GAS));
-  const raw = await g.a.signTransaction({ chainId: 56, type: "legacy", nonce: g.nonce, gas, gasPrice, to: tx.to, data: tx.data, value: tx.value });
+const padGas = (est: bigint) => { const pad = (est * 13n) / 10n; return pad <= BUY_GAS ? pad : est <= BUY_GAS ? BUY_GAS : (est * 11n) / 10n; };
+
+/** Send one signed transaction to the fast RPC and the private relay together. Same hash everywhere, so the first acceptance wins. */
+async function broadcastRaw(raw: `0x${string}`, mev: boolean): Promise<string> {
+  const urls = [...new Set([...(mev ? [MEV] : []), ...RPCS])];
   const post = async (url: string) => {
     const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_sendRawTransaction", params: [raw] }), signal: AbortSignal.timeout(4000) });
     const j = await r.json().catch(() => null);
     if (j?.result) return String(j.result);
     throw new Error(String(j?.error?.message || `HTTP ${r.status}`));
   };
-  let hash = "", last = "";
-  if (mevOn(s)) hash = await post(MEV).catch((e) => { last = (e as Error).message; return ""; });
-  if (!hash) {
-    for (const u of RPCS) { hash = await post(u).catch((e) => { last = (e as Error).message; return /already known/i.test(last) ? "known" : ""; }); if (hash) break; }
-    if (hash === "known" || !hash) throw new Error(/insufficient funds/i.test(last) ? `not enough BNB for gas at ${gweiOf(s)} gwei (lower the gas speed or add BNB)` : `the transaction couldn't be sent (${last.slice(0, 100)})`);
-  }
+  const results = await Promise.all(urls.map((u) => post(u).then((h) => h, (e: Error) => e)));
+  for (const r of results) if (typeof r === "string" && r) return r;
+  const messages = results.filter((r): r is Error => r instanceof Error).map((e) => e.message);
+  if (messages.some((m) => /already known/i.test(m))) return keccak256(raw);
+  const last = messages[0] || "no node accepted it";
+  throw new Error(/insufficient funds/i.test(last) ? "not enough BNB for gas (lower the gas speed or add BNB)" : `the transaction couldn't be sent (${last.slice(0, 100)})`);
+}
+
+/** Sign here and send: the private relay and COPY_BSC_RPC (when set) at the same time. Returns the tx hash. */
+async function fire(g: Gun, s: FSettings, tx: { to: `0x${string}`; data: `0x${string}`; value: bigint; gas?: bigint }): Promise<string> {
+  const gasPrice = BigInt(Math.round(gweiOf(s) * 1e9));
+  const gas = tx.gas || (await pc().estimateGas({ account: g.a.address, to: tx.to, data: tx.data, value: tx.value }).then(padGas).catch(() => BUY_GAS));
+  const raw = await g.a.signTransaction({ chainId: 56, type: "legacy", nonce: g.nonce, gas, gasPrice, to: tx.to, data: tx.data, value: tx.value });
+  const hash = await broadcastRaw(raw, mevOn(s));
   g.nonce++;
   return hash;
 }
@@ -216,7 +223,6 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     return { bought: 1, why: "" };
   }
 
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
   let notOpen = "", sent = false;
   const short: string[] = [];
   // What each wallet will spend (v2), worked out up front: all the wallets land in the same block, so each one's
@@ -230,72 +236,102 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     return { amt, bnbFree, usdtFree, useUsdt, usd: ok ? usd : 0 };
   };
   const totalUsd = route.kind === "v2" ? guns.reduce((a, g) => a + planOf(g).usd, 0) : 0;
-  const done = await Promise.all(guns.map(async (g) => {
+  const gasPrice = BigInt(Math.round(gweiOf(s) * 1e9));
+  type Prep = { g: Gun; usd: number; amt: number; useUsdt: boolean; data: `0x${string}`; value: bigint; gas: bigint; before: bigint };
+  const preps: Prep[] = [];
+  const v3done = await Promise.all(guns.filter(() => route.kind === "v3").map(async (g) => {
     let mine = false;
     try {
-      if (route.kind === "v3") {
-        // v3-only pool: through the swap aggregator, with the same fast and private sending.
-        const ch = await import("@/lib/ai-trader-chains");
-        const w = { evm: g.a, sol: null };
-        const bnb = Math.min(amtFor(g.slot) / bnbUsd, g.bnb - gasKeep(s));
-        if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
-        mine = sent = true; fired.push(g.slot);
-        const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
-        g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }));
-        if (!(r.raw > 0n)) throw new Error("no coins arrived");
-        await record(s, t, name, bnb * bnbUsd, Number(r.raw) / 10 ** r.decimals, r.hash, g.slot, "BNB", route);
-        ok.push(g.slot);
-        await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${bnb.toFixed(4)} BNB ($${(bnb * bnbUsd).toFixed(2)}) on PancakeSwap v3. https://bscscan.com/tx/${r.hash}`);
-        return true;
-      }
-      // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
-      // The token's typed amount, else this wallet's own, else the normal one. As much as the wallet allows, up to the
-      // amount, leaving only the buy's gas: USDT if it has the full amount, else whichever of USDT / spare BNB is bigger.
-      const { amt, useUsdt, usd } = planOf(g);
-      if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return false; }
-      if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return false; }
-      const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; fired.push(g.slot); }, Math.max(0, totalUsd - usd));
-      if ("notOpen" in r) { notOpen = r.notOpen; return false; }
-      const { hash, got } = r;
-      if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
-      await record(s, t, name, usd, got, hash, g.slot, useUsdt ? "USDT" : "BNB", route);
+      const ch = await import("@/lib/ai-trader-chains");
+      const w = { evm: g.a, sol: null };
+      const bnb = Math.min(amtFor(g.slot) / bnbUsd, g.bnb - gasKeep(s));
+      if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
+      mine = sent = true; fired.push(g.slot);
+      const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
+      g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }));
+      if (!(r.raw > 0n)) throw new Error("no coins arrived");
+      await record(s, t, name, bnb * bnbUsd, Number(r.raw) / 10 ** r.decimals, r.hash, g.slot, "BNB", route);
       ok.push(g.slot);
-      await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought${usd < amt * 0.95 ? ` (all it had, minus the buy's gas)` : ""}. https://bscscan.com/tx/${hash}`);
-      // Ready to sell fast later: approve the router for this coin now (in the background).
-      approveForSell(g, s, token).catch(() => {});
+      await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${bnb.toFixed(4)} BNB ($${(bnb * bnbUsd).toFixed(2)}) on PancakeSwap v3. https://bscscan.com/tx/${r.hash}`);
       return true;
     } catch (e) {
       if (!mine) { notOpen ||= (e as Error).message.slice(0, 120); return false; }
-      g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }).catch(() => g.nonce));
-      // Reverted on-chain (price moved past the slippage, a per-block limit…): nothing was bought, so this wallet keeps
-      // trying about every second at the fresh price until it gets in, whatever the other wallets did (until the
-      // retry window ends). A buy that may still land (no receipt yet) is never re-sent.
-      const key = `${T()}|${token.toLowerCase()}|${g.slot}`, tries = (chainFails.get(key)?.n || 0) + 1;
-      if (/failed on-chain/.test((e as Error).message)) {
-        chainFails.set(key, { n: tries, at: Date.now() });
-        const i = fired.indexOf(g.slot);
-        if (i >= 0) fired.splice(i, 1);
-        if (tries === 1 || tries % 5 === 0) await flog("error", `Wallet ${g.slot}'s buy of ${name} reverted on-chain (try ${tries}): trying again next block at the new price.`);
-      } else await flog("error", `Wallet ${g.slot} couldn't snipe ${name}: ${(e as Error).message.slice(0, 160)}`);
+      await noteBuyFail(g, token, name, e as Error, fired);
       return false;
     }
   }));
-  const bought = done.filter(Boolean).length;
+  if (route.kind === "v2") {
+    await Promise.all(guns.map(async (g) => {
+      const { amt, useUsdt, usd } = planOf(g);
+      if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return; }
+      if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return; }
+      const built = await prepareV2Buy(g, token, route, usd, useUsdt, slip, bnbUsd, Math.max(0, totalUsd - usd)).catch((e: Error) => ({ notOpen: e.message.slice(0, 120) }));
+      if ("notOpen" in built) { notOpen = built.notOpen; return; }
+      preps.push({ g, usd, amt, useUsdt, ...built });
+    }));
+  }
+  const signed = await Promise.all(preps.map(async (p) => ({
+    ...p,
+    raw: await p.g.a.signTransaction({ chainId: 56, type: "legacy", nonce: p.g.nonce, gas: p.gas, gasPrice, to: ROUTER, data: p.data, value: p.value }),
+  })));
+  const sentTx = await Promise.all(signed.map(async (p) => {
+    try {
+      const hash = await broadcastRaw(p.raw, mevOn(s));
+      p.g.nonce++;
+      fired.push(p.g.slot);
+      sent = true;
+      return { ...p, hash };
+    } catch (e) {
+      await flog("error", `Wallet ${p.g.slot} couldn't send the buy of ${name}: ${(e as Error).message.slice(0, 160)}`);
+      return null;
+    }
+  }));
+  const v2done = await Promise.all(sentTx.map(async (p) => {
+    if (!p) return false;
+    try {
+      const rc = await receipt(p.hash);
+      const got = Number(await received(rc, token, p.g.a.address, p.before)) / 10 ** dec;
+      if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
+      await record(s, t, name, p.usd, got, p.hash, p.g.slot, p.useUsdt ? "USDT" : "BNB", route);
+      ok.push(p.g.slot);
+      const block = rc.blockNumber != null ? ` block ${rc.blockNumber}` : "";
+      await flog("open", `⚡ Wallet ${p.g.slot} sniped ${name} for ${p.useUsdt ? `$${p.usd.toFixed(2)} USDT` : `${(p.usd / bnbUsd).toFixed(4)} BNB ($${p.usd.toFixed(2)})`}${p.usd < p.amt * 0.95 ? " (all it had, minus the buy's gas)" : ""}. https://bscscan.com/tx/${p.hash}${block}`);
+      approveForSell(p.g, s, token).catch(() => {});
+      return true;
+    } catch (e) {
+      await noteBuyFail(p.g, token, name, e as Error, fired, p.hash);
+      return false;
+    }
+  }));
+  if (sentTx.some(Boolean)) {
+    const lines = sentTx.filter(Boolean).map((p) => `#${p!.g.slot} ${p!.hash.slice(0, 10)}… ${ok.includes(p!.g.slot) ? "success" : "failed"}`);
+    await flog("open", `Buys of ${name} sent together: ${lines.join(" · ")}`);
+  }
+  const bought = v3done.filter(Boolean).length + v2done.filter(Boolean).length;
   return { bought, sent, fired, ok, why: bought ? "" : notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.length ? `not enough money: ${short.join("; ")}` : "no wallet could buy" };
 }
 
-/**
- * Buy through the PancakeSwap v2 router: quote, test-run, sign, send (MEV Guard), wait. If the test-run fails, the
- * slippage steps up (yours → +10 → 35%, never past 49) in case it's a buy tax; nothing is sent until a test passes.
- */
-async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extract<Route, { kind: "v2" }>, usd: number, useUsdt: boolean, slip: number, bnbUsd: number, dec: number, onSend: () => void, aheadUsd = 0): Promise<{ hash: string; got: number; slip: number } | { notOpen: string }> {
+/** A buy that was sent but reverted, or never landed. The wallet keeps trying next block. */
+async function noteBuyFail(g: Gun, token: string, name: string, e: Error, fired: number[], hash = "") {
+  g.nonce = Number(await pc().getTransactionCount({ address: g.a.address, blockTag: "pending" }).catch(() => g.nonce));
+  const key = `${T()}|${token.toLowerCase()}|${g.slot}`, tries = (chainFails.get(key)?.n || 0) + 1;
+  const tx = hash ? ` ${hash}` : "";
+  if (/failed on-chain|no coins arrived/.test(e.message)) {
+    chainFails.set(key, { n: tries, at: Date.now() });
+    const i = fired.indexOf(g.slot);
+    if (i >= 0) fired.splice(i, 1);
+    if (tries === 1 || tries % 5 === 0) await flog("error", `Wallet ${g.slot}'s buy of ${name} failed${tx} (try ${tries}): trying again next block at the new price.`);
+  } else await flog("error", `Wallet ${g.slot} couldn't snipe ${name}${tx}: ${e.message.slice(0, 140)}`);
+}
+
+/** Quote and test-run one wallet's PancakeSwap buy. Nothing is sent. Slippage steps are tried together; the tightest one that passes is kept. */
+async function prepareV2Buy(g: Gun, token: `0x${string}`, route: Extract<Route, { kind: "v2" }>, usd: number, useUsdt: boolean, slip: number, bnbUsd: number, aheadUsd = 0): Promise<{ data: `0x${string}`; value: bigint; slip: number; before: bigint; gas: bigint } | { notOpen: string }> {
   const c = pc();
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
   const path = useUsdt ? (route.via === "USDT" ? [USDT, token] : [USDT, WBNB, token]) : route.path;
   const amountIn = useUsdt ? BigInt(Math.floor(usd * 1e6)) * 10n ** 12n : BigInt(Math.floor((usd / bnbUsd) * 1e18));
   const out = (wei: bigint) => (wei > 0n ? c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [wei, route.path] }).then((a: readonly bigint[]) => BigInt(a[a.length - 1])) : Promise.resolve(0n));
   const wei = (u: number) => BigInt(Math.floor((u / bnbUsd) * 1e18));
-  // Your other wallets buy in the same block: quote this one as if it lands last, after all of theirs.
   const [amts, all, prior, alone] = await Promise.all([
     c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [amountIn, path] }),
     aheadUsd > 0 ? out(wei(aheadUsd + usd)).catch(() => 0n) : Promise.resolve(0n),
@@ -304,27 +340,34 @@ async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extr
   ]);
   let quoted = BigInt(amts[amts.length - 1]);
   const [A, P, L] = [BigInt(all), BigInt(prior), BigInt(alone)];
-  if (aheadUsd > 0 && L > 0n && A > P) quoted = (quoted * (A - P)) / L; // ≤ quoted: the price after the others
+  if (aheadUsd > 0 && L > 0n && A > P) quoted = (quoted * (A - P)) / L;
   const value = useUsdt ? 0n : amountIn;
-  let data: `0x${string}` | null = null, used = slip, why = "";
-  for (const sl of [...new Set([slip, Math.min(49, slip + 10), Math.max(slip, 35)])]) {
+  const trials = [...new Set([slip, Math.min(49, slip + 10), Math.max(slip, 35)])];
+  const tried = await Promise.all(trials.map(async (sl) => {
     const minOut = (quoted * BigInt(Math.round((100 - sl) * 100))) / 10_000n;
     const d = useUsdt
       ? encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens", args: [amountIn, minOut, path, g.a.address, deadline] })
       : encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", args: [minOut, path, g.a.address, deadline] });
-    // Test-run: trading not open yet, max-wallet limits, a tax bigger than the slippage… nothing is sent.
-    try { await c.call({ account: g.a.address, to: ROUTER, data: d, value, gas: GAS_LIMIT }); data = d; used = sl; break; } // eslint-disable-line
-    catch (e) {
-      why = String((e as any)?.shortMessage || (e as Error).message).slice(0, 120);
-      if (!/INSUFFICIENT_OUTPUT_AMOUNT|TransferHelper|reverted/i.test(why)) break; // not a slippage problem: stepping up won't help
-    }
-  }
-  if (!data) return { notOpen: why };
-  const before = BigInt(await c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }).catch(() => 0n));
-  const hash = await fire(g, s, { to: ROUTER, data, value }); // throws if no node took it: nothing went out
-  onSend(); // from here a buy is on its way: never fire at this token again on its own
+    try { await c.call({ account: g.a.address, to: ROUTER, data: d, value, gas: GAS_LIMIT }); return { sl, d }; }
+    catch (e) { return { sl, err: String((e as any)?.shortMessage || (e as Error).message).slice(0, 120) }; }
+  }));
+  const hit = tried.find((x): x is { sl: number; d: `0x${string}` } => "d" in x);
+  if (!hit) return { notOpen: tried.map((x) => "err" in x ? x.err : "").find(Boolean) || "refused" };
+  const [before, gas] = await Promise.all([
+    c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [g.a.address] }).then((x: bigint) => BigInt(x)).catch(() => 0n),
+    c.estimateGas({ account: g.a.address, to: ROUTER, data: hit.d, value }).then(padGas).catch(() => BUY_GAS),
+  ]);
+  return { data: hit.d, value, slip: hit.sl, before, gas };
+}
+
+/** One wallet's buy: prepare, sign, send, and wait. Used when a single wallet buys (Copy). Snipes prepare every wallet first, then send them together. */
+async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extract<Route, { kind: "v2" }>, usd: number, useUsdt: boolean, slip: number, bnbUsd: number, dec: number, onSend: () => void, aheadUsd = 0): Promise<{ hash: string; got: number; slip: number } | { notOpen: string }> {
+  const built = await prepareV2Buy(g, token, route, usd, useUsdt, slip, bnbUsd, aheadUsd);
+  if ("notOpen" in built) return built;
+  const hash = await fire(g, s, { to: ROUTER, data: built.data, value: built.value, gas: built.gas });
+  onSend();
   const rc = await receipt(hash);
-  return { hash, got: Number(await received(rc, token, g.a.address, before)) / 10 ** dec, slip: used };
+  return { hash, got: Number(await received(rc, token, g.a.address, built.before)) / 10 ** dec, slip: built.slip };
 }
 
 /**

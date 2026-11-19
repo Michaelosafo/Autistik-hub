@@ -9,6 +9,7 @@ type Act = (name: string, action: string, body: unknown, done?: string) => Promi
 type Asset = { address: string; symbol: string; name: string; decimals: number; raw: string; amount: number; valueUsd: number | null };
 type Holdings = { coin: string; explorer: string; assets: Asset[] };
 type Xfer = { chain: string; coin: string; fromSlot: number; toSlot: number; from: string; to: string; symbol: string; amount: string; gasNative: string; gasUsd: number | null; explorer: string };
+type Withdraw = { slot: number; from: string; to: string; symbol: string; amount: string; gasNative: string; coin: string; gasUsd: number | null };
 type Quote = { via: string; symbolIn: string; symbolOut: string; amountIn: string; amountOut: string; minOut: string; minOutRaw: string; slippageBps: number; impact: number | null; gasUsd: number | null; address: string };
 
 const NETS = [
@@ -31,7 +32,7 @@ async function ask<T>(action: string, body: unknown): Promise<T> {
 export default function SniperWalletTools({ slot, address, others, busy, act }: {
   slot: number; address: string; others: { slot: number; address: string }[]; busy: boolean; act: Act;
 }) {
-  const [open, setOpen] = useState<"send" | "swap" | null>(null);
+  const [open, setOpen] = useState<"send" | "swap" | "withdraw" | null>(null);
   const [chain, setChain] = useState<(typeof NETS)[number]["id"]>("bsc");
   const [hold, setHold] = useState<Holdings | null>(null);
   const [extra, setExtra] = useState("");
@@ -45,6 +46,8 @@ export default function SniperWalletTools({ slot, address, others, busy, act }: 
   const [recv, setRecv] = useState("USDT");
   const [slip, setSlip] = useState(100);
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [dest, setDest] = useState("");
+  const [wd, setWd] = useState<Withdraw | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -67,6 +70,21 @@ export default function SniperWalletTools({ slot, address, others, busy, act }: 
       setXfer(await ask<Xfer>("sniper-transfer-preview", body));
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
+  }
+  async function reviewWithdraw(max: boolean) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(dest.trim())) { setErr("Enter a BNB Chain address (0x and 40 letters)."); return; }
+    setErr(""); setWd(null); setLoading(true);
+    try {
+      if (max) setAmount("");
+      setWd(await ask<Withdraw>("sniper-withdraw-preview", { slot, chain: "bsc", asset, amount: max ? "max" : Number(amount), to: dest.trim() }));
+    } catch (e) { setErr((e as Error).message); }
+    finally { setLoading(false); }
+  }
+  function confirmWithdraw() {
+    if (!wd) return;
+    const body = { slot, chain: "bsc", asset, amount: amount.trim() ? Number(amount) : "max", to: dest.trim() };
+    setWd(null); setOpen(null);
+    act(`wd${slot}`, "sniper-withdraw", body);
   }
   function confirmSend() {
     if (!xfer || !to) return;
@@ -99,17 +117,20 @@ export default function SniperWalletTools({ slot, address, others, busy, act }: 
     <div className="stack" style={{ gap: 6 }}>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         {others.length > 0 && <button type="button" className={"btn small" + (open === "send" ? " primary" : "")} disabled={busy} onClick={() => { setOpen(open === "send" ? null : "send"); setXfer(null); setErr(""); }}>↔ Transfer</button>}
+        <button type="button" className={"btn small" + (open === "withdraw" ? " primary" : "")} disabled={busy} onClick={() => { setChain("bsc"); setOpen(open === "withdraw" ? null : "withdraw"); setWd(null); setErr(""); }}>{busy ? "Working…" : "Withdraw"}</button>
         <button type="button" className={"btn small" + (open === "swap" ? " primary" : "")} disabled={busy} onClick={() => { setOpen(open === "swap" ? null : "swap"); setQuote(null); setErr(""); }}>{busy && open === "swap" ? "Swapping…" : "Swap"}</button>
       </div>
       {open && (
         <div className="stack" style={{ gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px dashed var(--line, rgba(127,127,127,.35))" }}>
-          <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <small><b>Network:</b></small>
-            {NETS.map((n) => <button key={n.id} type="button" className={"btn small" + (chain === n.id ? " primary" : " ghost")} onClick={() => { setChain(n.id); setXfer(null); setQuote(null); setAsset(n.id === "bsc" ? "BNB" : "ETH"); setPay(n.id === "bsc" ? "BNB" : "ETH"); }}>{n.name}</button>)}
-          </div>
+          {open === "withdraw" ? <small className="muted"><b>BNB Chain.</b> Send from this wallet to an address you type. A direct transfer.</small> : (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <small><b>Network:</b></small>
+              {NETS.map((n) => <button key={n.id} type="button" className={"btn small" + (chain === n.id ? " primary" : " ghost")} onClick={() => { setChain(n.id); setXfer(null); setQuote(null); setAsset(n.id === "bsc" ? "BNB" : "ETH"); setPay(n.id === "bsc" ? "BNB" : "ETH"); }}>{n.name}</button>)}
+            </div>
+          )}
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {loading && <small className="muted">Reading balances…</small>}
-            {assets.map((a) => <button key={a.address + a.symbol} type="button" className={"btn small" + ((open === "send" ? asset : pay) === a.symbol ? " primary" : " ghost")} onClick={() => open === "send" ? setAsset(a.symbol) : setPay(a.symbol)}>{a.symbol} {amt(a.amount)}</button>)}
+            {assets.map((a) => <button key={a.address + a.symbol} type="button" className={"btn small" + ((open === "swap" ? pay : asset) === a.symbol ? " primary" : " ghost")} onClick={() => { if (open === "swap") setPay(a.symbol); else { setAsset(a.symbol); setWd(null); } }}>{a.symbol} {amt(a.amount)}</button>)}
           </div>
           <input className="input" style={{ fontFamily: "monospace" }} placeholder="Or paste a token address to include it" value={extra} onChange={(e) => setExtra(e.target.value)} aria-label="Token address" autoComplete="off" spellCheck={false} />
 
@@ -135,6 +156,30 @@ export default function SniperWalletTools({ slot, address, others, busy, act }: 
                   <div className="row" style={{ gap: 6 }}>
                     <button type="button" className="btn small primary" disabled={busy} onClick={confirmSend}>{busy ? "Sending…" : "Confirm send"}</button>
                     <button type="button" className="btn small ghost" onClick={() => setXfer(null)}>Cancel</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {open === "withdraw" && (
+            <>
+              <input className="input" style={{ fontFamily: "monospace" }} placeholder="Send to address 0x…" value={dest} onChange={(e) => { setDest(e.target.value); setWd(null); }} aria-label="Destination address" autoComplete="off" spellCheck={false} />
+              <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <input className="input" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder={`Amount of ${asset}`} value={amount} onChange={(e) => { setAmount(e.target.value); setWd(null); }} aria-label="Amount to withdraw" />
+                <button type="button" className="btn small" disabled={loading || busy || !dest.trim()} onClick={() => reviewWithdraw(false)}>Review</button>
+                <button type="button" className="btn small" disabled={loading || busy || !dest.trim()} onClick={() => reviewWithdraw(true)}>Review max</button>
+              </div>
+              {wd && (
+                <div className="notice stack" style={{ gap: 4 }}>
+                  <b>Confirm withdrawal</b>
+                  <small>Amount: <b>{wd.amount} {wd.symbol}</b></small>
+                  <small>From: wallet #{wd.slot} <span className="mono">{short(wd.from)}</span></small>
+                  <small>To: <span className="mono">{wd.to}</span></small>
+                  <small>Estimated gas: <b>{wd.gasNative} {wd.coin}</b>{wd.gasUsd != null ? ` (≈ $${wd.gasUsd.toFixed(3)})` : ""}{wd.symbol === "BNB" ? ". Max leaves this fee in the wallet." : ""}</small>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button type="button" className="btn small primary" disabled={busy} onClick={confirmWithdraw}>{busy ? "Sending…" : "Confirm withdraw"}</button>
+                    <button type="button" className="btn small ghost" onClick={() => setWd(null)}>Cancel</button>
                   </div>
                 </div>
               )}

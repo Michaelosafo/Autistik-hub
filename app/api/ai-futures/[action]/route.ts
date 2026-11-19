@@ -232,6 +232,18 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (params.action === "sniper-swap-quote") return json(await w.swapQuote(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip));
           return json({ ok: true, note: await w.swapSend(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
         }
+        case "sniper-withdraw-preview":
+        case "sniper-withdraw": {
+          if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
+          const slow = await rateLimit(req, params.action, params.action.endsWith("preview") ? 20 : 8, 60, String(id));
+          if (slow) return slow;
+          const w = await import("@/lib/sniper-wallet");
+          const amount = b.amount === "max" ? "max" as const : Number(b.amount);
+          const asset = String(b.asset || "");
+          const to = String(b.to || "");
+          if (params.action === "sniper-withdraw-preview") return json(await w.withdrawPreview(Number(b.slot), asset, amount, to));
+          return json({ ok: true, note: await w.withdrawSend(Number(b.slot), asset, amount, to) });
+        }
         case "copy-key-remove": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
           const k = await (await import("@/lib/ai-copy")).removeCopyKey(Number(b.slot));

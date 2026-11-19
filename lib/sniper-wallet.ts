@@ -6,6 +6,7 @@
  */
 import { createPublicClient, createWalletClient, erc20Abi, fallback, formatUnits, getAddress, http, isAddress, parseUnits, type Address } from "viem";
 import { MAX_KEYS, SLOTS, copyKey, isEvmAddr, moveTrades } from "@/lib/ai-copy";
+import { logActivity } from "@/lib/activity";
 import { flog } from "@/lib/ai-futures";
 import { T } from "@/lib/ai-trader-ctx";
 import { nativeUsd } from "@/lib/ai-trader-chains";
@@ -268,4 +269,74 @@ export async function swapSend(slot: number, chainKey: string, tokenIn: string, 
   const msg = `Swapped ${shown(raw, inn.decimals)} ${inn.symbol} for at least ${shown(min, out.decimals)} ${out.symbol} in wallet ${slot} (${via}). ${c.explorer}/tx/${hash}`;
   await flog("settings", msg);
   return msg;
+}
+
+const ZERO = "0x0000000000000000000000000000000000000000" as const;
+
+async function logWithdraw(slot: number, text: string, hash: string) {
+  const owner = T() % 100_000;
+  const { data } = await supabaseService().from("ai_trader_settings").select("user_id").eq("id", owner).maybeSingle();
+  logActivity((data as { user_id?: string } | null)?.user_id, "withdraw", text, undefined, { chain: "bsc", tx: hash });
+  await flog("settings", text);
+}
+
+export type WithdrawPreview = {
+  chain: "bsc"; coin: string; slot: number; from: string; to: string;
+  symbol: string; native: boolean; amount: string; raw: string; gasNative: string; gasUsd: number | null; explorer: string;
+};
+
+/** BNB Chain only. Shows the send before anything is broadcast. The destination is the address the admin typed. */
+export async function withdrawPreview(slot: number, asset: string, amount: number | "max", toRaw: string): Promise<WithdrawPreview> {
+  if (!isAddress(String(toRaw || ""))) throw new Error("Enter a BNB Chain address (0x and 40 letters).");
+  const to = getAddress(toRaw);
+  if (to === ZERO) throw new Error("That address is empty.");
+  const c = chainOf("bsc");
+  const from = await own(slot);
+  if (to.toLowerCase() === from.address.toLowerCase()) throw new Error("That is this same wallet.");
+  const held = await resolve(c, from.address, asset);
+  const gasPrice = await gasPriceOf(c);
+  let gas = 21_000n, raw = 0n;
+  if (held.native) {
+    raw = parseAmount(amount, held, gas * gasPrice);
+  } else {
+    raw = parseAmount(amount, held, 0n);
+    const est = await pub(c).estimateContractGas({ account: from.address, address: held.address as Address, abi: ERC20, functionName: "transfer", args: [to, raw] }).catch((e: Error) => {
+      throw new Error(`The token refused the transfer (${(e as { shortMessage?: string }).shortMessage || e.message}).`.slice(0, 180));
+    });
+    gas = (BigInt(est) * 13n) / 10n;
+    const native = await pub(c).getBalance({ address: from.address });
+    if (native < gas * gasPrice) throw new Error(`This wallet needs about ${shown(gas * gasPrice, 18)} BNB for the fee; it has ${shown(native, 18)}.`);
+  }
+  const fee = gas * gasPrice;
+  const feeNum = Number(formatUnits(fee, 18));
+  const usd = await coinUsd("bsc");
+  return {
+    chain: "bsc", coin: "BNB", slot, from: from.address, to, symbol: held.symbol, native: held.native,
+    amount: shown(raw, held.decimals), raw: raw.toString(), gasNative: shown(fee, 18), gasUsd: usd ? feeNum * usd : null, explorer: c.explorer,
+  };
+}
+
+/** Broadcasts the withdrawal. The key never leaves the server. */
+export async function withdrawSend(slot: number, asset: string, amount: number | "max", toRaw: string) {
+  const preview = await withdrawPreview(slot, asset, amount, toRaw);
+  const c = chainOf("bsc");
+  const from = await own(slot);
+  if (getAddress(toRaw).toLowerCase() !== preview.to.toLowerCase()) throw new Error("That address changed. Review it again.");
+  const pc = pub(c);
+  const wc = wallet(c, from);
+  const gasPrice = await gasPriceOf(c);
+  const raw = BigInt(preview.raw);
+  const to = getAddress(preview.to);
+  let hash: `0x${string}`;
+  if (preview.native) hash = await wc.sendTransaction({ account: from, chain: c.viem, to, value: raw, gas: 21_000n, gasPrice });
+  else {
+    const held = await resolve(c, from.address, asset);
+    const est = await pc.estimateContractGas({ account: from.address, address: held.address as Address, abi: ERC20, functionName: "transfer", args: [to, raw] });
+    hash = await wc.writeContract({ account: from, chain: c.viem, address: held.address as Address, abi: ERC20, functionName: "transfer", args: [to, raw], gas: (BigInt(est) * 13n) / 10n, gasPrice });
+  }
+  const rc = await pc.waitForTransactionReceipt({ hash, timeout: 60_000 });
+  if (rc.status !== "success") throw new Error(`The withdrawal failed on-chain: ${c.explorer}/tx/${hash}`);
+  const text = `Withdrew ${preview.amount} ${preview.symbol} from sniper wallet ${slot} (${preview.from.slice(0, 6)}…${preview.from.slice(-4)}) to ${preview.to}.`;
+  await logWithdraw(slot, `${text} ${c.explorer}/tx/${hash}`, hash);
+  return `${text} ${c.explorer}/tx/${hash}`;
 }

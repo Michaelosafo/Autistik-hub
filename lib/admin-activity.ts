@@ -34,10 +34,10 @@ const maskEmail = (e: string | null | undefined) => {
   return `${u.slice(0, 2)}${u.length > 2 ? "…" : ""}@${d}`;
 };
 const ICON: Record<string, string> = {
-  swap: "🔁", liquidity: "💧", "lp-burn": "🔥", launch: "🚀", launchpad: "🛠", lock: "🔒", locker: "🛠",
+  swap: "🔁", liquidity: "💧", "lp-burn": "🔥", launch: "🚀", launchpad: "🛠", lock: "🔒", locker: "🛠", withdraw: "📤",
   search: "🔎", pin: "📌", unpin: "📍", pro: "💎", report: "🤖", alerts: "📲", "momentum-alerts": "⚡",
 };
-const KIND_OF: Record<string, FeedKind> = { swap: "swap", liquidity: "liquidity", "lp-burn": "liquidity", launch: "launch", launchpad: "launch", lock: "lock", locker: "lock" };
+const KIND_OF: Record<string, FeedKind> = { swap: "swap", liquidity: "liquidity", "lp-burn": "liquidity", launch: "launch", launchpad: "launch", lock: "lock", locker: "lock", withdraw: "wallet" };
 
 /** Throws for anyone who isn't the owner with their 2-step code entered. */
 export async function adminActivity(): Promise<AdminActivity> {
