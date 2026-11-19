@@ -30,56 +30,60 @@ const SUPPORT = [
 
 const TRAITS = ["Communication style", "Sensory processing", "Focus and interests", "Routine and predictability"];
 
+/**
+ * Long-form guide. There is no /hike route; this is the page that is mostly paragraphs,
+ * headings and lists, so the reading rhythm lives here.
+ */
 export default function AutismPage() {
   return (
-    <div className="stack" style={{ maxWidth: 860 }}>
+    <div className="read">
       <ProHero tone="rose" kicker="UNDERSTANDING AUTISM" title="Different wavelength. Same channel."
         text="A plain-language guide to what autism is, common misconceptions, and how to be supportive. For anyone who wants to understand."
         stats={[["~1 in 100", "children (WHO)"], ["Lifelong", "not an illness"], ["Spectrum", "not a scale"]]} />
 
-      <div className="card stack">
-        <h2>What autism actually is</h2>
+      <section className="card prose" aria-labelledby="what-autism">
+        <h2 id="what-autism">What autism actually is</h2>
         <p>Autism is a lifelong, natural difference in how the brain processes information, communicates and experiences the world. It is there from early life. It isn&apos;t something you catch, and it isn&apos;t something to cure.</p>
         <p>&quot;Spectrum&quot; doesn&apos;t mean a line from mild to severe. It means many traits that combine differently in each person, such as:</p>
-        <div className="traits" style={{ marginTop: 0, ["--cs" as any]: "var(--violet-soft)" }}>{TRAITS.map((t) => <span key={t}>{t}</span>)}</div>
+        <div className="traits read-pills" style={{ ["--cs" as string]: "var(--violet-soft)" }}>{TRAITS.map((t) => <span key={t}>{t}</span>)}</div>
         <p>Two autistic people can look very different, and both are autistic.</p>
-      </div>
+      </section>
 
-      <div className="card stack">
-        <h2>Common misconceptions worth retiring</h2>
-        <div className="grid2" style={{ gap: 12 }}>
+      <section className="card prose" aria-labelledby="myths">
+        <h2 id="myths">Common misconceptions worth retiring</h2>
+        <div className="myths">
           {MYTHS.map((m) => (
-            <div key={m.myth} className="stack" style={{ gap: 4, padding: 14, borderRadius: 12, background: "var(--surface-2)" }}>
-              <b>{m.myth}</b>
-              <p className="muted" style={{ fontSize: ".94em" }}>{m.truth}</p>
-            </div>
+            <article key={m.myth} className="myth">
+              <h3>{m.myth}</h3>
+              <p className="muted">{m.truth}</p>
+            </article>
           ))}
         </div>
+      </section>
+
+      <div className="read-split">
+        <section className="card prose" aria-labelledby="facts">
+          <h2 id="facts">Important facts</h2>
+          <ul className="prose-list">{FACTS.map((f) => <li key={f}>{f}</li>)}</ul>
+          <p className="muted"><b>A note on words:</b> some people say &quot;autistic person&quot;, others say &quot;person with autism&quot;. Use the words each person uses for themselves.</p>
+        </section>
+        <section className="card prose" aria-labelledby="support">
+          <h2 id="support">How to be supportive</h2>
+          <ul className="prose-list">{SUPPORT.map((s) => <li key={s}>{s}</li>)}</ul>
+        </section>
       </div>
 
-      <div className="grid2" style={{ alignItems: "start" }}>
-        <div className="card stack">
-          <h2>Important facts</h2>
-          <ul className="stack" style={{ margin: 0, paddingLeft: 18, gap: 6 }}>{FACTS.map((f) => <li key={f}>{f}</li>)}</ul>
-          <p className="muted" style={{ fontSize: ".9em" }}><b>A note on words:</b> some people say &quot;autistic person&quot;, others say &quot;person with autism&quot;. Use the words each person uses for themselves.</p>
-        </div>
-        <div className="card stack">
-          <h2>How to be supportive</h2>
-          <ul className="stack" style={{ margin: 0, paddingLeft: 18, gap: 6 }}>{SUPPORT.map((s) => <li key={s}>{s}</li>)}</ul>
-        </div>
-      </div>
-
-      <div className="card stack">
-        <h2>Where to learn more</h2>
+      <section className="card prose" aria-labelledby="learn-more">
+        <h2 id="learn-more">Where to learn more</h2>
         <p>Autistic-led organisations and communities are the best place for first-hand, up-to-date views. They are more reliable than any single article, including this one.</p>
         <p>On the Hub, you can ask questions in the <Link href="/community?g=learn">Ask &amp; Learn</Link> group, join a <Link href="/sessions">live session</Link> with verified practitioners, or talk things through with <Link href="/companions">Believer or Purity</Link>.</p>
-        <div className="row" style={{ gap: 6 }}>
+        <div className="read-actions">
           <Link className="btn primary" href="/community">Join the community</Link>
           <Link className="btn" href="/fund">AUTISTIK Fund</Link>
         </div>
-      </div>
+      </section>
 
-      <p className="muted" style={{ fontSize: ".82em" }}>This page is general information, not medical advice. If you need support right now, find a helpline near you at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</p>
+      <p className="read-note muted">This page is general information, not medical advice. If you need support right now, find a helpline near you at <a href="https://findahelpline.com" target="_blank" rel="noopener noreferrer">findahelpline.com</a>.</p>
     </div>
   );
 }
