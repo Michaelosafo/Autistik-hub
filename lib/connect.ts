@@ -20,41 +20,33 @@ type Detected = { info: WalletInfo; provider: any };
  * link at the wallet's own app (an Android intent with its package) opens ONLY the wallet; if it isn't installed,
  * the phone goes to its Play Store page.
  */
-const ONE_APP: { test: RegExp; scheme: string; pkg: string }[] = [
-  { test: /bitkeep:|bkcode\.vip/i, scheme: "bitkeep", pkg: "com.bitget.web3" },
-  { test: /trust:|link\.trustwallet\.com/i, scheme: "trust", pkg: "com.wallet.crypto.trustapp" },
-  { test: /metamask:|metamask\.app\.link/i, scheme: "metamask", pkg: "io.metamask" },
-  { test: /okex:|okx:|www\.okx\.com/i, scheme: "okex", pkg: "com.okx.wallet" },
-  { test: /bnc:|app\.binance\.com/i, scheme: "bnc", pkg: "com.binance.dev" },
-  { test: /cbwallet:|go\.cb-w\.com/i, scheme: "cbwallet", pkg: "org.toshi" },
-  { test: /phantom:|phantom\.app/i, scheme: "phantom", pkg: "app.phantom" },
-  { test: /safepal/i, scheme: "safepalwallet", pkg: "io.safepal.wallet" },
-  { test: /tokenpocket|tpoutside|tpdapp/i, scheme: "tpoutside", pkg: "vip.mytokenpocket" },
-  { test: /rabby/i, scheme: "rabby", pkg: "io.rabby" },
+const ONE_APP: { test: RegExp; scheme: string; pkg: string; site: string }[] = [
+  // pkg = the app's real Google Play id. A wrong id sends the phone to Play's "Item not found" page.
+  { test: /bitkeep:|bkcode\.vip/i, scheme: "bitkeep", pkg: "com.bitkeep.wallet", site: "https://web3.bitget.com/en/wallet-download" },
+  { test: /trust:|link\.trustwallet\.com/i, scheme: "trust", pkg: "com.wallet.crypto.trustapp", site: "https://trustwallet.com/download" },
+  { test: /metamask:|metamask\.app\.link/i, scheme: "metamask", pkg: "io.metamask", site: "https://metamask.io/download/" },
+  { test: /okex:|okx:|www\.okx\.com/i, scheme: "okex", pkg: "com.okinc.okex.gp", site: "https://www.okx.com/web3" },
+  { test: /bnc:|app\.binance\.com/i, scheme: "bnc", pkg: "com.binance.dev", site: "https://www.binance.com/en/web3wallet" },
+  { test: /cbwallet:|go\.cb-w\.com/i, scheme: "cbwallet", pkg: "org.toshi", site: "https://www.coinbase.com/wallet/downloads" },
+  { test: /phantom:|phantom\.app/i, scheme: "phantom", pkg: "app.phantom", site: "https://phantom.com/download" },
+  { test: /safepal/i, scheme: "safepalwallet", pkg: "io.safepal.wallet", site: "https://www.safepal.com/download" },
+  { test: /tokenpocket|tpoutside|tpdapp/i, scheme: "tpoutside", pkg: "vip.mytokenpocket", site: "https://www.tokenpocket.pro/en/download/app" },
+  { test: /rabby/i, scheme: "rabby", pkg: "com.debank.rabbymobile", site: "https://rabby.io/" },
 ];
-/** Android: open that one wallet app. An https link also offers Chrome, so this uses the app's own scheme and package. */
+/**
+ * Android: open that one wallet app (package-pinned intent, so no "Chrome or wallet?" chooser). If the app isn't
+ * installed, the phone opens the wallet's own link / download page (S.browser_fallback_url) instead of Play.
+ */
 export function pinAndroid(href: string): string {
   if (typeof navigator === "undefined" || !/Android/i.test(navigator.userAgent)) return href;
-  // Force an Android intent with the exact package so only the wallet app opens (no "Choose activity" / Chrome chooser).
   const hit = ONE_APP.find((a) => a.test.test(href));
   if (!hit) return href;
-  // For Bitget on Android the official supported link is https://bkcode.vip. Convert it to a package-pinned intent
-  // so Chrome never appears in the chooser.
-  if (hit.scheme === "bitkeep") {
-    let path = href;
-    if (/^https?:\/\/bkcode\.vip/i.test(href)) {
-      path = href.replace(/^https?:\/\//i, "");
-      return href;
-    }
-    // bitkeep://wc?uri=... style
-    const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
-    return `intent://${q.replace(/^\//, "")}#Intent;scheme=bitkeep;package=${hit.pkg};end`;
-  }
-  // Generic for other wallets
-  let q = href;
-  if (href.includes("wc?")) q = href.slice(href.indexOf("wc?"));
-  else q = href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
-  return `intent://${q.replace(/^\//, "")}#Intent;scheme=${hit.scheme};package=${hit.pkg};end`;
+  const web = /^https?:\/\//i.test(href);
+  const fallback = `S.browser_fallback_url=${encodeURIComponent(web ? href : hit.site)};`;
+  // Bitget's official Android link is https://bkcode.vip: keep it as is, but open it only in the Bitget app.
+  if (web && hit.scheme === "bitkeep") return `intent://${href.replace(/^https?:\/\//i, "")}#Intent;scheme=https;package=${hit.pkg};${fallback}end`;
+  const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  return `intent://${q.replace(/^\//, "")}#Intent;scheme=${hit.scheme};package=${hit.pkg};${fallback}end`;
 }
 
 /** Official Bitget "open this dapp" link. Android only accepts https://bkcode.vip. */
@@ -84,7 +76,7 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => { const q = `open_url?coin_id=20000714&url=${encodeURIComponent(u)}`; return androidScheme("trust", q, "com.wallet.crypto.trustapp", "https://trustwallet.com/download", `trust://${q}`); } },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => { const path = `dapp/${u.replace(/^https?:\/\//, "")}`; return androidScheme("metamask", path, "io.metamask", "https://metamask.io/download/", `metamask://${path}`); } },
   { id: "binance", native: "bnc://app.binance.com/cedefi/", name: "Binance Wallet", rdns: ["com.binance.wallet", "com.binance"], color: "#F0B90B", install: "https://www.binance.com/en/web3wallet", wc: "https://app.binance.com/cedefi", dapp: (u) => { const q = `app.binance.com/cedefi/dapp?url=${encodeURIComponent(u)}`; return androidScheme("bnc", q, "com.binance.dev", "https://www.binance.com/en/web3wallet", `bnc://${q}`); } },
-  { id: "okx", native: "okex://main", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", wc: "okex://main", dapp: (u) => { const q = `wallet/dapp/url?dappUrl=${encodeURIComponent(u)}`; return androidScheme("okx", q, "com.okx.wallet", "https://www.okx.com/web3", `okx://${q}`); } },
+  { id: "okx", native: "okex://main", name: "OKX Wallet", rdns: ["com.okex.wallet"], color: "#111111", install: "https://www.okx.com/web3", wc: "okex://main", dapp: (u) => { const q = `wallet/dapp/url?dappUrl=${encodeURIComponent(u)}`; return androidScheme("okx", q, "com.okinc.okex.gp", "https://www.okx.com/web3", `okx://${q}`); } },
   { id: "coinbase", name: "Coinbase Wallet", rdns: ["com.coinbase.wallet"], color: "#0052FF", install: "https://www.coinbase.com/wallet/downloads", dapp: (u) => { const q = `dapp?url=${encodeURIComponent(u)}`; return androidScheme("cbwallet", q, "org.toshi", "https://www.coinbase.com/wallet/downloads", `cbwallet://${q}`); } },
   { id: "safepal", native: "safepalwallet://", name: "SafePal", rdns: ["com.safepal"], color: "#4A21EF", install: "https://www.safepal.com/download", wc: "https://link.safepal.io" },
   { id: "tokenpocket", native: "tpoutside://", name: "TokenPocket", rdns: ["pro.tokenpocket"], color: "#2980FE", install: "https://www.tokenpocket.pro/en/download/app", wc: "tpoutside://", dapp: (u) => `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: u }))}` },
