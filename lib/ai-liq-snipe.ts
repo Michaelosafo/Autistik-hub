@@ -71,7 +71,7 @@ const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
  */
 export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 /** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
-const REST_WINDOW_MS = 120_000;
+const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the first wallet got in
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(String(t?.token || "")));
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
 const sellPctOf = (s: FSettings) => Math.min(100, Math.max(5, n((s as any).liq_sell_pct) || 100));
@@ -187,8 +187,8 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   // Only the wallets you picked for this token (none picked = all), minus those that already sent their buy.
   const pick = Array.isArray(t.wallets) && t.wallets.length ? new Set(t.wallets.map(Number)) : null;
   const already = new Set((t.fired || []).map(Number));
-  // A wallet whose buy just reverted waits ~1 s before the next try (so a revert loop doesn't burn gas every block).
-  const cooling = (g: Gun) => Date.now() - (chainFails.get(`${T()}|${t.token.toLowerCase()}|${g.slot}`)?.at || 0) < 1000;
+  // A wallet whose buy just reverted tries again on the next block (~0.4 s): fast, without firing twice into one block.
+  const cooling = (g: Gun) => Date.now() - (chainFails.get(`${T()}|${t.token.toLowerCase()}|${g.slot}`)?.at || 0) < 400;
   const left = (pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns).filter((g) => !already.has(g.slot));
   const guns = left.filter((g) => !cooling(g));
   const fired: number[] = [], ok: number[] = [];
@@ -275,7 +275,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
         chainFails.set(key, { n: tries, at: Date.now() });
         const i = fired.indexOf(g.slot);
         if (i >= 0) fired.splice(i, 1);
-        if (tries === 1 || tries % 5 === 0) await flog("error", `Wallet ${g.slot}'s buy of ${name} reverted on-chain (try ${tries}): trying again every second at the new price.`);
+        if (tries === 1 || tries % 5 === 0) await flog("error", `Wallet ${g.slot}'s buy of ${name} reverted on-chain (try ${tries}): trying again next block at the new price.`);
       } else await flog("error", `Wallet ${g.slot} couldn't snipe ${name}: ${(e as Error).message.slice(0, 160)}`);
       return false;
     }
