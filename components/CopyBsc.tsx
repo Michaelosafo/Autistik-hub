@@ -15,9 +15,11 @@ const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 type Held = { coin: string; why?: string | null; copy_slot?: number | null; size?: number | null; venue?: string };
 type Tf = { from: number; to: number | null; asset: string; other: string; amt: string };
 
-export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: {
+export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, part }: {
   s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number; copy_key_usd?: Record<string, number>; snipe_usd?: number; snipe_amounts?: Record<string, Record<string, number>> }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
   busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean; held?: Held[];
+  /** Sniper tabs: only the wallet cards, or only the speed settings (none = both). */
+  part?: "wallets" | "settings";
 }) {
   // Moving money between your own wallets: one wallet's panel open at a time.
   const [tf, setTf] = useState<Tf | null>(null);
@@ -77,7 +79,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
   };
 
   return (
-    <section className="card stack">
+    <section className={"card stack" + (sniper ? " snp-card" : "")}>
+      {part !== "settings" && <>
       {!sniper && <>
       <b>🟡 Wallets to copy (BNB Chain)</b>
       <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); add(); }}>
@@ -110,16 +113,16 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
       {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const free = ks.find((k) => !k.address); return [...(free ? [free] : []), ...ks.filter((k) => k.address)]; })().map((k) => (
         <Fragment key={k.slot}>
       {sniper && k.slot === mine[0]?.slot && (
-        <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="row snp-nets" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           <small className="muted">Network:</small>
           {([["bsc", "BNB"], ["ethereum", "ETH"], ["base", "Base"], ["arbitrum", "Arb"], ["solana", "SOL"]] as const).map(([id, nm]) => (
-            <button key={id} type="button" className={"btn small" + (net === id ? " primary" : " ghost")} style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => setNet(id)}>{nm}</button>
+            <button key={id} type="button" data-net={id} className={"snp-net" + (net === id ? " on" : "")} onClick={() => setNet(id)}>{nm}</button>
           ))}
           <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"}</small>
         </div>
       )}
-        <div className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
-          <small>{k.address ? <b>Wallet {k.slot}</b> : <><b>＋ Add a wallet</b> <span className="muted">(becomes wallet {k.slot})</span></>}</small>
+        <div className={"stack" + (sniper ? " snp-wcard" + (k.address ? "" : " add") : "")} data-net={sniper ? net : undefined} style={sniper ? undefined : { gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
+          <small>{k.address ? <><b>Wallet {k.slot}</b>{sniper && <span className="snp-chip" data-net={net}>{net === "bsc" ? "BNB Chain" : net === "ethereum" ? "Ethereum" : net === "base" ? "Base" : net === "arbitrum" ? "Arbitrum" : "Solana"}</span>}</> : <><b>＋ Add a wallet</b> <span className="muted">(becomes wallet {k.slot})</span></>}</small>
           {k.address ? (
             <>
               {!sniper && <code style={{ wordBreak: "break-all" }}>{k.address}</code>}
@@ -202,7 +205,9 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
       ))}
       {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live (top of the page) once {mine.length ? "your wallet holds BNB" : "you've created or added a wallet and sent it BNB"}.</small>}
 
-      <b style={{ marginTop: 8 }}>⚡ Speed and bot protection</b>
+      </>}
+      {part !== "wallets" && <>
+      <b style={{ marginTop: part === "settings" ? 0 : 8 }}>⚡ Speed and bot protection</b>
       <small className="muted">{sniper ? "Gas speed decides who lands first in the block when liquidity arrives: Turbo or Max for hot launches." : "Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away."}</small>
       <label className="ait-check" style={{ margin: 0 }}>
         <input type="checkbox" checked={s.copy_mev !== false} disabled={!!busy} onChange={(e) => set({ copy_mev: e.target.checked }, e.target.checked ? "MEV protection on: buys and sells go through PancakeSwap MEV Guard, hidden from sandwich bots." : "MEV protection off: trades go to the public mempool.")} />
@@ -236,6 +241,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
           <button type="button" className="btn small" disabled={!!busy} onClick={() => { const x = prompt(`${l} (${unit}):`, String(v ?? "")); if (x != null && isFinite(Number(x)) && Number(x) > 0) set({ [k]: Number(x) }); }}>Change</button>
         </div>
       ))}
+      </>}
       </>}
     </section>
   );
