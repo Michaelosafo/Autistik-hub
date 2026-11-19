@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 
-type Target = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[] };
+type Target = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 type S = { liq_targets?: Target[]; liq_x?: number; liq_sell_pct?: number; liq_slip?: number; liq_tp_on?: boolean; snipe_usd?: number; copy_key_usd?: Record<string, number>; enabled: boolean; mode: string; last_note?: string | null };
 const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -91,13 +91,15 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
       {!list.length && <small className="muted">No tokens yet.</small>}
       {list.map((t) => {
         const st = t.state || "waiting";
+        // Some picked wallets already bought, the rest are still trying.
+        const part = st === "waiting" && (t.fired || []).length ? ` · ✅ ${t.fired!.map((x) => `#${x}`).join(" + ")} bought, rest trying` : "";
         return (
           <div key={t.token} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <span className="chip">{st === "done" ? "✅ Bought" : st === "failed" ? "⚠ Stopped" : t.on === false ? "⏸ Paused" : s.enabled ? "⏳ Waiting" : "⏹ Stopped"} · {t.label || short(t.token)}{t.usd ? ` · $${t.usd}` : ""} · {who(t.wallets)}</span>
+            <span className="chip">{st === "done" ? "✅ Bought" : st === "failed" ? "⚠ Stopped" : t.on === false ? "⏸ Paused" : s.enabled ? "⏳ Waiting" : "⏹ Stopped"} · {t.label || short(t.token)}{t.usd ? ` · $${t.usd}` : ""} · {who(t.wallets)}{part}</span>
             {slots.length > 1 && <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => setEditing(editing === t.token ? null : t.token)}>Wallets</button>}
             <a className="muted" href={`https://bscscan.com/token/${t.token}`} target="_blank" rel="noreferrer"><small>BscScan</small></a>
             {st === "waiting" && <button type="button" className="btn small" disabled={!!busy} onClick={() => save(list.map((x) => (x === t ? { ...x, on: x.on === false } : x)))}>{t.on === false ? "Resume" : "Pause"}</button>}
-            {st !== "waiting" && <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Arm ${t.label || short(t.token)} again? It will buy again if it can be bought.`)) save(list.map((x) => (x === t ? { ...x, state: "waiting", on: true } : x))); }}>Arm again</button>}
+            {st !== "waiting" && <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Arm ${t.label || short(t.token)} again? It will buy again if it can be bought.`)) save(list.map((x) => (x === t ? { ...x, state: "waiting", on: true, fired: undefined, first_at: undefined } : x))); }}>Arm again</button>}
             <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => save(list.filter((x) => x !== t))}>Remove</button>
             {editing === t.token && (
               <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center", width: "100%" }}>

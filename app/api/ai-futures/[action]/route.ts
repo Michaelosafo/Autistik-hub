@@ -95,6 +95,9 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 on: t?.on !== false, state: ["waiting", "done", "failed"].includes(t?.state) ? t.state : "waiting", added: String(t?.added || new Date().toISOString()),
                 // Which wallets snipe it (1–10); none = all.
                 wallets: Array.isArray(t?.wallets) ? [...new Set(t.wallets.map(Number).filter((x: number) => x >= 1 && x <= 10))].sort((a: number, b: number) => a - b) : undefined,
+                // Wallets that already sent their buy (kept so they never buy twice) and when the first did.
+                fired: Array.isArray(t?.fired) ? [...new Set(t.fired.map(Number).filter((x: number) => x >= 1 && x <= 10))].sort((a: number, b: number) => a - b) : undefined,
+                first_at: t?.first_at && !isNaN(Date.parse(t.first_at)) ? String(t.first_at) : undefined,
               })).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(t.token) && !seen.has(t.token.toLowerCase()) && seen.add(t.token.toLowerCase())).slice(0, 30);
             }
           }

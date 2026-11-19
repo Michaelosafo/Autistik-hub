@@ -65,8 +65,13 @@ const pc = () => (client ||= createPublicClient({ chain: bsc, batch: { multicall
 const WSS = [process.env.COPY_BSC_WSS, "wss://bsc-rpc.publicnode.com"].filter(Boolean) as string[];
 const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 
-/** wallets: which of your wallets (slots 1–10) snipe this token; missing / empty = all of them. */
-export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[] };
+/**
+ * wallets: which of your wallets (slots 1–10) snipe this token; missing / empty = all of them.
+ * fired: wallets that already sent their buy for it (never fire again on their own); first_at: when the first went out.
+ */
+export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
+/** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
+const REST_WINDOW_MS = 120_000;
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(String(t?.token || "")));
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
 const sellPctOf = (s: FSettings) => Math.min(100, Math.max(5, n((s as any).liq_sell_pct) || 100));
@@ -175,11 +180,13 @@ async function receipt(hash: string) {
 }
 
 /** Snipe one token from every wallet at once. Returns how many wallets bought (0: not tradable yet → try next block). */
-async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean }> {
+async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] }> {
   const c = pc();
-  // Only the wallets you picked for this token (none picked = all).
+  // Only the wallets you picked for this token (none picked = all), minus those that already sent their buy.
   const pick = Array.isArray(t.wallets) && t.wallets.length ? new Set(t.wallets.map(Number)) : null;
-  const guns = pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns;
+  const already = new Set((t.fired || []).map(Number));
+  const guns = (pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns).filter((g) => !already.has(g.slot));
+  const fired: number[] = [], ok: number[] = [];
   if (s.mode === "live" && !guns.length) return { bought: 0, why: `none of the wallets picked for it (${[...(pick || [])].map((x) => `#${x}`).join(", ")}) exist any more` };
   const token = getAddress(t.token);
   const bnbUsd = await bnbPrice();
@@ -215,11 +222,12 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
         const w = { evm: g.a, sol: null };
         const bnb = Math.min(amtFor(g.slot) / bnbUsd, g.bnb - gasKeep(s));
         if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
-        mine = sent = true;
+        mine = sent = true; fired.push(g.slot);
         const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
         g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }));
         if (!(r.raw > 0n)) throw new Error("no coins arrived");
         await record(s, t, name, bnb * bnbUsd, Number(r.raw) / 10 ** r.decimals, r.hash, g.slot, "BNB", route);
+        ok.push(g.slot);
         await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${bnb.toFixed(4)} BNB ($${(bnb * bnbUsd).toFixed(2)}) on PancakeSwap v3. https://bscscan.com/tx/${r.hash}`);
         return true;
       }
@@ -233,11 +241,12 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
       if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return false; }
       if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return false; }
       usd = +usd.toFixed(2);
-      const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; });
+      const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; fired.push(g.slot); });
       if ("notOpen" in r) { notOpen = r.notOpen; return false; }
       const { hash, got } = r;
       if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
       await record(s, t, name, usd, got, hash, g.slot, useUsdt ? "USDT" : "BNB", route);
+      ok.push(g.slot);
       await flog("open", `⚡ Wallet ${g.slot} sniped ${name} for ${useUsdt ? `$${usd.toFixed(2)} USDT` : `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})`} the moment it could be bought${usd < amt * 0.95 ? ` (all it had, minus the buy's gas)` : ""}. https://bscscan.com/tx/${hash}`);
       // Ready to sell fast later: approve the router for this coin now (in the background).
       approveForSell(g, s, token).catch(() => {});
@@ -250,7 +259,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     }
   }));
   const bought = done.filter(Boolean).length;
-  return { bought, sent, why: bought ? "" : notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.length ? `not enough money: ${short.join("; ")}` : "no wallet could buy" };
+  return { bought, sent, fired, ok, why: bought ? "" : notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.length ? `not enough money: ${short.join("; ")}` : "no wallet could buy" };
 }
 
 /**
@@ -473,24 +482,52 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   let tick: (() => void) | null = null, lastExit = 0, lastCheck = 0, pickedUp = false;
   const stop = blocks(() => tick?.());
   // Marks one token done / failed in what's saved now (you may have added tokens since this run started).
-  const mark = async (token: string, state: "done" | "failed") => {
+  const mark = async (t: LiqTarget) => {
     const { data } = await sb().from("ai_futures_settings").select("liq_targets").eq("id", T()).maybeSingle();
     const list: LiqTarget[] = Array.isArray(data?.liq_targets) ? data!.liq_targets : [];
-    await sb().from("ai_futures_settings").update({ liq_targets: list.map((x) => (x.token.toLowerCase() === token.toLowerCase() ? { ...x, state } : x)) }).eq("id", T());
+    await sb().from("ai_futures_settings").update({ liq_targets: list.map((x) => (x.token.toLowerCase() === t.token.toLowerCase() ? { ...x, state: t.state, fired: t.fired, first_at: t.first_at } : x)) }).eq("id", T());
   };
+  /** Picked wallets (that still exist) that haven't sent their buy for this token yet. */
+  const rest = (t: LiqTarget) => {
+    const pick = Array.isArray(t.wallets) && t.wallets.length ? new Set(t.wallets.map(Number)) : null;
+    const done = new Set((t.fired || []).map(Number));
+    return guns.filter((g) => (!pick || pick.has(g.slot)) && !done.has(g.slot)).map((g) => g.slot);
+  };
+  const okSlots = new Map<string, Set<number>>(); // token → wallets whose buy went through (this run)
   try {
     while (Date.now() - t0 < 49_000) {
-      const w = s.enabled ? waiting() : [];
+      let w = s.enabled ? waiting() : [];
+      if (live && w.length && guns.length) {
+        // A token whose first buy already went out: stop retrying the rest once the window has passed.
+        for (const t of w) if (t.first_at && Date.now() - Date.parse(t.first_at) > REST_WINDOW_MS) {
+          const left = rest(t);
+          t.state = (t.fired || []).length ? "done" : "failed";
+          if (left.length) await flog("skip", `${t.label || t.token.slice(0, 10)}: wallet ${left.map((x) => `#${x}`).join(" + ")} still couldn't buy ${REST_WINDOW_MS / 60_000} min after the first buy, so it stopped trying (Arm again to retry them).`);
+          await mark(t);
+        }
+        w = waiting();
+      }
       if (w.length && (!live || guns.length)) {
         lastCheck = Date.now();
         const found = await routes(w.map((t) => getAddress(t.token))).catch(() => new Map<string, Route>());
         await Promise.all(w.filter((t) => found.has(t.token.toLowerCase())).map(async (t) => {
-          const r = await snipe(s, t, found.get(t.token.toLowerCase())!, guns).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false }));
-          if (r.bought || r.sent) {
-            // Bought (or a buy was sent and errored): never fire at this token again on its own.
-            t.state = r.bought ? "done" : "failed";
-            if (r.bought) notes.push(`sniped ${t.label || t.token.slice(0, 8)}`);
-            await mark(t.token, t.state);
+          const r: { bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] } = await snipe(s, t, found.get(t.token.toLowerCase())!, guns).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false }));
+          const key = t.token.toLowerCase();
+          if (r.ok?.length) { const set = okSlots.get(key) || new Set<number>(); r.ok.forEach((x) => set.add(x)); okSlots.set(key, set); }
+          if (!live && r.bought) {
+            t.state = "done"; notes.push(`sniped ${t.label || t.token.slice(0, 8)}`); await mark(t);
+          } else if (r.fired?.length || r.bought || r.sent) {
+            // Every wallet that sent its buy never fires at this token again; the others keep trying next block.
+            t.fired = [...new Set([...(t.fired || []), ...(r.fired || [])])].sort((a, b) => a - b);
+            t.first_at ||= new Date().toISOString();
+            if (r.bought) notes.push(`sniped ${t.label || t.token.slice(0, 8)} with wallet ${(r.ok || []).map((x) => `#${x}`).join(" + ")}`);
+            const left = rest(t);
+            const late = Date.now() - Date.parse(t.first_at) > REST_WINDOW_MS;
+            if (!left.length || late) {
+              t.state = r.bought || (okSlots.get(key)?.size ?? 0) > 0 ? "done" : "failed";
+              if (left.length) await flog("skip", `${t.label || t.token.slice(0, 10)}: wallet ${left.map((x) => `#${x}`).join(" + ")} still couldn't buy ${REST_WINDOW_MS / 60_000} min after the first buy, so it stopped trying (Arm again to retry them).`);
+            }
+            await mark(t);
           } else if (Date.now() - (failing.get(t.token) || 0) > 60_000) {
             failing.set(t.token, Date.now());
             await flog("skip", `${t.label || t.token.slice(0, 10)}: ${r.why}. Trying again every block.`);
