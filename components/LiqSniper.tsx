@@ -1,21 +1,38 @@
 "use client";
 /**
- * BSC Sniper: the tokens to snipe (paste contract addresses before launch) and when to sell.
- * Wallets, gas speed, MEV protection and the trades card are Copy's (shared component).
+ * Sniper: paste a token address. The chain is detected (Solana mint, or which EVM chain has the contract).
+ * The buy is in that chain's coin, from each wallet's address on that chain.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-type Target = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
+type Target = { token: string; chain?: string; pay?: string; amount?: number; prio?: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 type S = { liq_targets?: Target[]; liq_x?: number; liq_sell_pct?: number; liq_slip?: number; liq_tp_on?: boolean; snipe_usd?: number; copy_key_usd?: Record<string, number>; enabled: boolean; mode: string; last_note?: string | null };
-const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
-const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+type Hit = { id: string; name: string; symbol: string; hasCode: boolean; hasPool: boolean; liquidityUsd: number };
+type Ready = { slot: number; address: string | null; balance: number | null; unit: string; need: number; ok: boolean; reason: string };
+const short = (a: string) => a.startsWith("0x") ? `${a.slice(0, 6)}…${a.slice(-4)}` : `${a.slice(0, 4)}…${a.slice(-4)}`;
+const EXPL: Record<string, string> = { bsc: "https://bscscan.com/token/", ethereum: "https://etherscan.io/token/", base: "https://basescan.org/token/", arbitrum: "https://arbiscan.io/token/", solana: "https://solscan.io/token/" };
+
+async function ask<T>(action: string, body: unknown): Promise<T> {
+  const r = await fetch(`/api/ai-futures/${action}?desk=liq`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || "Something went wrong.");
+  return d as T;
+}
 
 export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string; set: (b: any, done?: string) => Promise<void>; slots: number[] }) {
   const [ca, setCa] = useState(""), [label, setLabel] = useState(""), [amt, setAmt] = useState(""), [err, setErr] = useState("");
+  const [hits, setHits] = useState<Hit[]>([]);
+  const [chain, setChain] = useState("");
+  const [pay, setPay] = useState<"native" | "usdt" | "usdc">("native");
+  const [prio, setPrio] = useState<"low" | "med" | "high" | "max">("high");
+  const [ready, setReady] = useState<Ready[]>([]);
+  const [making, setMaking] = useState(0);
+  const [checking, setChecking] = useState(false);
+  const [noFundsOpen, setNoFundsOpen] = useState(false);
+  const [reload, setReload] = useState(0);
   // Wallets picked for the token being added (empty = all).
   // Wallets for the token being added: null = not chosen yet (required when you have more than one), "all", or a list.
   const [pick, setPick] = useState<number[] | "all" | null>(null);
-  const needPick = slots.length > 1 && pick === null;
   const pickList = Array.isArray(pick) ? pick : [];
   const [editing, setEditing] = useState<string | null>(null);
   const who = (w?: number[]) => (w && w.length && w.length < slots.length ? `wallet ${w.map((x) => `#${x}`).join(" + ")}` : "all wallets");
@@ -24,67 +41,136 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
   const save = (next: Target[], done?: string) => set({ liq_targets: next }, done);
   const per = Number(s.snipe_usd || 5), x = Number(s.liq_x || 2), pct = Number(s.liq_sell_pct || 100), slip = Number(s.liq_slip || 20), tp = s.liq_tp_on !== false;
   // Each wallet's own $ per snipe (the same amounts as on the wallet cards below); none = the normal amount.
-  const amounts = s.copy_key_usd || {};
-  const own = (w: number) => Number(amounts[String(w)] || 0);
-  const amtOf = (w: number) => (own(w) > 0 ? own(w) : per);
-  const setOwn = (w: number) => {
-    const v = prompt(`$ wallet #${w} spends on each snipe. Leave empty to use the normal amount ($${per}):`, own(w) > 0 ? String(own(w)) : "");
-    if (v == null) return;
-    const next = { ...amounts };
-    if (Number(v) >= 0.5) next[String(w)] = Number(v); else delete next[String(w)];
-    set({ copy_key_usd: next }, Number(v) >= 0.5 ? `Wallet #${w} now snipes $${Number(v)} each time.` : `Wallet #${w} snipes the normal amount ($${per}).`);
-  };
   const typed = Number(amt) > 0 ? Number(amt) : 0;
-  // The wallets that will buy the token being added: the ones tapped, or all.
-  const shown = slots.length <= 1 ? slots : pick === "all" ? slots : pickList;
+  const hit = hits.find((h) => h.id === chain) || hits[0];
+  const unit = pay === "native" ? (hit?.symbol || "BNB") : pay.toUpperCase();
+  const pays = (id: string) => id === "base" ? ["native", "usdc"] as const : ["native", "usdt", "usdc"] as const;
+
+  useEffect(() => {
+    const raw = ca.trim();
+    if (raw.length < 32) { setHits([]); setChain(""); setChecking(false); setReady([]); return; }
+    setChecking(true);
+    const t = setTimeout(() => {
+      ask<{ hits: Hit[]; suggested: string | null }>("sniper-detect", { token: raw }).then((d) => {
+        const next = d.hits || [];
+        setHits(next);
+        setChain((cur) => {
+          if (cur && next.some((h) => h.id === cur)) return cur;
+          const suggested = d.suggested || "";
+          if (suggested !== cur) { setPay("native"); setPick(null); }
+          return suggested;
+        });
+      }).catch(() => { setHits([]); setChain(""); }).finally(() => setChecking(false));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [ca]);
+
+  useEffect(() => {
+    if (!chain) { setReady([]); return; }
+    let gone = false;
+    ask<{ wallets: Ready[] }>("sniper-ready", { chain, pay, amount: typed, slots }).then((d) => {
+      if (gone) return;
+      const wallets = d.wallets || [];
+      setReady(wallets);
+      const funded = wallets.filter((w) => w.address && (typed > 0 ? w.ok : (w.balance || 0) > 0)).map((w) => w.slot);
+      setPick((cur) => {
+        if (funded.length === 1) return funded;
+        if (Array.isArray(cur)) { const keep = cur.filter((s) => funded.includes(s)); return keep.length ? keep : null; }
+        return null;
+      });
+    }).catch(() => {});
+    return () => { gone = true; };
+  }, [chain, pay, typed, slots.join(","), reload]);
 
   const add = () => {
-    const m = ca.trim().match(/0x[0-9a-fA-F]{40}/); // pasted links (BscScan, DexScreener…) work too
-    const a = m ? m[0] : "";
-    if (!isAddr(a)) { setErr("Paste the token's contract address (0x followed by 40 letters / numbers)."); return; }
-    if (list.some((t) => t.token.toLowerCase() === a.toLowerCase())) { setErr("That token is already on the list."); return; }
-    if (needPick) { setErr("Choose which wallet(s) snipe this token first (tap #1, #2… or All)."); return; }
-    const usd = Number(amt);
-    setErr(""); setCa(""); setLabel(""); setAmt("");
-    const w = pickList.length && pickList.length < slots.length ? [...pickList] : undefined;
-    setPick(null); // every new token gets its own choice
-    save([...list, { token: a, label: label.trim() || undefined, usd: usd > 0 ? usd : undefined, on: true, state: "waiting", added: new Date().toISOString(), wallets: w }],
-      `Waiting for liquidity on ${label.trim() || short(a)} with ${who(w)}. It buys within a block of liquidity landing${s.enabled ? "" : " (press ▶ START)"}.`);
+    const m = ca.trim().match(/0x[0-9a-fA-F]{40}/);
+    const sol = !m && ca.trim().match(/[1-9A-HJ-NP-Za-km-z]{32,44}/);
+    const a = m ? m[0] : sol ? sol[0] : "";
+    if (!a || !chain) { setErr("Paste a token address. We'll detect the chain (a Solana mint, or an 0x contract)."); return; }
+    const dup = (t: string) => t.startsWith("0x") ? t.toLowerCase() === a.toLowerCase() : t === a;
+    if (list.some((t) => dup(t.token))) { setErr("That token is already on the list."); return; }
+    if (pickList.length === 0) { setErr("Tick the wallets that should buy it."); return; }
+    if (!(typed > 0)) { setErr(`Type how much ${unit} each wallet spends.`); return; }
+    setErr(""); setCa(""); setLabel(""); setAmt(""); setHits([]); setChain("");
+    const w = [...pickList];
+    setPick(null);
+    const where = hit?.name || chain;
+    save([...list, { token: a, chain, pay, amount: typed, prio: chain === "solana" ? prio : undefined, label: label.trim() || undefined, on: true, state: "waiting", added: new Date().toISOString(), wallets: w }],
+      `Waiting on ${where} for ${label.trim() || short(a)} with ${who(w)}. Each wallet spends ${typed} ${unit}${s.enabled ? "" : " (press ▶ START)"}.`);
   };
+
+  const funded = ready.filter((w) => w.address && (typed > 0 ? w.ok : (w.balance || 0) > 0));
+  const broke = ready.filter((w) => w.address && !funded.some((f) => f.slot === w.slot));
+  const missing = ready.filter((w) => !w.address);
+
+  async function makeSol(slot: number) {
+    setMaking(slot); setErr("");
+    try { await ask("sniper-sol-create", { slot }); setReload((n) => n + 1); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setMaking(0); }
+  }
 
   return (
     <section className="card stack">
       <b>🎯 Tokens to snipe</b>
-      <small className="muted">Paste the contract address the team shared before launch. When their liquidity lands on PancakeSwap, your wallets buy in the next block.</small>
+      <small className="muted">Paste a token address. The chain is detected on its own, and the wallets below switch to that chain.</small>
       <form className="stack" style={{ gap: 6 }} onSubmit={(e) => { e.preventDefault(); add(); }}>
-        <input className="input" style={{ fontFamily: "monospace" }} placeholder="Paste token contract address 0x…" value={ca} onChange={(e) => { setCa(e.target.value); setErr(""); }} aria-label="Token contract address" autoComplete="off" spellCheck={false} />
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <input className="input" style={{ flex: "1 1 120px" }} placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={24} aria-label="Name" />
-          <input className="input" style={{ flex: "0 1 130px" }} inputMode="decimal" placeholder="$ (optional)" value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars per wallet for this token only (optional)" />
-          <button type="submit" className="btn primary" disabled={!!busy || !ca.trim() || needPick}>{needPick ? "Choose wallet(s) below" : `Snipe it${slots.length > 1 ? ` with ${pick === "all" ? "all wallets" : pickList.map((x) => `#${x}`).join(" + ")}` : ""}`}</button>
-        </div>
-        {slots.length > 1 && (
+        <input className="input" style={{ fontFamily: "monospace" }} placeholder="Paste a token address (0x… or a Solana mint)" value={ca} onChange={(e) => { setCa(e.target.value); setErr(""); }} aria-label="Token address" autoComplete="off" spellCheck={false} />
+        {(checking || hit) && (
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            <small><b>Which wallet snipes it:</b></small>
-            {slots.map((x) => <button key={x} type="button" className={"btn small" + (pickList.includes(x) ? " primary" : " ghost")} onClick={() => { const next = toggle(pickList, x); setPick(next.length ? next : null); }} aria-pressed={pickList.includes(x)}>#{x} · ${typed || amtOf(x)}</button>)}
-            <button type="button" className={"btn small" + (pick === "all" ? " primary" : " ghost")} onClick={() => setPick(pick === "all" ? null : "all")} aria-pressed={pick === "all"}>All</button>
-            <small className={needPick ? "aic-warn" : "muted"}>{needPick ? "tap the wallet(s) for this token" : pick === "all" ? "every wallet" : `only ${pickList.map((x) => `#${x}`).join(" + ")}`}</small>
+            {checking && !hit && <span className="chip">Checking chain…</span>}
+            {hit && <span className="chip" style={{ fontWeight: 700 }}>{hit.name}{hit.hasPool ? " · pool" : hit.hasCode ? " · contract" : ""}</span>}
+            {hits.length > 1 && hits.map((h) => (
+              <button key={h.id} type="button" className={"btn small" + (chain === h.id ? " primary" : " ghost")} onClick={() => { setChain(h.id); setPay("native"); setPick(null); }}>{h.name}</button>
+            ))}
           </div>
         )}
-        {shown.length > 0 && (
-          <div className="stack" style={{ gap: 4 }}>
-            {typed > 0
-              ? <small className="muted">This token only: each wallet buys <b>${typed}</b> (clear the $ box to use each wallet&apos;s own amount).</small>
-              : <>
-                  {shown.map((w) => (
-                    <div key={w} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      <small>💵 Wallet #{w} buys <b>${amtOf(w)}</b> <span className="muted">{own(w) > 0 ? "(its own amount)" : "(normal amount)"}</span></small>
-                      <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => setOwn(w)}>Change</button>
+        {!checking && ca.trim().length >= 32 && hits.length === 0 && <small className="aic-warn">No contract found on BNB Chain, Ethereum, Base, Arbitrum, or Solana.</small>}
+        {hit && (
+          <>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <small><b>Pay with:</b></small>
+              {pays(chain).map((p) => <button key={p} type="button" className={"btn small" + (pay === p ? " primary" : " ghost")} onClick={() => setPay(p)}>{p === "native" ? hit.symbol : p.toUpperCase()}</button>)}
+            </div>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <input className="input" style={{ flex: "1 1 120px" }} placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={24} aria-label="Name" />
+              <input className="input" style={{ flex: "0 1 140px" }} inputMode="decimal" placeholder={unit} value={amt} onChange={(e) => setAmt(e.target.value)} aria-label={`Amount in ${unit}`} />
+              <small><b>{unit}</b> each</small>
+            </div>
+            {chain === "solana" && (
+              <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <small><b>Priority fee:</b></small>
+                {(["low", "med", "high", "max"] as const).map((p) => <button key={p} type="button" className={"btn small" + (prio === p ? " primary" : " ghost")} onClick={() => setPrio(p)}>{p}</button>)}
+              </div>
+            )}
+            <div className="stack" style={{ gap: 4 }}>
+              <small><b>Wallets on {hit.name}</b></small>
+              {funded.length === 0 && broke.length === 0 && missing.length === 0 && <small className="muted">Reading balances…</small>}
+              {funded.map((w) => (
+                <button key={w.slot} type="button" className={"btn small" + (pickList.includes(w.slot) ? " primary" : " ghost")} style={{ justifyContent: "flex-start" }} onClick={() => { const next = toggle(pickList, w.slot); setPick(next.length ? next : null); }} aria-pressed={pickList.includes(w.slot)}>
+                  #{w.slot} · {(w.balance ?? 0).toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.unit}{w.address ? ` · ${short(w.address)}` : ""}
+                </button>
+              ))}
+              {funded.length > 1 && <button type="button" className="btn small ghost" onClick={() => setPick(pickList.length === funded.length ? null : funded.map((w) => w.slot))}>{pickList.length === funded.length ? "Clear" : "Tick all with funds"}</button>}
+              {(broke.length > 0 || missing.length > 0) && (
+                <div>
+                  <button type="button" className="btn small ghost" onClick={() => setNoFundsOpen((v) => !v)}>{noFundsOpen ? "Hide" : "No funds"} ({broke.length + missing.length})</button>
+                  {noFundsOpen && (
+                    <div className="stack" style={{ gap: 4, opacity: 0.7, marginTop: 4 }}>
+                      {broke.map((w) => <small key={w.slot}>#{w.slot} · {(w.balance ?? 0).toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.unit} · {w.reason}</small>)}
+                      {missing.map((w) => (
+                        <div key={w.slot} className="row" style={{ gap: 6, alignItems: "center" }}>
+                          <small>#{w.slot} · {w.reason}</small>
+                          {chain === "solana" && <button type="button" className="btn small" disabled={!!busy || making === w.slot} onClick={() => makeSol(w.slot)}>{making === w.slot ? "Creating…" : "Add Solana address"}</button>}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  <small className="muted">Total for this token: ${+shown.reduce((a, w) => a + amtOf(w), 0).toFixed(2)}. Saved per wallet, so you set it once.</small>
-                </>}
-          </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <button type="submit" className="btn primary" disabled={!!busy || !chain || pickList.length === 0 || !(typed > 0)}>{pickList.length ? `Snipe with ${pickList.map((x) => `#${x}`).join(" + ")} · ${typed || "…"} ${unit}` : "Tick a wallet with funds"}</button>
+          </>
         )}
       </form>
       {err && <small className="aic-warn" role="alert">{err}</small>}
@@ -95,9 +181,9 @@ export default function LiqSniper({ s, busy, set, slots }: { s: S; busy: string;
         const part = st === "waiting" && (t.fired || []).length ? ` · ✅ ${t.fired!.map((x) => `#${x}`).join(" + ")} bought, rest trying` : "";
         return (
           <div key={t.token} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <span className="chip">{st === "done" ? "✅ Bought" : st === "failed" ? "⚠ Stopped" : t.on === false ? "⏸ Paused" : s.enabled ? "⏳ Waiting" : "⏹ Stopped"} · {t.label || short(t.token)}{t.usd ? ` · $${t.usd}` : ""} · {who(t.wallets)}{part}</span>
+            <span className="chip">{st === "done" ? "✅ Bought" : st === "failed" ? "⚠ Stopped" : t.on === false ? "⏸ Paused" : s.enabled ? "⏳ Waiting" : "⏹ Stopped"} · {t.chain === "solana" ? "Solana" : t.chain === "ethereum" ? "Ethereum" : t.chain === "base" ? "Base" : t.chain === "arbitrum" ? "Arbitrum" : "BNB Chain"} · {t.label || short(t.token)}{t.amount ? ` · ${t.amount} ${t.pay === "usdt" ? "USDT" : t.pay === "usdc" ? "USDC" : t.chain === "solana" ? "SOL" : t.chain === "bsc" || !t.chain ? "BNB" : "ETH"}` : t.usd ? ` · $${t.usd}` : ""} · {who(t.wallets)}{part}</span>
             {slots.length > 1 && <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => setEditing(editing === t.token ? null : t.token)}>Wallets</button>}
-            <a className="muted" href={`https://bscscan.com/token/${t.token}`} target="_blank" rel="noreferrer"><small>BscScan</small></a>
+            <a className="muted" href={`${EXPL[t.chain || "bsc"] || EXPL.bsc}${t.token}`} target="_blank" rel="noreferrer"><small>Explorer</small></a>
             {st === "waiting" && <button type="button" className="btn small" disabled={!!busy} onClick={() => save(list.map((x) => (x === t ? { ...x, on: x.on === false } : x)))}>{t.on === false ? "Resume" : "Pause"}</button>}
             {st !== "waiting" && <button type="button" className="btn small" disabled={!!busy} onClick={() => { if (confirm(`Arm ${t.label || short(t.token)} again? It will buy again if it can be bought.`)) save(list.map((x) => (x === t ? { ...x, state: "waiting", on: true, fired: undefined, first_at: undefined } : x))); }}>Arm again</button>}
             <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => save(list.filter((x) => x !== t))}>Remove</button>

@@ -70,10 +70,12 @@ const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
  * wallets: which of your wallets (slots 1–10) snipe this token; missing / empty = all of them.
  * fired: wallets that already sent their buy for it (never fire again on their own); first_at: when the first went out.
  */
-export type LiqTarget = { token: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
+export type LiqTarget = { token: string; chain?: string; pay?: string; amount?: number; prio?: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 /** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
 const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the first wallet got in
-export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(String(t?.token || "")));
+const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
+export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => isMint(String(t?.token || "")));
+const sameToken = (a: string, b: string) => (a.startsWith("0x") || b.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b);
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
 const sellPctOf = (s: FSettings) => Math.min(100, Math.max(5, n((s as any).liq_sell_pct) || 100));
 const slipOf = (s: FSettings) => Math.min(49, Math.max(3, n((s as any).liq_slip) || 20));
@@ -203,9 +205,11 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   if (s.mode === "live" && !guns.length) return { bought: 0, why: `none of the wallets picked for it (${[...(pick || [])].map((x) => `#${x}`).join(", ")}) exist any more` };
   const token = getAddress(t.token);
   const bnbUsd = await bnbPrice();
-  const usdEach = Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);
+  const pinned = n((t as any).amount);
+  const payKind = String((t as any).pay || "");
+  const usdEach = payKind === "usdt" || payKind === "usdc" ? Math.max(MIN_USD, pinned) : payKind === "native" && pinned > 0 ? Math.max(MIN_USD, pinned * bnbUsd) : Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);
   // Each wallet's $: an amount typed for this token wins, else the wallet's own amount (set on the Sniper), else the normal one.
-  const amtFor = (slot: number) => (n(t.usd) > 0 ? usdEach : Math.max(MIN_USD, keyUsd(s, slot) ?? usdEach));
+  const amtFor = (slot: number) => (pinned > 0 || n(t.usd) > 0 ? usdEach : Math.max(MIN_USD, keyUsd(s, slot) ?? usdEach));
   const slip = slipOf(s);
   const [sym, dec] = await Promise.all([
     c.readContract({ address: token, abi: ERC20, functionName: "symbol" }).catch(() => token.slice(0, 8)),
@@ -230,7 +234,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   const planOf = (g: Gun) => {
     const amt = amtFor(g.slot);
     const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
-    const useUsdt = usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
+    const useUsdt = payKind === "usdt" || payKind === "usdc" ? usdtFree > 0 : usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
     const usd = +Math.min(amt, useUsdt ? usdtFree : bnbFree).toFixed(2);
     const ok = usd >= MIN_USD && !(useUsdt && g.bnb < gasKeep(s));
     return { amt, bnbFree, usdtFree, useUsdt, usd: ok ? usd : 0 };
@@ -507,7 +511,7 @@ async function pickUp(s: FSettings) {
 /** Value of every open snipe straight from the pool (no price site needed); sells at the target or stop. */
 async function watchExits(s: FSettings) {
   const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open").eq("venue", "copy");
-  const open = (data || []) as FPos[];
+  const open = ((data || []) as FPos[]).filter((p) => String(p.coin || "").startsWith("bsc:"));
   if (!open.length) return;
   const c = pc(), bnbUsd = await bnbPrice();
   const decs = new Map<string, number>();
@@ -556,13 +560,13 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   }
   const notes: string[] = [];
   const failing = new Map<string, number>(); // token → last time "can't be bought yet" was logged
-  let tick: (() => void) | null = null, lastExit = 0, lastCheck = 0, pickedUp = false;
+  let tick: (() => void) | null = null, lastExit = 0, lastCheck = 0, lastOther = 0, pickedUp = false;
   const stop = blocks(() => tick?.());
   // Marks one token done / failed in what's saved now (you may have added tokens since this run started).
   const mark = async (t: LiqTarget) => {
     const { data } = await sb().from("ai_futures_settings").select("liq_targets").eq("id", T()).maybeSingle();
     const list: LiqTarget[] = Array.isArray(data?.liq_targets) ? data!.liq_targets : [];
-    await sb().from("ai_futures_settings").update({ liq_targets: list.map((x) => (x.token.toLowerCase() === t.token.toLowerCase() ? { ...x, state: t.state, fired: t.fired, first_at: t.first_at } : x)) }).eq("id", T());
+    await sb().from("ai_futures_settings").update({ liq_targets: list.map((x) => (sameToken(x.token, t.token) ? { ...x, state: t.state, fired: t.fired, first_at: t.first_at } : x)) }).eq("id", T());
   };
   /** Picked wallets (that still exist) that haven't sent their buy for this token yet. */
   const rest = (t: LiqTarget) => {
@@ -601,10 +605,30 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
         }
         w = waiting();
       }
-      if (w.length && (!live || guns.length)) {
+      const others = w.filter((t) => t.chain && t.chain !== "bsc");
+      if (others.length && Date.now() - lastOther >= 4000) {
+        lastOther = Date.now();
+        const { fireChain } = await import("@/lib/sniper-fire");
+        await Promise.all(others.map(async (t) => {
+          const r = await fireChain(s, t).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false as boolean, fired: [] as number[], ok: [] as number[] }));
+          if (r.fired?.length || r.bought || r.sent) {
+            t.fired = [...new Set([...(t.fired || []), ...(r.fired || [])])].sort((a, b) => a - b);
+            t.first_at ||= new Date().toISOString();
+            const left = (Array.isArray(t.wallets) && t.wallets.length ? t.wallets : []).filter((x) => !(t.fired || []).includes(x));
+            if (!left.length || (t.wallets && t.fired && t.fired.length >= t.wallets.length)) t.state = r.bought ? "done" : t.state;
+            if (r.bought) notes.push(`sniped ${t.label || t.token.slice(0, 8)} on ${t.chain}`);
+            await mark(t);
+          } else if (Date.now() - (failing.get(t.token) || 0) > 60_000) {
+            failing.set(t.token, Date.now());
+            await flog("skip", `${t.label || t.token.slice(0, 10)} (${t.chain}): ${r.why}. Trying again.`);
+          }
+        }));
+      }
+      const bscW = w.filter((t) => !t.chain || t.chain === "bsc");
+      if (bscW.length && (!live || guns.length)) {
         lastCheck = Date.now();
-        const found = await routes(w.map((t) => getAddress(t.token))).catch(() => new Map<string, Route>());
-        await Promise.all(w.filter((t) => found.has(t.token.toLowerCase())).map(async (t) => {
+        const found = await routes(bscW.map((t) => getAddress(t.token))).catch(() => new Map<string, Route>());
+        await Promise.all(bscW.filter((t) => found.has(t.token.toLowerCase())).map(async (t) => {
           const r: { bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] } = await snipe(s, t, found.get(t.token.toLowerCase())!, guns).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false }));
           const key = t.token.toLowerCase();
           if (r.ok?.length) { const set = okSlots.get(key) || new Set<number>(); r.ok.forEach((x) => set.add(x)); okSlots.set(key, set); }

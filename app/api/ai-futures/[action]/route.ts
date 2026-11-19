@@ -91,15 +91,24 @@ export async function POST(req: Request, { params }: { params: { action: string 
             if (Array.isArray(b.liq_targets)) {
               // Tokens to snipe: 0x addresses, each once.
               const seen = new Set<string>();
+              const chains = ["bsc", "ethereum", "base", "arbitrum", "solana"];
+              const pays = ["native", "usdt", "usdc"];
+              const prios = ["low", "med", "high", "max"];
+              const mint = (token: string) => /^0x[0-9a-fA-F]{40}$/.test(token) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token);
+              const keyOf = (token: string) => token.startsWith("0x") ? token.toLowerCase() : token;
               up.liq_targets = b.liq_targets.map((t: any) => ({
                 token: String(t?.token || "").trim(), label: String(t?.label || "").trim().slice(0, 24) || undefined, usd: clamp(t?.usd, 0.5, 100000),
+                chain: chains.includes(t?.chain) ? t.chain : undefined,
+                pay: pays.includes(t?.pay) ? t.pay : undefined,
+                amount: clamp(t?.amount, 0, 1_000_000_000),
+                prio: prios.includes(t?.prio) ? t.prio : undefined,
                 on: t?.on !== false, state: ["waiting", "done", "failed"].includes(t?.state) ? t.state : "waiting", added: String(t?.added || new Date().toISOString()),
                 // Which wallets snipe it (1–13); none = all.
                 wallets: Array.isArray(t?.wallets) ? [...new Set(t.wallets.map(Number).filter((x: number) => x >= 1 && x <= 13))].sort((a: number, b: number) => a - b) : undefined,
                 // Wallets that already sent their buy (kept so they never buy twice) and when the first did.
                 fired: Array.isArray(t?.fired) ? [...new Set(t.fired.map(Number).filter((x: number) => x >= 1 && x <= 13))].sort((a: number, b: number) => a - b) : undefined,
                 first_at: t?.first_at && !isNaN(Date.parse(t.first_at)) ? String(t.first_at) : undefined,
-              })).filter((t: any) => /^0x[0-9a-fA-F]{40}$/.test(t.token) && !seen.has(t.token.toLowerCase()) && seen.add(t.token.toLowerCase())).slice(0, 30);
+              })).filter((t: any) => mint(t.token) && !seen.has(keyOf(t.token)) && seen.add(keyOf(t.token))).slice(0, 30);
             }
           }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
@@ -237,6 +246,22 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (chain === "solana" && params.action === "sniper-swap") return json({ ok: true, note: await chains.solSwapSend(Number(b.slot), String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
           if (params.action === "sniper-swap-quote") return json(await w.swapQuote(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip));
           return json({ ok: true, note: await w.swapSend(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
+        }
+        case "sniper-detect":
+        case "sniper-ready": {
+          if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
+          const slow = await rateLimit(req, params.action, 30, 60, String(id));
+          if (slow) return slow;
+          if (params.action === "sniper-detect") {
+            const { detectSnipe } = await import("@/lib/sniper-detect");
+            return json(await detectSnipe(String(b.token || "")));
+          }
+          const { snipeReady } = await import("@/lib/sniper-fire");
+          const chain = String(b.chain || "");
+          const pay = b.pay === "usdt" || b.pay === "usdc" ? b.pay : "native";
+          if (!["bsc", "ethereum", "base", "arbitrum", "solana"].includes(chain)) return json({ error: "Pick a chain." }, 400);
+          const slots = Array.isArray(b.slots) ? b.slots.map(Number).filter((x: number) => x >= 1 && x <= 13) : [];
+          return json(await snipeReady(chain as any, pay, Number(b.amount) || 0, slots));
         }
         case "sniper-card":
         case "sniper-sol-create":
