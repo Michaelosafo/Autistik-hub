@@ -1143,7 +1143,7 @@ function drawSky(c,skyOff){
     c.fillStyle='rgba(115,103,255,0.13)';c.fillRect(x,hz-b.h,b.w,2);
   }
   // A few cloud streaks add scale without obscuring the road.
-  for(let i=0;i<6;i++){const cx=((i*207+off*0.12)% (W+220))-110,cy=H*(0.31+i%3*0.055,);const cg=c.createRadialGradient(cx,cy,4,cx,cy,95);cg.addColorStop(0,'rgba(221,171,255,0.055)');cg.addColorStop(1,'rgba(221,171,255,0)');c.fillStyle=cg;c.fillRect(cx-95,cy-22,190,44);}
+  for(let i=0;i<6;i++){const cx=((i*207+off*0.12)% (W+220))-110,cy=H*(0.31+i%3*0.055);const cg=c.createRadialGradient(cx,cy,4,cx,cy,95);cg.addColorStop(0,'rgba(221,171,255,0.055)');cg.addColorStop(1,'rgba(221,171,255,0)');c.fillStyle=cg;c.fillRect(cx-95,cy-22,190,44);}
   c.restore();
   const gl=c.createLinearGradient(0,hz-40,0,hz);gl.addColorStop(0,'rgba(255,122,47,0)');gl.addColorStop(1,'rgba(255,122,47,0.24)');c.fillStyle=gl;c.fillRect(0,hz-40,W,40);
 }
