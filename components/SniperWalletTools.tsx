@@ -63,10 +63,14 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
   const [wd, setWd] = useState<Withdraw | null>(null);
   const [card, setCard] = useState<Card | null>(null);
   const [copied, setCopied] = useState(false);
-  const [bridgeTo, setBridgeTo] = useState<number | null>(null);
+  // Wallets to bridge to: tap to tick one or several. Several = the same $ to each.
+  const [bridgeTos, setBridgeTos] = useState<number[]>([]);
   const [bridgeChain, setBridgeChain] = useState<(typeof NETS)[number]["id"]>("solana");
   const [bridgeOut, setBridgeOut] = useState("SOL");
-  const [bridge, setBridge] = useState<Bridge | null>(null);
+  const [bridges, setBridges] = useState<Bridge[]>([]);
+  const bridge = bridges[0] || null;
+  const setBridge = (b: Bridge | null) => setBridges(b ? [b] : []);
+  const [sending, setSending] = useState("");
   const [bridgeAmt, setBridgeAmt] = useState<number | "max">("max");
   // Every one of your wallets' addresses (EVM + Solana), for picking where a bridge lands.
   const [cards, setCards] = useState<Record<number, Card>>({});
@@ -193,30 +197,40 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     return a && a.amount > 0 && a.valueUsd ? a.valueUsd / a.amount : 0;
   }
   async function reviewBridge(max: boolean) {
-    const destSlot = bridgeTo ?? slot;
-    if (bridgeChain === chain && destSlot === slot) { setErr("Pick another wallet or a different network."); return; }
+    const dests = bridgeTos.length ? bridgeTos : [slot];
+    if (bridgeChain === chain && dests.includes(slot)) { setErr("This wallet is already on this network: untick it or pick a different network."); return; }
+    if (max && dests.length > 1) { setErr("Max works with one wallet. For several, type the $ each wallet gets."); return; }
     let coinAmt: number | "max" = "max";
     if (!max) {
       const dollars = Number(amount);
-      if (!(dollars > 0)) { setErr("Type how many $ to bridge, or tap Review max."); return; }
+      if (!(dollars > 0)) { setErr(dests.length > 1 ? "Type how many $ each wallet gets." : "Type how many $ to bridge, or tap Review max."); return; }
       const p = payPrice();
       if (!(p > 0)) { setErr(`No ${pay} price right now. Try again in a moment.`); return; }
       coinAmt = +(dollars / p).toFixed(8);
+      const have = pick(pay)?.amount;
+      if (dests.length > 1 && have != null && coinAmt * dests.length > have) { setErr(`Not enough ${pay}: ${dests.length} × $${dollars} needs ${amt(coinAmt * dests.length)} ${pay}, this wallet has ${amt(have)}.`); return; }
     }
-    setErr(""); setBridge(null); setLoading(true);
+    setErr(""); setBridges([]); setLoading(true);
     try {
       if (max) setAmount("");
       setBridgeAmt(coinAmt);
-      setBridge(await ask<Bridge>("sniper-bridge-quote", { from: slot, to: destSlot, fromChain: chain, toChain: bridgeChain, assetIn: pay, assetOut: bridgeOut, amount: coinAmt }));
+      const got: Bridge[] = [];
+      for (const d of dests) got.push(await ask<Bridge>("sniper-bridge-quote", { from: slot, to: d, fromChain: chain, toChain: bridgeChain, assetIn: pay, assetOut: bridgeOut, amount: coinAmt }));
+      setBridges(got);
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
   }
-  function confirmBridge() {
-    if (!bridge) return;
-    // The exact coin amount that was quoted (the $ were turned into it at Review).
-    const body = { from: slot, to: bridge.toSlot, fromChain: chain, toChain: bridge.toChain, assetIn: pay, assetOut: bridge.symbolOut, amount: bridgeAmt, minOutRaw: bridge.amountOutRaw };
-    setBridge(null); setOpen(null);
-    act(`br${slot}`, "sniper-bridge", body);
+  async function confirmBridge() {
+    if (!bridges.length) return;
+    const list = bridges;
+    setBridges([]); setOpen(null);
+    // One after another, each with the exact coin amount that was quoted.
+    for (let i = 0; i < list.length; i++) {
+      const b = list[i];
+      if (list.length > 1) setSending(`Bridging ${i + 1} of ${list.length} (to wallet #${b.toSlot})…`);
+      await act(`br${slot}`, "sniper-bridge", { from: slot, to: b.toSlot, fromChain: chain, toChain: b.toChain, assetIn: pay, assetOut: b.symbolOut, amount: bridgeAmt, minOutRaw: b.amountOutRaw });
+    }
+    setSending("");
   }
   function confirmSwap() {
     if (!quote) return;
@@ -392,27 +406,45 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
                 {destNets.map((n) => <button key={n.id} type="button" className={"btn small" + (bridgeChain === n.id ? " primary" : " ghost")} onClick={() => { setBridgeChain(n.id); setBridgeOut(n.id === "solana" ? "SOL" : n.id === "bsc" ? "BNB" : "ETH"); setBridge(null); }}>{n.name}</button>)}
               </div>
               <div className="stack" style={{ gap: 4 }}>
-                <small><b>Your {NETS.find((n) => n.id === bridgeChain)?.name} wallet to receive it:</b></small>
+                <small><b>Your {NETS.find((n) => n.id === bridgeChain)?.name} wallets to receive it:</b> <span className="muted">tap one or several (several = the same $ to each)</span></small>
                 {[slot, ...others.map((o) => o.slot)].map((x) => {
                   const c = cards[x];
                   const dest = bridgeChain === "solana" ? c?.sol || null : c?.evm || (x === slot ? address : others.find((o) => o.slot === x)?.address) || null;
-                  const sel = (bridgeTo ?? slot) === x;
+                  const sel = bridgeTos.length ? bridgeTos.includes(x) : x === slot && bridgeChain !== chain;
                   if (!c && bridgeChain === "solana") return <small key={x} className="muted">#{x} · reading…</small>;
                   if (!dest) return <small key={x} className="muted">#{x}{x === slot ? " (this wallet)" : ""} · no Solana address yet: open wallet #{x} → Solana → Create or Import</small>;
-                  return <button key={x} type="button" className={"btn small" + (sel ? " primary" : " ghost")} style={{ justifyContent: "flex-start" }} onClick={() => { setBridgeTo(x); setBridge(null); }}>#{x}{x === slot ? " (this wallet)" : ""} · {short(dest)}</button>;
+                  return <button key={x} type="button" className={"btn small" + (sel ? " primary" : " ghost")} style={{ justifyContent: "flex-start" }} onClick={() => { const cur = bridgeTos.length ? bridgeTos : bridgeChain !== chain ? [slot] : []; setBridgeTos(cur.includes(x) ? cur.filter((y) => y !== x) : [...cur, x].sort((a, b) => a - b)); setBridges([]); }}>{sel ? "☑" : "☐"} #{x}{x === slot ? " (this wallet)" : ""} · {short(dest)}</button>;
                 })}
+                {others.length > 0 && (
+                  <div className="row" style={{ gap: 6 }}>
+                    <button type="button" className="btn small ghost" onClick={() => { const all = [slot, ...others.map((o) => o.slot)].filter((x) => { const c = cards[x]; const d = bridgeChain === "solana" ? c?.sol : c?.evm || (x === slot ? address : others.find((o) => o.slot === x)?.address); return !!d && !(x === slot && bridgeChain === chain); }); setBridgeTos(all.sort((a, b) => a - b)); setBridges([]); }}>Tick all</button>
+                    <button type="button" className="btn small ghost" onClick={() => { setBridgeTos([]); setBridges([]); }}>Clear</button>
+                  </div>
+                )}
               </div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                 <small><b>Arrive as:</b></small>
                 {(bridgeChain === "solana" ? ["SOL", "USDT", "USDC"] : bridgeChain === "bsc" ? ["BNB", "USDT", "USDC"] : ["ETH", "USDT", "USDC"]).map((s) => <button key={s} type="button" className={"btn small" + (bridgeOut === s ? " primary" : " ghost")} onClick={() => { setBridgeOut(s); setBridge(null); }}>{s}</button>)}
               </div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <input className="input" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder="$ to bridge" value={amount} onChange={(e) => { setAmount(e.target.value); setBridge(null); }} aria-label="Dollars to bridge" />
-                {Number(amount) > 0 && payPrice() > 0 && <small className="muted">≈ {amt(Number(amount) / payPrice())} {pay}</small>}
-                <button type="button" className="btn small" disabled={loading || busy} onClick={() => reviewBridge(false)}>Review</button>
-                <button type="button" className="btn small" disabled={loading || busy} onClick={() => reviewBridge(true)}>Review max</button>
+                <input className="input" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder={bridgeTos.length > 1 ? "$ each wallet gets" : "$ to bridge"} value={amount} onChange={(e) => { setAmount(e.target.value); setBridges([]); }} aria-label="Dollars to bridge" />
+                {Number(amount) > 0 && payPrice() > 0 && <small className="muted">≈ {amt(Number(amount) / payPrice())} {pay}{bridgeTos.length > 1 ? ` each · $${(Number(amount) * bridgeTos.length).toFixed(2)} in all to ${bridgeTos.length} wallets` : ""}</small>}
+                <button type="button" className="btn small" disabled={loading || busy} onClick={() => reviewBridge(false)}>{loading ? "Quoting…" : "Review"}</button>
+                {bridgeTos.length <= 1 && <button type="button" className="btn small" disabled={loading || busy} onClick={() => reviewBridge(true)}>Review max</button>}
               </div>
-              {bridge && (
+              {bridges.length > 1 && (
+                <div className="notice stack" style={{ gap: 4 }}>
+                  <b>Confirm {bridges.length} bridges</b>
+                  <small>From wallet #{slot} on {NETS.find((n) => n.id === chain)?.name}: <b>{bridges[0].amountIn} {bridges[0].symbolIn}{payPrice() > 0 ? ` ($${(Number(String(bridges[0].amountIn).replace(/,/g, "")) * payPrice()).toFixed(2)})` : ""}</b> to each, <b>{amt(Number(String(bridges[0].amountIn).replace(/,/g, "")) * bridges.length)} {bridges[0].symbolIn}</b> in all.</small>
+                  {bridges.map((b) => <small key={b.toSlot}>→ #{b.toSlot} <span className="mono">{short(b.to)}</span> gets about <b>{b.amountOut} {b.symbolOut}</b>{b.feeUsd != null ? <span className="muted"> · fee ${b.feeUsd.toFixed(3)}</span> : null}</small>)}
+                  <small>Fees about ${bridges.reduce((t, b) => t + (b.feeUsd || 0), 0).toFixed(3)} in all{bridges[0].seconds ? ` · about ${bridges[0].seconds}s each` : ""}. {bridges[0].via}. Sent one after another.</small>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button type="button" className="btn small primary" disabled={busy} onClick={confirmBridge}>{busy ? "Sending…" : `Confirm ${bridges.length} bridges`}</button>
+                    <button type="button" className="btn small ghost" onClick={() => setBridges([])}>Cancel</button>
+                  </div>
+                </div>
+              )}
+              {bridges.length === 1 && bridge && (
                 <div className="notice stack" style={{ gap: 4 }}>
                   <b>Confirm bridge</b>
                   <small>Send: <b>{payPrice() > 0 ? `$${(Number(String(bridge.amountIn).replace(/,/g, "")) * payPrice()).toFixed(2)} = ` : ""}{bridge.amountIn} {bridge.symbolIn}</b> from wallet #{bridge.fromSlot}</small>
@@ -432,6 +464,7 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
           {err && <small className="aic-warn" role="alert">{err}</small>}
         </div>
       )}
+      {sending && <small className="aic-note" role="status">{sending}</small>}
       {!open && err && <small className="aic-warn" role="alert">{err}</small>}
     </div>
   );
