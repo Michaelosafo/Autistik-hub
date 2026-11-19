@@ -39,6 +39,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
   const [addr, setAddr] = useState(""), [label, setLabel] = useState(""), [err, setErr] = useState("");
   const [keyIn, setKeyIn] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState(0);
+  // Sniper: one network for all the wallet cards.
+  const [net, setNet] = useState<"bsc" | "ethereum" | "base" | "arbitrum" | "solana">("bsc");
   const reveal = async (slot: number) => {
     if (!confirm(`Show wallet ${slot}'s private key? Anyone who sees it can take the money. Use it to import the wallet into Bitget, MetaMask or Trust.`)) return;
     const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
@@ -105,13 +107,22 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
         }}>{busy === "cfill" ? "Creating…" : `＋ Create all ${(keys?.keys || []).filter((k) => !k.address).length} remaining wallets (up to 13)`}</button>
       )}
       <small className="muted">Each wallet you add buys every copied coin with its own money (USDT / USDC on BNB Chain, else BNB), so with 3 wallets each copy is bought 3 times. Keep a little BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
+      {sniper && mine.length > 0 && (
+        <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+          <small className="muted">Network:</small>
+          {([["bsc", "BNB"], ["ethereum", "ETH"], ["base", "Base"], ["arbitrum", "Arb"], ["solana", "SOL"]] as const).map(([id, nm]) => (
+            <button key={id} type="button" className={"btn small" + (net === id ? " primary" : " ghost")} style={{ padding: "2px 8px", fontSize: 12 }} onClick={() => setNet(id)}>{nm}</button>
+          ))}
+          <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"}</small>
+        </div>
+      )}
       {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
         <div key={k.slot} className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
           <small><b>Wallet {k.slot}</b>{!k.address && mine.length ? <span className="muted"> (add another, optional)</span> : null}</small>
           {k.address ? (
             <>
-              <code style={{ wordBreak: "break-all" }}>{k.address}</code>
-              {(() => { const b = Number(k.bnb || 0), u = Number(k.usd || 0), tot = b * bnbUsd + u; return (
+              {!sniper && <code style={{ wordBreak: "break-all" }}>{k.address}</code>}
+              {!sniper && (() => { const b = Number(k.bnb || 0), u = Number(k.usd || 0), tot = b * bnbUsd + u; return (
                 <small className="muted">{k.bnb == null ? "–" : `${b.toFixed(4)} BNB`}{bnbUsd ? ` (≈ $${(b * bnbUsd).toFixed(2)})` : ""} · ${u.toFixed(2)} USDT/USDC · <b>≈ ${tot.toFixed(2)} in all</b>{b < 0.0006 ? " · needs ~0.0006 BNB for gas" : tot < per ? ` · less than a $${per} buy: it buys with what it has` : ""}</small>
               ); })()}
               {!sniper && (() => {
@@ -129,15 +140,16 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
                   </div>
                 );
               })()}
-              <small className="muted">To fund it: send USDT, USDC or BNB on <b>BNB Chain (BEP20)</b> to the address above, plus a little BNB (~0.001) for gas. It buys with USDT / USDC first, else BNB, and sells back into the same.</small>
+              {!sniper && <small className="muted">To fund it: send USDT, USDC or BNB on <b>BNB Chain (BEP20)</b> to the address above, plus a little BNB (~0.001) for gas. It buys with USDT / USDC first, else BNB, and sells back into the same.</small>}
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-                <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>
-                <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>
+                {!sniper && <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>}
+                {!sniper && <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>}
                 {!sniper && mine.length > 1 && <button type="button" className={"btn small" + (tf?.from === k.slot ? " primary" : "")} disabled={!!busy} onClick={() => setTf(tf?.from === k.slot ? null : { from: k.slot, to: null, asset: "BNB", other: "", amt: "" })}>{busy === `tf${k.slot}` ? "Sending…" : "↔ Transfer"}</button>}
-                <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>
-                <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove"}</button>
+                {!sniper && <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>}
+                {!sniper && <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove"}</button>}
               </div>
               {sniper && <SniperWalletTools slot={k.slot} address={k.address} others={mine.filter((x) => x.slot !== k.slot && x.address).map((x) => ({ slot: x.slot, address: x.address! }))} busy={!!busy} act={act}
+                net={net}
                 amounts={(s.snipe_amounts || {})[String(k.slot)] || {}}
                 setChainAmount={(chain, v) => {
                   const all = { ...(s.snipe_amounts || {}) };
@@ -146,6 +158,12 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
                   if (Object.keys(row).length) all[String(k.slot)] = row; else delete all[String(k.slot)];
                   set({ snipe_amounts: all }, v ? `Wallet ${k.slot} snipes with ${v} on ${chain === "bsc" ? "BNB Chain" : chain[0].toUpperCase() + chain.slice(1)}.` : `Wallet ${k.slot}: amount on ${chain} cleared.`);
                 }} />}
+              {sniper && (
+                <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                  {net !== "solana" && <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>}
+                  <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove wallet"}</button>
+                </div>
+              )}
               {!sniper && tf?.from === k.slot && (
                 <div className="stack" style={{ gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px dashed var(--line, rgba(127,127,127,.35))" }}>
                   <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>

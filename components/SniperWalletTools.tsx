@@ -32,13 +32,18 @@ async function ask<T>(action: string, body: unknown): Promise<T> {
   return d as T;
 }
 
-export default function SniperWalletTools({ slot, address, others, busy, act, amounts, setChainAmount }: {
+type NetId = (typeof NETS)[number]["id"];
+
+export default function SniperWalletTools({ slot, address, others, busy, act, amounts, setChainAmount, net }: {
   slot: number; address: string; others: { slot: number; address: string }[]; busy: boolean; act: Act;
   /** This wallet's snipe amount per chain, in that chain's coin. */
   amounts?: Record<string, number>; setChainAmount?: (chain: string, value: number | null) => void;
+  /** The network picked above all the wallet cards. When given, this card follows it (no tabs of its own). */
+  net?: NetId;
 }) {
   const [open, setOpen] = useState<"send" | "swap" | "withdraw" | "bridge" | null>(null);
-  const [chain, setChain] = useState<(typeof NETS)[number]["id"]>("bsc");
+  const [chain, setChain] = useState<NetId>(net || "bsc");
+  const [more, setMore] = useState(false);
   const [hold, setHold] = useState<Holdings | null>(null);
   const [extra, setExtra] = useState("");
   const [err, setErr] = useState("");
@@ -201,15 +206,27 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     act(`sw${slot}`, "sniper-swap", body);
   }
 
+  function switchTo(id: NetId) {
+    const c = id === "bsc" ? "BNB" : id === "solana" ? "SOL" : "ETH";
+    setChain(id); setXfer(null); setQuote(null); setBridge(null); setWd(null); setErr("");
+    if ((id === "solana" && open === "send") || (id !== "bsc" && open === "withdraw")) setOpen(null);
+    setAsset(c); setPay(c);
+    const next = NETS.find((x) => x.id !== id);
+    if (next) { setBridgeChain(next.id); setBridgeOut(next.id === "solana" ? "SOL" : next.id === "bsc" ? "BNB" : "ETH"); }
+  }
+  useEffect(() => { if (net && net !== chain) switchTo(net); }, [net]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const here = card?.chains.find((c) => c.id === chain);
   const addr = here?.address || (chain === "solana" ? null : address);
   const destNets = NETS.filter((n) => n.id !== chain);
 
   return (
     <div className="stack" style={{ gap: 6 }}>
-      <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {NETS.map((n) => <button key={n.id} type="button" className={"btn small" + (chain === n.id ? " primary" : " ghost")} onClick={() => { setChain(n.id); setXfer(null); setQuote(null); setBridge(null); if ((n.id === "solana" && open === "send") || (n.id !== "bsc" && open === "withdraw")) setOpen(null); setAsset(n.id === "bsc" ? "BNB" : n.id === "solana" ? "SOL" : "ETH"); setPay(n.id === "bsc" ? "BNB" : n.id === "solana" ? "SOL" : "ETH"); const next = NETS.find((x) => x.id !== n.id); if (next) { setBridgeChain(next.id); setBridgeOut(next.id === "solana" ? "SOL" : next.id === "bsc" ? "BNB" : "ETH"); } }}>{n.name}</button>)}
-      </div>
+      {!net && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {NETS.map((n) => <button key={n.id} type="button" className={"btn small" + (chain === n.id ? " primary" : " ghost")} onClick={() => switchTo(n.id)}>{n.name}</button>)}
+        </div>
+      )}
       {addr ? (
         <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <code style={{ wordBreak: "break-all" }}>{addr}</code>
@@ -222,15 +239,9 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
           <button type="button" className="btn small ghost" disabled={busy || loading} onClick={importSol}>Import my Solana key</button>
         </div>
       )}
-      {chain === "solana" && addr && (
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <button type="button" className="btn small ghost" disabled={busy || loading} onClick={showSolKey}>Show Solana private key</button>
-          <button type="button" className="btn small ghost" disabled={busy || loading} onClick={importSol}>Use my own Solana key</button>
-        </div>
-      )}
       {setChainAmount && (
         <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <small>🎯 <b>Snipe amount on {NETS.find((n) => n.id === chain)?.name}: {amounts?.[chain] ? `${amounts[chain]} ${here?.symbol || coin}` : "not set"}</b></small>
+          <small>💵 <b>Buy amount: {amounts?.[chain] ? `${amounts[chain]} ${here?.symbol || coin}` : "not set"}</b> <span className="muted">on {NETS.find((n) => n.id === chain)?.name}</span></small>
           <button type="button" className="btn small" disabled={busy} onClick={editAmount}>Set amount</button>
         </div>
       )}
@@ -239,14 +250,21 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
         {assets.map((a) => <span key={a.address + a.symbol} className="muted"><b>{a.symbol}</b> {amt(a.amount)}</span>)}
       </div>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        <button type="button" className={"btn small" + (open === "swap" ? " primary" : "")} disabled={busy || !addr} onClick={() => { setOpen(open === "swap" ? null : "swap"); setQuote(null); setErr(""); }}>{busy && open === "swap" ? "Swapping…" : "Swap"}</button>
         {chain !== "solana" && others.length > 0 && <button type="button" className={"btn small" + (open === "send" ? " primary" : "")} disabled={busy} onClick={() => { setOpen(open === "send" ? null : "send"); setXfer(null); setErr(""); }}>↔ Transfer</button>}
-        <button type="button" className={"btn small" + (open === "bridge" ? " primary" : "")} disabled={busy || (chain === "solana" && !addr)} onClick={() => { setOpen(open === "bridge" ? null : "bridge"); setBridge(null); setErr(""); }}>Bridge</button>
-        <button type="button" className={"btn small" + (open === "withdraw" ? " primary" : "")} disabled={busy} onClick={() => { setChain("bsc"); setOpen(open === "withdraw" ? null : "withdraw"); setWd(null); setErr(""); }}>{busy ? "Working…" : "Withdraw"}</button>
-        <button type="button" className={"btn small" + (open === "swap" ? " primary" : "")} disabled={busy || (chain === "solana" && !addr)} onClick={() => { setOpen(open === "swap" ? null : "swap"); setQuote(null); setErr(""); }}>{busy && open === "swap" ? "Swapping…" : "Swap"}</button>
+        <button type="button" className={"btn small ghost" + (more ? " primary" : "")} onClick={() => setMore(!more)}>{more ? "Less ▴" : "More ▾"}</button>
       </div>
+      {more && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button type="button" className={"btn small" + (open === "bridge" ? " primary" : "")} disabled={busy || !addr} onClick={() => { setOpen(open === "bridge" ? null : "bridge"); setBridge(null); setErr(""); }}>🌉 Bridge to another chain</button>
+          {chain === "bsc" && <button type="button" className={"btn small" + (open === "withdraw" ? " primary" : "")} disabled={busy} onClick={() => { setOpen(open === "withdraw" ? null : "withdraw"); setWd(null); setErr(""); }}>{busy ? "Working…" : "Withdraw"}</button>}
+          {chain === "solana" && addr && <button type="button" className="btn small ghost" disabled={busy || loading} onClick={showSolKey}>Show Solana private key</button>}
+          {chain === "solana" && addr && <button type="button" className="btn small ghost" disabled={busy || loading} onClick={importSol}>Use my own Solana key</button>}
+        </div>
+      )}
       {open && (
         <div className="stack" style={{ gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px dashed var(--line, rgba(127,127,127,.35))" }}>
-          {open === "withdraw" ? <small className="muted"><b>BNB Chain.</b> Send from this wallet to an address you type. A direct transfer.</small> : (
+          {open === "withdraw" ? <small className="muted"><b>BNB Chain.</b> Send from this wallet to an address you type. A direct transfer.</small> : net ? null : (
             <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <small><b>Network:</b></small>
               {NETS.map((n) => <button key={n.id} type="button" className={"btn small" + (chain === n.id ? " primary" : " ghost")} onClick={() => { const c = n.id === "bsc" ? "BNB" : n.id === "solana" ? "SOL" : "ETH"; setChain(n.id); setXfer(null); setQuote(null); setBridge(null); setAsset(c); setPay(c); if (bridgeChain === n.id) { const nx = NETS.find((x) => x.id !== n.id)!; setBridgeChain(nx.id); setBridgeOut(nx.id === "solana" ? "SOL" : nx.id === "bsc" ? "BNB" : "ETH"); } }}>{n.name}</button>)}
