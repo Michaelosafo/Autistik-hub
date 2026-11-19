@@ -44,7 +44,7 @@ export function pinAndroid(href: string): string {
     let path = href;
     if (/^https?:\/\/bkcode\.vip/i.test(href)) {
       path = href.replace(/^https?:\/\//i, "");
-      return `intent://${path}#Intent;scheme=https;package=${hit.pkg};end`;
+      return href;
     }
     // bitkeep://wc?uri=... style
     const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
