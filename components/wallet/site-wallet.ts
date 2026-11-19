@@ -25,10 +25,19 @@ export function useSiteWallet(): { ready: boolean; name: string | null; evm: Sig
   useEffect(() => { restoreWallet().catch(() => null).finally(() => setReady(true)); }, []);
   useEffect(() => {
     if (!prov) { setAddress(null); return; }
-    prov.request({ method: "eth_accounts" }).then((a: string[]) => setAddress((a?.[0] as any) || null)).catch(() => {});
+    let gone = false;
+    // Some wallets (Bitget's app among them) answer with no account for a moment: ask again a few times.
+    (async () => {
+      for (let i = 0; i < 6 && !gone; i++) {
+        const a: string[] = await prov.request({ method: "eth_accounts" }).catch(() => []);
+        const first = a?.[0] || prov.selectedAddress || prov.accounts?.[0] || null;
+        if (first) { if (!gone) setAddress(first as any); return; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    })();
     const on = (a: string[]) => setAddress((a?.[0] as any) || null);
     prov.on?.("accountsChanged", on);
-    return () => prov.removeListener?.("accountsChanged", on);
+    return () => { gone = true; prov.removeListener?.("accountsChanged", on); };
   }, [prov]);
 
   async function switchTo(chainId: number) {
@@ -37,7 +46,8 @@ export function useSiteWallet(): { ready: boolean; name: string | null; evm: Sig
     catch (e: any) {
       const c = WCHAIN_LIST.find((x) => x.chainId === chainId);
       const x = XCHAINS[chainId];
-      if (e?.code !== 4902 || (!c && !x)) throw e;
+      // 4902 is the usual "unknown network" code; Bitget, WalletConnect wallets and others word it instead.
+      if ((e?.code !== 4902 && !/unrecognized|not added|unknown chain|not supported|not approved/i.test(String(e?.message))) || (!c && !x)) throw e;
       const add = c ? { chainName: c.name, nativeCurrency: { name: c.native.name, symbol: c.native.symbol, decimals: 18 }, rpcUrls: [c.rpc], blockExplorerUrls: [c.explorer] }
         : { chainName: x.name, nativeCurrency: { name: x.native.symbol, symbol: x.native.symbol, decimals: x.native.decimals }, rpcUrls: [x.rpc], blockExplorerUrls: [x.explorer] };
       await prov.request({ method: "wallet_addEthereumChain", params: [{ chainId: hex, ...add }] });

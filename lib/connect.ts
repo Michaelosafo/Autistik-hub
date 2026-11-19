@@ -333,9 +333,24 @@ function legacySolWallet(name: string, icon: string, p: any): Wallet {
       "solana:signTransaction": {
         version: "1.0.0", supportedTransactionVersions: ["legacy", 0],
         signTransaction: async ({ transaction }: { transaction: Uint8Array }) => {
-          const { VersionedTransaction } = await import("@solana/web3.js");
-          const signed = await p.signTransaction(VersionedTransaction.deserialize(transaction));
-          return [{ signedTransaction: signed.serialize() }];
+          const { PublicKey, VersionedTransaction } = await import("@solana/web3.js");
+          const tx = VersionedTransaction.deserialize(transaction);
+          const signed: any = await p.signTransaction(tx);
+          // Wallets answer in different shapes: the signed transaction, its bytes, base58/base64 text, or just the signature.
+          if (signed && typeof signed.serialize === "function") return [{ signedTransaction: signed.serialize() }];
+          if (signed instanceof Uint8Array) return [{ signedTransaction: signed }];
+          // Signed in place, nothing returned.
+          if (signed == null && tx.signatures.some((x) => x.some((b) => b !== 0))) return [{ signedTransaction: tx.serialize() }];
+          const sig = signed?.signature ?? (typeof signed === "string" ? signed : null);
+          const raw = typeof signed?.transaction === "string" ? signed.transaction : typeof signed === "string" && signed.length > 120 ? signed : null;
+          if (raw) return [{ signedTransaction: await txFromText(raw) }];
+          if (sig) {
+            const pk = (p.publicKey || "").toString();
+            if (!pk) throw new Error("The wallet didn't sign.");
+            tx.addSignature(new PublicKey(pk), typeof sig === "string" ? b58decode(sig) : Uint8Array.from(sig));
+            return [{ signedTransaction: tx.serialize() }];
+          }
+          throw new Error("The wallet didn't sign.");
         },
       },
     } as any,
@@ -719,9 +734,14 @@ export async function restoreWallet(): Promise<any | null> {
   if (!name) return null;
   await new Promise((r) => setTimeout(r, 150)); // let wallets announce
   const d = state.detected.find((x) => x.info.name === name);
-  const p = d?.provider ?? (name === "Browser wallet" ? legacyInjected() : null);
+  // Wallets picked by name (Bitget, Trust, OKX…) may not announce themselves the standard way, above all inside
+  // their own app's browser: find them by the names they put on the page, as when they were picked.
+  const top = TOP_WALLETS.find((w) => w.name === name);
+  const p = d?.provider ?? (top ? injectedFor(top.id) : null) ?? (name === "Browser wallet" ? legacyInjected() : null);
   if (!p) return null;
-  const accts: string[] = await p.request({ method: "eth_accounts" }).catch(() => []);
+  let accts: string[] = await p.request({ method: "eth_accounts" }).catch(() => []);
+  // Some wallets (Bitget among them) answer with no account for a moment after the page loads.
+  for (let i = 0; !accts?.length && i < 3; i++) { await new Promise((r) => setTimeout(r, 400)); accts = await p.request({ method: "eth_accounts" }).catch(() => []); }
   if (!accts?.length) return null;
   watchRequests(name, p);
   set({ current: { name, provider: p } });
@@ -894,6 +914,10 @@ export async function listWallets(page: number, search = ""): Promise<{ wallets:
 // ---------------------------------------------------------------- Solana over WalletConnect (Bitget, Trust, OKX…)
 
 const SOL_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+// The older Solana mainnet id: Bitget and some other wallets still approve sessions with it.
+const SOL_MAINNET_OLD = "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ";
+/** The Solana chain the wallet approved (its account says which), so requests go to a chain in the session. */
+const solChainOf = (up: any) => { const a = String(up.session?.namespaces?.solana?.accounts?.[0] || ""); const c = a.split(":").slice(0, 2).join(":"); return c.startsWith("solana:") ? c : SOL_MAINNET; };
 let solWc: any = null;
 async function initSolWc() {
   if (solWc) return solWc;
@@ -911,6 +935,25 @@ async function initSolWc() {
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58encode(bytes: Uint8Array): string {
+  const digits: number[] = [];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) { carry += digits[i] << 8; digits[i] = carry % 58; carry = (carry / 58) | 0; }
+    while (carry) { digits.push(carry % 58); carry = (carry / 58) | 0; }
+  }
+  let out = "";
+  for (const b of bytes) { if (b === 0) out += "1"; else break; }
+  for (let i = digits.length - 1; i >= 0; i--) out += B58[digits[i]];
+  return out;
+}
+/** A signed transaction a wallet sent back as text: base64 or base58, whichever reads as a real transaction. */
+async function txFromText(text: string): Promise<Uint8Array> {
+  const { VersionedTransaction } = await import("@solana/web3.js");
+  const tries: (() => Uint8Array)[] = [() => Uint8Array.from(atob(text), (c) => c.charCodeAt(0)), () => b58decode(text)];
+  for (const t of tries) { try { const b = t(); VersionedTransaction.deserialize(b); return b; } catch { /* try the other */ } }
+  throw new Error("The wallet sent back a transaction this page can't read.");
+}
 function b58decode(str: string): Uint8Array {
   const bytes: number[] = [0];
   for (const ch of str) {
@@ -942,9 +985,17 @@ function wcSolWallet(name: string, icon: string, up: any, address: string, base?
           set({ pending: mine });
           if (href) setTimeout(() => openWalletApp(href), 300);
           let r: any;
-          try { r = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, SOL_MAINNET); }
+          const chainId = solChainOf(up);
+          try {
+            try { r = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, chainId); }
+            catch (e: any) {
+              // Some wallets still expect the transaction in base58 (the older WalletConnect rule): try that once.
+              if (/reject|denied|cancel|declin|expire|timeout|timed out|closed|reset|pending/i.test(String(e?.message)) || e?.code === 4001 || e?.code === 5000) throw e;
+              r = await up.request({ method: "solana_signTransaction", params: { transaction: b58encode(transaction) } }, chainId);
+            }
+          }
           finally { if (state.pending === mine) set({ pending: null }); }
-          if (typeof r?.transaction === "string") return [{ signedTransaction: Uint8Array.from(atob(r.transaction), (c) => c.charCodeAt(0)) }];
+          if (typeof r?.transaction === "string") return [{ signedTransaction: await txFromText(r.transaction) }];
           if (typeof r?.signature !== "string") throw new Error("The wallet didn't sign.");
           const { PublicKey, VersionedTransaction } = await import("@solana/web3.js");
           const tx = VersionedTransaction.deserialize(transaction);
@@ -978,7 +1029,8 @@ export async function chooseSolWalletConnect(t: WcTarget) {
       if (mobile && base) { const href = wcHref(base, uri, t.pkg); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); openWalletApp(href); }
       else set({ qr: { uri, name: t.name, logo: t.logo, install: t.install }, busy: "" });
     });
-    await up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
+    // Optional, with both mainnet ids: wallets that only know the older id (Bitget among them) can still approve.
+    await up.connect({ optionalNamespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET, SOL_MAINNET_OLD], events: [] } } });
     await finishSolWc(t, up);
   } catch (e: any) {
     if (state.sol) return;
