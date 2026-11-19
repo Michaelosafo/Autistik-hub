@@ -15,7 +15,7 @@
  * Safety: safety stop-loss / take profit, max coins at once, the daily loss limit, coins with almost no liquidity skipped.
  * Practice: pretend dollars at real prices (1% slippage and 1% fees each way). Live: real swaps (PancakeSwap / four.meme).
  */
-import { createPublicClient, fallback, http, webSocket } from "viem";
+import { createPublicClient, createWalletClient, fallback, formatUnits, http, parseUnits, webSocket } from "viem";
 import { bsc } from "viem/chains";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { supabaseService } from "@/lib/supabase/server";
@@ -128,6 +128,85 @@ export async function copyKeys() {
     return { slot, address: a.address, bnb, usd: st.reduce((x, y) => x + y.balance, 0) };
   }));
   return { bnbUsd, keys };
+}
+
+// ---------- Moving money between your wallets ----------
+
+const SEND_RPCS = [process.env.COPY_BSC_RPC, "https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://bsc-dataseed.bnbchain.org"].filter(Boolean) as string[];
+const ERC20_T = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address", name: "a" }], outputs: [{ type: "uint256", name: "" }] },
+  { type: "function", name: "decimals", stateMutability: "view", inputs: [], outputs: [{ type: "uint8", name: "" }] },
+  { type: "function", name: "symbol", stateMutability: "view", inputs: [], outputs: [{ type: "string", name: "" }] },
+  { type: "function", name: "transfer", stateMutability: "nonpayable", inputs: [{ type: "address", name: "to" }, { type: "uint256", name: "v" }], outputs: [{ type: "bool", name: "" }] },
+] as const;
+const amountStr = (x: number, dec: number) => x.toFixed(Math.min(dec, 18)).replace(/\.?0+$/, "") || "0";
+
+/**
+ * Send BNB, USDT, USDC or any token from one of your wallets to another (a plain, direct BNB Chain transfer).
+ * asset: "BNB" | "USDT" | "USDC" | a token address. amount: a number, or "max" (all of it; for BNB, all minus the fee).
+ * Moving a coin you hold in an open trade moves that trade (its share of the cost) to the other wallet, so its
+ * Sell buttons and auto-sell follow the coins.
+ */
+export async function transferBetween(fromSlot: number, toSlot: number, asset: string, amount: number | "max"): Promise<string> {
+  if (!SLOTS.includes(fromSlot as any) || !SLOTS.includes(toSlot as any)) throw new Error(`Pick wallets from 1 to ${MAX_KEYS}.`);
+  if (fromSlot === toSlot) throw new Error("Pick a different wallet to send to.");
+  if (amount !== "max" && !(Number(amount) > 0)) throw new Error("Type an amount, or tap Max.");
+  const [a, b] = await Promise.all([copyKey(fromSlot), copyKey(toSlot)]);
+  if (!a) throw new Error(`Wallet ${fromSlot} doesn't exist.`);
+  if (!b) throw new Error(`Wallet ${toSlot} doesn't exist.`);
+  const c = bscLogs();
+  const wc = createWalletClient({ account: a, chain: bsc, transport: fallback(SEND_RPCS.map((u) => http(u, { timeout: 8000, retryCount: 0 })), { retryCount: 1 }) });
+  const [gasPrice, bnb] = await Promise.all([c.getGasPrice() as Promise<bigint>, c.getBalance({ address: a.address }) as Promise<bigint>]);
+  let hash: `0x${string}`, what: string, token: string | null = null, raw = 0n, dec = 18;
+  if (asset.toUpperCase() === "BNB") {
+    const fee = 21000n * gasPrice;
+    raw = amount === "max" ? bnb - fee : parseUnits(amountStr(Number(amount), 18), 18);
+    if (raw <= 0n || raw + fee > bnb) throw new Error(`Wallet ${fromSlot} has ${Number(formatUnits(bnb, 18)).toFixed(5)} BNB: not enough for that plus the fee (~${Number(formatUnits(fee, 18)).toFixed(6)} BNB).`);
+    hash = await wc.sendTransaction({ account: a, chain: bsc, to: b.address, value: raw, gas: 21000n, gasPrice });
+    what = `${Number(formatUnits(raw, 18)).toFixed(5)} BNB`;
+  } else {
+    const st = stableBySymbolBsc(asset);
+    token = st ? st : isEvmAddr(asset.trim()) ? asset.trim() : null;
+    if (!token) throw new Error("Pick BNB, USDT, USDC, or paste the token's contract address.");
+    const t = token as `0x${string}`;
+    const [bal, d, sym] = await Promise.all([
+      c.readContract({ address: t, abi: ERC20_T, functionName: "balanceOf", args: [a.address] }).then((x: any) => BigInt(x)),
+      c.readContract({ address: t, abi: ERC20_T, functionName: "decimals" }).then(Number).catch(() => 18),
+      c.readContract({ address: t, abi: ERC20_T, functionName: "symbol" }).then(String).catch(() => short(t)),
+    ]);
+    dec = d;
+    raw = amount === "max" ? bal : parseUnits(amountStr(Number(amount), dec), dec);
+    if (raw <= 0n || raw > bal) throw new Error(`Wallet ${fromSlot} holds ${Number(formatUnits(bal, dec)).toPrecision(6)} ${sym}${raw > bal ? ": less than that" : ""}.`);
+    const est = await (c as any).estimateContractGas({ account: a, address: t, abi: ERC20_T, functionName: "transfer", args: [b.address, raw] }).catch((e: Error) => { throw new Error(`The token refused the transfer (${(e as any).shortMessage || e.message}`.slice(0, 160) + ")"); });
+    const limit = (BigInt(est) * 13n) / 10n;
+    if (bnb < limit * gasPrice) throw new Error(`Wallet ${fromSlot} needs about ${Number(formatUnits(limit * gasPrice, 18)).toFixed(6)} BNB for the fee; it has ${Number(formatUnits(bnb, 18)).toFixed(6)}.`);
+    hash = await wc.writeContract({ account: a, chain: bsc, address: t, abi: ERC20_T, functionName: "transfer", args: [b.address, raw], gas: limit, gasPrice });
+    what = `${Number(formatUnits(raw, dec)).toPrecision(6)} ${sym}`;
+  }
+  const rc = await c.waitForTransactionReceipt({ hash, timeout: 45_000, pollingInterval: 500 });
+  if (rc.status !== "success") throw new Error(`The transfer failed on-chain: https://bscscan.com/tx/${hash}`);
+  if (token && !stableBySymbolBsc(asset)) await moveTrades(token, fromSlot, toSlot, Number(formatUnits(raw, dec))).catch(() => {});
+  const msg = `Sent ${what} from wallet ${fromSlot} to wallet ${toSlot}. https://bscscan.com/tx/${hash}`;
+  await flog("settings", msg);
+  return msg;
+}
+const stableBySymbolBsc = (x: string) => ({ USDT: "0x55d398326f99059fF775485246999027B3197955", USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d" } as Record<string, string>)[x.toUpperCase()] || null;
+
+/** Coins moved between your wallets: their open trade moves too (the same share of the cost). */
+async function moveTrades(token: string, from: number, to: number, qty: number) {
+  const { data } = await pos().select("*").eq("fut_id", T()).eq("copy_slot", from).eq("coin", `bsc:${token.toLowerCase()}`).eq("status", "open");
+  let left = qty;
+  for (const p of (data || []) as FPos[]) {
+    if (left <= 0) break;
+    const size = n(p.size), take = Math.min(size, left), f = size > 0 ? take / size : 0;
+    left -= take;
+    if (f <= 0) continue;
+    if (f >= 0.999) { await pos().update({ copy_slot: to }).eq("id", p.id); continue; }
+    const rest: any = { ...p };
+    delete rest.id; delete rest.price; delete rest.upnl;
+    await pos().insert({ ...rest, copy_slot: to, size: take, notional_usd: n(p.notional_usd) * f, margin_usd: n(p.margin_usd) * f, fees_usd: n(p.fees_usd) * f, risk_usd: n((p as any).risk_usd) * f });
+    await pos().update({ size: size - take, notional_usd: n(p.notional_usd) * (1 - f), margin_usd: n(p.margin_usd) * (1 - f), fees_usd: n(p.fees_usd) * (1 - f), risk_usd: n((p as any).risk_usd) * (1 - f) }).eq("id", p.id);
+  }
 }
 
 // ---------- Watching the copied wallets ----------

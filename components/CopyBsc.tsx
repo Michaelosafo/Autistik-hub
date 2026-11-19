@@ -11,10 +11,30 @@ type Act = (name: string, action: string, body: unknown, done?: string) => Promi
 const isAddr = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
-export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
+type Held = { coin: string; why?: string | null; copy_slot?: number | null; size?: number | null; venue?: string };
+type Tf = { from: number; to: number | null; asset: string; other: string; amt: string };
+
+export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: {
   s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number; copy_key_usd?: Record<string, number>; snipe_usd?: number }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
-  busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean;
+  busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean; held?: Held[];
 }) {
+  // Moving money between your own wallets: one wallet's panel open at a time.
+  const [tf, setTf] = useState<Tf | null>(null);
+  const coinsOf = (slot: number) => {
+    const m = new Map<string, string>();
+    for (const p of held || []) if (Number(p.copy_slot) === slot && /^bsc:0x[0-9a-fA-F]{40}$/.test(p.coin)) m.set(p.coin.slice(4), (p.why || "").split(":")[0] || short(p.coin.slice(4)));
+    return [...m.entries()];
+  };
+  const sendTf = (t: Tf, max: boolean) => {
+    const asset = t.asset === "other" ? t.other.trim() : t.asset;
+    if (!t.to) { alert("Pick the wallet to send to."); return; }
+    if (t.asset === "other" && !isAddr(asset)) { alert("Paste the token's contract address (0x…)."); return; }
+    if (!max && !(Number(t.amt) > 0)) { alert("Type an amount, or tap Max."); return; }
+    const label = t.asset === "other" ? short(asset) : t.asset.startsWith("0x") ? (coinsOf(t.from).find(([a]) => a === t.asset)?.[1] || short(t.asset)) : t.asset;
+    if (!confirm(`Send ${max ? "ALL" : t.amt} ${label} from wallet ${t.from} to wallet ${t.to}?`)) return;
+    setTf(null);
+    act(`tf${t.from}`, "copy-transfer", { from: t.from, to: t.to, asset, amount: max ? "max" : Number(t.amt) });
+  };
   const [addr, setAddr] = useState(""), [label, setLabel] = useState(""), [err, setErr] = useState("");
   const [keyIn, setKeyIn] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState(0);
@@ -112,9 +132,31 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper }: {
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>
                 <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>
+                {mine.length > 1 && <button type="button" className={"btn small" + (tf?.from === k.slot ? " primary" : "")} disabled={!!busy} onClick={() => setTf(tf?.from === k.slot ? null : { from: k.slot, to: null, asset: "BNB", other: "", amt: "" })}>{busy === `tf${k.slot}` ? "Sending…" : "↔ Transfer"}</button>}
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove"}</button>
               </div>
+              {tf?.from === k.slot && (
+                <div className="stack" style={{ gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px dashed var(--line, rgba(127,127,127,.35))" }}>
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <small><b>To:</b></small>
+                    {mine.filter((x) => x.slot !== k.slot).map((x) => <button key={x.slot} type="button" className={"btn small" + (tf.to === x.slot ? " primary" : " ghost")} onClick={() => setTf({ ...tf, to: x.slot })}>#{x.slot}</button>)}
+                  </div>
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <small><b>Send:</b></small>
+                    {["BNB", "USDT", "USDC"].map((a) => <button key={a} type="button" className={"btn small" + (tf.asset === a ? " primary" : " ghost")} onClick={() => setTf({ ...tf, asset: a })}>{a}</button>)}
+                    {coinsOf(k.slot).map(([addr, nm]) => <button key={addr} type="button" className={"btn small" + (tf.asset === addr ? " primary" : " ghost")} onClick={() => setTf({ ...tf, asset: addr })}>{nm}</button>)}
+                    <button type="button" className={"btn small" + (tf.asset === "other" ? " primary" : " ghost")} onClick={() => setTf({ ...tf, asset: "other" })}>Other token…</button>
+                  </div>
+                  {tf.asset === "other" && <input className="input" style={{ fontFamily: "monospace" }} placeholder="Token contract address 0x…" value={tf.other} onChange={(e) => setTf({ ...tf, other: e.target.value })} autoComplete="off" spellCheck={false} aria-label="Token contract address" />}
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <input className="input" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder={`Amount of ${tf.asset === "other" ? "the token" : tf.asset.startsWith("0x") ? "coins" : tf.asset}`} value={tf.amt} onChange={(e) => setTf({ ...tf, amt: e.target.value })} aria-label="Amount to send" />
+                    <button type="button" className="btn small primary" disabled={!!busy || !tf.to} onClick={() => sendTf(tf, false)}>Send</button>
+                    <button type="button" className="btn small" disabled={!!busy || !tf.to} onClick={() => sendTf(tf, true)}>Send max</button>
+                  </div>
+                  <small className="muted">A direct transfer on BNB Chain, done in a few seconds. The sending wallet pays a tiny BNB fee. Moving a coin you hold moves its trade too, so Sell and auto-sell follow it.</small>
+                </div>
+              )}
             </>
           ) : (
             <>
