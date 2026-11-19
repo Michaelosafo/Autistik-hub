@@ -1,7 +1,10 @@
 import { cookies, headers } from "next/headers";
+import { Russo_One } from "next/font/google";
 import { APP_COOKIE } from "@/lib/android-app";
 import HFBoot from "./HFBoot";
 import { HF_CSS, HF_MARKUP } from "./markup";
+
+const fontRace = Russo_One({ weight: "400", subsets: ["latin"], display: "swap", variable: "--font-race", adjustFontFallback: true });
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -25,10 +28,9 @@ export default function HyperfocusPage() {
   return (
     <>
       <h1 className="sr-only">Hyperfocus GP</h1>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Russo+One&family=Figtree:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" />
       <style dangerouslySetInnerHTML={{ __html: HF_CSS }} />
       {app && <style dangerouslySetInnerHTML={{ __html: '.hf .mcard[data-flow="paid"],.hf [data-step="paid"],.hf #paidOv{display:none!important}' }} />}
-      <div className="hf" dangerouslySetInnerHTML={{ __html: markup }} suppressHydrationWarning />
+      <div className={"hf " + fontRace.variable} dangerouslySetInnerHTML={{ __html: markup }} suppressHydrationWarning />
       <HFBoot nonce={nonce} />
     </>
   );

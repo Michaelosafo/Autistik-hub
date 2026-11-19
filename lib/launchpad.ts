@@ -213,7 +213,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
   base: {
     key: "base",
     name: "Base",
-    dex: "Uniswap",
+    dex: "Uniswap V2",
     coin: "ETH",
     chainId: 8453,
     rpc: process.env.NEXT_PUBLIC_BASE_RPC || "https://mainnet.base.org",
@@ -227,7 +227,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
   arbitrum: {
     key: "arbitrum",
     name: "Arbitrum",
-    dex: "Uniswap",
+    dex: "Uniswap V2",
     coin: "ETH",
     chainId: 42161,
     rpc: process.env.NEXT_PUBLIC_ARBITRUM_RPC || "https://arb1.arbitrum.io/rpc",
@@ -241,10 +241,10 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
   polygon: {
     key: "polygon",
     name: "Polygon",
-    dex: "Uniswap",
+    dex: "Uniswap V2",
     coin: "POL",
     chainId: 137,
-    rpc: process.env.NEXT_PUBLIC_POLYGON_RPC || "https://polygon-rpc.com",
+    rpc: process.env.NEXT_PUBLIC_POLYGON_RPC || "https://polygon-bor-rpc.publicnode.com",
     explorer: "https://polygonscan.com",
     dexscreener: "polygon",
     router: "0xedf6066a2b290C185783862C7F4776A2C8077AD1",
@@ -255,7 +255,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
   avalanche: {
     key: "avalanche",
     name: "Avalanche",
-    dex: "Uniswap",
+    dex: "Uniswap V2",
     coin: "AVAX",
     chainId: 43114,
     rpc: process.env.NEXT_PUBLIC_AVALANCHE_RPC || "https://api.avax.network/ext/bc/C/rpc",
@@ -269,7 +269,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
   optimism: {
     key: "optimism",
     name: "Optimism",
-    dex: "Uniswap",
+    dex: "Uniswap V2",
     coin: "ETH",
     chainId: 10,
     rpc: process.env.NEXT_PUBLIC_OPTIMISM_RPC || "https://mainnet.optimism.io",
@@ -291,7 +291,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
     explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "https://robinhoodchain.blockscout.com").replace(/\/+$/, ""),
     dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "robinhood",
-    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89E5Db8B5aA49aa85AC63f691524311aeb649EBA",
+    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89e5DB8B5aA49aA85AC63f691524311AEB649eba",
     stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN) ?? "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
     suggestedLiquidity: "0.1",
     swapUrl: (t) => (process.env.NEXT_PUBLIC_ROBINHOOD_SWAP_URL || "").replace("{token}", t),
