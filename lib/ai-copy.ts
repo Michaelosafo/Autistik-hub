@@ -1,6 +1,6 @@
 /**
  * 👥 Copy (server only), BNB Chain only. Paste the wallets to copy; when one of them buys a coin on BSC, Copy buys it
- * too from YOUR wallets (up to 10 private keys you add, each paying with its own BNB); when that wallet sells, Copy
+ * too from YOUR wallets (up to 13 private keys you add, each paying with its own BNB); when that wallet sells, Copy
  * sells the same share (they sell half, Copy sells half; they sell it all, Copy sells it all) back into BNB.
  *
  * Watching: every ~second, coin Transfer logs in and out of the copied wallets are read from a BSC node that serves
@@ -43,12 +43,12 @@ const tokenOf = (coin: string) => /^bsc:(0x[0-9a-fA-F]{40})$/.exec(coin)?.[1] ||
 /** Moving these is paying, not a coin "buy" to copy: USDT, USDC, WBNB, BUSD, USD1, FDUSD. */
 const MONEY = new Set(["0x55d398326f99059ff775485246999027b3197955", "0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d", "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c", "0xe9e7cea3dedca5984780bafc599bd69add087d56", "0x8d0d000ee44948fc98c9b98a4fa4921476f08b0d", "0xc5f0f7b66764f6ec8c8dff7ba683102295e16409"]);
 
-// ---------- Your wallets (private keys in Vault, slots 1–5) ----------
+// ---------- Your wallets (private keys in Vault, slots 1–13) ----------
 
-export const MAX_KEYS = 10;
+export const MAX_KEYS = 13;
 /** $ one of your wallets spends per buy, if you set one for it (else null: the normal amount). */
 export const keyUsd = (s: FSettings, slot: number): number | null => { const v = n(((s as any).copy_key_usd || {})[String(slot)]); return v > 0 ? v : null; };
-export const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+export const SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
 /** BNB kept for gas in each wallet (a swap on BNB Chain costs well under a cent; this covers many). */
 const COPY_GAS = 0.0002;
 const keyCache = new Map<string, { key: string; a: PrivateKeyAccount }>();
