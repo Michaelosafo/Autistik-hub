@@ -40,7 +40,7 @@ export function pinAndroid(href: string): string {
   if (!hit) return href;
   // For Bitget on Android the official supported link is https://bkcode.vip. Convert it to a package-pinned intent
   // so Chrome never appears in the chooser.
-  if (hit.pkg === "com.bitkeep.wallet") {
+  if (hit.scheme === "bitkeep") {
     let path = href;
     if (/^https?:\/\/bkcode\.vip/i.test(href)) {
       path = href.replace(/^https?:\/\//i, "");
