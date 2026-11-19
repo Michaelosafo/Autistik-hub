@@ -43,23 +43,47 @@ export function pinAndroid(href: string): string {
   if (!hit) return href;
   const web = /^https?:\/\//i.test(href);
   const fallback = `S.browser_fallback_url=${encodeURIComponent(web ? href : hit.site)};`;
-  // Bitget: browsers can only reach it through https://bkcode.vip (its bitkeep:// link isn't open to browsers).
-  // Chrome can open that link too, so a plain link (or a fallback to it) makes Android ask "Chrome or Bitget?".
-  // Lock it to the Bitget app with no browser fallback: installed → only Bitget opens; not installed → its Play page.
-  if (web && hit.scheme === "bitkeep" && !/\/wc\?/.test(href)) {
-    return `intent://${href.replace(/^https?:\/\//i, "")}#Intent;scheme=https;package=${hit.pkg};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
+  // https://bkcode.vip is claimed by both Chrome and Bitget, so an https intent shows "Choose activity".
+  // Bitget's own scheme is only registered by the wallet. Docs: bitkeep://bkconnect (Android sample uses that Intent).
+  if (hit.scheme === "bitkeep" && /bkcode\.vip/i.test(href)) {
+    const fallback = `S.browser_fallback_url=${encodeURIComponent(hit.site)};`;
+    if (/\/wc\?/.test(href)) {
+      const wc = href.slice(href.indexOf("wc?"));
+      return `intent://${wc}#Intent;scheme=bitkeep;package=${hit.pkg};${fallback}end`;
+    }
+    const q = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
+    return `intent://bkconnect?${q}#Intent;scheme=bitkeep;package=${hit.pkg};${fallback}end`;
   }
   const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
   return `intent://${q.replace(/^\//, "")}#Intent;scheme=${hit.scheme};package=${hit.pkg};${fallback}end`;
 }
 
-/** Official Bitget "open this dapp" link. Android only accepts https://bkcode.vip. */
+/**
+ * Official Bitget "open this dapp" link (BKConnect).
+ * iOS: bitkeep://bkconnect. Desktop: https://bkcode.vip.
+ * Android: intent with scheme bitkeep and package com.bitkeep.wallet, so Chrome is not offered.
+ * https://web3.bitget.com/en/docs/configuration/deeplink
+ */
 export function bitgetOpenDapp(dappUrl: string): string {
   const actionID = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `act-${Date.now().toString(36)}`;
   const params = new URLSearchParams({ action: "dapp", actionID, version: "1.0", dappName: "AUTISTIK Hub", url: dappUrl });
-  const ios = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (ios) return `bitkeep://bkconnect?${params.toString()}`;
-  return pinAndroid(`https://bkcode.vip?${params.toString()}`);
+  const query = params.toString();
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  if (/Android/i.test(ua)) {
+    return `intent://bkconnect?${query}#Intent;scheme=bitkeep;package=com.bitkeep.wallet;S.browser_fallback_url=${encodeURIComponent("https://web3.bitget.com/en/wallet-download")};end`;
+  }
+  if (/iPhone|iPad|iPod/i.test(ua)) return `bitkeep://bkconnect?${query}`;
+  return `https://bkcode.vip?${query}`;
+}
+
+/** True inside Bitget's own browser, where window.bitkeep is already injected and a deep link must not run. */
+export function insideBitget(): boolean {
+  if (typeof window === "undefined") return false;
+  const w = window as any;
+  if (w.bitkeep || w.bitget) return true;
+  const eth = w.ethereum;
+  if (eth?.isBitKeep || eth?.isBitgetWallet) return true;
+  return /BitKeep|BitgetWallet/i.test(navigator.userAgent || "");
 }
 
 function androidScheme(scheme: string, pathQuery: string, pkg: string, fallback: string, plain: string): string {
@@ -74,8 +98,8 @@ export const TOP_WALLETS: { id: string; name: string; rdns: string[]; color: str
   // `wc`: the wallet's own WalletConnect link on phones, so it opens straight away and comes back to this browser.
   // Logos live in /public/wallets/<id>.svg.
   // Bitget and Trust first: both handle every network and switch between them easily.
-  // Bitget on a phone opens this site inside the app (official bkcode.vip link). WalletConnect's
-  // bitkeep://wc link does not open the dapp on Android, so people had to find it by hand.
+  // Bitget on a phone opens this site inside the app via bitkeep://bkconnect (Android: package-pinned intent).
+  // An https://bkcode.vip link is also handled by Chrome, so Android shows "Choose activity".
   { id: "bitget", native: "bitkeep://", name: "Bitget Wallet", rdns: ["com.bitget.web3"], color: "#00F0FF", install: "https://web3.bitget.com/en/wallet-download", wc: "https://bkcode.vip", dapp: (u) => bitgetOpenDapp(u) },
   { id: "trust", native: "trust://", name: "Trust Wallet", rdns: ["com.trustwallet.app"], color: "#0500FF", install: "https://trustwallet.com/download", wc: "https://link.trustwallet.com", dapp: (u) => { const q = `open_url?coin_id=20000714&url=${encodeURIComponent(u)}`; return androidScheme("trust", q, "com.wallet.crypto.trustapp", "https://trustwallet.com/download", `trust://${q}`); } },
   { id: "metamask", native: "metamask://", name: "MetaMask", rdns: ["io.metamask", "io.metamask.mobile"], color: "#F6851B", install: "https://metamask.io/download/", wc: "https://metamask.app.link", dapp: (u) => { const path = `dapp/${u.replace(/^https?:\/\//, "")}`; return androidScheme("metamask", path, "io.metamask", "https://metamask.io/download/", `metamask://${path}`); } },
@@ -203,7 +227,13 @@ export function injectedFor(id: string): any | null {
   const list: any[] = [eth, ...(Array.isArray(eth?.providers) ? eth.providers : [])].filter(isEip1193);
   const flag = (f: (p: any) => boolean) => list.find(f) ?? null;
   switch (id) {
-    case "bitget": return [w.bitkeep?.ethereum, w.bitget?.ethereum].find(isEip1193) ?? flag((p) => p.isBitKeep || p.isBitgetWallet);
+    case "bitget": {
+      const named = [w.bitkeep?.ethereum, w.bitget?.ethereum].find(isEip1193) ?? flag((p) => p.isBitKeep || p.isBitgetWallet);
+      if (named) return named;
+      // Bitget's in-app browser sometimes only exposes window.ethereum. Stay on it; don't deep-link.
+      if (/BitKeep|BitgetWallet/i.test(navigator.userAgent || "") && isEip1193(eth)) return eth;
+      return null;
+    }
     case "trust": return [w.trustwallet?.ethereum, w.trustwallet].find(isEip1193) ?? flag((p) => p.isTrust || p.isTrustWallet);
     case "okx": return [w.okxwallet].find(isEip1193) ?? flag((p) => p.isOkxWallet || p.isOKExWallet);
     case "binance": return [w.binancew3w?.ethereum, w.BinanceChain].find(isEip1193) ?? flag((p) => p.isBinance);
@@ -511,6 +541,19 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet. Open this site inside your wallet app's browser instead." }); return; }
   const t = typeof walletId === "object" ? walletId : TOP_WALLETS.find((w) => w.id === walletId);
   const top: WcTarget | undefined = !t ? undefined : "id" in t ? { name: t.name, logo: `/wallets/${(t as any).id}.svg`, wc: (t as any).wc, native: (t as any).native, install: (t as any).install } : t;
+  // Bitget on a phone: already inside its browser → injected provider, no redirect. In Chrome → open the app
+  // with bitkeep://bkconnect (Android: package-pinned intent). https://bkcode.vip is also claimed by Chrome.
+  if (isMobile() && top?.name === "Bitget Wallet" && top.wc === "https://bkcode.vip") {
+    const inj = injectedFor("bitget") || (insideBitget() ? legacyInjected() : null);
+    if (inj) { choose("Bitget Wallet", inj); return; }
+    if (insideBitget()) { set({ busy: "", error: "Bitget's wallet isn't ready in this browser yet. Wait a second and tap Bitget again." }); return; }
+    const href = bitgetOpenDapp(location.href);
+    flagWc(false);
+    if (pre && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
+    set({ open: true, busy: "", error: "", qr: { uri: "", name: top.name, logo: top.logo, install: top.install, href } });
+    openWalletApp(href);
+    return;
+  }
   // Phone + a wallet with its own link + the link already made: open the wallet NOW, inside the tap (no waiting).
   if (isMobile() && top && (top.native || top.wc) && preReady()) {
     const base = walletBase(top)!, href = wcHref(base, pre!.uri);
@@ -538,14 +581,6 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (pre && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
   set({ busy: top?.name || "WalletConnect", error: "", qr: null });
   const mobile = isMobile();
-  // Bitget Android uses BKConnect to open the DApp inside its wallet browser. Avoid the unsupported /wc path.
-  if (mobile && top?.name === "Bitget Wallet" && top.wc === "https://bkcode.vip") {
-    const href = bitgetOpenDapp(location.href);
-    flagWc(false);
-    set({ open: true, busy: "", error: "", qr: { uri: "", name: top.name, logo: top.logo, install: top.install, href } });
-    openWalletApp(href);
-    return;
-  }
   // On a phone: that wallet's own app opens with the request. On a computer: our window shows a code to scan
   // with that wallet's app. With no wallet named: WalletConnect's own list of 300+ wallets.
   const direct = mobile ? (top?.native || top?.wc ? top : undefined) : undefined;
@@ -744,7 +779,7 @@ const browse = (base: string) => (u: string) => `${base}/${encodeURIComponent(u)
  * the others open this page inside their app on a phone, or their download page on a computer.
  */
 export const SOL_APPS: { id: string; name: string; logo: string; install: string; dapp: (url: string) => string; native?: string; wc?: string }[] = [
-  { id: "bitget", wc: "https://bkcode.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => pinAndroid(`https://bkcode.vip?action=dapp&url=${encodeURIComponent(u)}`) },
+  { id: "bitget", native: "bitkeep://", wc: "https://bkcode.vip", name: "Bitget Wallet", logo: "/wallets/bitget.svg", install: "https://web3.bitget.com/en/wallet-download", dapp: (u) => bitgetOpenDapp(u) },
   { id: "trust", native: "trust://", wc: "https://link.trustwallet.com", name: "Trust Wallet", logo: "/wallets/trust.svg", install: "https://trustwallet.com/download", dapp: (u) => `https://link.trustwallet.com/open_url?coin_id=501&url=${encodeURIComponent(u)}` },
   { id: "phantom", name: "Phantom", logo: "/wallets/phantom.svg", install: "https://phantom.com/download", dapp: browse("https://phantom.app/ul/browse") },
   { id: "solflare", name: "Solflare", logo: wcLogo("34c0e38d-66c4-470e-1aed-a6fabe2d1e00"), install: "https://solflare.com/download", dapp: browse("https://solflare.com/ul/v1/browse") },
@@ -844,6 +879,11 @@ function wcSolWallet(name: string, icon: string, up: any, address: string, base?
  */
 export async function chooseSolWalletConnect(t: WcTarget) {
   if (!WALLETCONNECT_ID) { set({ error: "WalletConnect isn't switched on yet." }); return; }
+  if (t.name === "Bitget Wallet" && insideBitget()) {
+    if (chooseSolInjected("bitget", t.name, t.logo)) return;
+    set({ busy: "", error: "Bitget's wallet isn't ready in this browser yet. Wait a second and tap Bitget again." });
+    return;
+  }
   set({ busy: t.name, error: "", qr: null });
   const mobile = isMobile();
   try {
