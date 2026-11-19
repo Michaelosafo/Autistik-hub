@@ -13,12 +13,13 @@ export default async function RagePage() {
   if (!owner && !helper) notFound();
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <Link href="/admin">Admin</Link> and confirm your 2-step code, then come back.</p></div>;
   return (
-    <div className="stack">
+    <div className="stack rg">
       <TraderTabs />
-      <div className="page-head">
-        <div className="label">Admin · token deploy</div>
-        <h1>Rage</h1>
-        <p className="muted">Deploy the token, add the liquidity, then it asks if you want to remove that liquidity. BNB Chain is the default. Open the network control to deploy on Ethereum, Base, Arbitrum, Polygon, Avalanche, Optimism, Robinhood Chain, or Solana instead.</p>
+      <div className="snp-hero">
+        <Link href="/admin" className="snp-back">← Admin</Link>
+        <h1>💧 Rage</h1>
+        <p>Deploy a token, add liquidity, then pull it when you choose.</p>
+        <details><summary>How it works</summary><p>Deploy the token, add the liquidity, then it asks if you want to remove that liquidity. BNB Chain is the default. Open the network control to deploy on Ethereum, Base, Arbitrum, Polygon, Avalanche, Optimism, Robinhood Chain, or Solana instead.</p></details>
       </div>
       <AdminDirectPool mode="all" />
     </div>

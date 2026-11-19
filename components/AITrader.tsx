@@ -148,14 +148,16 @@ export default function AITrader() {
   const freeUsd = cash != null && d.bnbUsd ? cash * d.bnbUsd : null;
 
   return (
-    <div className="stack ait ait-desk" style={{ ["--acc" as any]: "#3b82f6" }}>
+    <div className="stack ait ait-desk snp" style={{ ["--acc" as any]: "#3b82f6", ["--acc2" as any]: "#06b6d4" }}>
       <TraderTabs />
-      <div className="page-head ait-hero">
-        <Link href="/admin" className="muted">← Admin</Link>
-        <div className="label">{d.isOwner ? "Owner" : "Admin"} · your own trader</div>
+      <div className="snp-hero">
+        <Link href="/admin" className="snp-back">← Admin</Link>
         <h1>🤖 AI trader</h1>
-        <p className="muted ait-mine">This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>
-        <p className="muted">It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
+        <p>{d.isOwner ? "Owner" : "Admin"} · your own trader. Buys BNB Chain coins with buzz on X and Telegram that pass the safety checks.</p>
+        <details><summary>How it works</summary>
+        <p>This trader is yours alone: its wallet, settings, Telegram and X logins, followed groups and trades are separate from every other admin&apos;s.</p>
+        <p>It trades with BNB. It looks at coins trending and new on BNB Chain, Ethereum and Robinhood Chain (Solana if you turn it on), favours coins with buzz on X and Telegram, keeps only ones that pass the safety checks (safety label, honeypot, taxes, liquidity, age), lets the AI pick the best, buys, and sells on stop-loss, take profit, trailing stop or max hold time. It checks every 5 minutes.</p>
+        </details>
       </div>
 
       <CoinsTraded busy={!!busy} onAct={act} />

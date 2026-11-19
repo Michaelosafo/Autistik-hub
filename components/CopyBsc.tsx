@@ -19,7 +19,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   s: { copy_wallets?: W[]; mode: string; copy_sl_on?: boolean; copy_tp_on?: boolean; copy_mev?: boolean; copy_gwei?: number; copy_slip?: number; copy_key_usd?: Record<string, number>; snipe_usd?: number; snipe_amounts?: Record<string, Record<string, number>> }; keys: CopyKeys | null; cfg?: { usd: number; tp: number; sl: number } | null;
   busy: string; act: Act; set: (b: any, done?: string) => Promise<void>; sniper?: boolean; held?: Held[];
   /** Sniper tabs: only the wallet cards, or only the speed settings (none = both). */
-  part?: "wallets" | "settings";
+  part?: "copy" | "wallets" | "settings";
 }) {
   // Moving money between your own wallets: one wallet's panel open at a time.
   const [tf, setTf] = useState<Tf | null>(null);
@@ -79,9 +79,9 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   };
 
   return (
-    <section className={"card stack" + (sniper ? " snp-card" : "")}>
+    <section className="card stack snp-card">
       {part !== "settings" && <>
-      {!sniper && <>
+      {!sniper && part !== "wallets" && <>
       <b>🟡 Wallets to copy (BNB Chain)</b>
       <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); add(); }}>
         <input className="input" style={{ flex: "1 1 260px", fontFamily: "monospace" }} placeholder="Paste wallet address 0x…" value={addr} onChange={(e) => { setAddr(e.target.value); setErr(""); }} aria-label="Wallet address to copy" autoComplete="off" spellCheck={false} />
@@ -102,7 +102,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
       {dropped > 0 && <small className="muted">{dropped} older Solana / Ethereum wallet{dropped === 1 ? " is" : "s are"} no longer copied (Copy is BNB Chain only now). Saving any change clears {dropped === 1 ? "it" : "them"}.</small>}
 
       </>}
-      <b style={{ marginTop: 8 }}>🔑 Your wallets that buy (up to 13)</b>
+      {part !== "copy" && <>
+      <b style={{ marginTop: part === "wallets" ? 0 : 8 }}>🔑 Your wallets that buy (up to 13)</b>
       {(keys?.keys || []).some((k) => !k.address) && (
         <button type="button" className="btn small" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => {
           const free = (keys?.keys || []).filter((k) => !k.address).length;
@@ -121,7 +122,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
           <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"}</small>
         </div>
       )}
-        <div className={"stack" + (sniper ? " snp-wcard" + (k.address ? "" : " add") : "")} data-net={sniper ? net : undefined} style={sniper ? undefined : { gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
+        <div className={"stack snp-wcard" + (k.address ? "" : " add")} data-net={sniper ? net : "bsc"}>
           <small>{k.address ? <><b>Wallet {k.slot}</b>{sniper && <span className="snp-chip" data-net={net}>{net === "bsc" ? "BNB Chain" : net === "ethereum" ? "Ethereum" : net === "base" ? "Base" : net === "arbitrum" ? "Arbitrum" : "Solana"}</span>}</> : <><b>＋ Add a wallet</b> <span className="muted">(becomes wallet {k.slot})</span></>}</small>
           {k.address ? (
             <>
@@ -206,7 +207,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
       {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live (top of the page) once {mine.length ? "your wallet holds BNB" : "you've created or added a wallet and sent it BNB"}.</small>}
 
       </>}
-      {part !== "wallets" && <>
+      </>}
+      {part !== "wallets" && part !== "copy" && <>
       <b style={{ marginTop: part === "settings" ? 0 : 8 }}>⚡ Speed and bot protection</b>
       <small className="muted">{sniper ? "Gas speed decides who lands first in the block when liquidity arrives: Turbo or Max for hot launches." : "Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away."}</small>
       <label className="ait-check" style={{ margin: 0 }}>
