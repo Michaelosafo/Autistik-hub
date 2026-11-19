@@ -7638,3 +7638,42 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .wp-main > .wp-nets,.wp-main > .wp-searchrow,.wp-main > .wp-head,.wp-main > .wp-allnets{flex:none}
 .wp-phone .wp-nets{padding:2px 0 6px;min-height:42px}
 .wp-phone .wp-net{white-space:nowrap}
+
+/* AUTISTIK polish pass — elevated typography, hero depth and clearer landing-page rhythm. */
+.lp .lp-hero{
+ position:relative;isolation:isolate;overflow:hidden;border:1px solid rgba(181,124,255,.18);border-radius:34px;
+ background:radial-gradient(ellipse at 85% 18%,rgba(181,124,255,.18),transparent 38%),radial-gradient(ellipse at 5% 85%,rgba(255,107,154,.11),transparent 42%),linear-gradient(135deg,#11101f 0%,#17142c 55%,#1b1831 100%);
+ box-shadow:0 26px 80px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.06);
+}
+.lp .lp-hero::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;opacity:.18;background-image:radial-gradient(rgba(255,255,255,.32) 1px,transparent 1px);background-size:28px 28px;mask-image:linear-gradient(90deg,#000,transparent 70%);}
+.lp .lp-hero-copy{padding:clamp(26px,5vw,64px);}
+.lp .lp-hero .lp-eyebrow{font-size:.76em;letter-spacing:.22em;text-transform:uppercase;color:#d7b4ff;font-weight:800;}
+.lp .lp-hero h1{font-family:"Bricolage Grotesque",var(--f-display);font-size:clamp(2.45em,5.5vw,4.25em);letter-spacing:-.055em;line-height:1.02;font-weight:800;}
+.lp .lp-hero h1 .lp-punch{border-radius:.18em;box-shadow:0 .12em 0 rgba(0,0,0,.25),0 10px 32px rgba(245,197,24,.14);}
+.lp .lp-hero h1 .lp-loop{font-size:.58em;line-height:1.25;letter-spacing:-.02em;margin-top:.25em;background:linear-gradient(90deg,#ffe16a,#ff9e68 48%,#ff75b2 80%,#b99cff);background-clip:text;-webkit-background-clip:text;color:transparent;-webkit-text-fill-color:transparent;}
+.lp .lp-hero p{max-width:60ch;line-height:1.72;font-size:1.06em;color:#d4d1e5;}
+.lp .lp-hero p.lp-why{border:1px solid rgba(240,185,11,.2);border-left:3px solid #f0b90b;background:linear-gradient(135deg,rgba(240,185,11,.09),rgba(181,124,255,.05));border-radius:0 18px 18px 0;padding:16px 18px;color:#ece8f8;}
+.lp .lp-hero-art{position:relative;min-height:340px;border-radius:28px;overflow:hidden;box-shadow:0 26px 70px rgba(0,0,0,.25);}
+.lp .lp-hero-art::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,transparent 65%,rgba(11,10,18,.25));}
+.lp .lp-ctas .lp-btn{transition:transform .18s ease,box-shadow .18s ease,filter .18s ease;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.14);}
+.lp .lp-ctas .lp-btn:hover{transform:translateY(-3px);filter:brightness(1.04);}
+.lp .lp-stats div{transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;background:linear-gradient(145deg,var(--surface),var(--surface-2));}
+.lp .lp-stats div:hover{transform:translateY(-3px);border-color:rgba(181,124,255,.35);box-shadow:0 12px 30px rgba(0,0,0,.1);}
+.lp .lp-stats b{font-size:clamp(1.2em,2vw,1.55em);letter-spacing:-.035em;}
+.lp .lp-sec{scroll-margin-top:100px;}
+.lp .lp-head h2{letter-spacing:-.035em;}
+.lp .lp-why-card,.lp .lp-tool{transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease;}
+.lp .lp-why-card:hover,.lp .lp-tool:hover{transform:translateY(-4px);box-shadow:0 16px 36px rgba(0,0,0,.11);border-color:rgba(181,124,255,.35);}
+@media(max-width:640px){
+ .lp .lp-hero{border-radius:24px;grid-template-columns:1fr;padding:0;gap:0;}
+ .lp .lp-hero-copy{padding:24px 20px 26px;}
+ .lp .lp-hero-art{min-height:210px;max-height:none;border-radius:0 0 24px 24px;order:-1;}
+ .lp .lp-hero h1{font-size:clamp(2.25em,10.4vw,3em);letter-spacing:-.055em;}
+ .lp .lp-hero h1 .lp-loop{font-size:.62em;min-height:1.4em;}
+ .lp .lp-stats{gap:8px;}
+ .lp .lp-stats div{border-radius:14px;padding:12px;}
+}
+@media(prefers-reduced-motion:reduce){
+ .lp .lp-ctas .lp-btn,.lp .lp-stats div,.lp .lp-why-card,.lp .lp-tool{transition:none;}
+ .lp .lp-ctas .lp-btn:hover,.lp .lp-stats div:hover,.lp .lp-why-card:hover,.lp .lp-tool:hover{transform:none;}
+}
