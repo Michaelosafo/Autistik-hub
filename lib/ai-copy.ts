@@ -193,7 +193,7 @@ export async function transferBetween(fromSlot: number, toSlot: number, asset: s
 const stableBySymbolBsc = (x: string) => ({ USDT: "0x55d398326f99059fF775485246999027B3197955", USDC: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d" } as Record<string, string>)[x.toUpperCase()] || null;
 
 /** Coins moved between your wallets: their open trade moves too (the same share of the cost). */
-async function moveTrades(token: string, from: number, to: number, qty: number) {
+export async function moveTrades(token: string, from: number, to: number, qty: number) {
   const { data } = await pos().select("*").eq("fut_id", T()).eq("copy_slot", from).eq("coin", `bsc:${token.toLowerCase()}`).eq("status", "open");
   let left = qty;
   for (const p of (data || []) as FPos[]) {
