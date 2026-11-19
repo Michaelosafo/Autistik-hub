@@ -225,12 +225,36 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const w = await import("@/lib/sniper-wallet");
           const amount = b.amount === "max" ? "max" as const : Number(b.amount);
           const chain = String(b.chain || "bsc");
-          if (params.action === "sniper-balances") return json(await w.walletHoldings(Number(b.slot), chain, Array.isArray(b.extra) ? b.extra.map(String) : []));
+          if (params.action === "sniper-balances") {
+            const chains = await import("@/lib/sniper-chains");
+            return json(await chains.cardHoldings(Number(b.slot), chain, Array.isArray(b.extra) ? b.extra.map(String) : []));
+          }
           if (params.action === "sniper-transfer-preview") return json(await w.transferPreview(Number(b.from), Number(b.to), String(b.asset || ""), amount, chain));
           if (params.action === "sniper-transfer") return json({ ok: true, note: await w.transferSend(Number(b.from), Number(b.to), String(b.asset || ""), amount, chain) });
           const slip = Number(b.slippageBps ?? 100);
+          const chains = await import("@/lib/sniper-chains");
+          if (chain === "solana" && params.action === "sniper-swap-quote") return json(await chains.solSwapQuote(Number(b.slot), String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip));
+          if (chain === "solana" && params.action === "sniper-swap") return json({ ok: true, note: await chains.solSwapSend(Number(b.slot), String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
           if (params.action === "sniper-swap-quote") return json(await w.swapQuote(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip));
           return json({ ok: true, note: await w.swapSend(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
+        }
+        case "sniper-card":
+        case "sniper-sol-create":
+        case "sniper-bridge-quote":
+        case "sniper-bridge": {
+          if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
+          const cap = params.action === "sniper-bridge" || params.action === "sniper-sol-create" ? 6 : 30;
+          const slow = await rateLimit(req, params.action, cap, 60, String(id));
+          if (slow) return slow;
+          const chains = await import("@/lib/sniper-chains");
+          if (params.action === "sniper-card") return json(await chains.walletCard(Number(b.slot)));
+          if (params.action === "sniper-sol-create") {
+            const made = await chains.createSniperSol(Number(b.slot));
+            return json({ ok: true, ...made, note: `Solana address for wallet ${made.slot}: ${made.address}` });
+          }
+          const amount = b.amount === "max" ? "max" as const : Number(b.amount);
+          if (params.action === "sniper-bridge-quote") return json(await chains.bridgeQuote(Number(b.from), Number(b.to), String(b.fromChain || ""), String(b.toChain || ""), String(b.assetIn || ""), String(b.assetOut || ""), amount));
+          return json({ ok: true, note: await chains.bridgeSend(Number(b.from), Number(b.to), String(b.fromChain || ""), String(b.toChain || ""), String(b.assetIn || ""), String(b.assetOut || ""), amount, String(b.minOutRaw || "0")) });
         }
         case "sniper-withdraw-preview":
         case "sniper-withdraw": {
