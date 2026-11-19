@@ -606,16 +606,10 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
     set({ busy: "", error: `${top!.name} isn't ready in this browser yet. Wait a second and tap it again.` });
     return;
   }
-  // Bitget on a phone opens this site inside the app. https://bkcode.vip is also claimed by Chrome, so Android
-  // uses bitkeep://bkconnect pinned to com.bitkeep.wallet. iOS stays on bitkeep://. Desktop never reaches this.
-  if (isMobile() && top?.name === "Bitget Wallet" && top.wc === "https://bkcode.vip") {
-    const href = bitgetOpenDapp(location.href);
-    flagWc(false);
-    if (pre && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
-    set({ open: true, busy: "", error: "", qr: { uri: "", name: top.name, logo: top.logo, install: top.install, href } });
-    openWalletApp(href);
-    return;
-  }
+  // Bitget on a phone goes through WalletConnect like every other wallet (and like Bitget on Solana): its app opens
+  // with the connection request and the member comes back here connected. It used to open this site inside
+  // Bitget's own browser instead, which asked for a network again rather than showing the request to approve.
+  // walletBase() picks bitkeep:// on phones, so Chrome never offers itself for the link.
   // Phone + a wallet with its own link + the link already made: open the wallet NOW, inside the tap (no waiting).
   if (isMobile() && top && (top.native || top.wc) && preReady()) {
     const base = walletBase(top)!, href = wcHref(base, pre!.uri, top.pkg);
