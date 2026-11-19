@@ -4,6 +4,7 @@
  * their own BNB, and set the buy size and safety exits.
  */
 import { useState } from "react";
+import SniperWalletTools from "@/components/SniperWalletTools";
 
 export type CopyKeys = { bnbUsd: number; keys: { slot: number; address: string | null; bnb: number | null; usd?: number | null }[] };
 type W = { address: string; chain?: string; label?: string; usd?: number; on?: boolean };
@@ -132,11 +133,12 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <button type="button" className="btn small" onClick={() => { navigator.clipboard?.writeText(k.address!).then(() => setCopied(k.slot), () => {}); setTimeout(() => setCopied(0), 1500); }}>{copied === k.slot ? "Copied ✓" : "Copy address"}</button>
                 <a className="btn small ghost" href={`https://bscscan.com/address/${k.address}`} target="_blank" rel="noreferrer">BscScan</a>
-                {mine.length > 1 && <button type="button" className={"btn small" + (tf?.from === k.slot ? " primary" : "")} disabled={!!busy} onClick={() => setTf(tf?.from === k.slot ? null : { from: k.slot, to: null, asset: "BNB", other: "", amt: "" })}>{busy === `tf${k.slot}` ? "Sending…" : "↔ Transfer"}</button>}
+                {!sniper && mine.length > 1 && <button type="button" className={"btn small" + (tf?.from === k.slot ? " primary" : "")} disabled={!!busy} onClick={() => setTf(tf?.from === k.slot ? null : { from: k.slot, to: null, asset: "BNB", other: "", amt: "" })}>{busy === `tf${k.slot}` ? "Sending…" : "↔ Transfer"}</button>}
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => reveal(k.slot)}>Show private key</button>
                 <button type="button" className="btn small ghost" disabled={!!busy} onClick={() => remove(k.slot)}>{busy === `ck${k.slot}` ? "Removing…" : "Remove"}</button>
               </div>
-              {tf?.from === k.slot && (
+              {sniper && <SniperWalletTools slot={k.slot} address={k.address} others={mine.filter((x) => x.slot !== k.slot && x.address).map((x) => ({ slot: x.slot, address: x.address! }))} busy={!!busy} act={act} />}
+              {!sniper && tf?.from === k.slot && (
                 <div className="stack" style={{ gap: 6, padding: "8px 10px", borderRadius: 10, border: "1px dashed var(--line, rgba(127,127,127,.35))" }}>
                   <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     <small><b>To:</b></small>
@@ -161,7 +163,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
           ) : (
             <>
             <button type="button" className="btn primary" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={() => act(`cn${k.slot}`, "copy-key-new", { slot: k.slot })}>{busy === `cn${k.slot}` ? "Creating…" : "＋ Create new wallet"}</button>
-            <small className="muted">Makes a fresh BNB Chain wallet just for Copy; you fund it with BNB. Or paste the private key of a wallet you already have:</small>
+            <small className="muted">Makes a fresh BNB Chain wallet just for this; you fund it with BNB. Or paste the private key of a wallet you already have:</small>
             <form className="row" style={{ gap: 6, flexWrap: "wrap" }} onSubmit={(e) => { e.preventDefault(); const v = (keyIn[k.slot] || "").trim(); if (!v) return; setKeyIn({ ...keyIn, [k.slot]: "" }); act(`ck${k.slot}`, "copy-key-set", { slot: k.slot, key: v }); }}>
               <input className="input" type="password" style={{ flex: "1 1 260px", fontFamily: "monospace" }} placeholder="Paste private key" value={keyIn[k.slot] || ""} onChange={(e) => setKeyIn({ ...keyIn, [k.slot]: e.target.value })} aria-label={`Private key for wallet ${k.slot}`} autoComplete="off" spellCheck={false} />
               <button type="submit" className="btn small" disabled={!!busy || !(keyIn[k.slot] || "").trim()}>Add wallet {k.slot}</button>

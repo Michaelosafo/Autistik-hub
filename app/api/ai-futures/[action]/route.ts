@@ -6,6 +6,7 @@
  */
 import { adminState } from "@/lib/admin";
 import { cronDenied } from "@/lib/cron-auth";
+import { rateLimit } from "@/lib/ratelimit";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
 import { withTrader } from "@/lib/ai-trader-ctx";
 import { moveToDesk, EARN_DESK, FX_DESK, SNIPE_DESK, TURBO_DESK, COPY_DESK, LIQ_DESK, MAD_DESK, isCopyDesk, isLiqDesk, isSpotDesk, earnMove, LIVE_VENUES, VENUES, closeAllNow, closeNow, withdrawFut, createFutSolWallet, createFutWallet, depositToHl, flog, fundFromSolana, futStatus, futWallet, getF, importFutKey, importFutSolKey, revealFutKey, revealFutSolKey, runFutures, setStopTarget } from "@/lib/ai-futures";
@@ -206,9 +207,30 @@ export async function POST(req: Request, { params }: { params: { action: string 
         }
         case "copy-transfer": {
           if (!isCopyDesk()) return json({ error: "Copy / Sniper only." }, 400);
+          const slow = await rateLimit(req, "copy-transfer", 12, 60, String(id));
+          if (slow) return slow;
           const amount = b.amount === "max" ? "max" : Number(b.amount);
           const note = await (await import("@/lib/ai-copy")).transferBetween(Number(b.from), Number(b.to), String(b.asset || ""), amount as number | "max");
           return json({ ok: true, note });
+        }
+        case "sniper-balances":
+        case "sniper-transfer-preview":
+        case "sniper-transfer":
+        case "sniper-swap-quote":
+        case "sniper-swap": {
+          if (!isCopyDesk()) return json({ error: "Sniper only." }, 400);
+          const cap = params.action === "sniper-swap" || params.action === "sniper-transfer" ? 8 : 40;
+          const slow = await rateLimit(req, params.action, cap, 60, String(id));
+          if (slow) return slow;
+          const w = await import("@/lib/sniper-wallet");
+          const amount = b.amount === "max" ? "max" as const : Number(b.amount);
+          const chain = String(b.chain || "bsc");
+          if (params.action === "sniper-balances") return json(await w.walletHoldings(Number(b.slot), chain, Array.isArray(b.extra) ? b.extra.map(String) : []));
+          if (params.action === "sniper-transfer-preview") return json(await w.transferPreview(Number(b.from), Number(b.to), String(b.asset || ""), amount, chain));
+          if (params.action === "sniper-transfer") return json({ ok: true, note: await w.transferSend(Number(b.from), Number(b.to), String(b.asset || ""), amount, chain) });
+          const slip = Number(b.slippageBps ?? 100);
+          if (params.action === "sniper-swap-quote") return json(await w.swapQuote(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip));
+          return json({ ok: true, note: await w.swapSend(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
         }
         case "copy-key-remove": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
