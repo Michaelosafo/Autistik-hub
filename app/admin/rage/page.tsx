@@ -18,7 +18,7 @@ export default async function RagePage() {
       <div className="page-head">
         <div className="label">Admin · token deploy</div>
         <h1>Rage</h1>
-        <p className="muted">Deploy the token, add the liquidity, then it asks if you want to remove that liquidity. BNB Chain is the default. Open the network control to deploy on Ethereum, Robinhood Chain or Solana instead.</p>
+        <p className="muted">Deploy the token, add the liquidity, then it asks if you want to remove that liquidity. BNB Chain is the default. Open the network control to deploy on Ethereum, Base, Arbitrum, Polygon, Avalanche, Optimism, Robinhood Chain, or Solana instead.</p>
       </div>
       <AdminDirectPool mode="all" />
     </div>

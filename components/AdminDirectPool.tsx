@@ -71,7 +71,7 @@ function RageNetworkPicker({ value, onChange }: { value: RageChain; onChange: (k
           })}
         </div>
       )}
-      <small className="muted">{value === "bsc" ? "BNB Chain is the default. Open this to deploy on Ethereum, Robinhood Chain or Solana." : `Deploying on ${chain.name}. The wallet is asked to switch.`}</small>
+      <small className="muted">{value === "bsc" ? "BNB Chain is the default. Open this to deploy on another network." : `Deploying on ${chain.name}. The wallet is asked to switch.`}</small>
     </div>
   );
 }

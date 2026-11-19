@@ -1,6 +1,6 @@
 import { parseAbi } from "viem";
 
-/** Compiled from contracts/AdminDirectToken.sol (solc 0.8.38, optimizer 200, paris). Trading stays closed until the owner opens it. Buy and sell tax are 0–50% (default 0). The V2 router is passed in, so the same token works on BNB Chain, Ethereum and Robinhood Chain, and that router can still return liquidity while trading is closed. */
+/** Compiled from contracts/AdminDirectToken.sol (solc 0.8.38, optimizer 200, paris). Trading stays closed until the owner opens it. Buy and sell tax are 0–50% (default 0). The V2 router is passed in, so the same token works on every Rage EVM network, and that router can still return liquidity while trading is closed. */
 export const ADMIN_DIRECT_TOKEN_ABI = parseAbi([
   "constructor(string n, string s, uint256 supply, uint256 buyTaxBps, uint256 sellTaxBps, address taxWallet, address router)",
   "function name() view returns (string)",
