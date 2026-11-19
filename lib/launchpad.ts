@@ -291,7 +291,7 @@ export const CHAINS: Record<ChainKey, LaunchChain> = {
     rpc: process.env.NEXT_PUBLIC_ROBINHOOD_RPC || "https://rpc.mainnet.chain.robinhood.com",
     explorer: (process.env.NEXT_PUBLIC_ROBINHOOD_EXPLORER || "https://robinhoodchain.blockscout.com").replace(/\/+$/, ""),
     dexscreener: process.env.NEXT_PUBLIC_ROBINHOOD_DEXSCREENER_SLUG || "robinhood",
-    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89E5Db8B5aA49aa85AC63f691524311aeb649EBA",
+    router: addr(process.env.NEXT_PUBLIC_ROBINHOOD_ROUTER) ?? "0x89e5DB8B5aA49aA85AC63f691524311AEB649eba",
     stablecoin: addr(process.env.NEXT_PUBLIC_ROBINHOOD_STABLECOIN) ?? "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
     suggestedLiquidity: "0.1",
     swapUrl: (t) => (process.env.NEXT_PUBLIC_ROBINHOOD_SWAP_URL || "").replace("{token}", t),
