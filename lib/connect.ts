@@ -60,7 +60,7 @@ export function pinAndroid(href: string): string {
 /** Official Bitget "open this dapp" link. Android only accepts https://bkcode.vip. */
 export function bitgetOpenDapp(dappUrl: string): string {
   const actionID = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `act-${Date.now().toString(36)}`;
-  const params = new URLSearchParams({ action: "DApp", actionID, version: "1.0", dappName: "AUTISTIK Hub", url: dappUrl });
+  const params = new URLSearchParams({ action: "dapp", actionID, version: "1.0", dappName: "AUTISTIK Hub", url: dappUrl });
   const ios = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (ios) return `bitkeep://bkconnect?${params.toString()}`;
   return pinAndroid(`https://bkcode.vip?${params.toString()}`);
