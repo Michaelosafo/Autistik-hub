@@ -3,7 +3,7 @@
  * Copy desk (BNB Chain only): paste wallets to copy, add one or two of your own wallets (private keys) that buy with
  * their own BNB, and set the buy size and safety exits.
  */
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import SniperWalletTools from "@/components/SniperWalletTools";
 
 export type CopyKeys = { bnbUsd: number; keys: { slot: number; address: string | null; bnb: number | null; usd?: number | null }[] };
@@ -107,7 +107,9 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
         }}>{busy === "cfill" ? "Creating…" : `＋ Create all ${(keys?.keys || []).filter((k) => !k.address).length} remaining wallets (up to 13)`}</button>
       )}
       <small className="muted">Each wallet you add buys every copied coin with its own money (USDT / USDC on BNB Chain, else BNB), so with 3 wallets each copy is bought 3 times. Keep a little BNB in each for gas. Keys are stored encrypted on the server and never shown on this page.</small>
-      {sniper && mine.length > 0 && (
+      {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const free = ks.find((k) => !k.address); return [...(free ? [free] : []), ...ks.filter((k) => k.address)]; })().map((k) => (
+        <Fragment key={k.slot}>
+      {sniper && k.slot === mine[0]?.slot && (
         <div className="row" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           <small className="muted">Network:</small>
           {([["bsc", "BNB"], ["ethereum", "ETH"], ["base", "Base"], ["arbitrum", "Arb"], ["solana", "SOL"]] as const).map(([id, nm]) => (
@@ -116,9 +118,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
           <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"}</small>
         </div>
       )}
-      {(() => { const ks = keys?.keys || [{ slot: 1, address: null, bnb: null }]; const firstFree = ks.find((k) => !k.address)?.slot; return ks.filter((k) => k.address || k.slot === firstFree); })().map((k) => (
-        <div key={k.slot} className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
-          <small><b>Wallet {k.slot}</b>{!k.address && mine.length ? <span className="muted"> (add another, optional)</span> : null}</small>
+        <div className="stack" style={{ gap: 4, padding: "8px 10px", border: "1px solid var(--line, rgba(127,127,127,.25))", borderRadius: 12 }}>
+          <small>{k.address ? <b>Wallet {k.slot}</b> : <><b>＋ Add a wallet</b> <span className="muted">(becomes wallet {k.slot})</span></>}</small>
           {k.address ? (
             <>
               {!sniper && <code style={{ wordBreak: "break-all" }}>{k.address}</code>}
@@ -197,6 +198,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
             </>
           )}
         </div>
+        </Fragment>
       ))}
       {s.mode !== "live" && <small className="muted">Practice mode: buys are pretend (real prices). Switch to Live (top of the page) once {mine.length ? "your wallet holds BNB" : "you've created or added a wallet and sent it BNB"}.</small>}
 
