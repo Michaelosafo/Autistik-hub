@@ -130,7 +130,15 @@ async function solHoldings(slot: number, extra: string[]) {
     if (amount <= 0 && t.symbol !== "USDT" && t.symbol !== "USDC" && !extra.includes(t.address)) continue;
     assets.push({ address: t.address, symbol: t.symbol, name: t.name, decimals: t.decimals, raw: rawOf(t.address).toString(), amount, valueUsd: null });
   }
-  return { slot, address: owner, chain: "solana" as const, coin: "SOL", explorer: chain.explorer, assets };
+  // Dollar values from Jupiter's price feed (stablecoins count as $1 if it has none).
+  const ids = [...new Set(assets.map((x) => x.address))];
+  const px = await fetch(`${JUP}/price/v3?ids=${ids.join(",")}`, { cache: "no-store", signal: AbortSignal.timeout(8_000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  for (const x of assets) {
+    const p = Number(px?.[x.address]?.usdPrice) || (x.symbol === "USDT" || x.symbol === "USDC" ? 1 : 0);
+    x.valueUsd = p > 0 ? x.amount * p : null;
+  }
+  const coinUsd = Number(px?.[WSOL]?.usdPrice) || null;
+  return { slot, address: owner, chain: "solana" as const, coin: "SOL", explorer: chain.explorer, coinUsd, assets };
 }
 
 /** Balances for the chain tab. EVM chains share the wallet's one address. */

@@ -281,7 +281,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const slots = Array.isArray(b.slots) ? b.slots.map(Number).filter((x: number) => x >= 1 && x <= 13) : [];
           const amounts: Record<string, number> = {};
           if (b.amounts && typeof b.amounts === "object") for (const [k, v] of Object.entries(b.amounts)) { const x = Number(v); if (Number(k) >= 1 && Number(k) <= 13 && x > 0 && isFinite(x)) amounts[k] = x; }
-          return json(await snipeReady(chain as any, pay, Number(b.amount) || 0, slots, amounts));
+          return json(await snipeReady(chain as any, pay, Number(b.amount) || 0, slots, amounts, b.usd === true));
         }
         case "sniper-card":
         case "sniper-sol-create":
