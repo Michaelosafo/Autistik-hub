@@ -67,6 +67,7 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
   const [bridgeChain, setBridgeChain] = useState<(typeof NETS)[number]["id"]>("solana");
   const [bridgeOut, setBridgeOut] = useState("SOL");
   const [bridge, setBridge] = useState<Bridge | null>(null);
+  const [bridgeAmt, setBridgeAmt] = useState<number | "max">("max");
   // Every one of your wallets' addresses (EVM + Solana), for picking where a bridge lands.
   const [cards, setCards] = useState<Record<number, Card>>({});
 
@@ -183,19 +184,37 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     setChainAmount(chain, v.trim() ? x : null);
   }
 
+  /** $ for one unit of the coin being bridged (BNB / ETH / SOL from today's price, USDT / USDC = 1). */
+  function payPrice() {
+    const up = pay.toUpperCase();
+    if (up === "USDT" || up === "USDC") return 1;
+    if (up === coin.toUpperCase() && hold?.coinUsd) return hold.coinUsd;
+    const a = pick(pay);
+    return a && a.amount > 0 && a.valueUsd ? a.valueUsd / a.amount : 0;
+  }
   async function reviewBridge(max: boolean) {
     const destSlot = bridgeTo ?? slot;
     if (bridgeChain === chain && destSlot === slot) { setErr("Pick another wallet or a different network."); return; }
+    let coinAmt: number | "max" = "max";
+    if (!max) {
+      const dollars = Number(amount);
+      if (!(dollars > 0)) { setErr("Type how many $ to bridge, or tap Review max."); return; }
+      const p = payPrice();
+      if (!(p > 0)) { setErr(`No ${pay} price right now. Try again in a moment.`); return; }
+      coinAmt = +(dollars / p).toFixed(8);
+    }
     setErr(""); setBridge(null); setLoading(true);
     try {
       if (max) setAmount("");
-      setBridge(await ask<Bridge>("sniper-bridge-quote", { from: slot, to: destSlot, fromChain: chain, toChain: bridgeChain, assetIn: pay, assetOut: bridgeOut, amount: max ? "max" : Number(amount) }));
+      setBridgeAmt(coinAmt);
+      setBridge(await ask<Bridge>("sniper-bridge-quote", { from: slot, to: destSlot, fromChain: chain, toChain: bridgeChain, assetIn: pay, assetOut: bridgeOut, amount: coinAmt }));
     } catch (e) { setErr((e as Error).message); }
     finally { setLoading(false); }
   }
   function confirmBridge() {
     if (!bridge) return;
-    const body = { from: slot, to: bridge.toSlot, fromChain: chain, toChain: bridge.toChain, assetIn: pay, assetOut: bridge.symbolOut, amount: amount.trim() ? Number(amount) : "max", minOutRaw: bridge.amountOutRaw };
+    // The exact coin amount that was quoted (the $ were turned into it at Review).
+    const body = { from: slot, to: bridge.toSlot, fromChain: chain, toChain: bridge.toChain, assetIn: pay, assetOut: bridge.symbolOut, amount: bridgeAmt, minOutRaw: bridge.amountOutRaw };
     setBridge(null); setOpen(null);
     act(`br${slot}`, "sniper-bridge", body);
   }
@@ -388,14 +407,15 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
                 {(bridgeChain === "solana" ? ["SOL", "USDT", "USDC"] : bridgeChain === "bsc" ? ["BNB", "USDT", "USDC"] : ["ETH", "USDT", "USDC"]).map((s) => <button key={s} type="button" className={"btn small" + (bridgeOut === s ? " primary" : " ghost")} onClick={() => { setBridgeOut(s); setBridge(null); }}>{s}</button>)}
               </div>
               <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                <input className="input" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder={`Amount of ${pay}`} value={amount} onChange={(e) => { setAmount(e.target.value); setBridge(null); }} aria-label="Amount to bridge" />
+                <input className="input" style={{ flex: "1 1 120px" }} inputMode="decimal" placeholder="$ to bridge" value={amount} onChange={(e) => { setAmount(e.target.value); setBridge(null); }} aria-label="Dollars to bridge" />
+                {Number(amount) > 0 && payPrice() > 0 && <small className="muted">≈ {amt(Number(amount) / payPrice())} {pay}</small>}
                 <button type="button" className="btn small" disabled={loading || busy} onClick={() => reviewBridge(false)}>Review</button>
                 <button type="button" className="btn small" disabled={loading || busy} onClick={() => reviewBridge(true)}>Review max</button>
               </div>
               {bridge && (
                 <div className="notice stack" style={{ gap: 4 }}>
                   <b>Confirm bridge</b>
-                  <small>Send: <b>{bridge.amountIn} {bridge.symbolIn}</b> from wallet #{bridge.fromSlot}</small>
+                  <small>Send: <b>{payPrice() > 0 ? `$${(Number(String(bridge.amountIn).replace(/,/g, "")) * payPrice()).toFixed(2)} = ` : ""}{bridge.amountIn} {bridge.symbolIn}</b> from wallet #{bridge.fromSlot}</small>
                   <small>From: <span className="mono">{bridge.from}</span></small>
                   <small>You receive about: <b>{bridge.amountOut} {bridge.symbolOut}</b></small>
                   <small>To wallet #{bridge.toSlot}: <span className="mono">{bridge.to}</span></small>
