@@ -180,15 +180,19 @@ async function receipt(hash: string) {
 }
 
 /** Wallet buys that reverted on-chain, per desk|token|wallet: each may try again a few times. */
-const chainFails = new Map<string, number>();
+const chainFails = new Map<string, { n: number; at: number }>();
 /** Snipe one token from every wallet at once. Returns how many wallets bought (0: not tradable yet → try next block). */
 async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] }> {
   const c = pc();
   // Only the wallets you picked for this token (none picked = all), minus those that already sent their buy.
   const pick = Array.isArray(t.wallets) && t.wallets.length ? new Set(t.wallets.map(Number)) : null;
   const already = new Set((t.fired || []).map(Number));
-  const guns = (pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns).filter((g) => !already.has(g.slot));
+  // A wallet whose buy just reverted waits ~1 s before the next try (so a revert loop doesn't burn gas every block).
+  const cooling = (g: Gun) => Date.now() - (chainFails.get(`${T()}|${t.token.toLowerCase()}|${g.slot}`)?.at || 0) < 1000;
+  const left = (pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns).filter((g) => !already.has(g.slot));
+  const guns = left.filter((g) => !cooling(g));
   const fired: number[] = [], ok: number[] = [];
+  if (s.mode === "live" && left.length && !guns.length) return { bought: 0, why: "retrying the wallets whose buy reverted" };
   if (s.mode === "live" && !guns.length) return { bought: 0, why: `none of the wallets picked for it (${[...(pick || [])].map((x) => `#${x}`).join(", ")}) exist any more` };
   const token = getAddress(t.token);
   const bnbUsd = await bnbPrice();
@@ -263,14 +267,15 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     } catch (e) {
       if (!mine) { notOpen ||= (e as Error).message.slice(0, 120); return false; }
       g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }).catch(() => g.nonce));
-      // Reverted on-chain (price moved past the slippage, a per-block limit…): nothing was bought, so this wallet
-      // tries again next block with a fresh price, up to 3 times. (A buy that may still land is never re-sent.)
-      const key = `${T()}|${token.toLowerCase()}|${g.slot}`, tries = (chainFails.get(key) || 0) + 1;
-      if (/failed on-chain/.test((e as Error).message) && tries <= 3) {
-        chainFails.set(key, tries);
+      // Reverted on-chain (price moved past the slippage, a per-block limit…): nothing was bought, so this wallet keeps
+      // trying about every second at the fresh price until it gets in, whatever the other wallets did (until the
+      // retry window ends). A buy that may still land (no receipt yet) is never re-sent.
+      const key = `${T()}|${token.toLowerCase()}|${g.slot}`, tries = (chainFails.get(key)?.n || 0) + 1;
+      if (/failed on-chain/.test((e as Error).message)) {
+        chainFails.set(key, { n: tries, at: Date.now() });
         const i = fired.indexOf(g.slot);
         if (i >= 0) fired.splice(i, 1);
-        await flog("error", `Wallet ${g.slot}'s buy of ${name} reverted on-chain (try ${tries} of 3): trying again next block at the new price.`);
+        if (tries === 1 || tries % 5 === 0) await flog("error", `Wallet ${g.slot}'s buy of ${name} reverted on-chain (try ${tries}): trying again every second at the new price.`);
       } else await flog("error", `Wallet ${g.slot} couldn't snipe ${name}: ${(e as Error).message.slice(0, 160)}`);
       return false;
     }
