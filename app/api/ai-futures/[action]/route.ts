@@ -290,7 +290,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
         case "sniper-bridge-quote":
         case "sniper-bridge": {
           if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
-          const cap = ["sniper-bridge", "sniper-sol-create", "sniper-sol-reveal", "sniper-sol-import"].includes(params.action) ? 6 : 30;
+          // Bridges: up to 15 a minute, so one tap can bridge to all 13 wallets.
+          const cap = params.action === "sniper-bridge" ? 15 : ["sniper-sol-create", "sniper-sol-reveal", "sniper-sol-import"].includes(params.action) ? 6 : 30;
           const slow = await rateLimit(req, params.action, cap, 60, String(id));
           if (slow) return slow;
           const chains = await import("@/lib/sniper-chains");

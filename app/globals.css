@@ -7761,7 +7761,11 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .snp-go{all:unset;box-sizing:border-box;cursor:pointer;margin-left:auto;padding:8px 16px;border-radius:12px;font-weight:900;color:#fff;background:linear-gradient(135deg,#22c55e,#16a34a);box-shadow:0 8px 18px -10px #16a34a}
 .snp-go.stop{background:linear-gradient(135deg,#ff5a5f,#d92d32);box-shadow:0 8px 18px -10px #d92d32}
 .snp-go:disabled{opacity:.5;cursor:not-allowed}
-.snp-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.snp-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.snp-toast{display:flex;align-items:flex-start;gap:8px;padding:6px 10px;border-radius:12px;background:var(--surface-2);animation:snpFade 6s forwards}
+.snp-toast button{all:unset;cursor:pointer;margin-left:auto;padding:0 4px;opacity:.7;font-weight:900}
+@keyframes snpFade{0%,85%{opacity:1}100%{opacity:0}}
+.snp-hist{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border-radius:12px;background:var(--surface-2)}
 .snp-tab{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:14px;font-weight:800;font-size:.82em;color:var(--muted);background:var(--surface-2);position:relative;transition:transform .12s,background .15s}
 .snp-tab span{font-size:1.35em;line-height:1}
 .snp-tab:active{transform:scale(.96)}
@@ -7769,6 +7773,7 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .snp-tab.on{color:#fff}
 .snp-tab.t-home.on{background:linear-gradient(135deg,var(--acc,#22c55e),var(--acc2,#0ea5e9))}
 .snp-tab.t-wallet.on{background:linear-gradient(135deg,#F0B90B,#f97316)}
+.snp-tab.t-history.on{background:linear-gradient(135deg,#0ea5e9,#22c55e)}
 .snp-tab.t-trades.on{background:linear-gradient(135deg,#6366f1,#9945FF)}
 .snp-tab.t-settings.on{background:linear-gradient(135deg,#64748b,#334155)}
 .snp .card{border-radius:20px}
