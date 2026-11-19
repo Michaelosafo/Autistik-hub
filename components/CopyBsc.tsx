@@ -139,7 +139,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
               </div>
               {sniper && <SniperWalletTools slot={k.slot} address={k.address} others={mine.filter((x) => x.slot !== k.slot && x.address).map((x) => ({ slot: x.slot, address: x.address! }))} busy={!!busy} act={act}
                 amounts={(s.snipe_amounts || {})[String(k.slot)] || {}}
-                setAmount={(chain, v) => {
+                setChainAmount={(chain, v) => {
                   const all = { ...(s.snipe_amounts || {}) };
                   const row = { ...(all[String(k.slot)] || {}) };
                   if (v && v > 0) row[chain] = v; else delete row[chain];

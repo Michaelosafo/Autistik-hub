@@ -32,10 +32,10 @@ async function ask<T>(action: string, body: unknown): Promise<T> {
   return d as T;
 }
 
-export default function SniperWalletTools({ slot, address, others, busy, act, amounts, setAmount }: {
+export default function SniperWalletTools({ slot, address, others, busy, act, amounts, setChainAmount }: {
   slot: number; address: string; others: { slot: number; address: string }[]; busy: boolean; act: Act;
   /** This wallet's snipe amount per chain, in that chain's coin. */
-  amounts?: Record<string, number>; setAmount?: (chain: string, value: number | null) => void;
+  amounts?: Record<string, number>; setChainAmount?: (chain: string, value: number | null) => void;
 }) {
   const [open, setOpen] = useState<"send" | "swap" | "withdraw" | "bridge" | null>(null);
   const [chain, setChain] = useState<(typeof NETS)[number]["id"]>("bsc");
@@ -163,7 +163,7 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     finally { setLoading(false); }
   }
   function editAmount() {
-    if (!setAmount) return;
+    if (!setChainAmount) return;
     const name = NETS.find((n) => n.id === chain)?.name || chain;
     const sym = here?.symbol || coin;
     const cur = amounts?.[chain];
@@ -171,7 +171,7 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     if (v == null) return;
     const x = Number(v);
     if (v.trim() && !(x > 0)) { setErr("Type an amount greater than zero, or leave it empty."); return; }
-    setAmount(chain, v.trim() ? x : null);
+    setChainAmount(chain, v.trim() ? x : null);
   }
 
   async function reviewBridge(max: boolean) {
@@ -228,7 +228,7 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
           <button type="button" className="btn small ghost" disabled={busy || loading} onClick={importSol}>Use my own Solana key</button>
         </div>
       )}
-      {setAmount && (
+      {setChainAmount && (
         <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <small>🎯 <b>Snipe amount on {NETS.find((n) => n.id === chain)?.name}: {amounts?.[chain] ? `${amounts[chain]} ${here?.symbol || coin}` : "not set"}</b></small>
           <button type="button" className="btn small" disabled={busy} onClick={editAmount}>Set amount</button>
