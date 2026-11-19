@@ -38,24 +38,29 @@ const ONE_APP: { test: RegExp; scheme: string; pkg: string; keepHost?: boolean; 
   { test: /rabby/i, scheme: "rabby", pkg: "com.debank.rabbymobile" },
 ];
 
-const playStore = (pkg: string) => `https://play.google.com/store/apps/details?id=${pkg}`;
-
-/**
- * Android intent that names one package. Do not add CATEGORY_BROWSABLE or ACTION_VIEW: with scheme=https those
- * make the system offer every app that handles the link, which is the "Choose activity" sheet (Chrome and the wallet).
- * Fallback is the Play page, never the https app link (Chrome handles that too).
- */
-export function androidIntent(path: string, scheme: string, pkg: string): string {
-  const fb = `S.browser_fallback_url=${encodeURIComponent(playStore(pkg))};`;
-  return `intent://${path.replace(/^\//, "")}#Intent;scheme=${scheme};package=${pkg};${fb}end`;
-}
-
 const androidUa = () => typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
 
-/** iOS and desktop keep `plain`. Android gets the package-pinned intent. */
+/** Plain custom-scheme link. Chrome does not register these, so it is not offered in "Choose activity". */
+function nativeUrl(scheme: string, path: string): string {
+  const p = path.replace(/^\//, "");
+  return p ? `${scheme}://${p}` : `${scheme}://`;
+}
+
+/**
+ * Package-pinned intent for the rare wallet whose docs only publish an https link (Backpack).
+ * No S.browser_fallback_url and no CATEGORY_BROWSABLE. Chrome loads that https fallback when it will not
+ * launch the app (a hidden anchor click is not a user gesture), and Bitget's in-app browser also handles
+ * https, which is the "Chrome or Bitget Wallet" sheet.
+ */
+export function androidIntent(path: string, scheme: string, pkg: string): string {
+  return `intent://${path.replace(/^\//, "")}#Intent;scheme=${scheme};package=${pkg};end`;
+}
+
+/** iOS and desktop keep `plain`. Android uses the wallet's own scheme, not an https link. */
 function platformLink(plain: string, android: { path: string; scheme: string; pkg: string }): string {
   if (!androidUa()) return plain;
-  return androidIntent(android.path, android.scheme, android.pkg);
+  if (android.scheme === "https") return androidIntent(android.path, android.scheme, android.pkg);
+  return nativeUrl(android.scheme, android.path);
 }
 
 /**
@@ -70,8 +75,8 @@ export function pinAndroid(href: string, pkgOverride?: string): string {
   if (!pkg) return href;
   if (/bkcode\.vip/i.test(href)) {
     const q = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
-    if (/\/wc\?/.test(href)) return androidIntent(href.slice(href.indexOf("wc?")), "bitkeep", pkg);
-    return androidIntent(q ? `bkconnect?${q}` : "bkconnect", "bitkeep", pkg);
+    if (/\/wc\?/.test(href)) return nativeUrl("bitkeep", href.slice(href.indexOf("wc?")));
+    return nativeUrl("bitkeep", q ? `bkconnect?${q}` : "bkconnect");
   }
   if (/^https?:\/\//i.test(href)) {
     let u: URL;
@@ -83,16 +88,17 @@ export function pinAndroid(href: string, pkgOverride?: string): string {
       const cb = u.searchParams.get("cb_url") || u.searchParams.get("url") || "";
       if (cb) path = `dapp?url=${encodeURIComponent(cb)}`;
     }
-    return androidIntent(path, hit.scheme, pkg);
+    return nativeUrl(hit.scheme, path);
   }
   const scheme = href.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1] || hit?.scheme || "https";
-  return androidIntent(href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ""), scheme, pkg);
+  return nativeUrl(scheme, href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ""));
 }
 
 /**
  * Official Bitget "open this dapp" link (BKConnect).
- * iOS: bitkeep://bkconnect. Desktop: https://bkcode.vip.
- * Android: intent with scheme bitkeep and package com.bitkeep.wallet, so Chrome is not offered.
+ * iOS and Android: bitkeep://bkconnect (Bitget's Android sample). Desktop: https://bkcode.vip.
+ * Android must not use intent:// with S.browser_fallback_url. Chrome will not launch an app from a
+ * hidden link click, then loads that https fallback, and Bitget also handles https — the chooser.
  * https://web3.bitget.com/en/docs/configuration/deeplink
  */
 export function bitgetOpenDapp(dappUrl: string): string {
@@ -100,8 +106,7 @@ export function bitgetOpenDapp(dappUrl: string): string {
   const params = new URLSearchParams({ action: "dapp", actionID, version: "1.0", dappName: "AUTISTIK Hub", url: dappUrl });
   const query = params.toString();
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  if (/Android/i.test(ua)) return androidIntent(`bkconnect?${query}`, "bitkeep", "com.bitkeep.wallet");
-  if (/iPhone|iPad|iPod/i.test(ua)) return `bitkeep://bkconnect?${query}`;
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return `bitkeep://bkconnect?${query}`;
   return `https://bkcode.vip?${query}`;
 }
 
@@ -770,7 +775,13 @@ export function openWalletApp(href: string) {
     const tg = (window as any).Telegram?.WebApp;
     if (tg?.initData && typeof tg.openLink === "function" && /^https:/.test(href)) { tg.openLink(href); return; }
   } catch { /* not a Telegram mini app */ }
-  // A link click keeps this page alive, so the signature can finish. location.href would leave the page.
+  // Custom scheme (bitkeep://, trust://, …): assign it on this tap. A hidden <a>.click() is not the
+  // gesture Chrome counts, so it skips the app. An intent:// link then loads its https fallback, and
+  // Android offers "Chrome or Bitget Wallet" because Bitget handles https too.
+  if (!/^https?:/i.test(href)) {
+    try { location.href = href; return; } catch { /* the Open button is there */ }
+  }
+  // iOS universal links: a real click keeps this page up so the signature can finish.
   try {
     const a = document.createElement("a");
     a.setAttribute("href", href);
