@@ -179,6 +179,8 @@ async function receipt(hash: string) {
   return r;
 }
 
+/** Wallet buys that reverted on-chain, per desk|token|wallet: each may try again a few times. */
+const chainFails = new Map<string, number>();
 /** Snipe one token from every wallet at once. Returns how many wallets bought (0: not tradable yet → try next block). */
 async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] }> {
   const c = pc();
@@ -213,6 +215,17 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
   let notOpen = "", sent = false;
   const short: string[] = [];
+  // What each wallet will spend (v2), worked out up front: all the wallets land in the same block, so each one's
+  // minimum-coins must allow for the others' buys moving the price first (else only the first one gets through).
+  const planOf = (g: Gun) => {
+    const amt = amtFor(g.slot);
+    const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
+    const useUsdt = usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
+    const usd = +Math.min(amt, useUsdt ? usdtFree : bnbFree).toFixed(2);
+    const ok = usd >= MIN_USD && !(useUsdt && g.bnb < gasKeep(s));
+    return { amt, bnbFree, usdtFree, useUsdt, usd: ok ? usd : 0 };
+  };
+  const totalUsd = route.kind === "v2" ? guns.reduce((a, g) => a + planOf(g).usd, 0) : 0;
   const done = await Promise.all(guns.map(async (g) => {
     let mine = false;
     try {
@@ -232,16 +245,12 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
         return true;
       }
       // v2: straight to the router. Pay with USDT if the wallet holds enough (and it's approved), else BNB.
-      const amt = amtFor(g.slot); // the token's typed amount, else this wallet's own, else the normal one
-      // Buy as much as the wallet allows, up to the amount, leaving only the buy's gas: the full amount in USDT if it
-      // has it, else whichever of USDT / spare BNB is bigger (a smaller buy beats no buy).
-      const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
-      const useUsdt = usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
-      let usd = Math.min(amt, useUsdt ? usdtFree : bnbFree);
+      // The token's typed amount, else this wallet's own, else the normal one. As much as the wallet allows, up to the
+      // amount, leaving only the buy's gas: USDT if it has the full amount, else whichever of USDT / spare BNB is bigger.
+      const { amt, useUsdt, usd } = planOf(g);
       if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return false; }
       if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return false; }
-      usd = +usd.toFixed(2);
-      const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; fired.push(g.slot); });
+      const r = await routerBuy(g, s, token, route as Extract<Route, { kind: "v2" }>, usd, useUsdt, slip, bnbUsd, dec, () => { mine = sent = true; fired.push(g.slot); }, Math.max(0, totalUsd - usd));
       if ("notOpen" in r) { notOpen = r.notOpen; return false; }
       const { hash, got } = r;
       if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
@@ -253,8 +262,16 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
       return true;
     } catch (e) {
       if (!mine) { notOpen ||= (e as Error).message.slice(0, 120); return false; }
-      await flog("error", `Wallet ${g.slot} couldn't snipe ${name}: ${(e as Error).message.slice(0, 160)}`);
       g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }).catch(() => g.nonce));
+      // Reverted on-chain (price moved past the slippage, a per-block limit…): nothing was bought, so this wallet
+      // tries again next block with a fresh price, up to 3 times. (A buy that may still land is never re-sent.)
+      const key = `${T()}|${token.toLowerCase()}|${g.slot}`, tries = (chainFails.get(key) || 0) + 1;
+      if (/failed on-chain/.test((e as Error).message) && tries <= 3) {
+        chainFails.set(key, tries);
+        const i = fired.indexOf(g.slot);
+        if (i >= 0) fired.splice(i, 1);
+        await flog("error", `Wallet ${g.slot}'s buy of ${name} reverted on-chain (try ${tries} of 3): trying again next block at the new price.`);
+      } else await flog("error", `Wallet ${g.slot} couldn't snipe ${name}: ${(e as Error).message.slice(0, 160)}`);
       return false;
     }
   }));
@@ -266,13 +283,23 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
  * Buy through the PancakeSwap v2 router: quote, test-run, sign, send (MEV Guard), wait. If the test-run fails, the
  * slippage steps up (yours → +10 → 35%, never past 49) in case it's a buy tax; nothing is sent until a test passes.
  */
-async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extract<Route, { kind: "v2" }>, usd: number, useUsdt: boolean, slip: number, bnbUsd: number, dec: number, onSend: () => void): Promise<{ hash: string; got: number; slip: number } | { notOpen: string }> {
+async function routerBuy(g: Gun, s: FSettings, token: `0x${string}`, route: Extract<Route, { kind: "v2" }>, usd: number, useUsdt: boolean, slip: number, bnbUsd: number, dec: number, onSend: () => void, aheadUsd = 0): Promise<{ hash: string; got: number; slip: number } | { notOpen: string }> {
   const c = pc();
   const deadline = BigInt(Math.floor(Date.now() / 1000) + 120);
   const path = useUsdt ? (route.via === "USDT" ? [USDT, token] : [USDT, WBNB, token]) : route.path;
   const amountIn = useUsdt ? BigInt(Math.floor(usd * 1e6)) * 10n ** 12n : BigInt(Math.floor((usd / bnbUsd) * 1e18));
-  const amts = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [amountIn, path] });
-  const quoted = BigInt(amts[amts.length - 1]);
+  const out = (wei: bigint) => (wei > 0n ? c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [wei, route.path] }).then((a: readonly bigint[]) => BigInt(a[a.length - 1])) : Promise.resolve(0n));
+  const wei = (u: number) => BigInt(Math.floor((u / bnbUsd) * 1e18));
+  // Your other wallets buy in the same block: quote this one as if it lands last, after all of theirs.
+  const [amts, all, prior, alone] = await Promise.all([
+    c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [amountIn, path] }),
+    aheadUsd > 0 ? out(wei(aheadUsd + usd)).catch(() => 0n) : Promise.resolve(0n),
+    aheadUsd > 0 ? out(wei(aheadUsd)).catch(() => 0n) : Promise.resolve(0n),
+    aheadUsd > 0 ? out(wei(usd)).catch(() => 0n) : Promise.resolve(0n),
+  ]);
+  let quoted = BigInt(amts[amts.length - 1]);
+  const [A, P, L] = [BigInt(all), BigInt(prior), BigInt(alone)];
+  if (aheadUsd > 0 && L > 0n && A > P) quoted = (quoted * (A - P)) / L; // ≤ quoted: the price after the others
   const value = useUsdt ? 0n : amountIn;
   let data: `0x${string}` | null = null, used = slip, why = "";
   for (const sl of [...new Set([slip, Math.min(49, slip + 10), Math.max(slip, 35)])]) {
