@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 type Act = (name: string, action: string, body: unknown, done?: string) => Promise<void>;
 type Asset = { address: string; symbol: string; name: string; decimals: number; raw: string; amount: number; valueUsd: number | null };
-type Holdings = { coin: string; explorer: string; assets: Asset[] };
+type Holdings = { coin: string; explorer: string; coinUsd?: number | null; assets: Asset[] };
 type Xfer = { chain: string; coin: string; fromSlot: number; toSlot: number; from: string; to: string; symbol: string; amount: string; gasNative: string; gasUsd: number | null; explorer: string };
 type Withdraw = { slot: number; from: string; to: string; symbol: string; amount: string; gasNative: string; coin: string; gasUsd: number | null };
 type Quote = { via: string; symbolIn: string; symbolOut: string; amountIn: string; amountOut: string; minOut: string; minOutRaw: string; slippageBps: number; impact: number | null; gasUsd: number | null; address: string };
@@ -23,6 +23,9 @@ const NETS = [
 ] as const;
 const SLIPS = [50, 100, 300, 500, 1200] as const;
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+const usd = (n: number | null | undefined) => (n == null ? "" : `$${n >= 100 ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : n.toFixed(2)}`);
+/** "$12.30 / 0.0200" (dollars first, then the coin amount). */
+const both = (a: { amount: number; valueUsd: number | null }) => (a.valueUsd != null ? `${usd(a.valueUsd)} / ${amt(a.amount)}` : amt(a.amount));
 const amt = (n: number) => (n >= 1 ? n.toLocaleString("en-US", { maximumFractionDigits: 4 }) : n > 0 ? n.toPrecision(4) : "0");
 
 async function ask<T>(action: string, body: unknown): Promise<T> {
@@ -172,7 +175,8 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
     const name = NETS.find((n) => n.id === chain)?.name || chain;
     const sym = here?.symbol || coin;
     const cur = amounts?.[chain];
-    const v = prompt(`${sym} wallet ${slot} spends on each snipe on ${name}. Leave empty to clear it:`, cur ? String(cur) : "");
+    void sym;
+    const v = prompt(`$ wallet ${slot} spends on each snipe on ${name} (paid in ${here?.symbol || coin} or USDT/USDC). Leave empty to clear it:`, cur ? String(cur) : "");
     if (v == null) return;
     const x = Number(v);
     if (v.trim() && !(x > 0)) { setErr("Type an amount greater than zero, or leave it empty."); return; }
@@ -241,13 +245,14 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
       )}
       {setChainAmount && (
         <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <small>💵 <b>Buy amount: {amounts?.[chain] ? `${amounts[chain]} ${here?.symbol || coin}` : "not set"}</b> <span className="muted">on {NETS.find((n) => n.id === chain)?.name}</span></small>
+          <small>💵 <b>Buy amount: {amounts?.[chain] ? `$${amounts[chain]}` : "not set"}</b>{amounts?.[chain] && hold?.coinUsd ? <span className="muted"> ≈ {amt(amounts[chain] / hold.coinUsd)} {here?.symbol || coin}</span> : null} <span className="muted">on {NETS.find((n) => n.id === chain)?.name}</span></small>
           <button type="button" className="btn small" disabled={busy} onClick={editAmount}>Set amount</button>
         </div>
       )}
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         {loading && <small className="muted">Reading balances…</small>}
-        {assets.map((a) => <span key={a.address + a.symbol} className="muted"><b>{a.symbol}</b> {amt(a.amount)}</span>)}
+        {assets.map((a) => <span key={a.address + a.symbol} className="muted"><b>{a.symbol}</b> {both(a)}</span>)}
+        {assets.length > 0 && <span><b>≈ {usd(assets.reduce((t, a) => t + (a.valueUsd || 0), 0))} in all</b></span>}
       </div>
       <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
         <button type="button" className={"btn small" + (open === "swap" ? " primary" : "")} disabled={busy || !addr} onClick={() => { setOpen(open === "swap" ? null : "swap"); setQuote(null); setErr(""); }}>{busy && open === "swap" ? "Swapping…" : "Swap"}</button>
@@ -272,7 +277,7 @@ export default function SniperWalletTools({ slot, address, others, busy, act, am
           )}
           <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
             {loading && <small className="muted">Reading balances…</small>}
-            {assets.map((a) => <button key={a.address + a.symbol} type="button" className={"btn small" + ((open === "swap" || open === "bridge" ? pay : asset) === a.symbol ? " primary" : " ghost")} onClick={() => { if (open === "swap" || open === "bridge") { setPay(a.symbol); setBridge(null); } else { setAsset(a.symbol); setWd(null); } }}>{a.symbol} {amt(a.amount)}</button>)}
+            {assets.map((a) => <button key={a.address + a.symbol} type="button" className={"btn small" + ((open === "swap" || open === "bridge" ? pay : asset) === a.symbol ? " primary" : " ghost")} onClick={() => { if (open === "swap" || open === "bridge") { setPay(a.symbol); setBridge(null); } else { setAsset(a.symbol); setWd(null); } }}>{a.symbol} {both(a)}</button>)}
           </div>
           <input className="input" style={{ fontFamily: "monospace" }} placeholder="Or paste a token address to include it" value={extra} onChange={(e) => setExtra(e.target.value)} aria-label="Token address" autoComplete="off" spellCheck={false} />
 

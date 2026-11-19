@@ -157,7 +157,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held }: 
                   const row = { ...(all[String(k.slot)] || {}) };
                   if (v && v > 0) row[chain] = v; else delete row[chain];
                   if (Object.keys(row).length) all[String(k.slot)] = row; else delete all[String(k.slot)];
-                  set({ snipe_amounts: all }, v ? `Wallet ${k.slot} snipes with ${v} on ${chain === "bsc" ? "BNB Chain" : chain[0].toUpperCase() + chain.slice(1)}.` : `Wallet ${k.slot}: amount on ${chain} cleared.`);
+                  set({ snipe_amounts: all }, v ? `Wallet ${k.slot} snipes with $${v} on ${chain === "bsc" ? "BNB Chain" : chain[0].toUpperCase() + chain.slice(1)}.` : `Wallet ${k.slot}: amount on ${chain} cleared.`);
                 }} />}
               {sniper && (
                 <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>

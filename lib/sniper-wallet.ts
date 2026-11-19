@@ -122,8 +122,9 @@ export async function walletHoldings(slot: number, chainKey: string, extra: stri
     const sym = h.symbol.toUpperCase();
     return h.amount > 0 || sym === c.native.symbol || sym === "USDT" || sym === "USDC" || forced.has(h.address.toLowerCase());
   });
+  const usd = await coinUsd(c.key as SniperChain);
   return {
-    slot, address: a.address, chain: c.key, coin: c.native.symbol, explorer: c.explorer,
+    slot, address: a.address, chain: c.key, coin: c.native.symbol, explorer: c.explorer, coinUsd: usd || null,
     assets: keep.map((h) => ({ address: h.address, symbol: h.symbol, name: h.name, decimals: h.decimals, raw: h.raw, amount: h.amount, valueUsd: h.valueUsd })),
   };
 }

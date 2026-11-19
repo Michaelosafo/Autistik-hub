@@ -41,12 +41,22 @@ function tokenIn(chain: SnipeChain, pay: "native" | "usdt" | "usdc") {
 }
 
 /** What each selected wallet holds on this chain, and whether it can pay the buy. */
-export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, slots: number[], amounts: Record<string, number> = {}): Promise<{ chain: SnipeChain; unit: string; wallets: ReadyWallet[] }> {
+/** $ for one unit of what pays (1 for USDT / USDC). */
+export async function payUsd(chain: SnipeChain, pay: "native" | "usdt" | "usdc"): Promise<number> {
+  if (pay !== "native") return 1;
+  const { nativeUsd } = await import("@/lib/ai-trader-chains");
+  return nativeUsd(chain === "bsc" ? "bsc" : chain === "solana" ? "solana" : "ethereum").catch(() => 0);
+}
+
+/** inUsd: the amounts are dollars, turned into the pay coin at today's price. */
+export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, slots: number[], amounts: Record<string, number> = {}, inUsd = false): Promise<{ chain: SnipeChain; unit: string; price: number; wallets: ReadyWallet[] }> {
   const unit = unitOf(chain, pay);
+  const price = inUsd ? await payUsd(chain, pay) : 0;
+  if (inUsd && !(price > 0)) throw new Error(`No ${unit} price right now. Try again in a moment.`);
   const reserve = pay === "native" ? RESERVE[chain] : (chain === "solana" ? 0.01 : RESERVE[chain]);
   const wallets = await Promise.all(slots.map(async (slot): Promise<ReadyWallet> => {
     // This wallet's own amount for the token, else the one typed for all.
-    const need = amountOf(slot, amount, amounts);
+    const need = inUsd ? +(amountOf(slot, amount, amounts) / price).toFixed(9) : amountOf(slot, amount, amounts);
     try {
       if (chain === "solana") {
         const kp = await sniperSol(slot);
@@ -65,7 +75,7 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
       return { slot, address: null, balance: null, unit, need, ok: false, reason: (e as Error).message.slice(0, 80) };
     }
   }));
-  return { chain, unit, wallets };
+  return { chain, unit, price, wallets };
 }
 
 async function evmUi(chain: SnipeChain, who: string, pay: "native" | "usdt" | "usdc"): Promise<number> {
