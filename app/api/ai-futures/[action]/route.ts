@@ -88,6 +88,18 @@ export async function POST(req: Request, { params }: { params: { action: string 
             if (b.liq_sell_pct != null) { const v = clamp(b.liq_sell_pct, 5, 100); if (v != null) up.liq_sell_pct = v; }
             if (b.liq_slip != null) { const v = clamp(b.liq_slip, 3, 49); if (v != null) up.liq_slip = v; }
             if (typeof b.liq_tp_on === "boolean") up.liq_tp_on = b.liq_tp_on;
+            if (b.snipe_amounts && typeof b.snipe_amounts === "object") {
+              // { "1": { "bsc": 0.05, "solana": 0.5 } }: each wallet's snipe amount per chain, in that chain's coin.
+              const m: Record<string, Record<string, number>> = {};
+              for (const [k, per] of Object.entries(b.snipe_amounts)) {
+                const slot = Number(k);
+                if (!(slot >= 1 && slot <= 13) || !per || typeof per !== "object") continue;
+                const row: Record<string, number> = {};
+                for (const c of ["bsc", "ethereum", "base", "arbitrum", "solana"]) { const v = Number((per as any)[c]); if (v > 0 && isFinite(v) && v <= 1_000_000) row[c] = v; }
+                if (Object.keys(row).length) m[String(slot)] = row;
+              }
+              up.snipe_amounts = m;
+            }
             if (Array.isArray(b.liq_targets)) {
               // Tokens to snipe: 0x addresses, each once.
               const seen = new Set<string>();
@@ -101,6 +113,12 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 chain: chains.includes(t?.chain) ? t.chain : undefined,
                 pay: pays.includes(t?.pay) ? t.pay : undefined,
                 amount: clamp(t?.amount, 0, 1_000_000_000),
+                // Each picked wallet's own amount for this token (in the pay coin); missing = `amount`.
+                amounts: t?.amounts && typeof t.amounts === "object" ? (() => {
+                  const m: Record<string, number> = {};
+                  for (const [k, v] of Object.entries(t.amounts)) { const slot = Number(k), x = Number(v); if (slot >= 1 && slot <= 13 && x > 0 && isFinite(x) && x <= 1_000_000_000) m[String(slot)] = x; }
+                  return Object.keys(m).length ? m : undefined;
+                })() : undefined,
                 prio: prios.includes(t?.prio) ? t.prio : undefined,
                 on: t?.on !== false, state: ["waiting", "done", "failed"].includes(t?.state) ? t.state : "waiting", added: String(t?.added || new Date().toISOString()),
                 // Which wallets snipe it (1–13); none = all.
@@ -172,7 +190,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
           }
           if (!Object.keys(up).length) return json({ error: "Nothing to change." }, 400);
           const { error } = await sb.from("ai_futures_settings").update(up).eq("id", id);
-          if (error) return json({ error: error.message }, 400);
+          if (error) return json({ error: /snipe_amounts/.test(error.message) ? "Run supabase/2026-11-19-sniper-amounts.sql in Supabase, then try again." : error.message }, 400);
           if (exits) await (await import("@/lib/ai-copy")).applyExitSwitches(await getF());
           await flog("settings", `Settings changed: ${Object.entries(up).filter(([k]) => !["day", "day_start_usd"].includes(k)).map(([k, v]) => `${k} = ${Array.isArray(v) ? v.map((x: any) => (x && typeof x === "object" ? x.label || x.address : x)).join(", ") : v}`).join("; ")}`);
           return json({ ok: true, note: up.mode === "live" ? "LIVE: the AI now trades real money on Hyperliquid." : up.enabled === true ? "AI Futures is on." : up.enabled === false ? "Off. Open positions are still watched." : "Saved." });
@@ -261,18 +279,27 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const pay = b.pay === "usdt" || b.pay === "usdc" ? b.pay : "native";
           if (!["bsc", "ethereum", "base", "arbitrum", "solana"].includes(chain)) return json({ error: "Pick a chain." }, 400);
           const slots = Array.isArray(b.slots) ? b.slots.map(Number).filter((x: number) => x >= 1 && x <= 13) : [];
-          return json(await snipeReady(chain as any, pay, Number(b.amount) || 0, slots));
+          const amounts: Record<string, number> = {};
+          if (b.amounts && typeof b.amounts === "object") for (const [k, v] of Object.entries(b.amounts)) { const x = Number(v); if (Number(k) >= 1 && Number(k) <= 13 && x > 0 && isFinite(x)) amounts[k] = x; }
+          return json(await snipeReady(chain as any, pay, Number(b.amount) || 0, slots, amounts));
         }
         case "sniper-card":
         case "sniper-sol-create":
+        case "sniper-sol-reveal":
+        case "sniper-sol-import":
         case "sniper-bridge-quote":
         case "sniper-bridge": {
           if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
-          const cap = params.action === "sniper-bridge" || params.action === "sniper-sol-create" ? 6 : 30;
+          const cap = ["sniper-bridge", "sniper-sol-create", "sniper-sol-reveal", "sniper-sol-import"].includes(params.action) ? 6 : 30;
           const slow = await rateLimit(req, params.action, cap, 60, String(id));
           if (slow) return slow;
           const chains = await import("@/lib/sniper-chains");
           if (params.action === "sniper-card") return json(await chains.walletCard(Number(b.slot)));
+          if (params.action === "sniper-sol-reveal") return json({ ok: true, ...(await chains.revealSniperSol(Number(b.slot))) });
+          if (params.action === "sniper-sol-import") {
+            const made = await chains.importSniperSol(Number(b.slot), String(b.key || ""));
+            return json({ ok: true, ...made, note: `Wallet ${made.slot} now uses your Solana wallet ${made.address}.` });
+          }
           if (params.action === "sniper-sol-create") {
             const made = await chains.createSniperSol(Number(b.slot));
             return json({ ok: true, ...made, note: `Solana address for wallet ${made.slot}: ${made.address}` });

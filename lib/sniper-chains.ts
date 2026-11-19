@@ -56,6 +56,42 @@ export async function createSniperSol(slot: number): Promise<{ slot: number; add
   return { slot, address };
 }
 
+/** The Solana private key of this slot, as Phantom / Solflare import it (base58). */
+export async function revealSniperSol(slot: number): Promise<{ slot: number; address: string; key: string }> {
+  const kp = await sniperSol(slot);
+  if (!kp) throw new Error(`Wallet ${slot} has no Solana address yet.`);
+  const { b58encode } = await import("@/lib/ai-trader");
+  await flog("settings", `Private key of sniper wallet ${slot} (Solana) was shown.`);
+  return { slot, address: kp.publicKey.toBase58(), key: b58encode(kp.secretKey) };
+}
+
+/**
+ * Use your own Solana wallet on this slot (Phantom / Solflare key, base58 or the [..] list).
+ * Replacing a Solana address that still holds SOL is refused, so nothing is left behind.
+ */
+export async function importSniperSol(slot: number, raw: string): Promise<{ slot: number; address: string }> {
+  slotOk(slot);
+  if (!(await copyKey(slot))) throw new Error(`Wallet ${slot} doesn't exist yet.`);
+  const { solKeypairFrom } = await import("@/lib/ai-trader");
+  const kp = solKeypairFrom(String(raw || ""));
+  const address = kp.publicKey.toBase58();
+  for (const o of SLOTS) {
+    if (o === slot) continue;
+    const other = await sniperSol(o).catch(() => null);
+    if (other?.publicKey.toBase58() === address) throw new Error(`That Solana wallet is already on wallet ${o}.`);
+  }
+  const cur = await sniperSol(slot);
+  if (cur && cur.publicKey.toBase58() === address) return { slot, address };
+  if (cur) {
+    const lamports = await new Connection(SOL_RPC, "confirmed").getBalance(cur.publicKey).catch(() => 0);
+    if (lamports > 2_000_000) throw new Error(`Wallet ${slot}'s current Solana address still holds ${(lamports / 1e9).toFixed(4)} SOL. Move it out first (Show private key → Phantom).`);
+  }
+  const { error } = await supabaseService().rpc("ai_copy_sol_key_set", { p_id: T(), p_slot: slot, p_key: toStored(kp) });
+  if (error) throw new Error(error.message.includes("ai_copy_sol_key_set") ? "Run supabase/2026-11-19-sniper-sol-keys.sql in Supabase, then try again." : error.message);
+  await flog("settings", `Wallet ${slot} now uses your Solana wallet: ${address}.`);
+  return { slot, address };
+}
+
 /** Addresses this wallet can use. The EVM address is the same on every EVM chain. */
 export async function walletCard(slot: number) {
   slotOk(slot);
