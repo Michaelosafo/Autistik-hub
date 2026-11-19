@@ -204,6 +204,12 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
           return json({ ok: true, key: await (await import("@/lib/ai-copy")).revealCopyKey(Number(b.slot)) });
         }
+        case "copy-transfer": {
+          if (!isCopyDesk()) return json({ error: "Copy / Sniper only." }, 400);
+          const amount = b.amount === "max" ? "max" : Number(b.amount);
+          const note = await (await import("@/lib/ai-copy")).transferBetween(Number(b.from), Number(b.to), String(b.asset || ""), amount as number | "max");
+          return json({ ok: true, note });
+        }
         case "copy-key-remove": {
           if (!isCopyDesk()) return json({ error: "Copy only." }, 400);
           const k = await (await import("@/lib/ai-copy")).removeCopyKey(Number(b.slot));
