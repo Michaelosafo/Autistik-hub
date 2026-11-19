@@ -529,11 +529,17 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   };
   const okSlots = new Map<string, Set<number>>(); // token → wallets whose buy went through (this run)
   // STOP, Pause, Remove (token or wallet) and setting changes take effect within a second, not at the next minute's run.
-  let lastFresh = Date.now();
+  let lastFresh = Date.now(), lastGuns = Date.now();
   const refresh = async () => {
     const { data } = await sb().from("ai_futures_settings").select("enabled,liq_targets,liq_x,liq_sell_pct,liq_tp_on,liq_slip,copy_key_usd,snipe_usd,copy_sl_on").eq("id", T()).maybeSingle();
     if (data) Object.assign(s, data);
-    if (guns.length) {
+    // Wallets ready to fire right away: a token added or START pressed mid-minute, a wallet created or funded since
+    // the run began. Reloaded (balances, nonces, new / removed wallets) every 3 s while anything is waiting.
+    if (live && s.enabled && waiting().length && (!guns.length || Date.now() - lastGuns >= 3000)) {
+      lastGuns = Date.now();
+      const fresh = await loadGuns().catch(() => null);
+      if (fresh) guns = fresh;
+    } else if (guns.length) {
       const still = await Promise.all(guns.map((g) => copyKey(g.slot).then((a) => a?.address === g.a.address, () => true)));
       guns = guns.filter((_, i) => still[i]);
     }
