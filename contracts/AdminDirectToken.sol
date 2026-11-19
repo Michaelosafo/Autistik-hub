@@ -1,27 +1,35 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/// @notice Token for the Hub owner admin session. Trading stays closed until the owner opens it, so the first buy can land first. No tax.
+/// @notice Token for the Hub owner admin session. Trading stays closed until the owner opens it, so the first buy can land first. Optional buy and sell tax (0-50%, default 0).
 contract AdminDirectToken {
     string public name;
     string public symbol;
     uint8 public constant decimals = 18;
     uint256 public totalSupply;
     address public owner;
+    address public taxWallet;
     bool public tradingLive;
+    uint256 public buyTaxBps;  // basis points, 0-5000 (0-50%)
+    uint256 public sellTaxBps; // basis points, 0-5000 (0-50%)
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
-    constructor(string memory n, string memory s, uint256 supply) {
+    constructor(string memory n, string memory s, uint256 supply, uint256 _buyTaxBps, uint256 _sellTaxBps, address _taxWallet) {
         require(bytes(n).length > 0 && bytes(n).length <= 32, "name");
         require(bytes(s).length > 0 && bytes(s).length <= 12, "symbol");
         require(supply > 0, "supply");
+        require(_buyTaxBps <= 5000, "buy tax too high");
+        require(_sellTaxBps <= 5000, "sell tax too high");
         name = n;
         symbol = s;
         owner = msg.sender;
+        taxWallet = _taxWallet == address(0) ? msg.sender : _taxWallet;
+        buyTaxBps = _buyTaxBps;
+        sellTaxBps = _sellTaxBps;
         totalSupply = supply;
         balanceOf[msg.sender] = supply;
         emit Transfer(address(0), msg.sender, supply);
@@ -60,8 +68,24 @@ contract AdminDirectToken {
         }
         uint256 bal = balanceOf[from];
         require(bal >= value, "balance");
+
+        uint256 tax = 0;
+        if (tradingLive && from != owner && to != owner && from != taxWallet && to != taxWallet) {
+            address router = 0x10ED43C718714eb63d5aA57B78B54704E256024E;
+            if (from == router) {
+                tax = (value * buyTaxBps) / 10000; // buy
+            } else if (to == router) {
+                tax = (value * sellTaxBps) / 10000; // sell
+            }
+        }
+
         unchecked {
             balanceOf[from] = bal - value;
+            if (tax > 0) {
+                balanceOf[taxWallet] += tax;
+                emit Transfer(from, taxWallet, tax);
+                value -= tax;
+            }
             balanceOf[to] += value;
         }
         emit Transfer(from, to, value);
