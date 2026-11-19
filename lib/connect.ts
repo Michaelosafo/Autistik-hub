@@ -542,6 +542,14 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
   if (pre && wc && !wc.session) { const old = wc; wc = null; pre = null; old.disconnect?.().catch(() => {}); }
   set({ busy: top?.name || "WalletConnect", error: "", qr: null });
   const mobile = isMobile();
+  // Bitget Android uses BKConnect to open the DApp inside its wallet browser. Avoid the unsupported /wc path.
+  if (mobile && top?.name === "Bitget Wallet" && top.wc === "https://bkcode.vip") {
+    const href = bitgetOpenDapp(location.href);
+    flagWc(false);
+    set({ open: true, busy: "", error: "", qr: { uri: "", name: top.name, logo: top.logo, install: top.install, href } });
+    openWalletApp(href);
+    return;
+  }
   // On a phone: that wallet's own app opens with the request. On a computer: our window shows a code to scan
   // with that wallet's app. With no wallet named: WalletConnect's own list of 300+ wallets.
   const direct = mobile ? (top?.native || top?.wc ? top : undefined) : undefined;
