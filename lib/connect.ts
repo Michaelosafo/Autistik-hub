@@ -43,11 +43,11 @@ export function pinAndroid(href: string): string {
   if (!hit) return href;
   const web = /^https?:\/\//i.test(href);
   const fallback = `S.browser_fallback_url=${encodeURIComponent(web ? href : hit.site)};`;
-  // Bitget: https://bkcode.vip?… can be opened by Chrome too, so Android asks "Chrome or Bitget?". Its own
-  // bitkeep://bkconnect?… link only Bitget can open, so that goes first; bkcode.vip stays as the fallback.
+  // Bitget: browsers can only reach it through https://bkcode.vip (its bitkeep:// link isn't open to browsers).
+  // Chrome can open that link too, so a plain link (or a fallback to it) makes Android ask "Chrome or Bitget?".
+  // Lock it to the Bitget app with no browser fallback: installed → only Bitget opens; not installed → its Play page.
   if (web && hit.scheme === "bitkeep" && !/\/wc\?/.test(href)) {
-    const qs = href.includes("?") ? href.slice(href.indexOf("?")) : "";
-    return `intent://bkconnect${qs}#Intent;scheme=bitkeep;package=${hit.pkg};${fallback}end`;
+    return `intent://${href.replace(/^https?:\/\//i, "")}#Intent;scheme=https;package=${hit.pkg};action=android.intent.action.VIEW;category=android.intent.category.BROWSABLE;end`;
   }
   const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
   return `intent://${q.replace(/^\//, "")}#Intent;scheme=${hit.scheme};package=${hit.pkg};${fallback}end`;
