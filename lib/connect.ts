@@ -43,8 +43,12 @@ export function pinAndroid(href: string): string {
   if (!hit) return href;
   const web = /^https?:\/\//i.test(href);
   const fallback = `S.browser_fallback_url=${encodeURIComponent(web ? href : hit.site)};`;
-  // Bitget's official Android link is https://bkcode.vip: keep it as is, but open it only in the Bitget app.
-  if (web && hit.scheme === "bitkeep") return `intent://${href.replace(/^https?:\/\//i, "")}#Intent;scheme=https;package=${hit.pkg};${fallback}end`;
+  // Bitget: https://bkcode.vip?… can be opened by Chrome too, so Android asks "Chrome or Bitget?". Its own
+  // bitkeep://bkconnect?… link only Bitget can open, so that goes first; bkcode.vip stays as the fallback.
+  if (web && hit.scheme === "bitkeep" && !/\/wc\?/.test(href)) {
+    const qs = href.includes("?") ? href.slice(href.indexOf("?")) : "";
+    return `intent://bkconnect${qs}#Intent;scheme=bitkeep;package=${hit.pkg};${fallback}end`;
+  }
   const q = href.includes("wc?") ? href.slice(href.indexOf("wc?")) : href.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
   return `intent://${q.replace(/^\//, "")}#Intent;scheme=${hit.scheme};package=${hit.pkg};${fallback}end`;
 }
