@@ -110,20 +110,47 @@ export async function walletCard(slot: number) {
   };
 }
 
+const TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"];
+/**
+ * A Solana wallet's balances read straight from the network (SOL + every token account, both token programs).
+ * Jupiter's holdings service was the only source before; when it didn't answer, every wallet showed 0.
+ */
+async function solBalances(owner: string): Promise<{ lamports: bigint; tokens: Map<string, { raw: bigint; decimals: number; ui: number }> }> {
+  const conn = new Connection(SOL_RPC, "confirmed");
+  const pk = new PublicKey(owner);
+  const [lamports, ...lists]: any[] = await Promise.all([
+    conn.getBalance(pk),
+    ...TOKEN_PROGRAMS.map((id) => conn.getParsedTokenAccountsByOwner(pk, { programId: new PublicKey(id) }).then((r) => r.value).catch(() => [])),
+  ]);
+  const tokens = new Map<string, { raw: bigint; decimals: number; ui: number }>();
+  for (const list of lists as any[]) for (const a of list) {
+    const info = a?.account?.data?.parsed?.info;
+    const mint = String(info?.mint || ""), amt = info?.tokenAmount;
+    if (!mint || !amt) continue;
+    let raw = 0n; try { raw = BigInt(String(amt.amount || "0")); } catch { /* skip */ }
+    const decimals = Number(amt.decimals) || 0;
+    const prev = tokens.get(mint);
+    const sum = (prev?.raw || 0n) + raw;
+    tokens.set(mint, { raw: sum, decimals, ui: Number(sum) / 10 ** decimals });
+  }
+  return { lamports: BigInt(lamports), tokens };
+}
+
 async function solHoldings(slot: number, extra: string[]) {
   const kp = await sniperSol(slot);
   if (!kp) throw new Error("Add a Solana address to this wallet first.");
   const owner = kp.publicKey.toBase58();
   const chain = WCHAINS.solana;
-  const h = await fetch(`${JUP}/ultra/v1/holdings/${owner}`, { cache: "no-store", signal: AbortSignal.timeout(12_000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  const ui = (mint: string) => ((h?.tokens?.[mint] || []) as { uiAmount?: number; amount?: string; decimals?: number }[]).reduce((a, x) => a + (Number(x.uiAmount) || 0), 0);
-  const rawOf = (mint: string) => ((h?.tokens?.[mint] || []) as { amount?: string }[]).reduce((a, x) => { try { return a + BigInt(String(x.amount || "0")); } catch { return a; } }, 0n);
+  let bal: Awaited<ReturnType<typeof solBalances>>;
+  try { bal = await solBalances(owner); }
+  catch { throw new Error("Couldn't read this Solana wallet right now. Try again in a moment."); }
+  const ui = (mint: string) => bal.tokens.get(mint)?.ui || 0;
+  const rawOf = (mint: string) => bal.tokens.get(mint)?.raw || 0n;
   const assets: { address: string; symbol: string; name: string; decimals: number; raw: string; amount: number; valueUsd: number | null }[] = [];
-  const solAmt = h?.uiAmount != null ? Number(h.uiAmount) : Number(h?.amount || 0) / 1e9;
-  const solRaw = h?.amount != null ? String(h.amount) : String(Math.round((solAmt || 0) * 1e9));
-  assets.push({ address: WSOL, symbol: "SOL", name: "Solana", decimals: 9, raw: solRaw, amount: solAmt || 0, valueUsd: null });
+  assets.push({ address: WSOL, symbol: "SOL", name: "Solana", decimals: 9, raw: bal.lamports.toString(), amount: Number(bal.lamports) / 1e9, valueUsd: null });
   const known = new Map(chain.tokens.map((t) => [t.address, t]));
   for (const mint of extra) if (!known.has(mint)) known.set(mint, { address: mint, symbol: mint.slice(0, 4), name: "Token", decimals: 6 });
+  for (const [mint, t] of bal.tokens) if (!known.has(mint) && t.raw > 0n) known.set(mint, { address: mint, symbol: mint.slice(0, 4), name: "Token", decimals: t.decimals });
   for (const t of known.values()) {
     if (t.address === WSOL) continue;
     const amount = ui(t.address);
@@ -132,12 +159,13 @@ async function solHoldings(slot: number, extra: string[]) {
   }
   // Dollar values from Jupiter's price feed (stablecoins count as $1 if it has none).
   const ids = [...new Set(assets.map((x) => x.address))];
+  const solUsd = await import("@/lib/ai-trader-chains").then((c) => c.nativeUsd("solana")).catch(() => 0);
   const px = await fetch(`${JUP}/price/v3?ids=${ids.join(",")}`, { cache: "no-store", signal: AbortSignal.timeout(8_000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   for (const x of assets) {
-    const p = Number(px?.[x.address]?.usdPrice) || (x.symbol === "USDT" || x.symbol === "USDC" ? 1 : 0);
+    const p = Number(px?.[x.address]?.usdPrice) || (x.symbol === "USDT" || x.symbol === "USDC" ? 1 : x.address === WSOL ? solUsd : 0);
     x.valueUsd = p > 0 ? x.amount * p : null;
   }
-  const coinUsd = Number(px?.[WSOL]?.usdPrice) || null;
+  const coinUsd = Number(px?.[WSOL]?.usdPrice) || solUsd || null;
   return { slot, address: owner, chain: "solana" as const, coin: "SOL", explorer: chain.explorer, coinUsd, assets };
 }
 
@@ -162,10 +190,8 @@ async function solRaw(owner: string, mint: string): Promise<{ raw: bigint; decim
     const lamports = await new Connection(SOL_RPC, "confirmed").getBalance(new PublicKey(owner));
     return { raw: BigInt(lamports), decimals: 9, symbol: "SOL" };
   }
-  const h = await fetch(`${JUP}/ultra/v1/holdings/${owner}`, { cache: "no-store", signal: AbortSignal.timeout(12_000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  const accs = (h?.tokens?.[mint] || []) as { amount?: string; decimals?: number }[];
-  let raw = 0n, decimals = WCHAINS.solana.tokens.find((t) => t.address === mint)?.decimals || 6;
-  for (const a of accs) { try { raw += BigInt(String(a.amount || "0")); } catch { /* skip */ } decimals = Number(a.decimals) || decimals; }
+  const hit = (await solBalances(owner)).tokens.get(mint);
+  const raw = hit?.raw || 0n, decimals = hit?.decimals || WCHAINS.solana.tokens.find((t) => t.address === mint)?.decimals || 6;
   const symbol = WCHAINS.solana.tokens.find((t) => t.address === mint)?.symbol || "TOKEN";
   return { raw, decimals, symbol };
 }
