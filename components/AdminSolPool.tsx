@@ -193,7 +193,21 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
 
       {showDeploy && (
         <>
-          <b>1. Deploy the token</b>
+          <div className="notice" style={{ display: "grid", gap: 8 }}>
+        <b>CA management</b>
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button className="btn small" type="button" disabled={!mint || busy} onClick={saveCA}>Save current CA</button>
+          <button className="btn small" type="button" disabled={busy} onClick={newDeployment}>Start another deployment</button>
+        </div>
+        {savedCAs.length > 0 && <div className="stack" style={{ gap: 6 }}>
+          <small>Saved CAs</small>
+          {savedCAs.map((item) => <div className="row" key={item.mint} style={{ justifyContent: "space-between", gap: 8 }}>
+            <span className="mono" style={{ overflowWrap: "anywhere" }}>{item.symbol} · {item.mint.slice(0, 6)}…{item.mint.slice(-6)}</span>
+            <button className="btn small" type="button" onClick={() => setTokenIn(item.mint)}>Load</button>
+          </div>)}
+        </div>}
+      </div>
+      <b>1. Deploy the token</b>
           <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
           <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={12} /></label>
           <label className="field"><span>Supply (whole tokens, 6 decimals)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
@@ -206,17 +220,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
 
       <b>2. Token</b>
       <input value={tokenIn} onChange={(e) => setTokenIn(e.target.value.trim())} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
-      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-        <button className="btn small" type="button" disabled={!mint || busy} onClick={saveCA}>Save CA</button>
-        <button className="btn small" type="button" disabled={busy} onClick={newDeployment}>New deployment</button>
-      </div>
-      {savedCAs.length > 0 && <div className="stack" style={{ gap: 6 }}>
-        <b>Saved Solana CAs</b>
-        {savedCAs.map((item) => <div className="row" key={item.mint} style={{ justifyContent: "space-between", gap: 8 }}>
-          <span className="mono" style={{ overflowWrap: "anywhere" }}>{item.symbol} · {item.mint.slice(0, 6)}…{item.mint.slice(-6)}</span>
-          <button className="btn small" type="button" onClick={() => setTokenIn(item.mint)}>Load</button>
-        </div>)}
-      </div>}
+
       {info && (
         <>
           <div className="notice">
