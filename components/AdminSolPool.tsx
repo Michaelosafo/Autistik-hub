@@ -75,6 +75,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   function connect() { setNetwork("solana").catch(() => {}); pickWallet({ fresh: true }); }
   function save(addr: string) {
     setTokenIn(addr);
+    try { localStorage.setItem(SAVED, addr); } catch { /* private mode */ }
   }
   function saveCA() {
     if (!mint) { setMsg("Enter a valid Solana token CA first."); return; }
@@ -110,7 +111,12 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     try {
       setMsg(feePct ? `Confirm in your wallet: deploy ${s} with a ${feePct}% transfer fee.` : "Confirm in your wallet: deploy the token. The whole supply comes to this wallet.");
       const built = await rageSol<{ tx: string; mint: string; feeBps: number }>("mint", { owner: sw.account.address, name: n, symbol: s, supply: whole, buyTax, sellTax });
-      const sig = await signAndSend(sw, built.tx);
+      const sig = await signAndSend(sw, built.tx, () => {
+        // Switch the panel to the new mint immediately after wallet submission,
+        // so delayed confirmation lookup cannot leave the previous token selected.
+        save(built.mint);
+        setMsg("Transaction submitted. Loading new token CA: " + built.mint);
+      });
       save(built.mint);
       setTick((x) => x + 1);
       const feeNote = built.feeBps > 0 ? ` Transfer fee ${built.feeBps / 100}% (Token-2022, every transfer).` : " No transfer fee.";
