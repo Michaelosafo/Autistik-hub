@@ -1,7 +1,7 @@
 "use client";
 import { reportActivity } from "@/lib/activity-client";
 import { MAX_RAGE_TAX, SOL_ADDR, rageTaxBps } from "@/lib/admin-rage";
-import { getState, isMobile, lostSolSign, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
+import { bitgetOpenDapp, getState, insideBitget, isMobile, lostSolSign, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
 import { CHAINS, SOL_DECIMALS, SOL_POOL_COST } from "@/lib/launchpad";
 import { sendSigned, signAndSend, solErr, type SolWallet } from "@/lib/sol-wallet";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -49,6 +49,9 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [tick, setTick] = useState(0);
+  // On a phone outside Bitget's own browser: offer opening this page inside Bitget (set after load, browser only).
+  const [offerBitget, setOfferBitget] = useState(false);
+  useEffect(() => { setOfferBitget(isMobile() && !insideBitget()); }, []);
   // A transaction built and waiting for your tap to open the wallet (phones + WalletConnect wallets such as Bitget).
   const [toSign, setToSign] = useState<{ label: string; go: () => void; stop: () => void } | null>(null);
   const mint = SOL_ADDR.test(tokenIn.trim()) ? tokenIn.trim() : "";
@@ -260,6 +263,13 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
         Solana · Raydium. You can deploy a new token or paste any existing token address to add or remove liquidity.
       </p>
       {!sw && <button className="btn small" type="button" disabled={busy} onClick={connect}>Connect a Solana wallet</button>}
+      {!sw && offerBitget && (
+        <small className="muted">
+          Bitget opens but shows nothing to approve?{" "}
+          <a className="linkish" href="#" onClick={(e) => { e.preventDefault(); location.href = bitgetOpenDapp(location.href); }}>Open this page inside Bitget Wallet</a>
+          {" "}instead: its wallet is built in there, so Connect and every signature pop up right on the page. Enter your Admin 2-step code there once.
+        </small>
+      )}
       {sw && <small className="muted">Wallet <span className="mono">{sw.account.address.slice(0, 4)}…{sw.account.address.slice(-4)}</span> on Solana · <button type="button" className="linkish" onClick={connect} disabled={busy}>Switch</button></small>}
 
       {showDeploy && (

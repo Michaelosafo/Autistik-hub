@@ -1061,6 +1061,29 @@ function wcSolWallet(name: string, icon: string, up: any, address: string, base?
   } as Wallet;
 }
 
+// ---- Phones, Solana: the WalletConnect link is made BEFORE the tap (same reason as prepareMobileWc above).
+// Before, the link was made after tapping Bitget, so the wallet app opened late or with no request in it.
+let solPre: { uri: string; at: number; up: any; done: Promise<any> } | null = null;
+let solPreparing = false;
+const solPreReady = () => !!solPre && solPre.up === solWc && !!solWc && !solWc.session?.namespaces?.solana?.accounts?.[0] && Date.now() - solPre.at < PRE_FRESH;
+
+export async function prepareSolWc() {
+  if (!isMobile() || !WALLETCONNECT_ID || state.sol || solPreparing || solPreReady()) return;
+  solPreparing = true;
+  try {
+    const up = await initSolWc();
+    if (up.session?.namespaces?.solana?.accounts?.[0]) return;
+    let done: Promise<any> = Promise.resolve();
+    const uri = await new Promise<string>((res, rej) => {
+      const t = setTimeout(() => rej(new Error("timeout")), 15_000);
+      up.once?.("display_uri", (u: string) => { clearTimeout(t); res(u); });
+      done = up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
+      done.catch(() => { if (solPre?.up === up) solPre = null; });
+    });
+    solPre = { uri, at: Date.now(), up, done };
+  } catch { solPre = null; } finally { solPreparing = false; }
+}
+
 /**
  * Connect a wallet's Solana account through WalletConnect, like the other networks: on a phone the wallet app opens
  * to approve and you come back here connected; on a computer our window shows that wallet's code to scan.
@@ -1073,10 +1096,28 @@ export async function chooseSolWalletConnect(t: WcTarget) {
     set({ busy: "", error: `${t.name} isn't ready in this browser yet. Wait a second and tap it again.` });
     return;
   }
-  set({ busy: t.name, error: "", qr: null });
   const mobile = isMobile();
+  // Phone with the link already made: open the wallet inside this tap, then wait for the approval.
+  const base = walletBase(t);
+  if (mobile && base && solPreReady()) {
+    const p = solPre!;
+    const href = wcHref(base, p.uri, t.pkg);
+    set({ open: true, busy: "", error: "", qr: { uri: p.uri, name: t.name, logo: t.logo, install: t.install, href } });
+    openWalletApp(href);
+    try { await p.done; solPre = null; await finishSolWc(t, p.up); }
+    catch (e: any) {
+      solPre = null;
+      if (state.sol) return;
+      if (cancelled) { cancelled = false; return; }
+      set({ open: true, busy: "", qr: null, error: /reset|reject|closed|cancel/i.test(String(e?.message)) ? "Closed in the wallet. Try again, or pick another wallet." : String(e?.message || e).slice(0, 160) });
+    }
+    return;
+  }
+  set({ busy: t.name, error: "", qr: null });
   try {
     const up = await initSolWc();
+    // A link made in the background but not used yet: use it instead of starting a second connection.
+    if (solPreReady()) { const p = solPre!; const href = base && mobile ? wcHref(base, p.uri, t.pkg) : undefined; set({ qr: { uri: p.uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); if (href) openWalletApp(href); await p.done; solPre = null; await finishSolWc(t, up); return; }
     if (up.session?.namespaces?.solana?.accounts?.[0]) { await finishSolWc(t, up); return; }
     up.once?.("display_uri", (uri: string) => {
       const base = walletBase(t);
@@ -1143,7 +1184,7 @@ export async function lostSolSign(txB64: string): Promise<Uint8Array | null> {
 /** Gets WalletConnect ready while the Connect window is open, so tapping a wallet opens it straight away. */
 export function warmUp() {
   if (!WALLETCONNECT_ID || typeof window === "undefined") return;
-  if (state.network === "solana") { if (!solWc) initSolWc().catch(() => {}); }
+  if (state.network === "solana") { if (isMobile()) prepareSolWc().catch(() => {}); else if (!solWc) initSolWc().catch(() => {}); }
   else if (!state.current) { if (isMobile()) prepareMobileWc().catch(() => {}); else initWc().catch(() => {}); }
 }
 
