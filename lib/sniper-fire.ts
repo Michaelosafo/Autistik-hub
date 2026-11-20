@@ -52,7 +52,7 @@ export async function payUsd(chain: SnipeChain, pay: "native" | "usdt" | "usdc")
 }
 
 /** inUsd: the amounts are dollars, turned into the pay coin at today's price. */
-export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, slots: number[], amounts: Record<string, number> = {}, inUsd = false): Promise<{ chain: SnipeChain; unit: string; price: number; wallets: ReadyWallet[] }> {
+export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "usdc", amount: number, slots: number[], amounts: Record<string, number> = {}, inUsd = false): Promise<{ chain: SnipeChain; unit: string; price: number; extra: number; wallets: ReadyWallet[] }> {
   const unit = unitOf(chain, pay);
   const price = inUsd ? await payUsd(chain, pay) : 0;
   if (inUsd && !(price > 0)) throw new Error(`No ${unit} price right now. Try again in a moment.`);
@@ -80,7 +80,9 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
       return { slot, address: null, balance: null, unit, need, ok: false, reason: (e as Error).message.slice(0, 80) };
     }
   }));
-  return { chain, unit, price, wallets };
+  // What a wallet must hold on top of the buy (fees), so the page can work out "ready" from the amounts typed right now.
+  const extra = chain === "solana" ? (pay === "native" ? reserve : 0.01) : reserve;
+  return { chain, unit, price, extra, wallets };
 }
 
 async function evmUi(chain: SnipeChain, who: string, pay: "native" | "usdt" | "usdc"): Promise<number> {

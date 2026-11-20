@@ -9,6 +9,8 @@ type Target = { token: string; chain?: string; pay?: string; amount?: number; am
 type S = { liq_targets?: Target[]; liq_x?: number; liq_sell_pct?: number; liq_slip?: number; liq_tp_on?: boolean; snipe_usd?: number; copy_key_usd?: Record<string, number>; snipe_amounts?: Record<string, Record<string, number>>; enabled: boolean; mode: string; last_note?: string | null };
 type Hit = { id: string; name: string; symbol: string; hasCode: boolean; hasPool: boolean; liquidityUsd: number };
 type Ready = { slot: number; address: string | null; balance: number | null; unit: string; need: number; ok: boolean; reason: string };
+// "$175", "175 usd", "1,175" → 175 / 1175 (anything that isn't a digit or a dot is dropped).
+const num = (v: unknown) => { const x = Number(String(v ?? "").replace(/,/g, "").replace(/[^0-9.]/g, "")); return isFinite(x) && x > 0 ? x : 0; };
 const short = (a: string) => a.startsWith("0x") ? `${a.slice(0, 6)}…${a.slice(-4)}` : `${a.slice(0, 4)}…${a.slice(-4)}`;
 const CHAIN_NAME: Record<string, string> = { bsc: "BNB Chain", ethereum: "Ethereum", base: "Base", arbitrum: "Arbitrum", solana: "Solana" };
 const unitOfT = (t: Target) => t.pay === "usdt" ? "USDT" : t.pay === "usdc" ? "USDC" : t.chain === "solana" ? "SOL" : t.chain === "bsc" || !t.chain ? "BNB" : "ETH";
@@ -30,6 +32,9 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
   const [ready, setReady] = useState<Ready[]>([]);
   // $ for one unit of what pays (BNB / ETH / SOL, or 1 for USDT / USDC), from the last balance check.
   const [price, setPrice] = useState(0);
+  // Fees a wallet needs on top of the buy (from the server), and whether a balance check is still on its way.
+  const [extra, setExtra] = useState(0);
+  const [loadingReady, setLoadingReady] = useState(false);
   const [making, setMaking] = useState(0);
   const [checking, setChecking] = useState(false);
   const [reload, setReload] = useState(0);
@@ -46,14 +51,14 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
   const save = (next: Target[], done?: string) => set({ liq_targets: next }, done);
   const per = Number(s.snipe_usd || 5), x = Number(s.liq_x || 2), pct = Number(s.liq_sell_pct || 100), slip = Number(s.liq_slip || 20), tp = s.liq_tp_on !== false;
   // Each wallet's own $ per snipe (the same amounts as on the wallet cards below); none = the normal amount.
-  const typed = Number(amt) > 0 ? Number(amt) : 0;
+  const typed = num(amt);
   const hit = hits.find((h) => h.id === chain) || hits[0];
   const unit = pay === "native" ? (hit?.symbol || "BNB") : pay.toUpperCase();
   const pays = (id: string) => id === "base" ? ["native", "usdc"] as const : ["native", "usdt", "usdc"] as const;
   // Amounts here are in $: each wallet's set amount (wallet card → Buy amount) for this chain fills in.
   const preset = (slot: number) => (chain ? Number(s.snipe_amounts?.[String(slot)]?.[chain] || 0) : 0);
   const money = (n: number) => `$${n >= 100 ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : n.toFixed(2)}`;
-  const ownNum = (slot: number) => (Number(own[slot]) > 0 ? Number(own[slot]) : 0);
+  const ownNum = (slot: number) => num(own[slot]);
   const spendOf = (slot: number) => ownNum(slot) || typed;
   const ownMap: Record<string, number> = {};
   for (const sl of slots) if (ownNum(sl) > 0) ownMap[String(sl)] = ownNum(sl);
@@ -91,11 +96,13 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
   useEffect(() => {
     if (!chain) { setReady([]); return; }
     let gone = false;
-    const t = setTimeout(() => ask<{ wallets: Ready[]; price: number }>("sniper-ready", { chain, pay, amount: typed, slots, amounts: ownMap, usd: true }).then((d) => {
+    setLoadingReady(true);
+    const t = setTimeout(() => ask<{ wallets: Ready[]; price: number; extra?: number }>("sniper-ready", { chain, pay, amount: typed, slots, amounts: ownMap, usd: true }).then((d) => {
       if (gone) return;
       const wallets = d.wallets || [];
       setReady(wallets);
       setPrice(Number(d.price) || 0);
+      setExtra(Number(d.extra) || 0);
       // Any wallet with an address on this chain can be ticked, funded or not (bridge to it before launch).
       const has = wallets.filter((w) => w.address).map((w) => w.slot);
       const funded = wallets.filter((w) => w.address && (w.balance || 0) > 0).map((w) => w.slot);
@@ -103,7 +110,7 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
         if (Array.isArray(cur)) { const keep = cur.filter((x) => has.includes(x)); return keep.length ? keep : null; }
         return funded.length === 1 ? funded : null;
       });
-    }).catch(() => {}), 300);
+    }).catch(() => {}).finally(() => { if (!gone) setLoadingReady(false); }), 300);
     return () => { gone = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, pay, typed, ownKey, slots.join(","), reload]);
@@ -200,14 +207,22 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
               {listed.map((w) => {
                 const on = pickList.includes(w.slot);
                 const spend = spendOf(w.slot);
-                const status = !(spend > 0) ? "type an amount" : w.ok ? `✅ ready · ≈ ${+w.need.toFixed(6)} ${w.unit}` : w.balance == null ? `⚠ ${w.reason}` : `${w.reason} · bridge or send ${w.unit} in`;
+                // Worked out here from the $ typed right now and the last balance, so an older answer can't say "No amount set".
+                const needNow = price > 0 ? spend / price : 0;
+                const okNow = spend > 0 && price > 0 && w.balance != null && w.balance + 1e-12 >= needNow + extra;
+                const status = !(spend > 0) ? "type an amount"
+                  : w.balance == null ? (loadingReady ? "checking…" : `⚠ ${w.reason}`)
+                  : !(price > 0) ? "checking…"
+                  : okNow ? `✅ ready · ≈ ${+needNow.toFixed(6)} ${w.unit}`
+                  : w.balance <= 0 ? `No ${w.unit} · bridge or send ${w.unit} in`
+                  : `Needs ${(needNow + extra).toFixed(4)} ${w.unit} (≈ ${money((needNow + extra) * price)}) · lower the $ or send more ${w.unit}`;
                 return (
                   <div key={w.slot} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     <button type="button" className={"btn small" + (on ? " primary" : " ghost")} style={{ justifyContent: "flex-start", flex: "1 1 200px" }} onClick={() => { const next = toggle(pickList, w.slot); setPick(next.length ? next : null); }} aria-pressed={on}>
                       {on ? "☑" : "☐"} #{w.slot} · {w.balance == null ? `? ${w.unit}` : <>{price > 0 ? `${money(w.balance * price)} / ` : ""}{w.balance.toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.unit}</>} · {short(w.address!)}
                     </button>
                     <input className="input" style={{ flex: "0 1 100px" }} inputMode="decimal" placeholder={typed > 0 ? `$${typed}` : "$"} value={own[w.slot] || ""} onChange={(e) => setOwn({ ...own, [w.slot]: e.target.value })} aria-label={`Wallet ${w.slot} dollars`} />
-                    <small className={w.ok || !on ? "muted" : "aic-warn"}>{status}</small>
+                    <small className={okNow || !on ? "muted" : "aic-warn"}>{status}</small>
                   </div>
                 );
               })}
@@ -222,7 +237,7 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
                   </>}
                 </div>
               ))}
-              {pickList.some((x) => !listed.find((w) => w.slot === x)?.ok) && <small className="muted">A wallet that still has no funds when the pool opens is skipped. The others buy.</small>}
+              {pickList.some((x) => { const w = listed.find((y) => y.slot === x); return !w || w.balance == null || !(price > 0) || w.balance + 1e-12 < spendOf(x) / price + extra; }) && <small className="muted">A wallet that still has no funds when the pool opens is skipped. The others buy.</small>}
             </div>
             <button type="submit" className="btn primary" disabled={!!busy || !chain || pickList.length === 0 || pickList.some((x) => !(spendOf(x) > 0))}>{pickList.length ? `Snipe on ${hit.name} with ${pickList.map((x) => `#${x}${spendOf(x) > 0 ? ` ${money(spendOf(x))}` : ""}`).join(" + ")} (in ${unit})` : "Tick a wallet"}</button>
           </>
