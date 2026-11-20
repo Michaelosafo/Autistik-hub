@@ -115,7 +115,7 @@ const TOKEN_PROGRAMS = ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "TokenzQd
  * A Solana wallet's balances read straight from the network (SOL + every token account, both token programs).
  * Jupiter's holdings service was the only source before; when it didn't answer, every wallet showed 0.
  */
-async function solBalances(owner: string): Promise<{ lamports: bigint; tokens: Map<string, { raw: bigint; decimals: number; ui: number }> }> {
+export async function solBalances(owner: string): Promise<{ lamports: bigint; tokens: Map<string, { raw: bigint; decimals: number; ui: number }> }> {
   const conn = new Connection(SOL_RPC, "confirmed");
   const pk = new PublicKey(owner);
   const [lamports, ...lists]: any[] = await Promise.all([

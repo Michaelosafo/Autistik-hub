@@ -200,11 +200,11 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
               {listed.map((w) => {
                 const on = pickList.includes(w.slot);
                 const spend = spendOf(w.slot);
-                const status = !(spend > 0) ? "type an amount" : w.ok ? `✅ ready · ≈ ${+w.need.toFixed(6)} ${w.unit}` : `${w.reason} · bridge or send ${w.unit} in`;
+                const status = !(spend > 0) ? "type an amount" : w.ok ? `✅ ready · ≈ ${+w.need.toFixed(6)} ${w.unit}` : w.balance == null ? `⚠ ${w.reason}` : `${w.reason} · bridge or send ${w.unit} in`;
                 return (
                   <div key={w.slot} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     <button type="button" className={"btn small" + (on ? " primary" : " ghost")} style={{ justifyContent: "flex-start", flex: "1 1 200px" }} onClick={() => { const next = toggle(pickList, w.slot); setPick(next.length ? next : null); }} aria-pressed={on}>
-                      {on ? "☑" : "☐"} #{w.slot} · {price > 0 ? `${money((w.balance ?? 0) * price)} / ` : ""}{(w.balance ?? 0).toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.unit} · {short(w.address!)}
+                      {on ? "☑" : "☐"} #{w.slot} · {w.balance == null ? `? ${w.unit}` : <>{price > 0 ? `${money(w.balance * price)} / ` : ""}{w.balance.toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.unit}</>} · {short(w.address!)}
                     </button>
                     <input className="input" style={{ flex: "0 1 100px" }} inputMode="decimal" placeholder={typed > 0 ? `$${typed}` : "$"} value={own[w.slot] || ""} onChange={(e) => setOwn({ ...own, [w.slot]: e.target.value })} aria-label={`Wallet ${w.slot} dollars`} />
                     <small className={w.ok || !on ? "muted" : "aic-warn"}>{status}</small>

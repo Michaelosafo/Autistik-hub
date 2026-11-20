@@ -14,12 +14,15 @@ import { T } from "@/lib/ai-trader-ctx";
 import { NATIVE, WCHAINS, WSOL } from "@/lib/wallet-chains";
 import { build, quote } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
-import { sniperSol } from "@/lib/sniper-chains";
+import { sniperSol, solBalances } from "@/lib/sniper-chains";
 import type { SnipeChain } from "@/lib/sniper-detect";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
 const SOL_RPC = process.env.SNIPER_SOLANA_RPC || process.env.WALLET_SOLANA_RPC || process.env.NEXT_PUBLIC_SOLANA_RPC || "https://solana-rpc.publicnode.com";
-const JUP = process.env.JUPITER_API || "https://lite-api.jup.ag";
+// lite-api.jup.ag (keyless) is being throttled and phased out by Jupiter; with JUPITER_API_KEY set, use api.jup.ag.
+const JUP_KEY = process.env.JUPITER_API_KEY || "";
+const JUP = process.env.JUPITER_API || (JUP_KEY ? "https://api.jup.ag" : "https://lite-api.jup.ag");
+const JUP_H: Record<string, string> = JUP_KEY ? { "x-api-key": JUP_KEY } : {};
 const PRIO: Record<string, number> = { low: 50_000, med: 200_000, high: 1_000_000, max: 5_000_000 };
 const RESERVE: Record<SnipeChain, number> = { bsc: 0.0015, ethereum: 0.0004, base: 0.00015, arbitrum: 0.00015, solana: 0.02 };
 
@@ -62,7 +65,9 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
         const kp = await sniperSol(slot);
         if (!kp) return { slot, address: null, balance: null, unit, need, ok: false, reason: "No Solana address" };
         const owner = kp.publicKey.toBase58();
-        const bal = await solUi(owner, pay === "native" ? "SOL" : tokenIn(chain, pay));
+        let bal: number;
+        try { bal = await solUi(owner, pay === "native" ? "SOL" : tokenIn(chain, pay)); }
+        catch (e) { return { slot, address: owner, balance: null, unit, need, ok: false, reason: (e as Error).message.slice(0, 80) }; }
         const ok = need > 0 && bal + 1e-12 >= need + (pay === "native" ? reserve : 0.01);
         return { slot, address: owner, balance: bal, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : bal <= 0 ? `No ${unit}` : `Needs ${(need + (pay === "native" ? reserve : 0.01)).toFixed(4)} ${unit}` };
       }
@@ -90,10 +95,16 @@ async function evmUi(chain: SnipeChain, who: string, pay: "native" | "usdt" | "u
   return Number(raw) / 10 ** dec;
 }
 
+/**
+ * A Solana wallet's SOL or token balance, read straight from the network (same as the wallet cards).
+ * It used to come from Jupiter's holdings service, and any failure there read as 0, so funded wallets showed "No SOL".
+ * A failed read now throws, so the wallet shows the error instead of a fake 0.
+ */
 async function solUi(owner: string, mintOrSol: string): Promise<number> {
-  const h = await fetch(`${JUP}/ultra/v1/holdings/${owner}`, { cache: "no-store", signal: AbortSignal.timeout(10_000) }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-  if (mintOrSol === "SOL") return h?.uiAmount != null ? Number(h.uiAmount) : Number(h?.amount || 0) / 1e9;
-  return ((h?.tokens?.[mintOrSol] || []) as { uiAmount?: number }[]).reduce((a, x) => a + (Number(x.uiAmount) || 0), 0);
+  const bal = await solBalances(owner).catch(() => null);
+  if (!bal) throw new Error("Couldn't read the Solana balance. Try again in a moment.");
+  if (mintOrSol === "SOL") return Number(bal.lamports) / 1e9;
+  return bal.tokens.get(mintOrSol)?.ui || 0;
 }
 
 /** A wallet's own amount (set for this token or this chain), else the shared one. */
@@ -180,9 +191,9 @@ async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", go
     if (!kp) { skip.push({ ...w, ok: false, reason: "No Solana address" }); return null; }
     try {
       const raw = parseUnits(w.need.toFixed(Math.min(dec, 6)), dec);
-      const q = await fetch(`${JUP}/swap/v1/quote?inputMint=${inn}&outputMint=${t.token}&amount=${raw}&slippageBps=${slip}&restrictIntermediateTokens=true`, { cache: "no-store", signal: AbortSignal.timeout(12_000) }).then((r) => r.json());
+      const q = await fetch(`${JUP}/swap/v1/quote?inputMint=${inn}&outputMint=${t.token}&amount=${raw}&slippageBps=${slip}&restrictIntermediateTokens=true`, { cache: "no-store", headers: JUP_H, signal: AbortSignal.timeout(12_000) }).then((r) => r.json());
       if (!q?.outAmount) throw new Error(q?.error || "no pool yet");
-      const j = await fetch(`${JUP}/swap/v1/swap`, { method: "POST", headers: { "content-type": "application/json" }, signal: AbortSignal.timeout(15_000), body: JSON.stringify({
+      const j = await fetch(`${JUP}/swap/v1/swap`, { method: "POST", headers: { "content-type": "application/json", ...JUP_H }, signal: AbortSignal.timeout(15_000), body: JSON.stringify({
         quoteResponse: q, userPublicKey: kp.publicKey.toBase58(), wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true,
         prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: prio, priorityLevel: prio >= 1_000_000 ? "veryHigh" : "high" } },
       }) }).then((r) => r.json());
