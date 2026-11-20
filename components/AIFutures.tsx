@@ -491,7 +491,7 @@ export default function AIFutures({ desk }: { desk?: "fx" | "earn" | "turbo" | "
   const snipeDesk = desk === "snipe" || copyDesk; // Sniper and Copy: spot coins from the shared Solana wallet
   DESK = desk ? `?desk=${desk}` : "";
   const NAME = liqDesk ? "Sniper (BSC)" : copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
-  const TAG = liqDesk ? "Paste a token, pick wallets, and it buys the moment liquidity lands. BNB · Ethereum · Base · Arbitrum · Solana."
+  const TAG = liqDesk ? "BNB Chain only: paste a BSC token, tick one or more wallets, and they all buy the moment liquidity lands."
     : copyDesk ? "Copies the wallets you paste: when they buy on BNB Chain, your wallets buy too."
     : madDesk ? "Highest risk: top Hyperliquid coins at high leverage with very tight stops."
     : snipeDesk ? "Buys brand-new Solana coins pumping hard with real volume. High risk."

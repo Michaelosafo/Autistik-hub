@@ -70,3 +70,23 @@ export async function detectSnipe(raw: string): Promise<{ kind: "evm" | "solana"
 
 export const isSnipeChain = (c: string): c is SnipeChain => (SNIPE_CHAINS as readonly string[]).includes(c);
 export const chainMeta = (id: SnipeChain) => WCHAINS[id as WChainKey];
+
+/** The ⚡ Sniper is BNB Chain only: an 0x token checked on BNB Chain (contract and/or PancakeSwap pool). */
+export async function detectSnipeBsc(raw: string): Promise<{ kind: "evm" | "unknown"; normalized: string; hits: ChainHit[]; suggested: SnipeChain | null }> {
+  const a = raw.trim().match(/0x[0-9a-fA-F]{40}/)?.[0] || "";
+  if (!a || !isAddress(a, { strict: false })) return { kind: "unknown", normalized: raw.trim(), hits: [], suggested: null };
+  const addr = getAddress(a);
+  const c = WCHAINS.bsc;
+  const [liq, hasCode] = await Promise.all([
+    pools(addr),
+    (async () => {
+      try {
+        const hex = await createPublicClient({ chain: c.viem, transport: http(c.rpc, { timeout: 5000 }) }).getBytecode({ address: addr });
+        return !!hex && hex !== "0x";
+      } catch { return false; }
+    })(),
+  ]);
+  if (!hasCode && !liq.has("bsc")) return { kind: "evm", normalized: addr, hits: [], suggested: null };
+  const hit: ChainHit = { id: "bsc", name: c.name, symbol: c.native.symbol, hasCode, hasPool: liq.has("bsc"), liquidityUsd: liq.get("bsc") || 0 };
+  return { kind: "evm", normalized: addr, hits: [hit], suggested: "bsc" };
+}

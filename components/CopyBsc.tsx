@@ -42,7 +42,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   const [keyIn, setKeyIn] = useState<Record<number, string>>({});
   const [copied, setCopied] = useState(0);
   // Sniper: one network for all the wallet cards.
-  const [net, setNet] = useState<"bsc" | "ethereum" | "base" | "arbitrum" | "solana">("bsc");
+  // The ⚡ Sniper is BNB Chain only, so its wallet cards stay on BNB Chain.
+  const net = "bsc" as "bsc" | "ethereum" | "base" | "arbitrum" | "solana";
   const reveal = async (slot: number) => {
     if (!confirm(`Show wallet ${slot}'s private key? Anyone who sees it can take the money. Use it to import the wallet into Bitget, MetaMask or Trust.`)) return;
     const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
@@ -116,10 +117,8 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
       {sniper && k.slot === mine[0]?.slot && (
         <div className="row snp-nets" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           <small className="muted">Network:</small>
-          {([["bsc", "BNB"], ["ethereum", "ETH"], ["base", "Base"], ["arbitrum", "Arb"], ["solana", "SOL"]] as const).map(([id, nm]) => (
-            <button key={id} type="button" data-net={id} className={"snp-net" + (net === id ? " on" : "")} onClick={() => setNet(id)}>{nm}</button>
-          ))}
-          <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"}</small>
+          <span data-net="bsc" className="snp-net on">BNB Chain only</span>
+          <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"} · tick several on a token and they all snipe together</small>
         </div>
       )}
         <div className={"stack snp-wcard" + (k.address ? "" : " add")} data-net={sniper ? net : "bsc"}>

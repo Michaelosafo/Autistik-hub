@@ -103,14 +103,14 @@ export async function POST(req: Request, { params }: { params: { action: string 
             if (Array.isArray(b.liq_targets)) {
               // Tokens to snipe: 0x addresses, each once.
               const seen = new Set<string>();
-              const chains = ["bsc", "ethereum", "base", "arbitrum", "solana"];
-              const pays = ["native", "usdt", "usdc"];
+              // BNB Chain only: the sniper buys with BNB or USDT from each picked wallet's BSC address.
+              const pays = ["native", "usdt"];
               const prios = ["low", "med", "high", "max"];
-              const mint = (token: string) => /^0x[0-9a-fA-F]{40}$/.test(token) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token);
+              const mint = (token: string) => /^0x[0-9a-fA-F]{40}$/.test(token);
               const keyOf = (token: string) => token.startsWith("0x") ? token.toLowerCase() : token;
               up.liq_targets = b.liq_targets.map((t: any) => ({
                 token: String(t?.token || "").trim(), label: String(t?.label || "").trim().slice(0, 24) || undefined, usd: clamp(t?.usd, 0.5, 100000),
-                chain: chains.includes(t?.chain) ? t.chain : undefined,
+                chain: !t?.chain || t.chain === "bsc" ? "bsc" : "other",
                 pay: pays.includes(t?.pay) ? t.pay : undefined,
                 amount: clamp(t?.amount, 0, 1_000_000_000),
                 // Each picked wallet's own amount for this token (in the pay coin); missing = `amount`.
@@ -126,7 +126,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 // Wallets that already sent their buy (kept so they never buy twice) and when the first did.
                 fired: Array.isArray(t?.fired) ? [...new Set(t.fired.map(Number).filter((x: number) => x >= 1 && x <= 13))].sort((a: number, b: number) => a - b) : undefined,
                 first_at: t?.first_at && !isNaN(Date.parse(t.first_at)) ? String(t.first_at) : undefined,
-              })).filter((t: any) => mint(t.token) && !seen.has(keyOf(t.token)) && seen.add(keyOf(t.token))).slice(0, 30);
+              })).filter((t: any) => t.chain === "bsc" && mint(t.token) && !seen.has(keyOf(t.token)) && seen.add(keyOf(t.token))).slice(0, 30);
             }
           }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
@@ -271,13 +271,13 @@ export async function POST(req: Request, { params }: { params: { action: string 
           const slow = await rateLimit(req, params.action, 30, 60, String(id));
           if (slow) return slow;
           if (params.action === "sniper-detect") {
-            const { detectSnipe } = await import("@/lib/sniper-detect");
-            return json(await detectSnipe(String(b.token || "")));
+            const { detectSnipeBsc } = await import("@/lib/sniper-detect");
+            return json(await detectSnipeBsc(String(b.token || "")));
           }
           const { snipeReady } = await import("@/lib/sniper-fire");
           const chain = String(b.chain || "");
-          const pay = b.pay === "usdt" || b.pay === "usdc" ? b.pay : "native";
-          if (!["bsc", "ethereum", "base", "arbitrum", "solana"].includes(chain)) return json({ error: "Pick a chain." }, 400);
+          const pay = b.pay === "usdt" ? "usdt" : "native";
+          if (chain !== "bsc") return json({ error: "The sniper is BNB Chain only." }, 400);
           const slots = Array.isArray(b.slots) ? b.slots.map(Number).filter((x: number) => x >= 1 && x <= 13) : [];
           const amounts: Record<string, number> = {};
           if (b.amounts && typeof b.amounts === "object") for (const [k, v] of Object.entries(b.amounts)) { const x = Number(v); if (Number(k) >= 1 && Number(k) <= 13 && x > 0 && isFinite(x)) amounts[k] = x; }

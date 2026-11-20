@@ -74,7 +74,8 @@ export type LiqTarget = { token: string; chain?: string; pay?: string; amount?: 
 /** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
 const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the first wallet got in
 const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
-export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => isMint(String(t?.token || "")));
+// BNB Chain only: targets saved on any other chain are ignored.
+export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => isMint(String(t?.token || "")) && (!t?.chain || t.chain === "bsc"));
 const sameToken = (a: string, b: string) => (a.startsWith("0x") || b.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b);
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
 const sellPctOf = (s: FSettings) => Math.min(100, Math.max(5, n((s as any).liq_sell_pct) || 100));
@@ -611,7 +612,8 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
         }
         w = waiting();
       }
-      const others = w.filter((t) => t.chain && t.chain !== "bsc");
+      // BNB Chain only: never fire on another chain, even for a target saved before the switch.
+      const others: LiqTarget[] = [];
       if (others.length && Date.now() - lastOther >= 4000) {
         lastOther = Date.now();
         const { fireChain } = await import("@/lib/sniper-fire");
