@@ -108,10 +108,11 @@ export async function POST(req: Request, { params }: { params: { action: string 
               const prios = ["low", "med", "high", "max"];
               // SniperBnbSol: 0x tokens on BNB Chain. SniperLobbySol: Solana mints.
               const mint = (token: string, chain: string) => chain === "solana" ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(token) : /^0x[0-9a-fA-F]{40}$/.test(token);
+              const NETS = ["bsc", "solana", "ethereum", "robinhood"];
               const keyOf = (token: string) => token.startsWith("0x") ? token.toLowerCase() : token;
               up.liq_targets = b.liq_targets.map((t: any) => ({
                 token: String(t?.token || "").trim(), label: String(t?.label || "").trim().slice(0, 24) || undefined, usd: clamp(t?.usd, 0.5, 100000),
-                chain: !t?.chain || t.chain === "bsc" ? "bsc" : t.chain === "solana" ? "solana" : "other",
+                chain: !t?.chain ? "bsc" : NETS.includes(t.chain) ? t.chain : "other",
                 pay: pays.includes(t?.pay) ? t.pay : undefined,
                 amount: clamp(t?.amount, 0, 1_000_000_000),
                 // Each picked wallet's own amount for this token (in the pay coin); missing = `amount`.
@@ -127,7 +128,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 // Wallets that already sent their buy (kept so they never buy twice) and when the first did.
                 fired: Array.isArray(t?.fired) ? [...new Set(t.fired.map(Number).filter((x: number) => x >= 1 && x <= 13))].sort((a: number, b: number) => a - b) : undefined,
                 first_at: t?.first_at && !isNaN(Date.parse(t.first_at)) ? String(t.first_at) : undefined,
-              })).filter((t: any) => (t.chain === "bsc" || t.chain === "solana") && mint(t.token, t.chain) && !seen.has(keyOf(t.token)) && seen.add(keyOf(t.token))).slice(0, 30);
+              })).filter((t: any) => NETS.includes(t.chain) && mint(t.token, t.chain) && !seen.has(`${t.chain}|${keyOf(t.token)}`) && seen.add(`${t.chain}|${keyOf(t.token)}`)).slice(0, 40);
             }
           }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
@@ -267,10 +268,23 @@ export async function POST(req: Request, { params }: { params: { action: string 
           return json({ ok: true, note: await w.swapSend(Number(b.slot), chain, String(b.tokenIn || ""), String(b.tokenOut || ""), amount, slip, String(b.minOutRaw || ""), b.confirmImpact === true) });
         }
         case "sniper-detect":
-        case "sniper-ready": {
+        case "sniper-ready":
+        case "sniper-v2-balances": {
           if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
           const slow = await rateLimit(req, params.action, 30, 60, String(id));
           if (slow) return slow;
+          if (b.net === "ethereum" || b.net === "robinhood" || b.chain === "ethereum" || b.chain === "robinhood") {
+            // SniperEth / SniperRobinhood.
+            const v2 = await import("@/lib/evm-snipe");
+            const k = (b.net === "ethereum" || b.chain === "ethereum") ? "ethereum" : "robinhood";
+            if (params.action === "sniper-detect") return json(await v2.v2Detect(k, String(b.token || "")));
+            if (params.action === "sniper-v2-balances") return json(await v2.v2Balances(k, Number(b.slot)));
+            const slots = Array.isArray(b.slots) ? b.slots.map(Number).filter((x: number) => x >= 1 && x <= 13) : [];
+            const amounts: Record<string, number> = {};
+            if (b.amounts && typeof b.amounts === "object") for (const [kk, v] of Object.entries(b.amounts)) { const x = Number(v); if (Number(kk) >= 1 && Number(kk) <= 13 && x > 0 && isFinite(x)) amounts[kk] = x; }
+            return json(await v2.v2Ready(k, slots, Number(b.amount) || 0, amounts));
+          }
+          if (params.action === "sniper-v2-balances") return json({ error: "Pick Ethereum or Robinhood Chain." }, 400);
           if (params.action === "sniper-detect") {
             const { detectSnipeBsc, detectSnipeSol } = await import("@/lib/sniper-detect");
             return json(b.net === "solana" ? await detectSnipeSol(String(b.token || "")) : await detectSnipeBsc(String(b.token || "")));

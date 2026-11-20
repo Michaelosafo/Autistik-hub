@@ -30,8 +30,13 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
   net?: string;
 }) {
   const sol = netIn === "solana";
-  const net = sol ? "solana" : "bsc", GAS = sol ? "SOL" : "BNB";
-  const gasNeed = sol ? 0.01 : GAS_BNB;
+  // SniperEth / SniperRobinhood: the same EVM address, its dollar coin and ETH on that chain.
+  const v2 = netIn === "ethereum" || netIn === "robinhood";
+  const net = sol ? "solana" : v2 ? (netIn as string) : "bsc", GAS = sol ? "SOL" : v2 ? "ETH" : "BNB";
+  const STABLE = netIn === "robinhood" ? "USDG" : "USDT";
+  const STD = sol ? "SPL" : netIn === "ethereum" ? "ERC20" : netIn === "robinhood" ? "Robinhood Chain" : "BEP20";
+  const NETNAME = sol ? "Solana" : netIn === "ethereum" ? "Ethereum" : netIn === "robinhood" ? "Robinhood Chain" : "BNB Chain";
+  const gasNeed = sol ? 0.01 : netIn === "ethereum" ? 0.003 : netIn === "robinhood" ? 0.0003 : GAS_BNB;
   const [solAddr, setSolAddr] = useState<string | null | undefined>(undefined); // undefined = still loading
   const [working, setWorking] = useState(false);
   const [again, setAgain] = useState(0);
@@ -52,12 +57,17 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
     if (sol && !solAddr) { setHold(null); return; }
     let gone = false;
     setLoading(true);
-    ask<Holdings>("sniper-balances", { slot, chain: net, extra: [] })
+    (v2
+      ? ask<{ usd: number; sym: string; eth: number }>("sniper-v2-balances", { slot, net }).then((d): Holdings => ({ coin: "ETH", explorer: "", assets: [
+          { address: "usd", symbol: d.sym, name: d.sym, decimals: 6, raw: "0", amount: d.usd, valueUsd: d.usd },
+          { address: "eth", symbol: "ETH", name: "ETH", decimals: 18, raw: "0", amount: d.eth, valueUsd: null },
+        ] }))
+      : ask<Holdings>("sniper-balances", { slot, chain: net, extra: [] }))
       .then((d) => { if (!gone) setHold(d); })
       .catch((e) => { if (!gone) setErr((e as Error).message); })
       .finally(() => { if (!gone) setLoading(false); });
     return () => { gone = true; };
-  }, [slot, net, sol, solAddr]);
+  }, [slot, net, sol, v2, solAddr]);
 
   async function solKey(action: "sniper-sol-create" | "sniper-sol-import") {
     let key = "";
@@ -79,14 +89,14 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
   }
 
   const find = (sym: string) => (hold?.assets || []).find((a) => a.symbol.toUpperCase() === sym);
-  const usdt = find("USDT")?.amount ?? 0;
+  const usdt = find(STABLE)?.amount ?? 0;
   const bnb = find(GAS)?.amount ?? 0;
   const bnbUsd = find(GAS)?.valueUsd ?? null;
   const cur = Number(amounts?.[net] || 0);
 
   function editAmount() {
     if (!setChainAmount) return;
-    const v = prompt(`USDT wallet ${slot} spends on each ${sol ? "Solana" : "BNB Chain"} snipe (${GAS} is only used for fees). Leave empty to clear it:`, cur ? String(cur) : "");
+    const v = prompt(`${STABLE} wallet ${slot} spends on each ${NETNAME} snipe (${GAS} is only used for fees). Leave empty to clear it:`, cur ? String(cur) : "");
     if (v == null) return;
     const x = Number(v);
     if (v.trim() && !(x > 0)) { setErr("Type an amount greater than zero, or leave it empty."); return; }
@@ -117,18 +127,18 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
       </div>
       <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
         {loading && !hold ? <small className="muted">Reading balances…</small> : <>
-          <span><b>USDT</b> {usd(usdt)}</span>
+          <span><b>{STABLE}</b> {usd(usdt)}</span>
           <span><b>{GAS}</b> {amt(bnb)}{bnbUsd != null ? <span className="muted"> ({usd(bnbUsd)})</span> : null} <small className="muted">fees</small></span>
         </>}
       </div>
       {hold && bnb < gasNeed && <small className="aic-warn">Needs about {gasNeed} {GAS} for fees.</small>}
       {setChainAmount && (
         <div className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          <small>💵 <b>Snipe amount: {cur ? `${usd(cur)} USDT` : "not set"}</b>{hold && cur > usdt ? <span className="aic-warn"> · only {usd(usdt)} USDT here</span> : null}</small>
+          <small>💵 <b>Snipe amount: {cur ? `${usd(cur)} ${STABLE}` : "not set"}</b>{hold && cur > usdt ? <span className="aic-warn"> · only {usd(usdt)} {STABLE} here</span> : null}</small>
           <button type="button" className="btn small" onClick={editAmount}>Set amount</button>
         </div>
       )}
-      <small className="muted">Fund it with <b>{sol ? "USDT on Solana (SPL)" : "USDT on BNB Chain (BEP20)"}</b> to snipe, plus a little {GAS} for fees.</small>
+      <small className="muted">Fund it with <b>{STABLE} on {NETNAME} ({STD})</b> to snipe, plus a little {GAS} for fees.</small>
       {sol && <div className="row" style={{ gap: 6, flexWrap: "wrap" }}><button type="button" className="btn small ghost" onClick={showSolKey}>Show Solana private key</button></div>}
       {err && <small className="aic-warn" role="alert">{err}</small>}
     </div>

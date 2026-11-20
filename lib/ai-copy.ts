@@ -522,6 +522,15 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
       got = r.got; tx = r.sig || null;
       if (!r.sig) reason = `${reason} (the wallet held none of it any more)`;
       if (n(p.size) > 0 && got > 0) px = got / (n(p.size) * part);
+    } else if (p.mode === "live" && /^(ethereum|robinhood):0x[0-9a-fA-F]{40}$/.test(p.coin)) {
+      // SniperEth / SniperRobinhood: sell on that chain's Uniswap V2 router, back to its dollar coin.
+      const [k, tok] = p.coin.split(":") as ["ethereum" | "robinhood", string];
+      const { sellV2 } = await import("@/lib/evm-snipe");
+      const slipSell = force ? 49 : /stop/i.test(reason) ? 30 : Math.max(10, n((s as any).liq_slip) || 20);
+      const r = await sellV2(k, slot, tok, all ? (n(p.size) > 0 ? n(p.size) : null) : n(p.size) * part, slipSell);
+      got = r.got; tx = r.hash || null;
+      if (!r.hash) reason = `${reason} (the wallet held none of it any more)`;
+      if (n(p.size) > 0 && got > 0) px = got / (n(p.size) * part);
     } else if (p.mode === "live") {
       if (!token) throw new Error("not a BNB Chain coin");
       const a = slot ? await copyKey(slot) : null;

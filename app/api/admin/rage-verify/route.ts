@@ -20,7 +20,7 @@ export async function POST(req: Request) {
   const chain = String(b?.chain || "");
   const address = String(b?.address || "");
   const guid = String(b?.guid || "");
-  if (!isEvmRage(chain as "bsc")) return json({ status: "unsupported", message: "Rage is BNB Chain only." });
+  if (!isEvmRage(chain as "bsc")) return json({ status: "unsupported", message: "Rage works on BNB Chain, Ethereum and Robinhood Chain." });
   try {
     const result = guid
       ? await checkRageVerify(chain, address, guid)

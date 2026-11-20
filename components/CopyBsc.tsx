@@ -21,7 +21,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   /** Sniper tabs: only the wallet cards, or only the speed settings (none = both). */
   part?: "copy" | "wallets" | "settings";
   /** Sniper pages: "bsc" (SniperBnbSol) or "solana" (SniperLobbySol) wallet cards. */
-  net?: "bsc" | "solana";
+  net?: "bsc" | "solana" | "ethereum" | "robinhood";
 }) {
   // Moving money between your own wallets: one wallet's panel open at a time.
   const [tf, setTf] = useState<Tf | null>(null);
@@ -46,7 +46,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   // Sniper: one network for all the wallet cards.
   // The ⚡ Sniper is BNB Chain only, so its wallet cards stay on BNB Chain.
   // Sniper wallet cards follow the page: BNB Chain (SniperBnbSol) or Solana (SniperLobbySol).
-  const net = (netIn === "solana" ? "solana" : "bsc") as "bsc" | "ethereum" | "base" | "arbitrum" | "solana";
+  const net = (netIn || "bsc") as "bsc" | "ethereum" | "base" | "arbitrum" | "solana" | "robinhood";
   const reveal = async (slot: number) => {
     if (!confirm(`Show wallet ${slot}'s private key? Anyone who sees it can take the money. Use it to import the wallet into Bitget, MetaMask or Trust.`)) return;
     const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
@@ -120,12 +120,12 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
       {sniper && k.slot === mine[0]?.slot && (
         <div className="row snp-nets" style={{ gap: 4, flexWrap: "wrap", alignItems: "center" }}>
           <small className="muted">Network:</small>
-          <span data-net={net} className="snp-net on">{net === "solana" ? "Solana only" : "BNB Chain only"}</span>
+          <span data-net={net} className="snp-net on">{net === "solana" ? "Solana only" : net === "ethereum" ? "Ethereum only" : net === "robinhood" ? "Robinhood Chain only" : "BNB Chain only"}</span>
           <small className="muted">· {mine.length} wallet{mine.length === 1 ? "" : "s"} · tick several on a token and they all snipe together</small>
         </div>
       )}
         <div className={"stack snp-wcard" + (k.address ? "" : " add")} data-net={sniper ? net : "bsc"}>
-          <small>{k.address ? <><b>Wallet {k.slot}</b>{sniper && <span className="snp-chip" data-net={net}>{net === "bsc" ? "BNB Chain" : net === "ethereum" ? "Ethereum" : net === "base" ? "Base" : net === "arbitrum" ? "Arbitrum" : "Solana"}</span>}</> : <><b>＋ Add a wallet</b> <span className="muted">(becomes wallet {k.slot})</span></>}</small>
+          <small>{k.address ? <><b>Wallet {k.slot}</b>{sniper && <span className="snp-chip" data-net={net}>{net === "bsc" ? "BNB Chain" : net === "ethereum" ? "Ethereum" : net === "base" ? "Base" : net === "arbitrum" ? "Arbitrum" : net === "robinhood" ? "Robinhood Chain" : "Solana"}</span>}</> : <><b>＋ Add a wallet</b> <span className="muted">(becomes wallet {k.slot})</span></>}</small>
           {k.address ? (
             <>
               {!sniper && <code style={{ wordBreak: "break-all" }}>{k.address}</code>}
@@ -210,7 +210,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
 
       </>}
       </>}
-      {part !== "wallets" && part !== "copy" && !(sniper && net === "solana") && <>
+      {part !== "wallets" && part !== "copy" && !(sniper && net !== "bsc") && <>
       <b style={{ marginTop: part === "settings" ? 0 : 8 }}>⚡ Speed and bot protection</b>
       <small className="muted">{sniper ? "Snipes always use at least Turbo gas, so every picked wallet's buy goes out together at the top of the block. Max for the hottest launches." : "Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away."}</small>
       <label className="ait-check" style={{ margin: 0 }}>

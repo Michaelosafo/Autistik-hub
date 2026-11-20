@@ -1,7 +1,7 @@
 import type { ChainKey } from "@/lib/launchpad";
 
-/** Rage is BNB Chain only. */
-export const RAGE_CHAINS = ["bsc"] as const;
+/** Rage pages: BnbRage (BNB Chain), EthRise (Ethereum), WanaRobinhood (Robinhood Chain). */
+export const RAGE_CHAINS = ["bsc", "ethereum", "robinhood"] as const;
 export type RageChain = (typeof RAGE_CHAINS)[number];
 export type EvmRageChain = RageChain;
 
@@ -30,4 +30,6 @@ export function rageTaxBps(raw: unknown): number | null {
 /** BNB kept back for gas on each Rage step (deploy, add, first buy). */
 export const RAGE_GAS: Record<EvmRageChain, number> = {
   bsc: 0.0015,
+  ethereum: 0.002,
+  robinhood: 0.0002,
 };

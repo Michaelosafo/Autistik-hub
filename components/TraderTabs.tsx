@@ -10,9 +10,12 @@ export const TRADER_TABS = [
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
   { href: "/admin/ai-snipe-bsc", label: "⚡ SniperBnbSol", sub: "BNB Chain · buys when liquidity lands", acc: "#22c55e" },
   { href: "/admin/sniperlobbysol", label: "🎯 SniperLobbySol", sub: "Solana · buys when it can be bought", acc: "#14F195" },
+  { href: "/admin/sniper-eth", label: "🔷 SniperEth", sub: "Ethereum · buys when liquidity lands", acc: "#627EEA" },
+  { href: "/admin/sniper-robinhood", label: "🪶 SniperRobinhood", sub: "Robinhood Chain · buys when liquidity lands", acc: "#00C805" },
   { href: "/admin/rage", label: "💧 BnbRage", sub: "BNB Chain · deploy · add · remove", acc: "#ef4444" },
+  { href: "/admin/ethrise", label: "🔷 EthRise", sub: "Ethereum · deploy · add · remove", acc: "#627EEA" },
+  { href: "/admin/wanarobinhood", label: "🪶 WanaRobinhood", sub: "Robinhood Chain · deploy · add · remove", acc: "#00C805" },
   { href: "/admin/lobbysol", label: "🟣 LobbySol", sub: "Solana · deploy · add · remove", acc: "#9945FF" },
-  { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
 ];
 
 export default function TraderTabs() {

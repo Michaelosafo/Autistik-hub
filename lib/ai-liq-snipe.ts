@@ -86,7 +86,8 @@ const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t);
 const isSolMint = (t: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => {
   const tok = String(t?.token || "");
-  return t?.chain === "solana" ? isSolMint(tok) : (!t?.chain || t.chain === "bsc") && isMint(tok);
+  // SniperEth / SniperRobinhood: an 0x token on Ethereum or Robinhood Chain.
+  return t?.chain === "solana" ? isSolMint(tok) : (!t?.chain || t.chain === "bsc" || t.chain === "ethereum" || t.chain === "robinhood") && isMint(tok);
 });
 const sameToken = (a: string, b: string) => (a.startsWith("0x") || b.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b);
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
@@ -763,7 +764,7 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   let lastFresh = Date.now(), lastGuns = Date.now(), firing = 0;
   // Housekeeping (settings / wallet reload, take-profit checks, picking up held coins) runs in the background, so
   // the block-by-block liquidity check is never held up by it.
-  let bgFresh = false, bgExit = false, bgPick = false, lastSolExit = 0;
+  let bgFresh = false, bgExit = false, bgPick = false, lastSolExit = 0, lastV2 = 0;
   const refresh = async () => {
     const { data } = await sb().from("ai_futures_settings").select("enabled,liq_targets,liq_x,liq_sell_pct,liq_tp_on,liq_slip,copy_key_usd,snipe_usd,copy_sl_on").eq("id", T()).maybeSingle();
     if (data) Object.assign(s, data);
@@ -822,6 +823,27 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
           }
         } finally { solBusy.delete(t.token); } })).catch(() => {});
       }
+      // SniperEth / SniperRobinhood: tried about every second in the background, one attempt per token at a time.
+      const v2 = live ? w.filter((t) => (t.chain === "ethereum" || t.chain === "robinhood") && !solBusy.has(t.token.toLowerCase())) : [];
+      if (v2.length && Date.now() - lastV2 >= 1000) {
+        lastV2 = Date.now();
+        const { fireV2 } = await import("@/lib/evm-snipe");
+        for (const t of v2) solBusy.add(t.token.toLowerCase());
+        void Promise.all(v2.map(async (t) => { try {
+          const r = await fireV2(s, t).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false as boolean, fired: [] as number[], ok: [] as number[] }));
+          if (r.fired?.length || r.bought || r.sent) {
+            t.fired = [...new Set([...(t.fired || []), ...(r.fired || [])])].sort((a, b) => a - b);
+            t.first_at ||= new Date().toISOString();
+            const left = (Array.isArray(t.wallets) && t.wallets.length ? t.wallets : []).filter((x) => !(t.fired || []).includes(x));
+            if (!left.length || !(t.wallets && t.wallets.length)) t.state = r.bought ? "done" : "failed";
+            if (r.bought) notes.push(`sniped ${t.label || t.token.slice(0, 8)} on ${t.chain}`);
+            await mark(t);
+          } else if (Date.now() - (failing.get(t.token) || 0) > 60_000) {
+            failing.set(t.token, Date.now());
+            await flog("skip", `${t.label || t.token.slice(0, 10)} (${t.chain === "ethereum" ? "Ethereum" : "Robinhood Chain"}): ${r.why}. Trying again every second.`);
+          }
+        } finally { solBusy.delete(t.token.toLowerCase()); } })).catch(() => {});
+      }
       const bscW = w.filter((t) => !t.chain || t.chain === "bsc");
       if (bscW.length && (!live || guns.length)) {
         lastCheck = Date.now();
@@ -854,7 +876,7 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
           }
         })).finally(() => { if (hits.length) firing--; });
       }
-      if (!bgExit && Date.now() - lastExit > 1500) { lastExit = Date.now(); bgExit = true; Promise.all([watchExits(s).catch(() => {}), Date.now() - lastSolExit > 4000 ? (lastSolExit = Date.now(), watchSolExits(s).catch(() => {})) : null]).finally(() => { bgExit = false; }); }
+      if (!bgExit && Date.now() - lastExit > 1500) { lastExit = Date.now(); bgExit = true; Promise.all([watchExits(s).catch(() => {}), Date.now() - lastSolExit > 4000 ? (lastSolExit = Date.now(), Promise.all([watchSolExits(s).catch(() => {}), import("@/lib/evm-snipe").then((m) => m.watchV2Exits(s, (p, frac, why, price) => sellCopy(s, p, frac, why, price))).catch(() => {})])) : null]).finally(() => { bgExit = false; }); }
       if (!pickedUp && !bgPick && Date.now() - t0 > 3000) {
         pickedUp = true; bgPick = true;
         pickUp(s).catch(async (e) => { if (!pickNoted.has("err")) { pickNoted.add("err"); await flog("error", `Checking held snipes failed: ${(e as Error).message.slice(0, 200)}`); } }).finally(() => { bgPick = false; });
