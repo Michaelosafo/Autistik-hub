@@ -10,8 +10,8 @@ type Row = { key: string; name: string; logo: string | null; color?: string; bad
 
 /** The "Connect a wallet" window. Mounted once (in the site frame); opened by pickWallet() from anywhere. */
 /** This page's link, marked so the wallet app's browser connects by itself when it opens it. */
-function directUrl() {
-  try { const u = new URL(location.href); u.searchParams.set("ax_connect", "1"); return u.toString(); } catch { return location.href; }
+function directUrl(net?: string) {
+  try { const u = new URL(location.href); u.searchParams.set("ax_connect", "1"); if (net) u.searchParams.set("ax_net", net); return u.toString(); } catch { return location.href; }
 }
 
 export default function WalletPicker() {
@@ -113,11 +113,14 @@ export default function WalletPicker() {
       // on the other networks. Phantom, Solflare, Backpack, Coinbase: open this site inside the app on a phone.
       const viaWc = !!WALLETCONNECT_ID && !!(a.wc || a.native);
       out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, badge: mobile && !viaWc ? "⚡ Direct" : undefined,
-        sub: viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Direct: opens autistik.io inside ${a.name}, connects in one tap` : "Not on this browser: get the app",
+        sub: mobile && a.id === "bitget" ? "Direct: opens this page inside Bitget, connects in one tap" : viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Direct: opens autistik.io inside ${a.name}, connects in one tap` : "Not on this browser: get the app",
         go: () => {
-          if (insideWallet(a.id)) { showWalletOpen(a.name, a.logo, a.dapp(directUrl()), a.install); return; }
+          if (insideWallet(a.id)) { showWalletOpen(a.name, a.logo, a.dapp(directUrl("solana")), a.install); return; }
+          // Bitget on a phone: WalletConnect on Solana opened Bitget with nothing to approve. Open this page inside
+          // Bitget's own browser instead, where its Solana wallet is built in and connects on the page.
+          if (mobile && a.id === "bitget") { showWalletOpen(a.name, a.logo, a.dapp(directUrl("solana")), a.install); return; }
           if (viaWc) { chooseSolWalletConnect({ name: a.name, logo: a.logo, wc: a.wc, native: a.native, install: a.install }); return; }
-          if (mobile) showWalletOpen(a.name, a.logo, a.dapp(directUrl()), a.install);
+          if (mobile) showWalletOpen(a.name, a.logo, a.dapp(directUrl("solana")), a.install);
           else window.open(a.install, "_blank", "noopener,noreferrer");
         } });
     }

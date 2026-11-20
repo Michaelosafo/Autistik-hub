@@ -136,7 +136,10 @@ export default function AppShell({ admin, me, onMe, children }: {
       u.searchParams.delete("ax_connect");
       history.replaceState(history.state, "", u.pathname + (u.search || "") + u.hash);
       try { sessionStorage.setItem("ax-direct", "1"); } catch {}
-      setTimeout(() => { if (!getState().current && !getState().sol) pickWallet({ fresh: true }); }, 600);
+      // Came from a Solana connect (e.g. Bitget): stay on Solana here so its Solana wallet is the one connected.
+      const net = u.searchParams.get("ax_net");
+      if (net === "solana") setNetwork("solana").catch(() => {});
+      setTimeout(() => { if (net === "solana" ? !getState().sol : (!getState().current && !getState().sol)) pickWallet({ fresh: true }); }, 600);
     } catch {}
   }, []);
   useEffect(() => {

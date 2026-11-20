@@ -266,7 +266,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
       {!sw && offerBitget && (
         <small className="muted">
           Bitget opens but shows nothing to approve?{" "}
-          <a className="linkish" href="#" onClick={(e) => { e.preventDefault(); location.href = bitgetOpenDapp(location.href); }}>Open this page inside Bitget Wallet</a>
+          <a className="linkish" href="#" onClick={(e) => { e.preventDefault(); const u = new URL(location.href); u.searchParams.set("ax_connect", "1"); u.searchParams.set("ax_net", "solana"); location.href = bitgetOpenDapp(u.toString()); }}>Open this page inside Bitget Wallet</a>
           {" "}instead: its wallet is built in there, so Connect and every signature pop up right on the page. Enter your Admin 2-step code there once.
         </small>
       )}

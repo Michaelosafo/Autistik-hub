@@ -116,6 +116,10 @@ function RageNetworkPicker({ value, onChange }: { value: RageChain; onChange: (k
 
 export default function AdminDirectPool({ mode = "all" }: { mode?: "deploy" | "add" | "remove" | "all" }) {
   const [chainKey, setChainKey] = useState<RageChain>("bsc");
+  // Opened inside a wallet's browser from a Solana connect (?ax_net=solana): start on Solana.
+  useEffect(() => {
+    try { if (new URL(location.href).searchParams.get("ax_net") === "solana") setChainKey("solana"); } catch { /* old browsers */ }
+  }, []);
   async function choose(k: RageChain) {
     setChainKey(k);
     const want = CHAINS[k].chainId;
