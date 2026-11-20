@@ -232,8 +232,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     <>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
-        Solana · Raydium. Deploy the token, add the liquidity, then it asks if you want to remove that liquidity. The LP stays in this wallet.
-        Trading opens as soon as the pool exists: Solana has no closed-trading first buy.
+        Solana · Raydium. You can deploy a new token or paste any existing token address to add or remove liquidity.
       </p>
       {!sw && <button className="btn small" type="button" disabled={busy} onClick={connect}>Connect a Solana wallet</button>}
       {sw && <small className="muted">Wallet <span className="mono">{sw.account.address.slice(0, 4)}…{sw.account.address.slice(-4)}</span> on Solana · <button type="button" className="linkish" onClick={connect} disabled={busy}>Switch</button></small>}
@@ -255,7 +254,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
           </div>)}
         </div>}
       </div>
-      <b>1. Deploy the token</b>
+      <b>1. Deploy the token (optional)</b>
           <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
           <label className="field"><span>Ticker (max 10)</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={10} /></label>
           <label className="field"><span>Supply (whole tokens, 6 decimals)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
@@ -266,8 +265,9 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
         </>
       )}
 
-      <b>2. Token</b>
-      <input value={tokenIn} onChange={(e) => setTokenIn(e.target.value.trim())} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
+      <b>2. Token address</b>
+      <small className="muted">Paste any Solana token address to add or remove liquidity. You do not have to deploy it here.</small>
+      <input value={tokenIn} onChange={(e) => setTokenIn(e.target.value.trim())} placeholder="Paste token address (CA)" spellCheck={false} aria-label="Token address" />
 
       {info && (
         <>
