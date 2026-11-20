@@ -38,7 +38,12 @@ export async function signAndSend(sw: SolWallet, txBase64: string, onSubmitted?:
     (sw.wallet.features["solana:signTransaction"] as any).signTransaction({ account: sw.account, transaction: toBytes(txBase64), chain: "solana:mainnet" }),
     new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("That took too long in the wallet. Nothing was sent. Try again.")), 180_000); }),
   ]).finally(() => clearTimeout(timer));
-  const { signature } = await wallet<{ signature: string }>("sol-send", { tx: toB64(out.signedTransaction) });
+  return sendSigned(out.signedTransaction, onSubmitted);
+}
+
+/** Sends an already-signed transaction through the Hub's node and waits until Solana confirms it. */
+export async function sendSigned(signed: Uint8Array, onSubmitted?: (signature: string) => void): Promise<string> {
+  const { signature } = await wallet<{ signature: string }>("sol-send", { tx: toB64(signed) });
   onSubmitted?.(signature);
   for (let i = 0; i < 45; i++) {
     await new Promise((r) => setTimeout(r, 2000));

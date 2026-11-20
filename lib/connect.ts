@@ -1111,6 +1111,35 @@ async function restoreSolWc(): Promise<SolConn | null> {
   } catch { return null; }
 }
 
+/**
+ * The signed copy of a Solana transaction that the wallet sent back over WalletConnect, if it arrived. Android often
+ * reloads this tab while the member is in the wallet app, so the page that asked is gone; WalletConnect still keeps
+ * the answer in its saved history, and this finds it by the transaction that was sent.
+ */
+export async function lostSolSign(txB64: string): Promise<Uint8Array | null> {
+  try {
+    if (!solWc) await restoreSolWc();
+    const up: any = solWc;
+    const recs: Map<number, any> | undefined = up?.client?.core?.history?.records;
+    if (!recs) return null;
+    for (const r of recs.values()) {
+      const req = r?.request?.params?.request;
+      if (req?.method !== "solana_signTransaction" || req?.params?.transaction !== txB64) continue;
+      const res = r?.response?.result;
+      if (typeof res?.transaction === "string") return Uint8Array.from(atob(res.transaction), (c) => c.charCodeAt(0));
+      if (typeof res?.signature === "string") {
+        const acct = String(up.session?.namespaces?.solana?.accounts?.[0] || "").split(":")[2];
+        if (!acct) return null;
+        const { PublicKey, VersionedTransaction } = await import("@solana/web3.js");
+        const tx = VersionedTransaction.deserialize(Uint8Array.from(atob(txB64), (c) => c.charCodeAt(0)));
+        tx.addSignature(new PublicKey(acct), b58decode(res.signature));
+        return tx.serialize();
+      }
+    }
+  } catch { /* not there */ }
+  return null;
+}
+
 /** Gets WalletConnect ready while the Connect window is open, so tapping a wallet opens it straight away. */
 export function warmUp() {
   if (!WALLETCONNECT_ID || typeof window === "undefined") return;
