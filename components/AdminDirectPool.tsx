@@ -587,7 +587,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
   const showDeploy = mode === "all" || mode === "deploy";
   const showAdd = mode === "all" || mode === "add";
   const showRemove = mode === "all" || mode === "remove";
-  const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : "Rage";
+  const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : "BnbRage";
   const blurb = mode === "all"
     ? `Deploy the token on ${CHAIN.name}, add liquidity and the first buy paid in USDT, then it asks if you want to remove that liquidity. BNB is only used for gas. The LP stays in this wallet.`
     : mode === "deploy"

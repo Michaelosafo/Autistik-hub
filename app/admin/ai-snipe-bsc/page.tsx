@@ -3,7 +3,7 @@ import AIFutures from "@/components/AIFutures";
 import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "BSC Sniper · Admin", robots: { index: false, follow: false } };
+export const metadata = { title: "SniperBnbSol · Admin", robots: { index: false, follow: false } };
 
 /** BSC Sniper: paste a token before its liquidity is added; buys the moment liquidity lands. Every admin, own wallets. */
 export default async function BscSniperPage() {

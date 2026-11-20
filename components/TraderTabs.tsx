@@ -1,5 +1,5 @@
 "use client";
-/** The switch at the top of the AI pages. Rage deploys, adds liquidity, then asks to remove it. */
+/** The switch at the top of the AI pages. BnbRage deploys, adds liquidity, then asks to remove it. */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,8 +8,9 @@ export const TRADER_TABS = [
   { href: "/admin/ai-futures", label: "📊 Futures", sub: "Crypto · Hyperliquid", acc: "#10b981" },
   { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz", acc: "#06b6d4" },
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
-  { href: "/admin/ai-snipe-bsc", label: "⚡ Sniper (BSC)", sub: "Buys when liquidity lands", acc: "#22c55e" },
-  { href: "/admin/rage", label: "💧 Rage", sub: "Deploy · add · remove", acc: "#ef4444" },
+  { href: "/admin/ai-snipe-bsc", label: "⚡ SniperBnbSol", sub: "BNB Chain · buys when liquidity lands", acc: "#22c55e" },
+  { href: "/admin/sniperlobbysol", label: "🎯 SniperLobbySol", sub: "Solana · buys when it can be bought", acc: "#14F195" },
+  { href: "/admin/rage", label: "💧 BnbRage", sub: "BNB Chain · deploy · add · remove", acc: "#ef4444" },
   { href: "/admin/lobbysol", label: "🟣 LobbySol", sub: "Solana · deploy · add · remove", acc: "#9945FF" },
   { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
 ];

@@ -18,7 +18,7 @@ export default async function AddLpPage() {
       <div className="page-head">
         <div className="label">Admin · add liquidity</div>
         <h1>Add LP</h1>
-        <p className="muted">Add liquidity for the token you deployed in Rage. BNB Chain only (PancakeSwap). The LP stays in your wallet.</p>
+        <p className="muted">Add liquidity for the token you deployed in BnbRage. BNB Chain only (PancakeSwap). The LP stays in your wallet.</p>
       </div>
       {owner ? <AdminDirectPool mode="add" /> : <div className="notice">Only the owner can add liquidity here.</div>}
     </div>

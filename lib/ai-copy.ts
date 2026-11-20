@@ -513,7 +513,16 @@ export async function sellCopy(s: FSettings, p: FPos, frac: number, reason: stri
   try {
     let px = price || n(p.last) || n(p.entry), got = 0, tx: string | null = null;
     const token = tokenOf(p.coin);
-    if (p.mode === "live") {
+    const solMint = /^solana:([1-9A-HJ-NP-Za-km-z]{32,44})$/.exec(p.coin)?.[1] || null;
+    if (p.mode === "live" && solMint) {
+      // SniperLobbySol: sell on Solana through Jupiter, back to USDT.
+      const { solSellToUsdt } = await import("@/lib/sniper-chains");
+      const slipSell = force ? 49 : /stop/i.test(reason) ? 30 : Math.max(10, n((s as any).liq_slip) || 20);
+      const r = await solSellToUsdt(slot, solMint, all ? (n(p.size) > 0 ? n(p.size) : null) : n(p.size) * part, slipSell);
+      got = r.got; tx = r.sig || null;
+      if (!r.sig) reason = `${reason} (the wallet held none of it any more)`;
+      if (n(p.size) > 0 && got > 0) px = got / (n(p.size) * part);
+    } else if (p.mode === "live") {
       if (!token) throw new Error("not a BNB Chain coin");
       const a = slot ? await copyKey(slot) : null;
       if (!a) throw new Error(`wallet ${slot || "?"} was removed, so this has to be sold from that wallet yourself`);

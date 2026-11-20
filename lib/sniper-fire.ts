@@ -6,7 +6,7 @@
  * A wallet with no address on that chain, or not enough of the coin, is skipped.
  */
 import { createPublicClient, createWalletClient, http, parseUnits, type Address } from "viem";
-import { Connection, Keypair, VersionedTransaction } from "@solana/web3.js";
+import { Connection, Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import type { PrivateKeyAccount } from "viem/accounts";
 import { copyKey } from "@/lib/ai-copy";
 import { flog, type FSettings } from "@/lib/ai-futures";
@@ -24,6 +24,8 @@ const JUP_KEY = process.env.JUPITER_API_KEY || "";
 const JUP = process.env.JUPITER_API || (JUP_KEY ? "https://api.jup.ag" : "https://lite-api.jup.ag");
 const JUP_H: Record<string, string> = JUP_KEY ? { "x-api-key": JUP_KEY } : {};
 const PRIO: Record<string, number> = { low: 50_000, med: 200_000, high: 1_000_000, max: 5_000_000 };
+/** SOL a Solana wallet keeps for fees when it snipes with USDT (network + priority fee + the new token account). */
+const SOL_FEE = 0.01;
 const RESERVE: Record<SnipeChain, number> = { bsc: 0.0015, ethereum: 0.0004, base: 0.00015, arbitrum: 0.00015, solana: 0.02 };
 
 export type ReadyWallet = { slot: number; address: string | null; balance: number | null; gas?: number; gasNeed?: number; unit: string; need: number; ok: boolean; reason: string };
@@ -68,8 +70,15 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
         let bal: number;
         try { bal = await solUi(owner, pay === "native" ? "SOL" : tokenIn(chain, pay)); }
         catch (e) { return { slot, address: owner, balance: null, unit, need, ok: false, reason: (e as Error).message.slice(0, 80) }; }
-        const ok = need > 0 && bal + 1e-12 >= need + (pay === "native" ? reserve : 0.01);
-        return { slot, address: owner, balance: bal, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : bal <= 0 ? `No ${unit}` : `Needs ${(need + (pay === "native" ? reserve : 0.01)).toFixed(4)} ${unit}` };
+        if (pay !== "native") {
+          // Paying in USDT: the buy spends USDT, and SOL only pays the network / priority fee (and a token account).
+          const sol = await solUi(owner, "SOL").catch(() => 0);
+          const gasOk = sol + 1e-12 >= SOL_FEE;
+          const ok = need > 0 && bal + 1e-12 >= need && gasOk;
+          return { slot, address: owner, balance: bal, gas: sol, gasNeed: SOL_FEE, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : bal + 1e-12 < need ? `Needs ${need.toFixed(2)} ${unit}` : `Needs ${SOL_FEE} SOL for fees` };
+        }
+        const ok = need > 0 && bal + 1e-12 >= need + reserve;
+        return { slot, address: owner, balance: bal, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : bal <= 0 ? `No ${unit}` : `Needs ${(need + reserve).toFixed(4)} ${unit}` };
       }
       const a = await copyKey(slot);
       if (!a) return { slot, address: null, balance: null, unit, need, ok: false, reason: "No wallet" };
@@ -89,7 +98,7 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
     }
   }));
   // What a wallet must hold on top of the buy (fees), so the page can work out "ready" from the amounts typed right now.
-  const extra = chain === "solana" ? (pay === "native" ? reserve : 0.01) : pay === "native" ? reserve : 0;
+  const extra = pay === "native" ? reserve : 0;
   return { chain, unit, price, extra, wallets };
 }
 
@@ -137,6 +146,12 @@ export async function fireChain(s: FSettings, t: any): Promise<Fire> {
   const already = new Set((t.fired || []).map(Number));
   const slots = pick.filter((x) => !already.has(x));
   if (!slots.length) return { bought: 0, why: "every picked wallet already bought" };
+  if (chain === "solana") {
+    // One cheap route check first: until Jupiter can route to the token, no wallet is read or built (fast, and it
+    // keeps well under Jupiter's rate limit while waiting).
+    const probe = await fetch(`${JUP}/swap/v1/quote?inputMint=${tokenIn("solana", pay)}&outputMint=${t.token}&amount=${pay === "native" ? 10_000_000 : 1_000_000}&slippageBps=5000&restrictIntermediateTokens=true`, { cache: "no-store", headers: JUP_H, signal: AbortSignal.timeout(4000) }).then((r) => r.json()).catch(() => null);
+    if (!probe?.outAmount) return { bought: 0, why: "no Solana pool Jupiter can route to yet" };
+  }
   const ready = await snipeReady(chain, pay, amount, slots, amounts);
   const skip = ready.wallets.filter((w) => !w.ok);
   const go = ready.wallets.filter((w) => w.ok);
@@ -210,12 +225,17 @@ async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", go
       if (!j?.swapTransaction) throw new Error(j?.error || "couldn't build");
       const tx = VersionedTransaction.deserialize(Buffer.from(j.swapTransaction, "base64"));
       tx.sign([kp]);
-      return { w, raw: tx.serialize(), kp };
+      return { w, raw: tx.serialize(), kp, out: BigInt(q.outAmount) };
     } catch (e) {
       skip.push({ ...w, ok: false, reason: (e as Error).message.slice(0, 80) });
       return null;
     }
-  }))).filter(Boolean) as { w: ReadyWallet; raw: Uint8Array; kp: Keypair }[];
+  }))).filter(Boolean) as { w: ReadyWallet; raw: Uint8Array; kp: Keypair; out: bigint }[];
+  // Token decimals and the $ per pay coin, so each buy is saved with its coins and its cost (take profit needs both).
+  const [mintDec, payPx] = await Promise.all([
+    conn.getTokenSupply(new PublicKey(t.token)).then((x) => x.value.decimals).catch(() => 6),
+    payUsd("solana", pay).catch(() => (pay === "native" ? 0 : 1)),
+  ]);
   if (!built.length) return { bought: 0, why: skip.map((w) => `#${w.slot} ${w.reason}`).join("; ") || "no Solana route yet" };
   const sent = await Promise.all(built.map(async (p) => {
     try {
@@ -237,7 +257,7 @@ async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", go
       if (st?.confirmationStatus === "confirmed" || st?.confirmationStatus === "finalized") {
         ok.push(p.w.slot);
         await flog("open", `⚡ Wallet ${p.w.slot} sniped ${t.label || String(t.token).slice(0, 6)} on Solana for ${p.w.need} ${unitOf("solana", pay)} from ${p.w.address}. https://solscan.io/tx/${p.sig}`);
-        await remember(s, t, "solana", p.w.need, unitOf("solana", pay), p.w.slot, p.sig);
+        await remember(s, t, "solana", p.w.need, unitOf("solana", pay), p.w.slot, p.sig, { size: Number(p.out) / 10 ** mintDec, usd: p.w.need * (payPx || 0) });
         return;
       }
     }
@@ -245,12 +265,15 @@ async function fireSol(s: FSettings, t: any, pay: "native" | "usdt" | "usdc", go
   return { bought: ok.length, why: skip.length ? `skipped ${skip.map((w) => `#${w.slot} (${w.reason})`).join(", ")}` : "", sent: fired.length > 0, fired, ok };
 }
 
-async function remember(s: FSettings, t: any, chain: SnipeChain, amount: number, unit: string, slot: number, tx: string) {
+async function remember(s: FSettings, t: any, chain: SnipeChain, amount: number, unit: string, slot: number, tx: string, got?: { size: number; usd: number }) {
   const sb = supabaseService();
+  // With the coins and the $ cost known, entry is the $ price per coin (like BNB Chain snipes), so take profit works.
+  const priced = !!got && got.size > 0 && got.usd > 0;
+  const entry = priced ? got!.usd / got!.size : amount;
   await sb.from("ai_futures_positions").insert({
     fut_id: T(), mode: s.mode, venue: "copy", coin: `${chain}:${t.token}`, side: "long", lev: 1,
-    margin_usd: 0, notional_usd: 0, entry: amount, stop: 0, target: 0, liq: null, best: amount, last: amount,
-    size: 0, fees_usd: 0, why: `${t.label || t.token}: sniped on ${WCHAINS[chain].name} (${amount} ${unit})`,
+    margin_usd: priced ? got!.usd : 0, notional_usd: priced ? got!.usd : 0, entry, stop: 0, target: 0, liq: null, best: entry, last: entry,
+    size: priced ? got!.size : 0, fees_usd: 0, why: `${t.label || t.token}: sniped on ${WCHAINS[chain].name} (${amount} ${unit})`,
     open_tx: tx, risk_usd: 0, equity_at_open: 0, copy_from: t.token, copy_slot: slot, copy_pay: unit,
   }).then(() => {}, () => {});
 }

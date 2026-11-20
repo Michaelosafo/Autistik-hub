@@ -81,10 +81,13 @@ const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 export type LiqTarget = { token: string; chain?: string; pay?: string; amount?: number; amounts?: Record<string, number>; prio?: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 /** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
 const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the first wallet got in
-// BNB Chain only: an 0x token address (old Solana entries are ignored).
+// SniperBnbSol: an 0x token on BNB Chain. SniperLobbySol: a Solana mint. Anything else is ignored.
 const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t);
-// BNB Chain only: targets saved on any other chain are ignored.
-export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => isMint(String(t?.token || "")) && (!t?.chain || t.chain === "bsc"));
+const isSolMint = (t: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
+export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => {
+  const tok = String(t?.token || "");
+  return t?.chain === "solana" ? isSolMint(tok) : (!t?.chain || t.chain === "bsc") && isMint(tok);
+});
 const sameToken = (a: string, b: string) => (a.startsWith("0x") || b.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b);
 const xOf = (s: FSettings) => Math.max(1.05, n((s as any).liq_x) || 2);
 const sellPctOf = (s: FSettings) => Math.min(100, Math.max(5, n((s as any).liq_sell_pct) || 100));
@@ -617,7 +620,7 @@ async function record(s: FSettings, t: LiqTarget, name: string, usd: number, qty
 const pickNoted = new Set<string>();
 async function pickUp(s: FSettings) {
   if (s.mode !== "live") return;
-  const targets = liqTargets(s).filter((t) => (t.state || "waiting") !== "waiting");
+  const targets = liqTargets(s).filter((t) => (t.state || "waiting") !== "waiting" && (!t.chain || t.chain === "bsc"));
   if (!targets.length) return;
   const c = pc(), bnbUsd = await bnbPrice();
   const { data: openRows } = await pos().select("coin,copy_slot").eq("fut_id", T()).eq("mode", "live").in("status", ["open", "closing"]);
@@ -652,6 +655,29 @@ async function pickUp(s: FSettings) {
 }
 
 /** Value of every open snipe straight from the pool (no price site needed); sells at the target or stop. */
+/**
+ * SniperLobbySol take profit: each open Solana snipe is priced in USDT through Jupiter (about every 4 s). At your
+ * target multiple it sells the share you chose back to USDT. Your own Sell buttons work any time.
+ */
+async function watchSolExits(s: FSettings) {
+  if (s.mode !== "live") return;
+  const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open").eq("venue", "copy").eq("mode", "live").like("coin", "solana:%");
+  const open = ((data || []) as FPos[]).filter((p) => n(p.size) > 0 && n(p.notional_usd) > 0);
+  if (!open.length) return;
+  const { solQuoteToUsdt } = await import("@/lib/sniper-chains");
+  await Promise.all(open.map(async (p) => {
+    const mint = p.coin.slice(7);
+    const usd = await solQuoteToUsdt(mint, n(p.size)).catch(() => null);
+    if (usd == null || !(usd > 0)) return;
+    const price = usd / n(p.size), mult = usd / n(p.notional_usd), best = Math.max(n(p.best), price);
+    if (tpOn(s) && mult >= xOf(s)) {
+      const pct = sellPctOf(s) / 100;
+      await sellCopy(s, { ...p, last: price, best }, pct, `Take profit at ${mult.toFixed(2)}x`, price);
+      if (pct < 0.85) await pos().update({ target: 0 }).eq("id", p.id).eq("status", "open");
+    } else await pos().update({ last: price, best }).eq("id", p.id);
+  }));
+}
+
 async function watchExits(s: FSettings) {
   const { data } = await pos().select("*").eq("fut_id", T()).eq("status", "open").eq("venue", "copy");
   const open = ((data || []) as FPos[]).filter((p) => String(p.coin || "").startsWith("bsc:"));
@@ -693,7 +719,19 @@ function blocks(onBlock: () => void): () => void {
 export async function runLiqSnipe(s: FSettings): Promise<string> {
   const t0 = Date.now();
   const targets = liqTargets(s);
-  const waiting = () => liqTargets(s).filter((t) => t.on !== false && (t.state || "waiting") === "waiting");
+  // What this run just did (wallets fired, done / failed), kept for 10 s: settings reload in the background, and a
+  // reload that started before a buy was saved must never make a wallet buy the same token twice.
+  const memo = new Map<string, { fired: number[]; state?: LiqTarget["state"]; first_at?: string; at: number }>();
+  const tkey = (tok: string) => (tok.startsWith("0x") ? tok.toLowerCase() : tok);
+  const withMemo = (t: LiqTarget) => {
+    const m = memo.get(tkey(t.token));
+    if (!m || Date.now() - m.at > 10_000) return t;
+    t.fired = [...new Set([...(t.fired || []), ...m.fired])].sort((a, b) => a - b);
+    if (m.state && m.state !== "waiting") t.state = m.state;
+    t.first_at ||= m.first_at;
+    return t;
+  };
+  const waiting = () => liqTargets(s).map(withMemo).filter((t) => t.on !== false && (t.state || "waiting") === "waiting");
   const live = s.mode === "live";
   let guns: Gun[] = [];
   if (live && s.enabled) {
@@ -708,6 +746,7 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   const stop = blocks(() => tick?.());
   // Marks one token done / failed in what's saved now (you may have added tokens since this run started).
   const mark = async (t: LiqTarget) => {
+    memo.set(tkey(t.token), { fired: [...(t.fired || [])], state: t.state, first_at: t.first_at, at: Date.now() });
     const { data } = await sb().from("ai_futures_settings").select("liq_targets").eq("id", T()).maybeSingle();
     const list: LiqTarget[] = Array.isArray(data?.liq_targets) ? data!.liq_targets : [];
     await sb().from("ai_futures_settings").update({ liq_targets: list.map((x) => (sameToken(x.token, t.token) ? { ...x, state: t.state, fired: t.fired, first_at: t.first_at } : x)) }).eq("id", T());
@@ -719,11 +758,12 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
     return guns.filter((g) => (!pick || pick.has(g.slot)) && !done.has(g.slot)).map((g) => g.slot);
   };
   const okSlots = new Map<string, Set<number>>(); // token → wallets whose buy went through (this run)
+  const solBusy = new Set<string>(); // Solana tokens with an attempt in flight
   // STOP, Pause, Remove (token or wallet) and setting changes take effect within a second, not at the next minute's run.
   let lastFresh = Date.now(), lastGuns = Date.now(), firing = 0;
   // Housekeeping (settings / wallet reload, take-profit checks, picking up held coins) runs in the background, so
   // the block-by-block liquidity check is never held up by it.
-  let bgFresh = false, bgExit = false, bgPick = false;
+  let bgFresh = false, bgExit = false, bgPick = false, lastSolExit = 0;
   const refresh = async () => {
     const { data } = await sb().from("ai_futures_settings").select("enabled,liq_targets,liq_x,liq_sell_pct,liq_tp_on,liq_slip,copy_key_usd,snipe_usd,copy_sl_on").eq("id", T()).maybeSingle();
     if (data) Object.assign(s, data);
@@ -759,12 +799,15 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
         }
         w = waiting();
       }
-      // BNB Chain only: never fire on another chain, even for a target saved before the switch.
-      const others: LiqTarget[] = [];
-      if (others.length && Date.now() - lastOther >= 4000) {
+      // SniperLobbySol: Solana tokens are tried about every second, in the background (a Solana buy confirms in a few
+      // seconds and must never hold up the BNB Chain block check). One attempt per token at a time.
+      // Live only: a Solana buy is always a real transaction (there's no practice buy on Solana).
+      const others = live ? w.filter((t) => t.chain === "solana" && !solBusy.has(t.token)) : [];
+      if (others.length && Date.now() - lastOther >= 1000) {
         lastOther = Date.now();
         const { fireChain } = await import("@/lib/sniper-fire");
-        await Promise.all(others.map(async (t) => {
+        for (const t of others) solBusy.add(t.token);
+        void Promise.all(others.map(async (t) => { try {
           const r = await fireChain(s, t).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false as boolean, fired: [] as number[], ok: [] as number[] }));
           if (r.fired?.length || r.bought || r.sent) {
             t.fired = [...new Set([...(t.fired || []), ...(r.fired || [])])].sort((a, b) => a - b);
@@ -775,9 +818,9 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
             await mark(t);
           } else if (Date.now() - (failing.get(t.token) || 0) > 60_000) {
             failing.set(t.token, Date.now());
-            await flog("skip", `${t.label || t.token.slice(0, 10)} (${t.chain}): ${r.why}. Trying again.`);
+            await flog("skip", `${t.label || t.token.slice(0, 10)} (Solana): ${r.why}. Trying again every second.`);
           }
-        }));
+        } finally { solBusy.delete(t.token); } })).catch(() => {});
       }
       const bscW = w.filter((t) => !t.chain || t.chain === "bsc");
       if (bscW.length && (!live || guns.length)) {
@@ -811,7 +854,7 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
           }
         })).finally(() => { if (hits.length) firing--; });
       }
-      if (!bgExit && Date.now() - lastExit > 1500) { lastExit = Date.now(); bgExit = true; watchExits(s).catch(() => {}).finally(() => { bgExit = false; }); }
+      if (!bgExit && Date.now() - lastExit > 1500) { lastExit = Date.now(); bgExit = true; Promise.all([watchExits(s).catch(() => {}), Date.now() - lastSolExit > 4000 ? (lastSolExit = Date.now(), watchSolExits(s).catch(() => {})) : null]).finally(() => { bgExit = false; }); }
       if (!pickedUp && !bgPick && Date.now() - t0 > 3000) {
         pickedUp = true; bgPick = true;
         pickUp(s).catch(async (e) => { if (!pickNoted.has("err")) { pickNoted.add("err"); await flog("error", `Checking held snipes failed: ${(e as Error).message.slice(0, 200)}`); } }).finally(() => { bgPick = false; });

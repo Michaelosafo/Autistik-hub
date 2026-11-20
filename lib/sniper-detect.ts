@@ -90,3 +90,11 @@ export async function detectSnipeBsc(raw: string): Promise<{ kind: "evm" | "unkn
   const hit: ChainHit = { id: "bsc", name: c.name, symbol: c.native.symbol, hasCode, hasPool: liq.has("bsc"), liquidityUsd: liq.get("bsc") || 0 };
   return { kind: "evm", normalized: addr, hits: [hit], suggested: "bsc" };
 }
+
+/** SniperLobbySol: a Solana mint only (an 0x address is not a Solana token). */
+export async function detectSnipeSol(raw: string): Promise<{ kind: "solana" | "unknown"; normalized: string; hits: ChainHit[]; suggested: SnipeChain | null }> {
+  const a = raw.trim().match(/[1-9A-HJ-NP-Za-km-z]{32,44}/)?.[0] || "";
+  if (!a || raw.trim().startsWith("0x")) return { kind: "unknown", normalized: raw.trim(), hits: [], suggested: null };
+  const r = await detectSnipe(a);
+  return r.kind === "solana" ? (r as any) : { kind: "unknown", normalized: a, hits: [], suggested: null };
+}

@@ -257,6 +257,57 @@ export async function solSwapSend(slot: number, tokenIn: string, tokenOut: strin
   return msg;
 }
 
+// ---------------------------------------------------------------- SniperLobbySol: price and sell a snipe in USDT
+
+const SOL_USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+const JUP_KEY = process.env.JUPITER_API_KEY || "";
+const JUPX = process.env.JUPITER_API || (JUP_KEY ? "https://api.jup.ag" : JUP);
+const JUP_HX: Record<string, string> = JUP_KEY ? { "x-api-key": JUP_KEY } : {};
+const decCache = new Map<string, number>();
+async function mintDecimals(mint: string) {
+  const hit = decCache.get(mint);
+  if (hit != null) return hit;
+  const d = await new Connection(SOL_RPC, "confirmed").getTokenSupply(new PublicKey(mint)).then((x) => x.value.decimals);
+  decCache.set(mint, d);
+  return d;
+}
+
+/** What `size` coins of a Solana token sell for in USDT right now (Jupiter quote), in $. */
+export async function solQuoteToUsdt(mint: string, size: number): Promise<number> {
+  const dec = await mintDecimals(mint);
+  const raw = BigInt(Math.floor(size * 10 ** dec));
+  if (raw <= 0n) return 0;
+  const q = await fetch(`${JUPX}/swap/v1/quote?inputMint=${mint}&outputMint=${SOL_USDT}&amount=${raw}&slippageBps=500&restrictIntermediateTokens=true`, { cache: "no-store", headers: JUP_HX, signal: AbortSignal.timeout(6000) }).then((r) => r.json());
+  return q?.outAmount ? Number(q.outAmount) / 1e6 : 0;
+}
+
+/**
+ * Sell a Solana snipe back to USDT from sniper wallet `slot`: `size` coins (never more than the wallet holds; null =
+ * all of it). Returns the $ received (USDT) and the transaction.
+ */
+export async function solSellToUsdt(slot: number, mint: string, size: number | null, slipPct: number): Promise<{ got: number; sig: string }> {
+  const kp = await sniperSol(slot);
+  if (!kp) throw new Error(`wallet ${slot} has no Solana address any more`);
+  const owner = kp.publicKey.toBase58();
+  const bal = (await solBalances(owner)).tokens.get(mint);
+  const held = bal?.raw || 0n, dec = bal?.decimals ?? (await mintDecimals(mint));
+  const want = size == null ? held : BigInt(Math.floor(size * 10 ** dec));
+  const raw = want > 0n && want < held ? want : held;
+  if (raw <= 0n) return { got: 0, sig: "" };
+  const slip = Math.min(4900, Math.max(100, Math.round(slipPct * 100)));
+  const q = await fetch(`${JUPX}/swap/v1/quote?inputMint=${mint}&outputMint=${SOL_USDT}&amount=${raw}&slippageBps=${slip}&restrictIntermediateTokens=true`, { cache: "no-store", headers: JUP_HX, signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
+  if (!q?.outAmount) throw new Error(q?.error || "Jupiter has no route to sell it");
+  const built = await fetch(`${JUPX}/swap/v1/swap`, { method: "POST", headers: { "content-type": "application/json", ...JUP_HX }, signal: AbortSignal.timeout(12_000), body: JSON.stringify({
+    quoteResponse: q, userPublicKey: owner, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true,
+    prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "veryHigh" } },
+  }) }).then((r) => r.json());
+  if (!built?.swapTransaction) throw new Error(built?.error || "Jupiter couldn't build the sell");
+  const tx = VersionedTransaction.deserialize(Buffer.from(built.swapTransaction, "base64"));
+  tx.sign([kp]);
+  const sig = await sendSol(tx);
+  return { got: Number(q.outAmount) / 1e6, sig };
+}
+
 async function sendSol(tx: VersionedTransaction) {
   const conn = new Connection(SOL_RPC, "confirmed");
   const raw = tx.serialize();
