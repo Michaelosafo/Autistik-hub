@@ -19,7 +19,12 @@ const ROUTER_ABI = parseAbi([
   "function removeLiquidityETHSupportingFeeOnTransferTokens(address token, uint256 liquidity, uint256 amountTokenMin, uint256 amountETHMin, address to, uint256 deadline) returns (uint256)",
   "function getAmountsOut(uint256 amountIn, address[] path) view returns (uint256[] amounts)",
   "function swapExactETHForTokensSupportingFeeOnTransferTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable",
+  "function swapExactTokensForTokensSupportingFeeOnTransferTokens(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline)",
+  "function swapExactTokensForETH(uint256 amountIn, uint256 amountOutMin, address[] path, address to, uint256 deadline) returns (uint256[] amounts)",
+  "function swapExactETHForTokens(uint256 amountOutMin, address[] path, address to, uint256 deadline) payable returns (uint256[] amounts)",
 ]);
+/** USDT on BNB Chain (BEP20, 18 decimals). Rage spends USDT; BNB only pays gas. */
+const USDT = "0x55d398326f99059fF775485246999027B3197955" as const;
 const FACTORY_ABI = parseAbi(["function getPair(address, address) view returns (address)"]);
 const PAIR_ABI = parseAbi([
   "function token0() view returns (address)",
@@ -80,6 +85,8 @@ const slip = (v: bigint) => (v * 9500n) / 10_000n;
 type Info = {
   symbol: string; decimals: number; pair: `0x${string}` | null;
   rToken: bigint; rCoin: bigint; lp: bigint; lpTotal: bigint; tokenBal: bigint; coinBal: bigint;
+  /** This wallet's USDT, and USDT for 1 BNB right now (both 18 decimals). */
+  usdtBal: bigint; bnbUsdt: bigint;
   /** Rage tokens: false while trading is closed (liquidity in, first buy / open trading still to do). null: not a Rage token. */
   live: boolean | null;
   buyTaxBps: number | null;
@@ -197,16 +204,20 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
           lpTotal = total as bigint;
           if (account) lp = (await pub.readContract({ address: pair, abi: ERC20, functionName: "balanceOf", args: [account] })) as bigint;
         }
+        let usdtBal = 0n;
         if (account) {
-          [tokenBal, coinBal] = await Promise.all([
+          [tokenBal, coinBal, usdtBal] = await Promise.all([
             pub.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [account] }),
             pub.getBalance({ address: account }),
-          ]) as [bigint, bigint];
+            pub.readContract({ address: USDT, abi: ERC20, functionName: "balanceOf", args: [account] }).catch(() => 0n),
+          ]) as [bigint, bigint, bigint];
         }
+        const bnbUsdt = await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [10n ** 18n, [weth, USDT]] })
+          .then((a: readonly bigint[]) => BigInt(a[a.length - 1])).catch(() => 0n);
         const live = await pub.readContract({ address: token, abi: parseAbi(["function tradingLive() view returns (bool)"]), functionName: "tradingLive" }).then((x: unknown) => Boolean(x)).catch(() => null);
         const buyTaxBps = await pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "buyTaxBps" }).then((x: unknown) => Number(x)).catch(() => null);
         const sellTaxBps = await pub.readContract({ address: token, abi: ADMIN_DIRECT_TOKEN_ABI, functionName: "sellTaxBps" }).then((x: unknown) => Number(x)).catch(() => null);
-        if (!gone) setInfo({ symbol: String(sym), decimals: Number(decimals), pair: pair === ZERO ? null : pair, rToken, rCoin, lp, lpTotal, tokenBal, coinBal, live, buyTaxBps, sellTaxBps });
+        if (!gone) setInfo({ symbol: String(sym), decimals: Number(decimals), pair: pair === ZERO ? null : pair, rToken, rCoin, lp, lpTotal, tokenBal, coinBal, usdtBal, bnbUsdt, live, buyTaxBps, sellTaxBps });
       } catch {
         if (!gone) setMsg(`Couldn't read that token on ${CHAIN.name}. Check the address.`);
       }
@@ -339,6 +350,43 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
     if (allowance < amount) await send(w, acc, { address, abi: ERC20, functionName: "approve", args: [ROUTER, amount] }, what);
   }
 
+  async function sendR(w: any, acc: `0x${string}`, req: any, what: string) {
+    setMsg(`${what}: confirm in your wallet…`);
+    const hash = await w.writeContract({ account: acc, chain: vc, ...req });
+    setMsg(`${what}: waiting on ${CHAIN.name}…`);
+    const r = await pub.waitForTransactionReceipt({ hash });
+    if (r.status !== "success") throw new Error(`${what} failed.`);
+    return { hash: hash as string, fee: BigInt(r.gasUsed) * BigInt(r.effectiveGasPrice || 0n) };
+  }
+  const wethOf = async () => (await pub.readContract({ address: ROUTER!, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
+  const usdtOf = async (acc: `0x${string}`) => (await pub.readContract({ address: USDT, abi: ERC20, functionName: "balanceOf", args: [acc] })) as bigint;
+  /** BNB that must stay in the wallet for gas (BNB is never spent on the token, only on gas). */
+  const gasWei = (steps: number) => parseEther((gasNative * steps).toFixed(18));
+
+  /** Swap USDT → BNB on PancakeSwap and return the BNB that arrived (for the BNB side of the pool). */
+  async function usdtToBnb(w: any, acc: `0x${string}`, usdtAmt: bigint): Promise<bigint> {
+    const weth = await wethOf();
+    await approveIfNeeded(w, acc, USDT, usdtAmt, `Allow ${CHAIN.dex} to use your USDT`);
+    const q = (await pub.readContract({ address: ROUTER!, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [usdtAmt, [USDT, weth]] })) as bigint[];
+    const minOut = slip(q[q.length - 1] ?? 0n);
+    const before = (await pub.getBalance({ address: acc })) as bigint;
+    const { fee } = await sendR(w, acc, { address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactTokensForETH", args: [usdtAmt, minOut, [USDT, weth], acc, deadline()] }, `Swap ${fmt(usdtAmt, 18)} USDT to BNB for the pool`);
+    const after = (await pub.getBalance({ address: acc })) as bigint;
+    const got = after + fee - before;
+    return got > 0n ? got : minOut;
+  }
+  /** Swap BNB → USDT (after removing liquidity), keeping gas in the wallet. Returns the USDT tx hash or null. */
+  async function bnbToUsdt(w: any, acc: `0x${string}`, bnbAmt: bigint): Promise<string | null> {
+    const bal = (await pub.getBalance({ address: acc })) as bigint;
+    const room = bal > gasWei(1) ? bal - gasWei(1) : 0n;
+    const value = bnbAmt < room ? bnbAmt : room;
+    if (value <= 0n) return null;
+    const weth = await wethOf();
+    const q = (await pub.readContract({ address: ROUTER!, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [value, [weth, USDT]] })) as bigint[];
+    const { hash } = await sendR(w, acc, { address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokens", value, args: [slip(q[q.length - 1] ?? 0n), [weth, USDT], acc, deadline()] }, `Swap ${fmt(value, 18)} BNB back to USDT`);
+    return hash;
+  }
+
   async function deploy() {
     const n = name.trim();
     const s = symbol.trim().replace(/^\$/, "").toUpperCase();
@@ -375,57 +423,61 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
 
   async function add() {
     if (!info || !token || !ROUTER) return;
-    let tokens: bigint, coin: bigint;
-    try { tokens = parseUnits(amtToken, info.decimals); coin = parseEther(amtCoin); } catch { setMsg("Type both amounts as numbers."); return; }
-    if (tokens <= 0n || coin <= 0n) { setMsg("Type both amounts."); return; }
-    if (!buyAmt.trim()) { setMsg(`Set the first-buy amount first. That buy is sent right after the liquidity, before any other trade.`); return; }
-    let parsedBuy: bigint;
-    try { parsedBuy = parseEther(buyAmt); } catch { setMsg(`Type the first-buy amount in ${CHAIN.coin}.`); return; }
-    const buyCoin: bigint = parsedBuy;
-    if (buyCoin <= 0n) { setMsg(`Type the first-buy amount in ${CHAIN.coin}.`); return; }
+    let tokens: bigint, usdtLiq: bigint;
+    try { tokens = parseUnits(amtToken, info.decimals); usdtLiq = parseUnits(amtCoin, 18); } catch { setMsg("Type both amounts as numbers."); return; }
+    if (tokens <= 0n || usdtLiq <= 0n) { setMsg("Type both amounts."); return; }
+    if (!buyAmt.trim()) { setMsg(`Set the first-buy amount (USDT) first. That buy is sent right after the liquidity, before any other trade.`); return; }
+    let buyUsdt: bigint;
+    try { buyUsdt = parseUnits(buyAmt, 18); } catch { setMsg("Type the first-buy amount in USDT."); return; }
+    if (buyUsdt <= 0n) { setMsg("Type the first-buy amount in USDT."); return; }
     setBusy(true);
     try {
       const { w, acc } = await wallet();
-      const bal = (await pub.getBalance({ address: acc })) as bigint;
-      const need = coin + buyCoin + parseEther(String(gasNative * 3));
-      if (bal < need) {
-        setMsg(`Not enough ${CHAIN.coin}: you have ${fmt(bal, 18)} ${CHAIN.coin}, and this needs about ${fmt(need, 18)} (${amtCoin} for the liquidity + ${buyAmt} for the first buy + ~${(gasNative * 3).toFixed(4)} for gas). Add ${CHAIN.coin}, or lower the liquidity or first-buy amount.`);
+      const [usdt, bnb] = await Promise.all([usdtOf(acc), pub.getBalance({ address: acc }) as Promise<bigint>]);
+      if (usdt < usdtLiq + buyUsdt) {
+        setMsg(`Not enough USDT: you have ${fmt(usdt, 18)} USDT, and this needs ${fmt(usdtLiq + buyUsdt, 18)} (${amtCoin} for the liquidity + ${buyAmt} for the first buy). Add USDT (BEP20), or lower the amounts.`);
+        return;
+      }
+      if (bnb < gasWei(6)) {
+        setMsg(`Keep about ${(gasNative * 6).toFixed(4)} BNB in this wallet for gas (you have ${fmt(bnb, 18)}). BNB is only used for gas; the liquidity and first buy are paid in USDT.`);
         return;
       }
       const priced = info.rToken > 0n && info.rCoin > 0n;
       await approveIfNeeded(w, acc, token, tokens, `Allow ${CHAIN.dex} to use your ${info.symbol}`);
+      const bnbForPool = await usdtToBnb(w, acc, usdtLiq);
       const hash = await send(w, acc, {
-        address: ROUTER, abi: ROUTER_ABI, functionName: "addLiquidityETH", value: coin,
-        args: [token, tokens, priced ? slip(tokens) : 0n, priced ? slip(coin) : 0n, acc, deadline()],
+        address: ROUTER, abi: ROUTER_ABI, functionName: "addLiquidityETH", value: bnbForPool,
+        args: [token, tokens, priced ? (tokens * 85n) / 100n : 0n, priced ? slip(bnbForPool) : 0n, acc, deadline()],
       }, "Add liquidity");
-      reportActivity("liquidity", CHAIN.key, hash, `Admin added ${amtToken} ${info.symbol} + ${amtCoin} ${CHAIN.coin}`);
+      reportActivity("liquidity", CHAIN.key, hash, `Admin added ${amtToken} ${info.symbol} + ${amtCoin} USDT (as ${fmt(bnbForPool, 18)} BNB)`);
       setAmtToken(""); setAmtCoin(""); setTick((x) => x + 1);
-      setMsg("Liquidity is in. Approve the first buy in your wallet. It goes out before any other trade.");
-      const ok = await firstBuyWith(w, acc, buyCoin);
+      setMsg("Liquidity is in. Approve the first buy (USDT) in your wallet. It goes out before any other trade.");
+      const ok = await firstBuyWith(w, acc, buyUsdt);
       if (!ok) return;
       if (mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
 
   /** The first buy, then open trading. Returns false if a step didn't go through (the Continue panel stays up). */
-  async function firstBuyWith(w: any, acc: `0x${string}`, buyCoin: bigint): Promise<boolean> {
+  async function firstBuyWith(w: any, acc: `0x${string}`, buyUsdt: bigint): Promise<boolean> {
     if (!token || !info || !ROUTER) return false;
     try {
-      const bal = (await pub.getBalance({ address: acc })) as bigint;
-      const gas = parseEther(String(gasNative));
-      if (bal < buyCoin + gas) {
-        const fit = bal > gas ? bal - gas : 0n;
-        setMsg(`The first buy needs ${fmt(buyCoin, 18)} ${CHAIN.coin} + gas, but this wallet has ${fmt(bal, 18)} ${CHAIN.coin} left. Add ${CHAIN.coin} and tap "Sign first buy" again${fit > 0n ? `, or tap "Buy with what's left" (${fmt(fit, 18)} ${CHAIN.coin})` : ""}. The liquidity is safe in the pool.`);
+      const [usdt, bnb] = await Promise.all([usdtOf(acc), pub.getBalance({ address: acc }) as Promise<bigint>]);
+      if (usdt < buyUsdt) {
+        setMsg(`The first buy needs ${fmt(buyUsdt, 18)} USDT, but this wallet has ${fmt(usdt, 18)} USDT. Add USDT and tap "Sign first buy" again${usdt > 0n ? `, or tap "Buy with what's left" (${fmt(usdt, 18)} USDT)` : ""}. The liquidity is safe in the pool.`);
         return false;
       }
-      const weth = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "WETH" })) as `0x${string}`;
-      const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [buyCoin, [weth, token]] })) as bigint[];
+      if (bnb < gasWei(2)) { setMsg(`Add a little BNB for gas (about ${(gasNative * 2).toFixed(4)} BNB), then tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
+      const weth = await wethOf();
+      const path = [USDT, weth, token] as `0x${string}`[];
+      await approveIfNeeded(w, acc, USDT, buyUsdt, `Allow ${CHAIN.dex} to use your USDT`);
+      const amounts = (await pub.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [buyUsdt, path] })) as bigint[];
       const outMin = slip(amounts[amounts.length - 1] ?? 0n);
       const buyHash = await send(w, acc, {
-        address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactETHForTokensSupportingFeeOnTransferTokens", value: buyCoin,
-        args: [outMin, [weth, token], acc, deadline()],
-      }, "First buy");
-      reportActivity("swap", CHAIN.key, buyHash, `First buy ${fmt(buyCoin, 18)} ${CHAIN.coin} of ${info.symbol}`);
+        address: ROUTER, abi: ROUTER_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens",
+        args: [buyUsdt, outMin, path, acc, deadline()],
+      }, "First buy (USDT)");
+      reportActivity("swap", CHAIN.key, buyHash, `First buy ${fmt(buyUsdt, 18)} USDT of ${info.symbol}`);
       setTick((x) => x + 1);
       const opened = await openTradingWith(w, acc);
       if (!opened) { setMsg(`✅ First buy is in (${CHAIN.explorer}/tx/${buyHash}). Now tap "Open trading" to finish.`); return false; }
@@ -451,12 +503,12 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
       const { w, acc } = await wallet();
       let amt: bigint;
       if (useAll) {
-        const bal = (await pub.getBalance({ address: acc })) as bigint, gas = parseEther(String(gasNative));
-        if (bal <= gas) { setMsg(`This wallet has ${fmt(bal, 18)} ${CHAIN.coin}: not enough for a buy plus gas. Add ${CHAIN.coin} first.`); return; }
-        amt = bal - gas;
+        const bal = await usdtOf(acc);
+        if (bal <= 0n) { setMsg("This wallet has no USDT for the first buy. Add USDT (BEP20) first."); return; }
+        amt = bal;
       } else {
-        try { amt = parseEther(buyAmt || "0"); } catch { setMsg(`Type the first-buy amount in ${CHAIN.coin}.`); return; }
-        if (amt <= 0n) { setMsg(`Type the first-buy amount in ${CHAIN.coin}.`); return; }
+        try { amt = parseUnits(buyAmt || "0", 18); } catch { setMsg("Type the first-buy amount in USDT."); return; }
+        if (amt <= 0n) { setMsg("Type the first-buy amount in USDT."); return; }
       }
       const ok = await firstBuyWith(w, acc, amt);
       if (ok && mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
@@ -470,7 +522,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
 
   async function remove() {
     if (!info?.pair || !token || !ROUTER) return;
-    if (!confirm(`Remove ${pct}% of the LP in this wallet? The tokens and ${CHAIN.coin} come back here. Liquidity that was burned or locked on a normal launch is not touched.`)) return;
+    if (!confirm(`Remove ${pct}% of the LP in this wallet? The tokens come back here, and the BNB side is swapped back to USDT. Liquidity that was burned or locked on a normal launch is not touched.`)) return;
     setBusy(true);
     try {
       const { w, acc } = await wallet();
@@ -504,12 +556,19 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
         if (blocked) await send(w, acc, { address: token, abi: parseAbi(["function enableTrading()"]), functionName: "enableTrading" }, "Open trading so the pool can send the tokens back");
       }
       const loose = (v: bigint) => (v * 5000n) / 10_000n;
-      const hash = await send(w, acc, {
+      const before = (await pub.getBalance({ address: acc })) as bigint;
+      const { hash, fee } = await sendR(w, acc, {
         address: ROUTER, abi: ROUTER_ABI, functionName: "removeLiquidityETHSupportingFeeOnTransferTokens",
         args: [token, amount, loose(shareToken), loose(shareCoin), acc, deadline()],
       }, `Remove ${pct}% of your liquidity`);
       reportActivity("liquidity", CHAIN.key, hash, `Admin removed ${pct}% of ${info.symbol} liquidity`);
-      setMsg(`✅ Removed ${pct}% of the liquidity in this wallet. ${CHAIN.explorer}/tx/${hash}`);
+      setTick((x) => x + 1);
+      const after = (await pub.getBalance({ address: acc })) as bigint;
+      const gotBnb = after + fee - before;
+      let swapHash: string | null = null;
+      try { if (gotBnb > 0n) swapHash = await bnbToUsdt(w, acc, gotBnb); }
+      catch (e) { fail(e); setMsg((m) => `✅ Liquidity removed (${CHAIN.explorer}/tx/${hash}), but the swap back to USDT didn't go through: ${m} The BNB is in your wallet.`); return; }
+      setMsg(`✅ Removed ${pct}% of the liquidity${swapHash ? ` and swapped the BNB back to USDT (${CHAIN.explorer}/tx/${swapHash})` : ""}. ${CHAIN.explorer}/tx/${hash}`);
       setTick((x) => x + 1);
     } catch (e) { fail(e); } finally { setBusy(false); }
   }
@@ -518,7 +577,8 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
   function onToken(v: string) {
     setAmtToken(v);
     if (!priced || !info) return;
-    try { setAmtCoin(formatUnits((parseUnits(v || "0", info.decimals) * info.rCoin) / info.rToken, 18).replace(/\.?0+$/, "")); } catch { setAmtCoin(""); }
+    if (!(info.bnbUsdt > 0n)) return;
+    try { setAmtCoin(formatUnits((parseUnits(v || "0", info.decimals) * info.rCoin * info.bnbUsdt) / info.rToken / 10n ** 18n, 18).replace(/\.?0+$/, "")); } catch { setAmtCoin(""); }
   }
   const share = info && info.lpTotal > 0n ? { token: (info.rToken * info.lp) / info.lpTotal, coin: (info.rCoin * info.lp) / info.lpTotal } : null;
 
@@ -529,13 +589,14 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
   const showRemove = mode === "all" || mode === "remove";
   const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : "Rage";
   const blurb = mode === "all"
-    ? `Deploy the token on ${CHAIN.name}, add the liquidity, then it asks if you want to remove that liquidity. The LP stays in this wallet.`
+    ? `Deploy the token on ${CHAIN.name}, add liquidity and the first buy paid in USDT, then it asks if you want to remove that liquidity. BNB is only used for gas. The LP stays in this wallet.`
     : mode === "deploy"
     ? `Deploy the token on ${CHAIN.name}. The whole supply comes to this wallet.`
     : mode === "add"
-    ? `Add ${CHAIN.coin} and tokens on ${CHAIN.dex}. The LP stays in this wallet.`
-    : `Remove LP sitting in this wallet. The tokens and ${CHAIN.coin} come back here. Liquidity that was burned or locked on a normal launch cannot be pulled.`;
-  const gasLeft = account && info && info.coinBal > parseEther(String(gasNative)) ? info.coinBal - parseEther(String(gasNative)) : 0n;
+    ? `Add tokens and USDT on ${CHAIN.dex} (the USDT is swapped to BNB for the token/BNB pool). BNB is only used for gas. The LP stays in this wallet.`
+    : `Remove LP sitting in this wallet. The tokens come back here and the BNB side is swapped back to USDT. Liquidity that was burned or locked on a normal launch cannot be pulled.`;
+  const usdtLeft = account && info ? info.usdtBal : 0n;
+  const asUsdt = (bnbWei: bigint) => (info && info.bnbUsdt > 0n ? (bnbWei * info.bnbUsdt) / 10n ** 18n : 0n);
   return (
     <>
       <h3 style={{ margin: 0 }}>{title}</h3>
@@ -604,18 +665,18 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
           <div className="notice">
             🪙 <b>{info.symbol}</b>
             {info.buyTaxBps != null && info.sellTaxBps != null && <> · tax {info.buyTaxBps / 100}% buy · {info.sellTaxBps / 100}% sell</>}
-            {" "}· {priced ? <>pool: {fmt(info.rToken, info.decimals)} {info.symbol} + {fmt(info.rCoin, 18)} {CHAIN.coin}</> : <>no pool yet: the amounts you add set the starting price</>}
-            {account && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol} and {fmt(info.coinBal, 18)} {CHAIN.coin}</small></>}
+            {" "}· {priced ? <>pool: {fmt(info.rToken, info.decimals)} {info.symbol} + {fmt(info.rCoin, 18)} BNB{info.bnbUsdt > 0n ? <> (≈ {fmt(asUsdt(info.rCoin), 18)} USDT)</> : null}</> : <>no pool yet: the amounts you add set the starting price</>}
+            {account && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol}, <b>{fmt(info.usdtBal, 18)} USDT</b> and {fmt(info.coinBal, 18)} BNB (gas)</small></>}
             {info.pair && <><br /><small>Pool <a href={`${CHAIN.explorer}/address/${info.pair}`} target="_blank" rel="noreferrer">{info.pair.slice(0, 8)}…{info.pair.slice(-4)}</a></small></>}
           </div>
           {showAdd && info.live === false && info.rToken > 0n && (
             <div className="notice stack" style={{ gap: 6, borderColor: "#f0b90b" }}>
               <b>▶ Continue: liquidity is in, trading is still closed</b>
               <small>Finish with the first buy (it goes out before anyone else can trade), then trading opens. If a step fails, just sign it again here: nothing is lost.</small>
-              <label className="field"><span>First buy ({CHAIN.coin})</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label={`First buy amount in ${CHAIN.coin}`} /></label>
+              <label className="field"><span>First buy (USDT)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="10" aria-label="First buy amount in USDT" /></label>
               <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                 <button className="btn primary" type="button" disabled={busy || !buyAmt} onClick={() => continueBuy(false)}>Sign first buy</button>
-                <button className="btn" type="button" disabled={busy} onClick={() => continueBuy(true)}>Buy with what&apos;s left{gasLeft > 0n ? ` (${fmt(gasLeft, 18)} ${CHAIN.coin})` : ""}</button>
+                <button className="btn" type="button" disabled={busy} onClick={() => continueBuy(true)}>Buy with all my USDT{usdtLeft > 0n ? ` (${fmt(usdtLeft, 18)} USDT)` : ""}</button>
                 <button className="btn ghost" type="button" disabled={busy} onClick={continueOpen}>Skip the buy, just open trading</button>
               </div>
             </div>
@@ -623,11 +684,11 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
           {showAdd && (
             <>
               <b className="rg-step sb"><i>⚡</i>First buy</b>
-              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. Trading stays closed until this wallet&apos;s buy is in, then it opens. You approve each step in the wallet.</p>
-              <label className="field"><span>Amount ({CHAIN.coin})</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="0.01" aria-label={`First buy amount in ${CHAIN.coin}`} /></label>
+              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. It&apos;s paid in USDT. Trading stays closed until this wallet&apos;s buy is in, then it opens. You approve each step in the wallet.</p>
+              <label className="field"><span>Amount (USDT)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="10" aria-label="First buy amount in USDT" /></label>
               <b className="rg-step s3"><i>3</i>Add liquidity</b>
               <label className="field"><span>{info.symbol}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
-              <label className="field"><span>{CHAIN.coin}</span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
+              <label className="field"><span>USDT <small className="muted">swapped to BNB for the {info.symbol}/BNB pool</small></span><input value={amtCoin} onChange={(e) => setAmtCoin(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <button className="btn primary" type="button" disabled={busy || !amtToken || !amtCoin || !buyAmt} onClick={add}>Add liquidity</button>
             </>
           )}
@@ -637,7 +698,7 @@ function AdminEvmPool({ mode, chainKey }: { mode: "deploy" | "add" | "remove" | 
                 info.lp > 0n ? (
                   <>
                     <b className="rg-step s4"><i>4</i>Remove liquidity?</b>
-                    <small>LP in this wallet: {fmt(info.lp, 18)}{share ? <> (about {fmt(share.token, info.decimals)} {info.symbol} + {fmt(share.coin, 18)} {CHAIN.coin})</> : null}</small>
+                    <small>LP in this wallet: {fmt(info.lp, 18)}{share ? <> (about {fmt(share.token, info.decimals)} {info.symbol} + {fmt(share.coin, 18)} BNB{info.bnbUsdt > 0n ? <>, ≈ {fmt(asUsdt(share.coin), 18)} USDT back</> : null})</> : null}</small>
                     <label className="field"><span>Remove <b>{pct}%</b></span><input type="range" min={1} max={100} value={pct} onChange={(e) => setPct(Number(e.target.value))} aria-label="Share of liquidity to remove" /></label>
                     <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
                       {[25, 50, 100].map((p) => <button key={p} type="button" className={"btn small" + (pct === p ? " primary" : "")} onClick={() => setPct(p)}>{p}%</button>)}

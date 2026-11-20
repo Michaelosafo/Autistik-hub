@@ -26,7 +26,7 @@ const JUP_H: Record<string, string> = JUP_KEY ? { "x-api-key": JUP_KEY } : {};
 const PRIO: Record<string, number> = { low: 50_000, med: 200_000, high: 1_000_000, max: 5_000_000 };
 const RESERVE: Record<SnipeChain, number> = { bsc: 0.0015, ethereum: 0.0004, base: 0.00015, arbitrum: 0.00015, solana: 0.02 };
 
-export type ReadyWallet = { slot: number; address: string | null; balance: number | null; unit: string; need: number; ok: boolean; reason: string };
+export type ReadyWallet = { slot: number; address: string | null; balance: number | null; gas?: number; gasNeed?: number; unit: string; need: number; ok: boolean; reason: string };
 
 function payOf(t: any): "native" | "usdt" | "usdc" {
   return t?.pay === "usdt" || t?.pay === "usdc" ? t.pay : "native";
@@ -73,6 +73,14 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
       }
       const a = await copyKey(slot);
       if (!a) return { slot, address: null, balance: null, unit, need, ok: false, reason: "No wallet" };
+      if (pay !== "native") {
+        // Paying in USDT: the buy spends USDT, and BNB (the chain's coin) only pays the gas.
+        const [bal, gas] = await Promise.all([evmUi(chain, a.address, pay), evmUi(chain, a.address, "native")]);
+        const gasOk = gas + 1e-12 >= reserve;
+        const ok = need > 0 && bal + 1e-12 >= need && gasOk;
+        const coin = WCHAINS[chain].native.symbol;
+        return { slot, address: a.address, balance: bal, gas, gasNeed: reserve, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : bal + 1e-12 < need ? `Needs ${need.toFixed(2)} ${unit}` : `Needs ${reserve} ${coin} for gas` };
+      }
       const bal = await evmUi(chain, a.address, pay);
       const ok = need > 0 && bal + 1e-12 >= need + reserve;
       return { slot, address: a.address, balance: bal, unit, need, ok, reason: ok ? "Ready" : !(need > 0) ? "No amount set" : `Needs ${(need + reserve).toFixed(4)} ${unit}` };
@@ -81,7 +89,7 @@ export async function snipeReady(chain: SnipeChain, pay: "native" | "usdt" | "us
     }
   }));
   // What a wallet must hold on top of the buy (fees), so the page can work out "ready" from the amounts typed right now.
-  const extra = chain === "solana" ? (pay === "native" ? reserve : 0.01) : reserve;
+  const extra = chain === "solana" ? (pay === "native" ? reserve : 0.01) : pay === "native" ? reserve : 0;
   return { chain, unit, price, extra, wallets };
 }
 

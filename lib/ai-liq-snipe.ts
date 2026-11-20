@@ -229,7 +229,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     const amts = await c.readContract({ address: ROUTER, abi: ROUTER_ABI, functionName: "getAmountsOut", args: [BigInt(Math.floor((usdEach / bnbUsd) * 1e18)), route.path] }).catch(() => null);
     const out = amts ? Number(amts[amts.length - 1]) / 10 ** dec : 0;
     if (!(out > 0)) return { bought: 0, why: "no price yet" };
-    await record(s, t, name, usdEach, out, null, null, "BNB", route);
+    await record(s, t, name, usdEach, out, null, null, "USDT", route);
     await flog("open", `⚡ Sniped ${name} for $${usdEach.toFixed(2)} (practice) the moment liquidity landed (${route.via === "USDT" ? "USDT pool" : "WBNB pool"}).`);
     return { bought: 1, why: "" };
   }
@@ -240,10 +240,11 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   // minimum-coins must allow for the others' buys moving the price first (else only the first one gets through).
   const planOf = (g: Gun) => {
     const amt = amtFor(g.slot);
-    const bnbFree = Math.max(0, g.bnb - gasKeep(s)) * bnbUsd, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
-    const useUsdt = payKind === "usdt" || payKind === "usdc" ? usdtFree > 0 : usdtFree >= amt * 0.98 || (bnbFree < amt && usdtFree > bnbFree);
-    const usd = +Math.min(amt, useUsdt ? usdtFree : bnbFree).toFixed(2);
-    const ok = usd >= MIN_USD && !(useUsdt && g.bnb < gasKeep(s));
+    // Snipes always spend USDT. BNB is only for gas, never for the buy itself.
+    const bnbFree = 0, usdtFree = g.usdtOk ? g.usdt * 0.995 : 0;
+    const useUsdt = true;
+    const usd = +Math.min(amt, usdtFree).toFixed(2);
+    const ok = usd >= MIN_USD && g.bnb >= gasKeep(s);
     return { amt, bnbFree, usdtFree, useUsdt, usd: ok ? usd : 0 };
   };
   const totalUsd = route.kind === "v2" ? guns.reduce((a, g) => a + planOf(g).usd, 0) : 0;
@@ -255,8 +256,9 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     try {
       const ch = await import("@/lib/ai-trader-chains");
       const w = { evm: g.a, sol: null };
-      const bnb = Math.min(amtFor(g.slot) / bnbUsd, g.bnb - gasKeep(s));
-      if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB`); return false; }
+      // Snipes spend USDT only, and the v3 path buys with BNB, so a v3-only pool is not sniped.
+      const bnb = 0;
+      if (bnb * bnbUsd < MIN_USD) { short.push(`wallet ${g.slot}: this token's pool is PancakeSwap v3, and USDT snipes need a v2 pool`); return false; }
       mine = sent = true; fired.push(g.slot);
       const r = await ch.withFastSend({ mev: mevOn(s) ? MEV : null, gwei: gweiOf(s), approveMax: true }, () => ch.liveBuyOn("bsc", w, token, bnb, slip - 3));
       g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }));
@@ -275,7 +277,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     await Promise.all(guns.map(async (g) => {
       const { amt, useUsdt, usd } = planOf(g);
       if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return; }
-      if (usd < MIN_USD) { short.push(`wallet ${g.slot} has only ${g.bnb.toFixed(4)} BNB${g.usdt ? ` + $${g.usdt.toFixed(2)} USDT` : ""} (keeps ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei)`); return; }
+      if (usd < MIN_USD) { short.push(!g.usdtOk && g.usdt >= 0.5 ? `wallet ${g.slot}: USDT not approved for PancakeSwap yet (it approves on its own; needs a little BNB for gas)` : `wallet ${g.slot} has only $${g.usdt.toFixed(2)} USDT (snipes spend USDT; BNB is only for gas)`); return; }
       const built = await prepareV2Buy(g, token, route, usd, useUsdt, slip, bnbUsd, Math.max(0, totalUsd - usd)).catch((e: Error) => ({ notOpen: e.message.slice(0, 120) }));
       if ("notOpen" in built) { notOpen = built.notOpen; return; }
       preps.push({ g, usd, amt, useUsdt, ...built });
