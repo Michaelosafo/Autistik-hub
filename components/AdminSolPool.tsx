@@ -14,6 +14,7 @@ import { formatUnits } from "viem";
  */
 const CHAIN = CHAINS.solana;
 const SAVED = "autistik-admin-direct-token:solana";
+const SAVED_LIST = "autistik-admin-direct-tokens:solana";
 const fmt = (raw: string, d: number) => {
   try { return Number(formatUnits(BigInt(raw), d)).toLocaleString("en-US", { maximumFractionDigits: 6 }); } catch { return "0"; }
 };
@@ -41,6 +42,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   const [buyTax, setBuyTax] = useState("0");
   const [sellTax, setSellTax] = useState("0");
   const [tokenIn, setTokenIn] = useState("");
+  const [savedCAs, setSavedCAs] = useState<{ mint: string; name: string; symbol: string }[]>([]);
   const [amtToken, setAmtToken] = useState("");
   const [amtSol, setAmtSol] = useState("");
   const [pct, setPct] = useState(100);
@@ -58,6 +60,8 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     try {
       const saved = localStorage.getItem(SAVED);
       if (saved && SOL_ADDR.test(saved)) setTokenIn(saved);
+      const list = JSON.parse(localStorage.getItem(SAVED_LIST) || "[]");
+      if (Array.isArray(list)) setSavedCAs(list.filter((x: any) => x && SOL_ADDR.test(String(x.mint || ""))).slice(0, 50));
     } catch { /* private mode */ }
   }, []);
   useEffect(() => {
@@ -71,7 +75,18 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   function connect() { setNetwork("solana").catch(() => {}); pickWallet({ fresh: true }); }
   function save(addr: string) {
     setTokenIn(addr);
-    try { localStorage.setItem(SAVED, addr); } catch { /* ignore */ }
+  }
+  function saveCA() {
+    if (!mint) { setMsg("Enter a valid Solana token CA first."); return; }
+    const entry = { mint, name: info?.name || name || "Token", symbol: info?.symbol || symbol || "TOKEN" };
+    const next = [entry, ...savedCAs.filter((x) => x.mint !== mint)].slice(0, 50);
+    setSavedCAs(next);
+    try { localStorage.setItem(SAVED_LIST, JSON.stringify(next)); localStorage.setItem(SAVED, mint); } catch { /* ignore */ }
+    setMsg(`CA saved: ${mint}`);
+  }
+  function newDeployment() {
+    setName(""); setSymbol(""); setSupply("1000000000"); setBuyTax("0"); setSellTax("0");
+    setTokenIn(""); setInfo(null); setAmtToken(""); setAmtSol(""); setAskRemove(false); setMsg("Ready for another deployment.");
   }
 
   const showDeploy = mode === "all" || mode === "deploy";
@@ -190,7 +205,18 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
       )}
 
       <b>2. Token</b>
-      <input value={tokenIn} onChange={(e) => { const v = e.target.value.trim(); setTokenIn(v); try { if (SOL_ADDR.test(v)) localStorage.setItem(SAVED, v); } catch { /* ignore */ } }} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
+      <input value={tokenIn} onChange={(e) => setTokenIn(e.target.value.trim())} placeholder="Token address (filled in after deploy)" spellCheck={false} aria-label="Token address" />
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        <button className="btn small" type="button" disabled={!mint || busy} onClick={saveCA}>Save CA</button>
+        <button className="btn small" type="button" disabled={busy} onClick={newDeployment}>New deployment</button>
+      </div>
+      {savedCAs.length > 0 && <div className="stack" style={{ gap: 6 }}>
+        <b>Saved Solana CAs</b>
+        {savedCAs.map((item) => <div className="row" key={item.mint} style={{ justifyContent: "space-between", gap: 8 }}>
+          <span className="mono" style={{ overflowWrap: "anywhere" }}>{item.symbol} · {item.mint.slice(0, 6)}…{item.mint.slice(-6)}</span>
+          <button className="btn small" type="button" onClick={() => setTokenIn(item.mint)}>Load</button>
+        </div>)}
+      </div>}
       {info && (
         <>
           <div className="notice">
