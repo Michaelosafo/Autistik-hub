@@ -45,6 +45,8 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
   const [pick, setPick] = useState<number[] | "all" | null>(null);
   const pickList = Array.isArray(pick) ? pick : [];
   const [editing, setEditing] = useState<string | null>(null);
+  // Set once you tick / untick a wallet yourself; until then the wallets that can pay are ticked for you.
+  const [manual, setManual] = useState(false);
   const who = (w?: number[]) => (w && w.length && w.length < slots.length ? `wallet ${w.map((x) => `#${x}`).join(" + ")}` : "all wallets");
   const toggle = (list: number[], x: number) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x].sort((a, b) => a - b));
   const list = s.liq_targets || [];
@@ -71,6 +73,7 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
     for (const sl of slots) { const v = preset(sl); next[sl] = v > 0 ? String(v) : ""; if (v > 0) withPreset.push(sl); }
     setOwn(next);
     setPick(withPreset.length ? withPreset : null);
+    setManual(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, pay]);
 
@@ -114,6 +117,15 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
     return () => { gone = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chain, pay, typed, ownKey, slots.join(","), reload]);
+
+  // Auto-pick: once there's an amount and fresh balances, tick the wallets that can pay it (until you tick by hand).
+  const canPay = ready.filter((w) => w.address && w.balance != null && price > 0 && spendOf(w.slot) > 0 && w.balance + 1e-12 >= spendOf(w.slot) / price + extra).map((w) => w.slot);
+  const canKey = canPay.join(",");
+  useEffect(() => {
+    if (manual || loadingReady || !chain) return;
+    if (canPay.length) setPick(canPay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canKey, manual, loadingReady, chain]);
 
   const add = () => {
     const m = ca.trim().match(/0x[0-9a-fA-F]{40}/);
@@ -192,7 +204,7 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
             </div>
             <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               <input className="input" style={{ flex: "1 1 120px" }} placeholder="Name (optional)" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={24} aria-label="Name" />
-              <input className="input" style={{ flex: "0 1 140px" }} inputMode="decimal" placeholder="$" value={amt} onChange={(e) => setAmt(e.target.value)} aria-label="Dollars for all wallets" />
+              <input className="input" style={{ flex: "0 1 140px" }} inputMode="decimal" placeholder="$" value={amt} onChange={(e) => { setAmt(e.target.value); setManual(false); if (num(e.target.value) > 0) setOwn({}); }} aria-label="Dollars for all wallets" />
               <small><b>$</b> each, paid in {unit}{typed > 0 && price > 0 ? ` (≈ ${+(typed / price).toFixed(6)} ${unit})` : ""} <span className="muted">(for wallets with no amount of their own)</span></small>
             </div>
             {chain === "solana" && (
@@ -218,15 +230,15 @@ export default function LiqSniper({ s, busy, set, slots, part }: { s: S; busy: s
                   : `Needs ${(needNow + extra).toFixed(4)} ${w.unit} (≈ ${money((needNow + extra) * price)}) · lower the $ or send more ${w.unit}`;
                 return (
                   <div key={w.slot} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    <button type="button" className={"btn small" + (on ? " primary" : " ghost")} style={{ justifyContent: "flex-start", flex: "1 1 200px" }} onClick={() => { const next = toggle(pickList, w.slot); setPick(next.length ? next : null); }} aria-pressed={on}>
+                    <button type="button" className={"btn small" + (on ? " primary" : " ghost")} style={{ justifyContent: "flex-start", flex: "1 1 200px" }} onClick={() => { const next = toggle(pickList, w.slot); setManual(true); setPick(next.length ? next : null); }} aria-pressed={on}>
                       {on ? "☑" : "☐"} #{w.slot} · {w.balance == null ? `? ${w.unit}` : <>{price > 0 ? `${money(w.balance * price)} / ` : ""}{w.balance.toLocaleString("en-US", { maximumFractionDigits: 4 })} {w.unit}</>} · {short(w.address!)}
                     </button>
-                    <input className="input" style={{ flex: "0 1 100px" }} inputMode="decimal" placeholder={typed > 0 ? `$${typed}` : "$"} value={own[w.slot] || ""} onChange={(e) => setOwn({ ...own, [w.slot]: e.target.value })} aria-label={`Wallet ${w.slot} dollars`} />
+                    <input className="input" style={{ flex: "0 1 100px" }} inputMode="decimal" placeholder={typed > 0 ? `$${typed}` : "$"} value={own[w.slot] || ""} onChange={(e) => { setOwn({ ...own, [w.slot]: e.target.value }); setManual(false); }} aria-label={`Wallet ${w.slot} dollars`} />
                     <small className={okNow || !on ? "muted" : "aic-warn"}>{status}</small>
                   </div>
                 );
               })}
-              {listed.length > 1 && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => setPick(pickList.length === listed.length ? null : listed.map((w) => w.slot))}>{pickList.length === listed.length ? "Clear" : `Tick all ${listed.length}`}</button>}
+              {listed.length > 1 && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} onClick={() => { setManual(true); setPick(pickList.length === listed.length ? null : listed.map((w) => w.slot)); }}>{pickList.length === listed.length ? "Clear" : `Tick all ${listed.length}`}</button>}
               {unsaved && <button type="button" className="btn small ghost" style={{ alignSelf: "flex-start" }} disabled={!!busy} onClick={saveAmounts}>💾 Save these as each wallet&apos;s {hit.name} amount</button>}
               {missing.map((w) => (
                 <div key={w.slot} className="row" style={{ gap: 6, alignItems: "center", flexWrap: "wrap", opacity: 0.8 }}>
