@@ -86,8 +86,11 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     setMsg(`CA saved: ${mint}`);
   }
   function newDeployment() {
+    // Works even while a step is waiting on the wallet: a stuck step must never block a new launch.
+    setBusy(false); setKnown(null);
     setName(""); setSymbol(""); setSupply("1000000000"); setBuyTax("0"); setSellTax("0");
     setTokenIn(""); setInfo(null); setAmtToken(""); setAmtSol(""); setAskRemove(false); setMsg("Ready for another deployment.");
+    try { localStorage.removeItem(SAVED); } catch { /* private mode */ }
   }
 
   const showDeploy = mode === "all" || mode === "deploy";
@@ -203,7 +206,8 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
         <b>CA management</b>
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <button className="btn small" type="button" disabled={!mint || busy} onClick={saveCA}>Save current CA</button>
-          <button className="btn small" type="button" disabled={busy} onClick={newDeployment}>Start another deployment</button>
+          <button className="btn small" type="button" onClick={newDeployment}>Start another deployment</button>
+          {busy && <button className="btn small ghost" type="button" onClick={() => { setBusy(false); setMsg("Stopped waiting. If your wallet still shows the request, reject it there, then try again."); }}>Stop waiting</button>}
         </div>
         {savedCAs.length > 0 && <div className="stack" style={{ gap: 6 }}>
           <small>Saved CAs</small>
