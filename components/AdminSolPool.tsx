@@ -1,7 +1,7 @@
 "use client";
 import { reportActivity } from "@/lib/activity-client";
 import { MAX_RAGE_TAX, SOL_ADDR, rageTaxBps } from "@/lib/admin-rage";
-import { getState, lostSolSign, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
+import { getState, isMobile, lostSolSign, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
 import { CHAINS, SOL_DECIMALS, SOL_POOL_COST } from "@/lib/launchpad";
 import { sendSigned, signAndSend, solErr, type SolWallet } from "@/lib/sol-wallet";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -49,6 +49,8 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [tick, setTick] = useState(0);
+  // A transaction built and waiting for your tap to open the wallet (phones + WalletConnect wallets such as Bitget).
+  const [toSign, setToSign] = useState<{ label: string; go: () => void; stop: () => void } | null>(null);
   const mint = SOL_ADDR.test(tokenIn.trim()) ? tokenIn.trim() : "";
   const knownPool = known?.mint === mint ? known.pool : "";
 
@@ -133,6 +135,26 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   const sellBps = rageTaxBps(sellTax);
   const feePct = buyBps == null || sellBps == null ? null : Math.max(buyBps, sellBps) / 100;
 
+  /**
+   * Sign a built transaction. On a phone with a WalletConnect wallet (Bitget, Trust…) the wallet app can only be
+   * opened from a tap: by the time the server has built the transaction, the tap that started it has expired, so the
+   * phone blocked the jump to the wallet and the request never showed. There, a "Sign in <wallet>" button appears and
+   * your tap sends the request and opens the wallet. Everywhere else it goes straight to the wallet as before.
+   */
+  function sign(w: SolWallet, tx: string, label: string, onSubmitted?: (sig: string) => void): Promise<string> {
+    const needsTap = isMobile() && w.wallet.name.endsWith("(WalletConnect)");
+    if (!needsTap) return signAndSend(w, tx, onSubmitted);
+    const name = w.wallet.name.replace(/ \(WalletConnect\)$/, "");
+    return new Promise<string>((resolve, reject) => {
+      setMsg(`Ready. Tap "✍️ Sign in ${name}" to open ${name} and approve: ${label}.`);
+      setToSign({
+        label: `✍️ Sign in ${name}: ${label}`,
+        go: () => { setToSign(null); setMsg(`Approve in ${name}, then come back here.`); signAndSend(w, tx, onSubmitted).then(resolve, reject); },
+        stop: () => { setToSign(null); reject(new Error("You cancelled in your wallet.")); },
+      });
+    });
+  }
+
   async function deploy() {
     const n = name.trim();
     const s = symbol.trim().replace(/^\$/, "").toUpperCase();
@@ -149,7 +171,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
       setMsg(feePct ? `Confirm in your wallet: deploy ${s} with a ${feePct}% transfer fee.` : "Confirm in your wallet: deploy the token. The whole supply comes to this wallet.");
       const built = await rageSol<{ tx: string; mint: string; feeBps: number }>("mint", { owner: sw.account.address, name: n, symbol: s, supply: whole, buyTax, sellTax });
       try { localStorage.setItem(PENDING, JSON.stringify({ tx: built.tx, mint: built.mint, symbol: s, feeBps: built.feeBps, at: Date.now() } satisfies Pending)); } catch { /* private mode */ }
-      const sig = await signAndSend(sw, built.tx, () => {
+      const sig = await sign(sw, built.tx, `deploy ${s}`, () => {
         try { localStorage.removeItem(PENDING); } catch { /* ignore */ }
         save(built.mint);
         setMsg("Transaction submitted. Loading new token CA: " + built.mint);
@@ -166,14 +188,15 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   }
 
   async function add() {
-    if (!sw || !mint || !info) return;
+    if (!sw) { setMsg("The Solana wallet isn't connected any more. Tap \"Connect a Solana wallet\", then Add liquidity again."); connect(); return; }
+    if (!mint || !info) { setMsg("Paste the token address and wait for its details to load."); return; }
     if (!amtToken || !amtSol) { setMsg("Type both amounts."); return; }
     setBusy(true);
     try {
       if (!info.pool) {
         setMsg(`Confirm in your wallet: create the Raydium pool. Raydium charges about 0.15 SOL on top (keep about ${SOL_POOL_COST} SOL spare).`);
         const r = await rageSol<{ tx: string; pool: string; lpMint: string }>("pool", { owner: sw.account.address, mint, tokens: amtToken, sol: amtSol });
-        const sig = await signAndSend(sw, r.tx);
+        const sig = await sign(sw, r.tx, "create the pool and add liquidity");
         setKnown({ mint, pool: r.pool });
         reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} + ${amtSol} SOL`);
         setAmtToken(""); setAmtSol(""); setTick((x) => x + 1);
@@ -181,7 +204,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
       } else {
         setMsg("Confirm in your wallet: add liquidity at the pool's price.");
         const r = await rageSol<{ tx: string }>("add", { owner: sw.account.address, pool: info.pool.pool, side: "token", amount: amtToken, decimals: info.decimals });
-        const sig = await signAndSend(sw, r.tx);
+        const sig = await sign(sw, r.tx, "add liquidity");
         reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} on Raydium`);
         setAmtToken(""); setAmtSol(""); setTick((x) => x + 1);
         setMsg(`✅ Liquidity added. ${CHAIN.explorer}/tx/${sig}`);
@@ -191,12 +214,13 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   }
 
   async function remove() {
-    if (!sw || !info?.pool) return;
+    if (!sw) { setMsg("The Solana wallet isn't connected any more. Tap \"Connect a Solana wallet\", then try again."); connect(); return; }
+    if (!info?.pool) return;
     if (!confirm(`Remove ${pct}% of the LP in this wallet? The tokens and SOL come back here. Liquidity that was burned or locked on a normal launch is not touched.`)) return;
     setBusy(true);
     try {
       const r = await rageSol<{ tx: string }>("remove", { owner: sw.account.address, pool: info.pool.pool, pct });
-      const sig = await signAndSend(sw, r.tx);
+      const sig = await sign(sw, r.tx, `remove ${pct}% of the liquidity`);
       reportActivity("liquidity", "solana", sig, `Admin removed ${pct}% of ${info.symbol || "token"} liquidity`);
       setMsg(`✅ Removed ${pct}% of the liquidity in this wallet. ${CHAIN.explorer}/tx/${sig}`);
       setTick((x) => x + 1);
@@ -204,13 +228,14 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   }
 
   async function collect() {
-    if (!sw || !mint) return;
+    if (!sw) { setMsg("The Solana wallet isn't connected any more. Tap \"Connect a Solana wallet\", then try again."); connect(); return; }
+    if (!mint) return;
     setBusy(true);
     try {
       const r = await rageSol<{ txs: string[]; amount: string }>("collect", { owner: sw.account.address, mint });
       if (!r.txs.length) { setMsg("No tax is waiting to collect yet. It builds up as people transfer the token."); return; }
       let last = "";
-      for (const tx of r.txs) last = await signAndSend(sw, tx);
+      for (const [i, tx] of r.txs.entries()) last = await sign(sw, tx, `collect the tax${r.txs.length > 1 ? ` (${i + 1} of ${r.txs.length})` : ""}`);
       setMsg(`✅ Collected the withheld tax into this wallet. ${CHAIN.explorer}/tx/${last}`);
       setTick((x) => x + 1);
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
@@ -244,7 +269,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
         <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
           <button className="btn small" type="button" disabled={!mint || busy} onClick={saveCA}>Save current CA</button>
           <button className="btn small" type="button" onClick={newDeployment}>Start another deployment</button>
-          {busy && <button className="btn small ghost" type="button" onClick={() => { setBusy(false); setMsg("Stopped waiting. If your wallet still shows the request, reject it there, then try again."); }}>Stop waiting</button>}
+          {busy && <button className="btn small ghost" type="button" onClick={() => { toSign?.stop(); setBusy(false); setMsg("Stopped waiting. If your wallet still shows the request, reject it there, then try again."); }}>Stop waiting</button>}
         </div>
         {savedCAs.length > 0 && <div className="stack" style={{ gap: 6 }}>
           <small>Saved CAs</small>
@@ -310,6 +335,12 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
             ) : <small className="muted">This token has no pool yet. Add liquidity first.</small>
           )}
         </>
+      )}
+      {toSign && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <button className="btn primary" type="button" onClick={toSign.go}>{toSign.label}</button>
+          <button className="btn small ghost" type="button" onClick={toSign.stop}>Cancel</button>
+        </div>
       )}
       {msg && <small className="muted" style={{ overflowWrap: "anywhere" }}>{msg}</small>}
     </>
