@@ -209,18 +209,18 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
       </>}
       {part !== "wallets" && part !== "copy" && <>
       <b style={{ marginTop: part === "settings" ? 0 : 8 }}>⚡ Speed and bot protection</b>
-      <small className="muted">{sniper ? "Gas speed decides who lands first in the block when liquidity arrives: Turbo or Max for hot launches." : "Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away."}</small>
+      <small className="muted">{sniper ? "Snipes always use at least Turbo gas, so every picked wallet's buy goes out together at the top of the block. Max for the hottest launches." : "Copy watches the wallets live: their trade is seen the moment its block lands (under a second), and your buy is sent straight away."}</small>
       <label className="ait-check" style={{ margin: 0 }}>
         <input type="checkbox" checked={s.copy_mev !== false} disabled={!!busy} onChange={(e) => set({ copy_mev: e.target.checked }, e.target.checked ? "MEV protection on: buys and sells go through PancakeSwap MEV Guard, hidden from sandwich bots." : "MEV protection off: trades go to the public mempool.")} />
         <span>🛡 MEV bot protection <small className="muted">(sends through PancakeSwap MEV Guard, a private route: sandwich bots can&apos;t see or front-run your trade)</small></span>
       </label>
       <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         <small><b>Gas speed:</b></small>
-        {([["Normal", 0.1], ["Fast", 0.3], ["Turbo", 1], ["Max", 3]] as const).map(([l, g]) => {
-          const on = Math.abs(Number(s.copy_gwei ?? 0.3) - g) < 1e-9;
+        {(sniper ? ([["Turbo", 1], ["Max", 3]] as const) : ([["Normal", 0.1], ["Fast", 0.3], ["Turbo", 1], ["Max", 3]] as const)).map(([l, g]) => {
+          const on = Math.abs((sniper ? Math.max(1, Number(s.copy_gwei ?? 1)) : Number(s.copy_gwei ?? 0.3)) - g) < 1e-9;
           return <button key={l} type="button" className={"btn small" + (on ? " primary" : " ghost")} disabled={!!busy || on} onClick={() => set({ copy_gwei: g }, `Gas speed ${l} (${g} gwei, about $${(g * 250_000 * 1e-9 * (bnbUsd || 600)).toFixed(2)} a swap).`)}>{l}</button>;
         })}
-        <small className="muted">{Number(s.copy_gwei ?? 0.3)} gwei ≈ ${(Number(s.copy_gwei ?? 0.3) * 250_000 * 1e-9 * (bnbUsd || 600)).toFixed(2)} a swap. Higher lands first in the block.</small>
+        {(() => { const gw = sniper ? Math.max(1, Number(s.copy_gwei ?? 1)) : Number(s.copy_gwei ?? 0.3); return <small className="muted">{gw} gwei ≈ ${(gw * 250_000 * 1e-9 * (bnbUsd || 600)).toFixed(2)} a swap. Higher lands first in the block.</small>; })()}
       </div>
       {!sniper && <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         <small><b>Max slippage:</b> {Number(s.copy_slip ?? 12)}%</small>

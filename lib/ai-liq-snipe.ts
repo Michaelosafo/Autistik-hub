@@ -15,7 +15,7 @@
  * After the buy: its value is read from the pool every ~1.5 s; at your target (e.g. 2x) it sells the share you chose.
  * Sell buttons and your own stop-loss / take profit work like on Copy. Practice mode: pretend buys at the pool price.
  */
-import { createPublicClient, encodeFunctionData, fallback, getAddress, http, keccak256, parseAbi, webSocket } from "viem";
+import { createPublicClient, encodePacked, encodeFunctionData, fallback, getAddress, getContractAddress, http, keccak256, parseAbi, webSocket } from "viem";
 import { bsc } from "viem/chains";
 import type { PrivateKeyAccount } from "viem/accounts";
 import { supabaseService } from "@/lib/supabase/server";
@@ -43,7 +43,12 @@ const BUY_GAS = 320_000n;
  * BNB kept back: only the buy's own gas at your gas speed. Everything else is spent on the buy; you add BNB later
  * for the sell.
  */
-const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, Number(BUY_GAS) * gweiOf(s) * 1e-9);
+const gasKeep = (s: FSettings) => Math.max(GAS_KEEP, Number(BUY_GAS) * snipeGwei(s) * 1e-9);
+/** Snipe buys never go below Turbo gas (1 gwei), so they sit at the top of the block; Max (3 gwei) still applies. */
+const TURBO_GWEI = 1;
+const snipeGwei = (s: FSettings) => Math.max(TURBO_GWEI, gweiOf(s));
+/** PancakeSwap v2 pair init code hash: a pair's address is worked out locally (CREATE2), no lookup needed. */
+const PANCAKE_V2_INIT = "0x00fb7f630766e6a796048ea87d01acd3068e8ff67d078148a3fa3f4a84f69bd5" as const;
 const MIN_USD = 0.1;
 
 const ROUTER_ABI = parseAbi([
@@ -63,6 +68,9 @@ const ERC20 = parseAbi([
 const RPCS = [process.env.COPY_BSC_RPC, "https://bsc-rpc.publicnode.com", "https://bsc.drpc.org", "https://bsc-mainnet.public.blastapi.io", "https://bsc-dataseed.bnbchain.org"].filter(Boolean) as string[];
 let client: any = null;
 const pc = () => (client ||= createPublicClient({ chain: bsc, batch: { multicall: true }, transport: fallback(RPCS.map((u) => http(u, { timeout: 5000, retryCount: 0 })), { retryCount: 1 }) }));
+// Test-runs of every wallet's buy go out in one batched request (one round trip for all wallets).
+let eclient: any = null;
+const ec = () => (eclient ||= createPublicClient({ chain: bsc, transport: fallback(RPCS.map((u) => http(u, { timeout: 4000, retryCount: 0, batch: { batchSize: 60, wait: 0 } })), { retryCount: 1 }) }));
 const WSS = [process.env.COPY_BSC_WSS, "wss://bsc-rpc.publicnode.com"].filter(Boolean) as string[];
 const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 
@@ -73,7 +81,8 @@ const MEV = process.env.COPY_MEV_RPC || "https://bscrpc.pancakeswap.finance";
 export type LiqTarget = { token: string; chain?: string; pay?: string; amount?: number; amounts?: Record<string, number>; prio?: string; label?: string; usd?: number; on?: boolean; state?: "waiting" | "done" | "failed"; added?: string; wallets?: number[]; fired?: number[]; first_at?: string };
 /** After the first wallet buys, the other picked wallets keep trying every block for this long, then it stops. */
 const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the first wallet got in
-const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
+// BNB Chain only: an 0x token address (old Solana entries are ignored).
+const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t);
 // BNB Chain only: targets saved on any other chain are ignored.
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => isMint(String(t?.token || "")) && (!t?.chain || t.chain === "bsc"));
 const sameToken = (a: string, b: string) => (a.startsWith("0x") || b.startsWith("0x") ? a.toLowerCase() === b.toLowerCase() : a === b);
@@ -115,6 +124,96 @@ async function routes(tokens: `0x${string}`[]): Promise<Map<string, Route>> {
     else if (x.kind === "v3" && !cur) out.set(key, { kind: "v3" });
   });
   return out;
+}
+
+type Pool = { rIn: bigint; rOut: bigint };
+/** Turbo quote data: the token's pool (from WBNB or USDT to the token) and the USDT→WBNB pool, read in the same block. */
+type Fast = { via: "WBNB" | "USDT"; tok: Pool; uw: Pool | null };
+const pairCache = new Map<string, `0x${string}`>();
+function pairFor(a: `0x${string}`, b: `0x${string}`): `0x${string}` {
+  const [t0, t1] = a.toLowerCase() < b.toLowerCase() ? [a, b] : [b, a];
+  const k = `${t0}|${t1}`.toLowerCase();
+  let p = pairCache.get(k);
+  if (!p) {
+    p = getContractAddress({ opcode: "CREATE2", from: V2_FACTORY, salt: keccak256(encodePacked(["address", "address"], [t0, t1])), bytecodeHash: PANCAKE_V2_INIT });
+    pairCache.set(k, p);
+  }
+  return p;
+}
+/** PancakeSwap v2 amount out (0.25% fee), worked out here with no RPC call. */
+const outOf = (x: bigint, p: Pool) => (x <= 0n || p.rIn <= 0n || p.rOut <= 0n ? 0n : (x * 9975n * p.rOut) / (p.rIn * 10_000n + x * 9975n));
+/** Tokens out for `x` USDT (18 decimals) along the turbo route. */
+const quoteUsdt = (x: bigint, f: Fast) => (f.via === "USDT" ? outOf(x, f.tok) : f.uw ? outOf(outOf(x, f.uw), f.tok) : 0n);
+
+/**
+ * Turbo pool check: ONE multicall per block for every waiting token. Pair addresses are computed locally, so their
+ * reserves are read straight away (no getPair round first), together with the USDT/WBNB pool for pricing.
+ * getPair is read in the same call only to double-check the computed address; on a mismatch it falls back to routes().
+ */
+async function fastRoutes(tokens: `0x${string}`[]): Promise<{ found: Map<string, Route>; fast: Map<string, Fast>; bnbUsd: number }> {
+  const c = pc();
+  const uwPair = pairFor(USDT, WBNB);
+  const calls: any[] = [{ address: uwPair, abi: PAIR_ABI, functionName: "getReserves" }];
+  for (const t of tokens) {
+    calls.push({ address: pairFor(t, WBNB), abi: PAIR_ABI, functionName: "getReserves" });
+    calls.push({ address: pairFor(t, USDT), abi: PAIR_ABI, functionName: "getReserves" });
+    calls.push({ address: V2_FACTORY, abi: FACTORY_ABI, functionName: "getPair", args: [t, WBNB] });
+    calls.push({ address: V2_FACTORY, abi: FACTORY_ABI, functionName: "getPair", args: [t, USDT] });
+    for (const f of V3_FEES) calls.push({ address: V3_FACTORY, abi: V3F_ABI, functionName: "getPool", args: [t, WBNB, f] });
+  }
+  const r = await c.multicall({ contracts: calls, allowFailure: true });
+  const res = (i: number): [bigint, bigint] | null => { const v: any = r[i]?.result; return Array.isArray(v) && BigInt(v[0]) > 0n && BigInt(v[1]) > 0n ? [BigInt(v[0]), BigInt(v[1])] : null; };
+  // Pool from `base` to `tok`, with the reserves the right way round (token0 is the lower address).
+  const pool = (base: string, tok: string, rr: [bigint, bigint]): Pool => (base.toLowerCase() < tok.toLowerCase() ? { rIn: rr[0], rOut: rr[1] } : { rIn: rr[1], rOut: rr[0] });
+  const uwR = res(0);
+  const uw = uwR ? pool(USDT, WBNB, uwR) : null;
+  const bnbUsd = uw ? Number((uw.rIn * 1_000_000n) / uw.rOut) / 1_000_000 : 0;
+  const found = new Map<string, Route>(), fast = new Map<string, Fast>();
+  const per = 4 + V3_FEES.length, slow: `0x${string}`[] = [], v3: `0x${string}`[] = [];
+  tokens.forEach((t, i) => {
+    const b = 1 + i * per, key = t.toLowerCase();
+    const gw = String(r[b + 2]?.result || ZERO), gu = String(r[b + 3]?.result || ZERO);
+    if ((gw !== ZERO && gw.toLowerCase() !== pairFor(t, WBNB).toLowerCase()) || (gu !== ZERO && gu.toLowerCase() !== pairFor(t, USDT).toLowerCase())) { slow.push(t); return; }
+    const w = res(b), u = res(b + 1);
+    const cands: Fast[] = [];
+    if (w && uw) cands.push({ via: "WBNB", tok: pool(WBNB, t, w), uw });
+    if (u) cands.push({ via: "USDT", tok: pool(USDT, t, u), uw });
+    if (!cands.length && w) { slow.push(t); return; } // BNB pool live but no USDT/WBNB price this block: normal path
+    if (cands.length) {
+      // The route that gives the most tokens for $100 of USDT.
+      const best = cands.sort((x, y) => (quoteUsdt(10n ** 20n, y) > quoteUsdt(10n ** 20n, x) ? 1 : -1))[0];
+      fast.set(key, best);
+      found.set(key, best.via === "WBNB" ? { kind: "v2", path: [WBNB, t], via: "WBNB" } : { kind: "v2", path: [WBNB, USDT, t], via: "USDT" });
+      return;
+    }
+    for (let k = 4; k < per; k++) if (String(r[b + k]?.result || ZERO) !== ZERO) { v3.push(t); break; }
+  });
+  // Off the hot path: a v3-only pool (liquidity checked), or a pair address that didn't match.
+  if (slow.length || v3.length) {
+    const more = await routes([...new Set([...slow, ...v3])]).catch(() => new Map<string, Route>());
+    for (const [k, v] of more) if (!found.has(k)) found.set(k, v);
+  }
+  return { found, fast, bnbUsd };
+}
+
+/** A token's symbol and decimals, read once and kept (prefetched while it waits for liquidity). */
+const metaCache = new Map<string, Promise<[string, number]>>();
+function metaOf(token: `0x${string}`): Promise<[string, number]> {
+  const k = token.toLowerCase();
+  let p = metaCache.get(k);
+  if (!p) {
+    p = (async () => {
+      const c = pc();
+      const [sym, dec] = await Promise.all([
+        c.readContract({ address: token, abi: ERC20, functionName: "symbol" }).catch(() => null),
+        c.readContract({ address: token, abi: ERC20, functionName: "decimals" }).then(Number).catch(() => null),
+      ]);
+      if (dec == null) metaCache.delete(k); // not deployed yet: read again next time
+      return [sym ? String(sym) : token.slice(0, 8), dec ?? 18] as [string, number];
+    })();
+    metaCache.set(k, p);
+  }
+  return p;
 }
 
 /** One wallet, ready to fire: nonce read ahead, balances known. */
@@ -192,7 +291,7 @@ async function receipt(hash: string) {
 /** Wallet buys that reverted on-chain, per desk|token|wallet: each may try again a few times. */
 const chainFails = new Map<string, { n: number; at: number }>();
 /** Snipe one token from every wallet at once. Returns how many wallets bought (0: not tradable yet → try next block). */
-async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): Promise<{ bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] }> {
+async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[], fast?: Fast, fastBnb = 0): Promise<{ bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] }> {
   const c = pc();
   // Only the wallets you picked for this token (none picked = all), minus those that already sent their buy.
   const pick = Array.isArray(t.wallets) && t.wallets.length ? new Set(t.wallets.map(Number)) : null;
@@ -205,7 +304,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   if (s.mode === "live" && left.length && !guns.length) return { bought: 0, why: "retrying the wallets whose buy reverted" };
   if (s.mode === "live" && !guns.length) return { bought: 0, why: `none of the wallets picked for it (${[...(pick || [])].map((x) => `#${x}`).join(", ")}) exist any more` };
   const token = getAddress(t.token);
-  const bnbUsd = await bnbPrice();
+  const bnbUsd = fastBnb > 0 ? fastBnb : await bnbPrice();
   const pinned = n((t as any).amount);
   const payKind = String((t as any).pay || "");
   const usdEach = payKind === "usdt" || payKind === "usdc" ? Math.max(MIN_USD, pinned) : payKind === "native" && pinned > 0 ? Math.max(MIN_USD, pinned * bnbUsd) : Math.max(MIN_USD, n(t.usd) || n((s as any).snipe_usd) || 5);
@@ -218,10 +317,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
   };
   const amtFor = (slot: number) => ownFor(slot) || (pinned > 0 || n(t.usd) > 0 ? usdEach : Math.max(MIN_USD, keyUsd(s, slot) ?? usdEach));
   const slip = slipOf(s);
-  const [sym, dec] = await Promise.all([
-    c.readContract({ address: token, abi: ERC20, functionName: "symbol" }).catch(() => token.slice(0, 8)),
-    c.readContract({ address: token, abi: ERC20, functionName: "decimals" }).then(Number).catch(() => 18),
-  ]);
+  const [sym, dec] = await metaOf(token);
   const name = t.label || String(sym);
 
   if (s.mode !== "live") {
@@ -248,7 +344,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
     return { amt, bnbFree, usdtFree, useUsdt, usd: ok ? usd : 0 };
   };
   const totalUsd = route.kind === "v2" ? guns.reduce((a, g) => a + planOf(g).usd, 0) : 0;
-  const gasPrice = BigInt(Math.round(gweiOf(s) * 1e9));
+  const gasPrice = BigInt(Math.round(snipeGwei(s) * 1e9));
   type Prep = { g: Gun; usd: number; amt: number; useUsdt: boolean; data: `0x${string}`; value: bigint; gas: bigint; before: bigint };
   const preps: Prep[] = [];
   const v3done = await Promise.all(guns.filter(() => route.kind === "v3").map(async (g) => {
@@ -273,7 +369,38 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[]): 
       return false;
     }
   }));
-  if (route.kind === "v2") {
+  if (route.kind === "v2" && fast) {
+    // ⚡ Turbo: quotes worked out locally from this block's reserves; every wallet's test-run (which is also its gas
+    // estimate) goes out in one batched round trip; then all the signed buys are broadcast together.
+    const ready: { g: Gun; amt: number; usd: number; inWei: bigint }[] = [];
+    for (const g of guns) {
+      const { amt, usd } = planOf(g);
+      if (g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${snipeGwei(s)} gwei (has ${g.bnb.toFixed(4)})`); continue; }
+      if (usd < MIN_USD) { short.push(!g.usdtOk && g.usdt >= 0.5 ? `wallet ${g.slot}: USDT not approved for PancakeSwap yet (it approves on its own; needs a little BNB for gas)` : `wallet ${g.slot} has only $${g.usdt.toFixed(2)} USDT (snipes spend USDT; BNB is only for gas)`); continue; }
+      ready.push({ g, amt, usd, inWei: BigInt(Math.floor(usd * 1e6)) * 10n ** 12n });
+    }
+    const total = ready.reduce((a, p) => a + p.inWei, 0n);
+    const outAll = quoteUsdt(total, fast);
+    const path = fast.via === "USDT" ? [USDT, token] : [USDT, WBNB, token];
+    const dl = BigInt(Math.floor(Date.now() / 1000) + 120);
+    const trials = [...new Set([slip, Math.min(49, slip + 10), Math.max(slip, 35)])];
+    await Promise.all(ready.map(async (p) => {
+      // Each wallet's least-accepted amount assumes every other picked wallet's buy lands before it in the same block,
+      // so all of them go through together instead of only the first.
+      const last = outAll - quoteUsdt(total - p.inWei, fast);
+      const datas = trials.map((sl) => ({ sl, d: encodeFunctionData({ abi: ROUTER_ABI, functionName: "swapExactTokensForTokensSupportingFeeOnTransferTokens", args: [p.inWei, (last * BigInt(Math.round((100 - sl) * 100))) / 10_000n, path, p.g.a.address, dl] }) }));
+      const [tries, before] = await Promise.all([
+        Promise.all(datas.map((x) => ec().estimateGas({ account: p.g.a.address, to: ROUTER, data: x.d, value: 0n }).then(
+          (gas: bigint) => ({ ...x, gas: BigInt(gas), err: "" }),
+          (e: any) => ({ ...x, gas: 0n, err: String(e?.shortMessage || e?.message || e).slice(0, 120) }),
+        ))),
+        c.readContract({ address: token, abi: ERC20, functionName: "balanceOf", args: [p.g.a.address] }).then((x: bigint) => BigInt(x)).catch(() => 0n),
+      ]);
+      const hit = tries.find((x) => x.gas > 0n);
+      if (!hit) { notOpen = tries.map((x) => x.err).find(Boolean) || "refused"; return; }
+      preps.push({ g: p.g, usd: p.usd, amt: p.amt, useUsdt: true, data: hit.d, value: 0n, gas: padGas(hit.gas), before });
+    }));
+  } else if (route.kind === "v2") {
     await Promise.all(guns.map(async (g) => {
       const { amt, useUsdt, usd } = planOf(g);
       if (useUsdt && g.bnb < gasKeep(s)) { short.push(`wallet ${g.slot} needs ${gasKeep(s).toFixed(4)} BNB for gas at ${gweiOf(s)} gwei (has ${g.bnb.toFixed(4)})`); return; }
@@ -585,24 +712,32 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   };
   const okSlots = new Map<string, Set<number>>(); // token → wallets whose buy went through (this run)
   // STOP, Pause, Remove (token or wallet) and setting changes take effect within a second, not at the next minute's run.
-  let lastFresh = Date.now(), lastGuns = Date.now();
+  let lastFresh = Date.now(), lastGuns = Date.now(), firing = 0;
+  // Housekeeping (settings / wallet reload, take-profit checks, picking up held coins) runs in the background, so
+  // the block-by-block liquidity check is never held up by it.
+  let bgFresh = false, bgExit = false, bgPick = false;
   const refresh = async () => {
     const { data } = await sb().from("ai_futures_settings").select("enabled,liq_targets,liq_x,liq_sell_pct,liq_tp_on,liq_slip,copy_key_usd,snipe_usd,copy_sl_on").eq("id", T()).maybeSingle();
     if (data) Object.assign(s, data);
     // Wallets ready to fire right away: a token added or START pressed mid-minute, a wallet created or funded since
     // the run began. Reloaded (balances, nonces, new / removed wallets) every 3 s while anything is waiting.
-    if (live && s.enabled && waiting().length && (!guns.length || Date.now() - lastGuns >= 3000)) {
+    if (live && s.enabled && waiting().length && (!guns.length || Date.now() - lastGuns >= 3000) && !firing) {
       lastGuns = Date.now();
       const fresh = await loadGuns().catch(() => null);
-      if (fresh) guns = fresh;
-    } else if (guns.length) {
+      // Never swap wallets in while buys are going out, and never step a nonce backwards (a node a moment behind).
+      if (fresh && !firing) {
+        const old = new Map(guns.map((g) => [g.slot, g]));
+        for (const g of fresh) { const o = old.get(g.slot); if (o && o.a.address === g.a.address && o.nonce > g.nonce) g.nonce = o.nonce; }
+        guns = fresh;
+      }
+    } else if (guns.length && !firing) {
       const still = await Promise.all(guns.map((g) => copyKey(g.slot).then((a) => a?.address === g.a.address, () => true)));
       guns = guns.filter((_, i) => still[i]);
     }
   };
   try {
     while (Date.now() - t0 < 49_000) {
-      if (Date.now() - lastFresh >= 1000) { lastFresh = Date.now(); await refresh().catch(() => {}); }
+      if (!bgFresh && Date.now() - lastFresh >= 1000) { lastFresh = Date.now(); bgFresh = true; refresh().catch(() => {}).finally(() => { bgFresh = false; }); }
       let w = s.enabled ? waiting() : [];
       if (live && w.length && guns.length) {
         // A token whose first buy already went out: stop retrying the rest once the window has passed.
@@ -637,9 +772,13 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
       const bscW = w.filter((t) => !t.chain || t.chain === "bsc");
       if (bscW.length && (!live || guns.length)) {
         lastCheck = Date.now();
-        const found = await routes(bscW.map((t) => getAddress(t.token))).catch(() => new Map<string, Route>());
-        await Promise.all(bscW.filter((t) => found.has(t.token.toLowerCase())).map(async (t) => {
-          const r: { bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] } = await snipe(s, t, found.get(t.token.toLowerCase())!, guns).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false }));
+        for (const t of bscW) void metaOf(getAddress(t.token)); // symbol / decimals ready before liquidity lands
+        const { found, fast, bnbUsd: fastBnb } = await fastRoutes(bscW.map((t) => getAddress(t.token))).catch(() => ({ found: new Map<string, Route>(), fast: new Map<string, Fast>(), bnbUsd: 0 }));
+        const hits = bscW.filter((t) => found.has(t.token.toLowerCase()));
+        if (hits.length) firing++;
+        await Promise.all(hits.map(async (t) => {
+          const k = t.token.toLowerCase();
+          const r: { bought: number; why: string; sent?: boolean; fired?: number[]; ok?: number[] } = await snipe(s, t, found.get(k)!, guns, fast.get(k), fastBnb).catch((e) => ({ bought: 0, why: (e as Error).message, sent: false }));
           const key = t.token.toLowerCase();
           if (r.ok?.length) { const set = okSlots.get(key) || new Set<number>(); r.ok.forEach((x) => set.add(x)); okSlots.set(key, set); }
           if (!live && r.bought) {
@@ -660,12 +799,12 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
             failing.set(t.token, Date.now());
             await flog("skip", `${t.label || t.token.slice(0, 10)}: ${r.why}. Trying again every block.`);
           }
-        }));
+        })).finally(() => { if (hits.length) firing--; });
       }
-      if (Date.now() - lastExit > 1500) { lastExit = Date.now(); await watchExits(s).catch(() => {}); }
-      if (!pickedUp && Date.now() - t0 > 3000) {
-        pickedUp = true;
-        await pickUp(s).catch(async (e) => { if (!pickNoted.has("err")) { pickNoted.add("err"); await flog("error", `Checking held snipes failed: ${(e as Error).message.slice(0, 200)}`); } });
+      if (!bgExit && Date.now() - lastExit > 1500) { lastExit = Date.now(); bgExit = true; watchExits(s).catch(() => {}).finally(() => { bgExit = false; }); }
+      if (!pickedUp && !bgPick && Date.now() - t0 > 3000) {
+        pickedUp = true; bgPick = true;
+        pickUp(s).catch(async (e) => { if (!pickNoted.has("err")) { pickNoted.add("err"); await flog("error", `Checking held snipes failed: ${(e as Error).message.slice(0, 200)}`); } }).finally(() => { bgPick = false; });
       }
       // Wait for the next block (pushed live), or 400 ms at most.
       await new Promise<void>((res) => { tick = res; setTimeout(res, Math.max(50, 400 - (Date.now() - lastCheck))); });
