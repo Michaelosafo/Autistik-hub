@@ -476,7 +476,7 @@ function solReason(e: any): string {
   return `Solana rejected it: ${(last || String(e?.message || "simulation failed")).replace(/^Program log: /, "").slice(0, 140)}`;
 }
 export async function solStatus(sig: string): Promise<"pending" | "done" | "failed"> {
-  const r = await solRpc("getSignatureStatuses", [[sig], { searchTransactionHistory: false }]);
+  const r = await solRpc("getSignatureStatuses", [[sig], { searchTransactionHistory: true }]);
   const s = r?.value?.[0];
   if (!s) return "pending";
   if (s.err) return "failed";
