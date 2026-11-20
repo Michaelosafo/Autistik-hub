@@ -476,6 +476,14 @@ export async function chooseInjected(name: string, provider: any) {
     if (id) await switchEvm(provider, id).catch(() => { /* they can switch later from the network button */ });
     choose(name, provider);
   } catch (e: any) {
+    // Inside Bitget's browser with a Solana-only wallet picked in Bitget: it can't give a BNB / EVM account, and
+    // Bitget shows "This wallet does not support BNB Chain" every time. Move this site to Solana so it stops asking.
+    if (insideWallet("bitget") && injectedSolFor("bitget") && e?.code !== -32002) {
+      rememberNet("solana");
+      try { sessionStorage.removeItem("aw-wallet"); } catch { /* private mode */ }
+      set({ busy: "", error: "The wallet picked in Bitget has no BNB Chain account, so this site switched to Solana. For BNB, tap the wallet name at the top of Bitget and pick a multi-chain wallet, then connect again." });
+      return;
+    }
     set({ busy: "", error: e?.code === -32002 ? String(e.message) : /reject|denied|cancel/i.test(String(e?.message)) ? "You cancelled in the wallet." : String(e?.message || e).slice(0, 200) });
   }
 }
@@ -818,7 +826,8 @@ export async function restoreWallet(): Promise<any | null> {
   const p = d?.provider ?? (name === "Browser wallet" ? legacyInjected() : null);
   if (!p) return null;
   const accts: string[] = await p.request({ method: "eth_accounts" }).catch(() => []);
-  if (!accts?.length) return null;
+  // Not connected any more (or the wallet has no EVM account): forget it, so the wallet isn't asked on every page.
+  if (!accts?.length) { try { sessionStorage.removeItem("aw-wallet"); } catch { /* private mode */ } return null; }
   watchRequests(name, p);
   set({ current: { name, provider: p } });
   return p;
