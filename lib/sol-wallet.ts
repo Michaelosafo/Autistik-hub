@@ -32,7 +32,12 @@ async function wallet<T>(action: string, body: object): Promise<T> {
 
 /** Signs a base64 transaction in the wallet, sends it, and waits until Solana confirms it. Returns the signature. */
 export async function signAndSend(sw: SolWallet, txBase64: string, onSubmitted?: (signature: string) => void): Promise<string> {
-  const [out] = await (sw.wallet.features["solana:signTransaction"] as any).signTransaction({ account: sw.account, transaction: toBytes(txBase64), chain: "solana:mainnet" });
+  // A wallet that never answers (app closed, request lost on the way back) must not leave the page waiting forever.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const [out] = await Promise.race([
+    (sw.wallet.features["solana:signTransaction"] as any).signTransaction({ account: sw.account, transaction: toBytes(txBase64), chain: "solana:mainnet" }),
+    new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Error("That took too long in the wallet. Nothing was sent. Try again.")), 180_000); }),
+  ]).finally(() => clearTimeout(timer));
   const { signature } = await wallet<{ signature: string }>("sol-send", { tx: toB64(out.signedTransaction) });
   onSubmitted?.(signature);
   for (let i = 0; i < 45; i++) {
