@@ -10,6 +10,7 @@ export const TRADER_TABS = [
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899" },
   { href: "/admin/ai-snipe-bsc", label: "⚡ Sniper (BSC)", sub: "Buys when liquidity lands", acc: "#22c55e" },
   { href: "/admin/rage", label: "💧 Rage", sub: "Deploy · add · remove", acc: "#ef4444" },
+  { href: "/admin/lobbysol", label: "🟣 LobbySol", sub: "Solana · deploy · add · remove", acc: "#9945FF" },
   { href: "/admin/ai-earn", label: "💰 Earn", sub: "HLP vault · steady", acc: "#eab308" },
 ];
 

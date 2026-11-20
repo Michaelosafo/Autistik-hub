@@ -63,10 +63,8 @@ export async function readAdminToken(owner: string | null, mintAddr: string, poo
 
 export async function buildAdminMint(owner: string, plan: { name: string; symbol: string; supply: string; feeBps: number }) {
   const { buildMint } = await import("@/lib/solana-launch");
-  if (plan.feeBps <= 0) {
-    return buildMint(owner, { name: plan.name, symbol: plan.symbol, supply: plan.supply });
-  }
-  return buildMint(owner, { name: plan.name, symbol: plan.symbol, supply: plan.supply, forceFeeBps: plan.feeBps });
+  // Always forced: the admin's own fee (0 = none), collected only by the deploying wallet.
+  return buildMint(owner, { name: plan.name, symbol: plan.symbol, supply: plan.supply, forceFeeBps: Math.max(0, plan.feeBps) });
 }
 
 export async function buildAdminWithdraw(owner: string, poolId: string, pct: number) {

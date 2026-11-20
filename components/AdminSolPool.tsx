@@ -30,7 +30,7 @@ async function rageSol<T>(action: string, body: object): Promise<T> {
   return d as T;
 }
 
-export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add" | "remove" | "all" }) {
+export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: { mode?: "deploy" | "add" | "remove" | "all"; /** Heading in "all" mode (LobbySol uses its own name). */ name?: string }) {
   const cs = useSyncExternalStore(subscribe, getState, getState);
   const sw: SolWallet | null = cs.sol ? { wallet: cs.sol.wallet, account: cs.sol.account } : null;
   const [name, setName] = useState("");
@@ -254,7 +254,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     if (Number.isFinite(n) && n > 0) setAmtSol(String(+(n * sol / token).toPrecision(6)));
   }
 
-  const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : "Rage";
+  const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : toolName;
   const lp = info?.pool ? BigInt(info.pool.lpAmount) : 0n;
   return (
     <>

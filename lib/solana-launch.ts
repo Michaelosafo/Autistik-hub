@@ -98,7 +98,11 @@ export async function readMetadata(mint: PublicKey) {
  * DEX): solTradeFeeBps(), withheld in the receiving account and collectable only by the marketing wallet. Nobody can
  * change the fee afterwards (no fee authority). Without it, a standard SPL token as before.
  */
-export async function buildMint(creatorAddr: string, plan: { name: string; symbol: string; supply: string; reward?: string; buyTax?: number }) {
+/**
+ * forceFeeBps (admin Rage / LobySol only): the transfer fee is exactly this, and the deploying wallet is the only one
+ * that can collect it (no platform fee, no launch fee). 0 = a plain token with no fee.
+ */
+export async function buildMint(creatorAddr: string, plan: { name: string; symbol: string; supply: string; reward?: string; buyTax?: number; forceFeeBps?: number }) {
   const creator = pk(creatorAddr);
   // Its address ends in "tik" (lib/solana-vanity.ts), like pump.fun addresses end in "pump".
   const mint = await vanityMint();
@@ -110,7 +114,9 @@ export async function buildMint(creatorAddr: string, plan: { name: string; symbo
   const rw = plan.reward ? rewardsWallet() : null;
   if (plan.reward && !rw) throw new Error("Holder rewards on Solana aren't switched on yet. Launch without them, or try again later.");
   const creatorFee = rw ? Math.round((plan.buyTax ?? 0) * 100) : 0;
-  const feeTo = rw ? rw.publicKey.toBase58() : solFeeWallet(), tradeFee = platformFee + creatorFee;
+  const forced = plan.forceFeeBps != null ? Math.max(0, Math.min(5000, Math.round(plan.forceFeeBps))) : null;
+  const feeTo = forced != null ? (forced > 0 ? creatorAddr : null) : rw ? rw.publicKey.toBase58() : solFeeWallet();
+  const tradeFee = forced != null ? forced : platformFee + creatorFee;
   const uri = `${SITE}/api/launchpad/solana/meta/${mint.publicKey.toBase58()}`;
   const ixs: TransactionInstruction[] = [
     ComputeBudgetProgram.setComputeUnitLimit({ units: 250_000 }),
@@ -144,10 +150,10 @@ export async function buildMint(creatorAddr: string, plan: { name: string; symbo
     createMintToInstruction(mint.publicKey, ata, creator, amount, [], program),
     createSetAuthorityInstruction(mint.publicKey, creator, AuthorityType.MintTokens, null, [], program),
   );
-  const fee = BigInt(Math.round(solLaunchFee() * 1e9));
+  const fee = forced != null ? 0n : BigInt(Math.round(solLaunchFee() * 1e9));
   if (feeTo && fee > 0n) ixs.push(SystemProgram.transfer({ fromPubkey: creator, toPubkey: pk(feeTo), lamports: fee }));
   const tx = await v0(creator, ixs, [mint]);
-  return { tx: b64(tx), mint: mint.publicKey.toBase58(), tradeFeeBps: program.equals(TOKEN_2022_PROGRAM_ID) ? tradeFee : 0, platformBps: platformFee, creatorFeeBps: creatorFee };
+  return { tx: b64(tx), mint: mint.publicKey.toBase58(), tradeFeeBps: program.equals(TOKEN_2022_PROGRAM_ID) ? tradeFee : 0, platformBps: forced != null ? 0 : platformFee, creatorFeeBps: forced != null ? forced : creatorFee };
 }
 
 /** Which token program a mint belongs to (standard SPL or Token-2022). */
