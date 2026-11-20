@@ -579,8 +579,15 @@ async function approveForSell(g: Gun, s: FSettings, token: `0x${string}`) {
   await fire(g, { ...s, copy_mev: false } as FSettings, { to: token, data, value: 0n });
 }
 /** USDT approved once per wallet, so USDT buys need no extra step when the moment comes. */
+const approving = new Set<string>();
 async function approveUsdt(g: Gun, s: FSettings) {
   if (g.usdtOk || g.usdt < 0.5 || g.bnb < 0.0003) return;
+  const key = g.a.address.toLowerCase();
+  if (approving.has(key)) return;
+  approving.add(key);
+  try { await approveUsdtNow(g, s); } finally { approving.delete(key); }
+}
+async function approveUsdtNow(g: Gun, s: FSettings) {
   const data = encodeFunctionData({ abi: ERC20, functionName: "approve", args: [ROUTER, 2n ** 256n - 1n] });
   await receipt(await fire(g, { ...s, copy_mev: false } as FSettings, { to: USDT, data, value: 0n }));
   g.usdtOk = true;
@@ -689,9 +696,10 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
   const waiting = () => liqTargets(s).filter((t) => t.on !== false && (t.state || "waiting") === "waiting");
   const live = s.mode === "live";
   let guns: Gun[] = [];
-  if (live && s.enabled && waiting().length) {
-    guns = await loadGuns();
-    // Pre-approve USDT so a USDT snipe is one transaction when the moment comes.
+  if (live && s.enabled) {
+    // Every run, even with nothing waiting: any wallet holding USDT gets it approved for PancakeSwap ahead of time,
+    // so the snipe itself is a single transaction the moment liquidity lands.
+    guns = await loadGuns().catch(() => []);
     await Promise.all(guns.map((g) => approveUsdt(g, s).catch(() => {})));
   }
   const notes: string[] = [];
@@ -729,6 +737,8 @@ export async function runLiqSnipe(s: FSettings): Promise<string> {
         const old = new Map(guns.map((g) => [g.slot, g]));
         for (const g of fresh) { const o = old.get(g.slot); if (o && o.a.address === g.a.address && o.nonce > g.nonce) g.nonce = o.nonce; }
         guns = fresh;
+        // A wallet funded or picked mid-minute: approve its USDT straight away, not at the next run.
+        for (const g of guns) if (!g.usdtOk) void approveUsdt(g, s).catch(() => {});
       }
     } else if (guns.length && !firing) {
       const still = await Promise.all(guns.map((g) => copyKey(g.slot).then((a) => a?.address === g.a.address, () => true)));
