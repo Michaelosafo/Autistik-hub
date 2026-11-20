@@ -146,7 +146,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     const n = name.trim();
     const s = symbol.trim().replace(/^\$/, "").toUpperCase();
     if (!n || n.length > 32) { setMsg("Name must be 1–32 characters."); return; }
-    if (!/^[A-Z0-9]{1,10}$/.test(s)) { setMsg("Ticker must be 1–10 letters or numbers (Solana's limit)."); return; }
+    if (!/^[A-Z0-9]{1,20}$/.test(s)) { setMsg("Ticker must be 1–20 letters or numbers."); return; }
     if (buyBps == null || sellBps == null) { setMsg(`Buy tax and sell tax must each be 0–${MAX_RAGE_TAX}%.`); return; }
     const whole = supply.replace(/[,_\s]/g, "");
     if (!/^\d{1,16}$/.test(whole) || BigInt(whole) <= 0n) { setMsg("Supply must be a whole number of tokens."); return; }
@@ -269,7 +269,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
       </div>
       <b>1. Deploy the token</b>
           <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Token" maxLength={32} /></label>
-          <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={10} /></label>
+          <label className="field"><span>Ticker</span><input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="TOK" maxLength={20} /></label>
           <label className="field"><span>Supply (whole tokens, 6 decimals)</span><input value={supply} onChange={(e) => setSupply(e.target.value)} inputMode="decimal" placeholder="1000000000" /></label>
           <label className="field"><span>Buy tax % <small className="muted">0–{MAX_RAGE_TAX}, default 0</small></span><input value={buyTax} onChange={(e) => setBuyTax(e.target.value)} inputMode="decimal" placeholder="0" aria-label="Buy tax percent" /></label>
           <label className="field"><span>Sell tax % <small className="muted">0–{MAX_RAGE_TAX}, default 0</small></span><input value={sellTax} onChange={(e) => setSellTax(e.target.value)} inputMode="decimal" placeholder="0" aria-label="Sell tax percent" /></label>
