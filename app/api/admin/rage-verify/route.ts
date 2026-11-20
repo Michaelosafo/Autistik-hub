@@ -1,5 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
+import { isEvmRage } from "@/lib/admin-rage";
 import { checkRageVerify, submitRageVerify } from "@/lib/rage-verify";
 import { rateLimit } from "@/lib/ratelimit";
 
@@ -19,6 +20,7 @@ export async function POST(req: Request) {
   const chain = String(b?.chain || "");
   const address = String(b?.address || "");
   const guid = String(b?.guid || "");
+  if (!isEvmRage(chain as "bsc")) return json({ status: "unsupported", message: "Rage is BNB Chain only." });
   try {
     const result = guid
       ? await checkRageVerify(chain, address, guid)

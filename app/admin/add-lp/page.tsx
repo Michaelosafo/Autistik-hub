@@ -7,7 +7,7 @@ import { adminState } from "@/lib/admin";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Add LP · Admin", robots: { index: false, follow: false } };
 
-/** Owner admin session: add liquidity on the network chosen in the form (BNB Chain by default). Removing it is a separate tab. */
+/** Owner admin session: add liquidity on BNB Chain only. Removing it is a separate tab. */
 export default async function AddLpPage() {
   const { staff, owner, helper } = await adminState();
   if (!owner && !helper) notFound();
@@ -18,7 +18,7 @@ export default async function AddLpPage() {
       <div className="page-head">
         <div className="label">Admin · add liquidity</div>
         <h1>Add LP</h1>
-        <p className="muted">Add liquidity for the token you deployed in Rage. BNB Chain is the default; the network control switches chain. The LP stays in your wallet.</p>
+        <p className="muted">Add liquidity for the token you deployed in Rage. BNB Chain only (PancakeSwap). The LP stays in your wallet.</p>
       </div>
       {owner ? <AdminDirectPool mode="add" /> : <div className="notice">Only the owner can add liquidity here.</div>}
     </div>
