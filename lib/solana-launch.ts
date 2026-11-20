@@ -1,1 +1,1 @@
-$(cat /tmp/solana-launch.ts)
+PLACEHOLDER_WILL_BE_REPLACED
