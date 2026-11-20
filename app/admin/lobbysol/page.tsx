@@ -18,8 +18,8 @@ export default async function LobbySolPage() {
       <div className="snp-hero" style={{ background: "linear-gradient(135deg, #9945FF, #14F195)" }}>
         <Link href="/admin" className="snp-back">← Admin</Link>
         <h1>🟣 LobbySol</h1>
-        <p>Deploy a Solana token, add liquidity on Raydium, then remove it when you want. Solana only.</p>
-        <details><summary>How it works</summary><p>Connect your own Solana wallet (Phantom, Solflare or Bitget). Deploy the token with an optional tax (only your wallet can collect it), add liquidity with SOL, and remove it later from the same wallet. Every step is signed in your wallet.</p></details>
+        <p>Deploy a Solana token, add liquidity on Raydium paid in USDT, then remove it when you want. Solana only.</p>
+        <details><summary>How it works</summary><p>Connect your own Solana wallet (Phantom, Solflare or Bitget). Deploy the token with an optional tax (only your wallet can collect it), add liquidity paid in USDT (swapped to SOL for the pool), and remove it later from the same wallet; the SOL side comes back as USDT. SOL only pays fees (Raydium charges about 0.15 SOL to create a pool). Every step is signed in your wallet.</p></details>
       </div>
       <div className="card stack" style={{ gap: 10 }}>
         <div className="notice" style={{ fontWeight: 700 }}>Network: Solana · SOL</div>

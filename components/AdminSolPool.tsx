@@ -41,7 +41,9 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
   const [tokenIn, setTokenIn] = useState("");
   const [savedCAs, setSavedCAs] = useState<{ mint: string; name: string; symbol: string }[]>([]);
   const [amtToken, setAmtToken] = useState("");
+  // LobbySol: the liquidity side is typed in USDT; it's swapped to SOL (Jupiter) right before it goes into the pool.
   const [amtSol, setAmtSol] = useState("");
+  const [bal, setBal] = useState<{ sol: number; usdt: number; solUsd: number } | null>(null);
   const [pct, setPct] = useState(100);
   const [askRemove, setAskRemove] = useState(false);
   const [known, setKnown] = useState<{ mint: string; pool: string } | null>(null);
@@ -101,6 +103,7 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     if (!mint) return;
     let gone = false;
     rageSol<Info>("info", { owner: sw?.account.address || "", mint, ...(knownPool ? { pool: knownPool } : {}) }).then((d) => { if (!gone) setInfo(d); }).catch((e) => { if (!gone) setMsg(solErr(e)); });
+    if (sw) rageSol<{ sol: number; usdt: number; solUsd: number }>("balances", { owner: sw.account.address }).then((d) => { if (!gone) setBal(d); }).catch(() => {});
     return () => { gone = true; };
   }, [mint, sw?.account.address, tick, knownPool]);
 
@@ -190,42 +193,68 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     } finally { setBusy(false); }
   }
 
+  const balances = (w: SolWallet) => rageSol<{ sol: number; usdt: number; solUsd: number }>("balances", { owner: w.account.address });
+
   async function add() {
     if (!sw) { setMsg("The Solana wallet isn't connected any more. Tap \"Connect a Solana wallet\", then Add liquidity again."); connect(); return; }
     if (!mint || !info) { setMsg("Paste the token address and wait for its details to load."); return; }
     if (!amtToken || !amtSol) { setMsg("Type both amounts."); return; }
+    const usdt = Number(amtSol);
+    if (!(usdt > 0)) { setMsg("Type the USDT amount."); return; }
     setBusy(true);
     try {
+      const b0 = await balances(sw);
+      if (b0.usdt + 1e-9 < usdt) { setMsg(`Not enough USDT: this wallet has ${b0.usdt.toFixed(2)} USDT on Solana. Add USDT (SPL) or lower the amount.`); return; }
+      const feeNeed = info.pool ? 0.02 : SOL_POOL_COST;
+      if (b0.sol < feeNeed) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : " (Raydium charges about 0.15 SOL to create a pool)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
+      // 1) USDT → SOL for the pool side.
+      setMsg(`Confirm in your wallet: swap ${usdt} USDT to SOL for the pool.`);
+      const sw1 = await rageSol<{ tx: string; sol: number }>("swap-in", { owner: sw.account.address, usdt: String(usdt) });
+      const swapSig = await sign(sw, sw1.tx, `swap ${usdt} USDT to SOL`);
+      const solIn = (sw1.sol * 0.999).toFixed(9);
+      // 2) The liquidity, with the SOL that arrived.
       if (!info.pool) {
-        setMsg(`Confirm in your wallet: create the Raydium pool. Raydium charges about 0.15 SOL on top (keep about ${SOL_POOL_COST} SOL spare).`);
-        const r = await rageSol<{ tx: string; pool: string; lpMint: string }>("pool", { owner: sw.account.address, mint, tokens: amtToken, sol: amtSol });
+        setMsg(`Confirm in your wallet: create the Raydium pool with ${amtToken} ${info.symbol || "tokens"} + ${Number(solIn).toFixed(4)} SOL (from your ${usdt} USDT).`);
+        const r = await rageSol<{ tx: string; pool: string; lpMint: string }>("pool", { owner: sw.account.address, mint, tokens: amtToken, sol: solIn });
         const sig = await sign(sw, r.tx, "create the pool and add liquidity");
         setKnown({ mint, pool: r.pool });
-        reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} + ${amtSol} SOL`);
+        reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} + ${usdt} USDT (as ${solIn} SOL)`);
         setAmtToken(""); setAmtSol(""); setTick((x) => x + 1);
-        setMsg(`✅ Liquidity is in. ${CHAIN.explorer}/tx/${sig}`);
+        setMsg(`✅ Liquidity is in (paid ${usdt} USDT). ${CHAIN.explorer}/tx/${sig}`);
       } else {
         setMsg("Confirm in your wallet: add liquidity at the pool's price.");
-        const r = await rageSol<{ tx: string }>("add", { owner: sw.account.address, pool: info.pool.pool, side: "token", amount: amtToken, decimals: info.decimals });
+        const r = await rageSol<{ tx: string }>("add", { owner: sw.account.address, pool: info.pool.pool, side: "sol", amount: solIn, decimals: info.decimals });
         const sig = await sign(sw, r.tx, "add liquidity");
-        reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} on Raydium`);
+        reportActivity("liquidity", "solana", sig, `Admin added ${usdt} USDT of liquidity to ${info.symbol || "token"} on Raydium`);
         setAmtToken(""); setAmtSol(""); setTick((x) => x + 1);
-        setMsg(`✅ Liquidity added. ${CHAIN.explorer}/tx/${sig}`);
+        setMsg(`✅ Liquidity added (paid ${usdt} USDT). ${CHAIN.explorer}/tx/${sig}`);
       }
+      void swapSig;
       if (mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
-    } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
+    } catch (e) { setMsg(`${solErr(e)} If the USDT was already swapped, the SOL is in your wallet: tap Add liquidity again.`); } finally { setBusy(false); }
   }
 
   async function remove() {
     if (!sw) { setMsg("The Solana wallet isn't connected any more. Tap \"Connect a Solana wallet\", then try again."); connect(); return; }
     if (!info?.pool) return;
-    if (!confirm(`Remove ${pct}% of the LP in this wallet? The tokens and SOL come back here. Liquidity that was burned or locked on a normal launch is not touched.`)) return;
+    if (!confirm(`Remove ${pct}% of the LP in this wallet? The tokens come back here, and the SOL side is swapped back to USDT. Liquidity that was burned or locked on a normal launch is not touched.`)) return;
     setBusy(true);
     try {
+      const before = (await balances(sw)).sol;
       const r = await rageSol<{ tx: string }>("remove", { owner: sw.account.address, pool: info.pool.pool, pct });
       const sig = await sign(sw, r.tx, `remove ${pct}% of the liquidity`);
       reportActivity("liquidity", "solana", sig, `Admin removed ${pct}% of ${info.symbol || "token"} liquidity`);
-      setMsg(`✅ Removed ${pct}% of the liquidity in this wallet. ${CHAIN.explorer}/tx/${sig}`);
+      setTick((x) => x + 1);
+      // The SOL that came out, swapped back to USDT (your own SOL for fees stays).
+      let got = 0;
+      for (let i = 0; i < 6 && got <= 0.002; i++) { await new Promise((res) => setTimeout(res, 1500)); got = (await balances(sw)).sol - before; }
+      if (got > 0.002) {
+        try {
+          const out = await rageSol<{ tx: string; usdt: number }>("swap-out", { owner: sw.account.address, sol: got.toFixed(9) });
+          const sig2 = await sign(sw, out.tx, `swap ${got.toFixed(4)} SOL back to USDT`);
+          setMsg(`✅ Removed ${pct}% of the liquidity and swapped ${got.toFixed(4)} SOL back to about ${out.usdt.toFixed(2)} USDT. ${CHAIN.explorer}/tx/${sig} · ${CHAIN.explorer}/tx/${sig2}`);
+        } catch (e) { setMsg(`✅ Removed ${pct}% of the liquidity (${CHAIN.explorer}/tx/${sig}), but the swap back to USDT didn't go through: ${solErr(e)} The SOL is in your wallet.`); }
+      } else setMsg(`✅ Removed ${pct}% of the liquidity in this wallet. ${CHAIN.explorer}/tx/${sig}`);
       setTick((x) => x + 1);
     } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
   }
@@ -251,7 +280,8 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     const token = Number(pool.tokenReserve), sol = Number(pool.solReserve);
     if (!(token > 0) || !(sol >= 0)) return;
     const n = Number(v);
-    if (Number.isFinite(n) && n > 0) setAmtSol(String(+(n * sol / token).toPrecision(6)));
+    // The matching USDT for the token amount, at the pool's price and today's SOL price.
+    if (Number.isFinite(n) && n > 0 && bal?.solUsd) setAmtSol(String(+(n * sol / token * bal.solUsd).toFixed(2)));
   }
 
   const title = mode === "add" ? "Add LP" : mode === "remove" ? "Remove LP" : toolName;
@@ -310,7 +340,7 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
             🪙 <b>{info.symbol || "Token"}</b>
             {info.feeBps != null && info.feeBps > 0 ? <> · transfer fee {info.feeBps / 100}%</> : <> · no transfer fee</>}
             {info.pool ? <> · pool: {showNum(info.pool.tokenReserve)} {info.symbol || "tokens"} + {showNum(info.pool.solReserve)} SOL</> : <> · no Raydium pool yet: the amounts you add set the starting price</>}
-            {sw && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol || "tokens"} and {fmt(info.solBal, 9)} SOL</small></>}
+            {sw && <><br /><small>You have {fmt(info.tokenBal, info.decimals)} {info.symbol || "tokens"}, <b>{bal ? bal.usdt.toFixed(2) : "…"} USDT</b> and {fmt(info.solBal, 9)} SOL (fees)</small></>}
             {info.pool && <><br /><small>Pool <a href={`${CHAIN.explorer}/account/${info.pool.pool}`} target="_blank" rel="noreferrer">{info.pool.pool.slice(0, 4)}…{info.pool.pool.slice(-4)}</a></small></>}
           </div>
           {info.feeBps != null && info.feeBps > 0 && (
@@ -320,10 +350,10 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
             <>
               <b>3. Add liquidity</b>
               <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
-                {info.pool ? "The pool already has a price. The token amount is what you add; SOL follows that price." : `A new pool needs both amounts. Keep about ${SOL_POOL_COST} SOL spare for Raydium's pool fee and rent.`}
+                {info.pool ? "The pool already has a price. The USDT amount is what you add (swapped to SOL); the tokens follow that price." : `A new pool needs both amounts. Keep about ${SOL_POOL_COST} SOL spare for Raydium's pool fee and rent.`}
               </p>
               <label className="field"><span>{info.symbol || "Tokens"}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
-              <label className="field"><span>SOL</span><input value={amtSol} onChange={(e) => setAmtSol(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
+              <label className="field"><span>USDT <small className="muted">swapped to SOL for the {info.symbol || "token"}/SOL pool</small></span><input value={amtSol} onChange={(e) => setAmtSol(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <button className="btn primary" type="button" disabled={busy || !amtToken || !amtSol} onClick={add}>{info.pool ? "Add liquidity" : "Create pool"}</button>
             </>
           )}

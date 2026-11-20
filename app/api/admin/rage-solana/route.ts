@@ -7,6 +7,24 @@ import { SOL_ADDR, buildAddLiquidity, buildPool } from "@/lib/solana-launch";
 import { buildAdminCollect, buildAdminMint, buildAdminWithdraw, readAdminToken } from "@/lib/solana-launch-admin";
 import { parseUnits } from "viem";
 
+// LobbySol pays in USDT: USDT is swapped to SOL (Jupiter) right before liquidity goes in, and SOL back to USDT after
+// it comes out. SOL only pays fees.
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+const SOL_USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+const JUP_KEY = process.env.JUPITER_API_KEY || "";
+const JUP = process.env.JUPITER_API || (JUP_KEY ? "https://api.jup.ag" : "https://lite-api.jup.ag");
+const JUP_H: Record<string, string> = JUP_KEY ? { "x-api-key": JUP_KEY } : {};
+async function jupSwap(owner: string, inputMint: string, outputMint: string, amount: bigint, slippageBps = 100) {
+  const q = await fetch(`${JUP}/swap/v1/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=${slippageBps}&restrictIntermediateTokens=true`, { cache: "no-store", headers: JUP_H, signal: AbortSignal.timeout(10_000) }).then((r) => r.json());
+  if (!q?.outAmount) throw new Error(q?.error || "Jupiter has no route for that swap right now.");
+  const built = await fetch(`${JUP}/swap/v1/swap`, { method: "POST", headers: { "content-type": "application/json", ...JUP_H }, signal: AbortSignal.timeout(12_000), body: JSON.stringify({
+    quoteResponse: q, userPublicKey: owner, wrapAndUnwrapSol: true, dynamicComputeUnitLimit: true,
+    prioritizationFeeLamports: { priorityLevelWithMaxLamports: { maxLamports: 1_000_000, priorityLevel: "high" } },
+  }) }).then((r) => r.json());
+  if (!built?.swapTransaction) throw new Error(built?.error || "Jupiter couldn't build the swap.");
+  return { tx: String(built.swapTransaction), out: String(q.outAmount), min: String(q.otherAmountThreshold || q.outAmount) };
+}
+
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
@@ -63,6 +81,35 @@ export async function POST(req: Request) {
         if (!SOL_ADDR.test(String(b?.pool || ""))) return json({ error: "Missing the pool." }, 400);
         const pct = Number(b?.pct);
         return json(await buildAdminWithdraw(owner, b.pool, pct));
+      }
+      case "balances": {
+        // The wallet's USDT and SOL, and USDT for 1 SOL right now.
+        const { Connection, PublicKey } = await import("@solana/web3.js");
+        const conn = new Connection(process.env.WALLET_SOLANA_RPC || process.env.NEXT_PUBLIC_SOLANA_RPC || "https://solana-rpc.publicnode.com", "confirmed");
+        const pk = new PublicKey(owner);
+        const [lamports, accs, px] = await Promise.all([
+          conn.getBalance(pk),
+          conn.getParsedTokenAccountsByOwner(pk, { mint: new PublicKey(SOL_USDT) }).then((r) => r.value).catch(() => []),
+          fetch(`${JUP}/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${SOL_USDT}&amount=1000000000&slippageBps=100`, { cache: "no-store", headers: JUP_H, signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => null),
+        ]);
+        const usdt = (accs as any[]).reduce((a, x) => a + Number(x?.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0), 0);
+        return json({ sol: lamports / 1e9, usdt, solUsd: px?.outAmount ? Number(px.outAmount) / 1e6 : 0 });
+      }
+      case "swap-in": {
+        // USDT → SOL for the pool side.
+        let raw = 0n;
+        try { raw = parseUnits(String(b?.usdt || ""), 6); } catch { /* bad number */ }
+        if (raw < 500_000n) return json({ error: "Type at least 0.5 USDT." }, 400);
+        const r = await jupSwap(owner, SOL_USDT, SOL_MINT, raw);
+        return json({ tx: r.tx, sol: Number(r.min) / 1e9, solOut: Number(r.out) / 1e9 });
+      }
+      case "swap-out": {
+        // SOL → USDT after removing liquidity.
+        let raw = 0n;
+        try { raw = parseUnits(String(b?.sol || ""), 9); } catch { /* bad number */ }
+        if (raw < 1_000_000n) return json({ error: "Too little SOL to swap back." }, 400);
+        const r = await jupSwap(owner, SOL_MINT, SOL_USDT, raw);
+        return json({ tx: r.tx, usdt: Number(r.out) / 1e6 });
       }
       case "collect": {
         if (!SOL_ADDR.test(String(b?.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
