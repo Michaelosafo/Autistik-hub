@@ -318,7 +318,8 @@ export async function buildAdminMint(creatorAddr: string, input: { name: string;
   const name = input.name.trim().replace(/\s+/g, " ");
   const symbol = input.symbol.trim().toUpperCase().replace(/^\$/, "");
   if (name.length < 1 || name.length > 32) throw new Error("Name must be 1–32 characters.");
-  if (!/^[A-Z0-9]{1,12}$/.test(symbol)) throw new Error("Ticker must be 1–12 letters or numbers.");
+  // Solana's token metadata (Metaplex) rejects tickers over 10 characters with error 0xc, after the wallet signs.
+  if (!/^[A-Z0-9]{1,10}$/.test(symbol)) throw new Error("Ticker must be 1–10 letters or numbers (Solana's limit).");
   if (!/^\d{1,16}$/.test(input.supply)) throw new Error("Supply must be a whole number of tokens.");
   const feeBps = input.feeBps;
   if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 5000) throw new Error("Tax must be 0–50%.");
