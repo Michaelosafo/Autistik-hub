@@ -1,9 +1,9 @@
 "use client";
 import { reportActivity } from "@/lib/activity-client";
 import { MAX_RAGE_TAX, SOL_ADDR, rageTaxBps } from "@/lib/admin-rage";
-import { getState, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
+import { getState, lostSolSign, pickWallet, restoreSol, setNetwork, subscribe } from "@/lib/connect";
 import { CHAINS, SOL_DECIMALS, SOL_POOL_COST } from "@/lib/launchpad";
-import { signAndSend, solErr, type SolWallet } from "@/lib/sol-wallet";
+import { sendSigned, signAndSend, solErr, type SolWallet } from "@/lib/sol-wallet";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { formatUnits } from "viem";
 
@@ -15,6 +15,9 @@ import { formatUnits } from "viem";
 const CHAIN = CHAINS.solana;
 const SAVED = "autistik-admin-direct-token:solana";
 const SAVED_LIST = "autistik-admin-direct-tokens:solana";
+/** A deploy sent to the wallet to sign, kept until it is sent, so a tab reload on the phone can still finish it. */
+const PENDING = "autistik-rage-sol-pending";
+type Pending = { tx: string; mint: string; symbol: string; feeBps: number; at: number };
 const fmt = (raw: string, d: number) => {
   try { return Number(formatUnits(BigInt(raw), d)).toLocaleString("en-US", { maximumFractionDigits: 6 }); } catch { return "0"; }
 };
@@ -56,6 +59,37 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
   const knownPool = known?.mint === mint ? known.pool : "";
 
   useEffect(() => { restoreSol().catch(() => {}); }, []);
+  // Came back from the wallet app to a reloaded tab: finish the deploy that was signed there.
+  useEffect(() => {
+    let p: Pending | null = null;
+    try { p = JSON.parse(localStorage.getItem(PENDING) || "null"); } catch { /* private mode */ }
+    if (!p?.tx || !p.mint) return;
+    const pend = p;
+    if (Date.now() - pend.at > 15 * 60_000) { try { localStorage.removeItem(PENDING); } catch { /* ignore */ } return; }
+    let gone = false;
+    (async () => {
+      setBusy(true);
+      setMsg(`Finishing the ${pend.symbol} deploy you signed in your wallet…`);
+      try {
+        let signed: Uint8Array | null = null;
+        for (let i = 0; i < 20 && !gone && !signed; i++) {
+          signed = await lostSolSign(pend.tx);
+          if (!signed) await new Promise((r) => setTimeout(r, 3000));
+        }
+        if (gone) return;
+        if (!signed) { setMsg(`The ${pend.symbol} deploy wasn't sent: the wallet's answer didn't come back. Nothing was spent. Deploy again.`); return; }
+        const sig = await sendSigned(signed, () => save(pend.mint));
+        save(pend.mint); setTick((x) => x + 1);
+        setMsg(`✅ ${pend.symbol} deployed.${pend.feeBps > 0 ? ` Transfer fee ${pend.feeBps / 100}%.` : ""} Now add the liquidity below. ${CHAIN.explorer}/token/${pend.mint} · ${CHAIN.explorer}/tx/${sig}`);
+      } catch (e) {
+        if (!gone) setMsg(/blockhash|expired/i.test(String((e as any)?.message)) ? `The ${pend.symbol} deploy took too long to come back from the wallet and expired. Nothing was spent. Deploy again.` : solErr(e));
+      } finally {
+        try { localStorage.removeItem(PENDING); } catch { /* ignore */ }
+        if (!gone) setBusy(false);
+      }
+    })();
+    return () => { gone = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     try {
       const saved = localStorage.getItem(SAVED);
@@ -90,7 +124,7 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     setBusy(false); setKnown(null);
     setName(""); setSymbol(""); setSupply("1000000000"); setBuyTax("0"); setSellTax("0");
     setTokenIn(""); setInfo(null); setAmtToken(""); setAmtSol(""); setAskRemove(false); setMsg("Ready for another deployment.");
-    try { localStorage.removeItem(SAVED); } catch { /* private mode */ }
+    try { localStorage.removeItem(SAVED); localStorage.removeItem(PENDING); } catch { /* private mode */ }
   }
 
   const showDeploy = mode === "all" || mode === "deploy";
@@ -114,7 +148,9 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
     try {
       setMsg(feePct ? `Confirm in your wallet: deploy ${s} with a ${feePct}% transfer fee.` : "Confirm in your wallet: deploy the token. The whole supply comes to this wallet.");
       const built = await rageSol<{ tx: string; mint: string; feeBps: number }>("mint", { owner: sw.account.address, name: n, symbol: s, supply: whole, buyTax, sellTax });
+      try { localStorage.setItem(PENDING, JSON.stringify({ tx: built.tx, mint: built.mint, symbol: s, feeBps: built.feeBps, at: Date.now() } satisfies Pending)); } catch { /* private mode */ }
       const sig = await signAndSend(sw, built.tx, () => {
+        try { localStorage.removeItem(PENDING); } catch { /* ignore */ }
         // Switch the panel to the new mint immediately after wallet submission,
         // so delayed confirmation lookup cannot leave the previous token selected.
         save(built.mint);
@@ -124,7 +160,10 @@ export default function AdminSolPool({ mode = "all" }: { mode?: "deploy" | "add"
       setTick((x) => x + 1);
       const feeNote = built.feeBps > 0 ? ` Transfer fee ${built.feeBps / 100}% (Token-2022, every transfer).` : " No transfer fee.";
       setMsg(`✅ ${s} deployed.${feeNote} Now add the liquidity below. ${CHAIN.explorer}/token/${built.mint} · ${CHAIN.explorer}/tx/${sig}`);
-    } catch (e) { setMsg(solErr(e)); } finally { setBusy(false); }
+    } catch (e) {
+      try { localStorage.removeItem(PENDING); } catch { /* ignore */ }
+      setMsg(solErr(e));
+    } finally { setBusy(false); }
   }
 
   async function add() {
