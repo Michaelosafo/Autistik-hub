@@ -9,8 +9,9 @@ export const metadata = { title: "EthRise · Admin (Ethereum)", robots: { index:
 
 /** EthRise: BnbRage on Ethereum (Uniswap V2). Deploy, add liquidity, first buy, remove. The admin's own wallet signs each step. */
 export default async function EthRisePage() {
-  const { staff, owner, helper } = await adminState();
-  if (!owner && !helper) notFound();
+  const { staff, owner } = await adminState();
+  // Owner only (admins you add see the BNB Chain tools only).
+  if (!owner) notFound();
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <Link href="/admin">Admin</Link> and confirm your 2-step code, then come back.</p></div>;
   return (
     <div className="stack rg">

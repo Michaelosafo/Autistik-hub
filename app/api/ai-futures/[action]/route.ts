@@ -57,6 +57,8 @@ const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); ret
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
   const id = desk(req, await mine());
+  // SniperEth, SniperRobinhood and SniperLobbySol are the owner's only; other admins have the BNB Chain sniper.
+  const isOwner = (await adminState()).owner;
   if (!id) return json({ error: "Open the AI Trader page once first (Admin → AI trader), then come back." }, 403);
   const b = await req.json().catch(() => ({}));
   return withTrader(id, async () => {
@@ -128,7 +130,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
                 // Wallets that already sent their buy (kept so they never buy twice) and when the first did.
                 fired: Array.isArray(t?.fired) ? [...new Set(t.fired.map(Number).filter((x: number) => x >= 1 && x <= 13))].sort((a: number, b: number) => a - b) : undefined,
                 first_at: t?.first_at && !isNaN(Date.parse(t.first_at)) ? String(t.first_at) : undefined,
-              })).filter((t: any) => NETS.includes(t.chain) && mint(t.token, t.chain) && !seen.has(`${t.chain}|${keyOf(t.token)}`) && seen.add(`${t.chain}|${keyOf(t.token)}`)).slice(0, 40);
+              })).filter((t: any) => NETS.includes(t.chain) && (isOwner || t.chain === "bsc") && mint(t.token, t.chain) && !seen.has(`${t.chain}|${keyOf(t.token)}`) && seen.add(`${t.chain}|${keyOf(t.token)}`)).slice(0, 40);
             }
           }
           if (Array.isArray(b.copy_wallets) && isCopyDesk()) {
@@ -273,6 +275,8 @@ export async function POST(req: Request, { params }: { params: { action: string 
           if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);
           const slow = await rateLimit(req, params.action, 30, 60, String(id));
           if (slow) return slow;
+          const offBsc = (b.net && b.net !== "bsc") || (b.chain && b.chain !== "bsc") || params.action === "sniper-v2-balances";
+          if (offBsc && !isOwner) return json({ error: "Only the owner can use this sniper." }, 403);
           if (b.net === "ethereum" || b.net === "robinhood" || b.chain === "ethereum" || b.chain === "robinhood") {
             // SniperEth / SniperRobinhood.
             const v2 = await import("@/lib/evm-snipe");
@@ -302,6 +306,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
         case "sniper-sol-create":
         case "sniper-sol-reveal":
         case "sniper-sol-import":
+          if (params.action !== "sniper-card" && isLiqDesk() && !isOwner) return json({ error: "Only the owner can use the Solana sniper." }, 403);
         case "sniper-bridge-quote":
         case "sniper-bridge": {
           if (!isLiqDesk()) return json({ error: "Sniper only." }, 400);

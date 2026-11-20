@@ -15,12 +15,15 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "admin-rage-verify", 20, 60);
   if (slow) return slow;
-  if (!(await adminState()).staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  const who = await adminState();
+  if (!who.staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
   const b = await req.json().catch(() => null);
   const chain = String(b?.chain || "");
   const address = String(b?.address || "");
   const guid = String(b?.guid || "");
   if (!isEvmRage(chain as "bsc")) return json({ status: "unsupported", message: "Rage works on BNB Chain, Ethereum and Robinhood Chain." });
+  // EthRise / WanaRobinhood are the owner's only.
+  if (chain !== "bsc" && !who.owner) return json({ status: "unsupported", message: "Only the owner can use this chain." });
   try {
     const result = guid
       ? await checkRageVerify(chain, address, guid)

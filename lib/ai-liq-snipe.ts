@@ -84,8 +84,11 @@ const REST_WINDOW_MS = 90_000; // 1.5 min: never buy later than this after the f
 // SniperBnbSol: an 0x token on BNB Chain. SniperLobbySol: a Solana mint. Anything else is ignored.
 const isMint = (t: string) => /^0x[0-9a-fA-F]{40}$/.test(t);
 const isSolMint = (t: string) => /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(t);
+// The owner's trader is id 1: only the owner's sniper runs Ethereum, Robinhood Chain and Solana tokens.
+const OWNER_TRADER = 1;
 export const liqTargets = (s: FSettings): LiqTarget[] => (Array.isArray((s as any).liq_targets) ? (s as any).liq_targets : []).filter((t: any) => {
   const tok = String(t?.token || "");
+  if (t?.chain && t.chain !== "bsc" && (() => { try { return T() % 100000 !== OWNER_TRADER; } catch { return true; } })()) return false;
   // SniperEth / SniperRobinhood: an 0x token on Ethereum or Robinhood Chain.
   return t?.chain === "solana" ? isSolMint(tok) : (!t?.chain || t.chain === "bsc" || t.chain === "ethereum" || t.chain === "robinhood") && isMint(tok);
 });

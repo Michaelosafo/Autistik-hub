@@ -36,7 +36,10 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "admin-rage-solana", 40, 600);
   if (slow) return slow;
-  if (!(await adminState()).staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  // LobbySol is the owner's only.
+  const who = await adminState();
+  if (!who.staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  if (!who.owner) return json({ error: "Only the owner can use LobbySol." }, 403);
   const b = await req.json().catch(() => null);
   const action = String(b?.action || "");
   const owner = String(b?.owner || "");
