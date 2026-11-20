@@ -3,7 +3,8 @@ import { adminState } from "@/lib/admin";
 import { SOL_ADDR as ADMIN_SOL, rageTaxBps } from "@/lib/admin-rage";
 import { rateLimit } from "@/lib/ratelimit";
 import { SOL_DECIMALS } from "@/lib/launchpad";
-import { SOL_ADDR, buildAddLiquidity, buildAdminCollect, buildAdminMint, buildAdminWithdraw, buildPool, readAdminToken } from "@/lib/solana-launch";
+import { SOL_ADDR, buildAddLiquidity, buildPool } from "@/lib/solana-launch";
+import { buildAdminCollect, buildAdminMint, buildAdminWithdraw, readAdminToken } from "@/lib/solana-launch-admin";
 import { parseUnits } from "viem";
 
 export const runtime = "nodejs";
@@ -30,7 +31,6 @@ export async function POST(req: Request) {
         const buy = rageTaxBps(b?.buyTax);
         const sell = rageTaxBps(b?.sellTax);
         if (buy == null || sell == null) return json({ error: "Buy tax and sell tax must each be 0–50%." }, 400);
-        // Token-2022 has one transfer fee, so a different buy and sell percent becomes the higher of the two.
         const feeBps = Math.max(buy, sell);
         const supply = String(b?.supply || "").replace(/[,_\s]/g, "");
         const built = await buildAdminMint(owner, { name: String(b?.name || ""), symbol: String(b?.symbol || ""), supply, feeBps });
