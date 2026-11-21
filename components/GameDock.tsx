@@ -50,10 +50,11 @@ export default function GameDock({ children }: { children: React.ReactNode }) {
     const h = host.current;
     if (!h) return;
     const g = game();
+    const racing = !!(g && g.racing());
+    if (racing) g!.mini(true); // puts the race screen back in the page first
     const st = h.querySelector(".stage");
-    if (g && g.racing() && st && box.current) {
+    if (racing && st && box.current) {
       stageHome.current = { parent: st.parentNode!, next: st.nextSibling };
-      g.mini(true);
       box.current.appendChild(st);
       setMini(true);
     } else {

@@ -1780,6 +1780,8 @@ function doContinue(){if(!S)return;
   S.pausedAt=0;$('#pauseOv').hidden=true;enterImmersive(true);}
 $('#bContinue').onclick=doContinue;
 $('#bQuit').onclick=()=>{$('#pauseOv').hidden=true;if(S)S.pausedAt=0;clearResume();exitImmersive();};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){[0,120,400,900].forEach(t=>setTimeout(()=>{try{resize();}catch(e){}},t));}});
+document.addEventListener('fullscreenchange',()=>{[0,150,500].forEach(t=>setTimeout(()=>{try{resize();}catch(e){}},t));});
 document.addEventListener('visibilitychange',()=>{if(!S||state!=='race')return;if(document.hidden){if(!S.me.finished&&racing()){S.pausedAt=S.pausedAt||Date.now();saveResume();}}else if(S.pausedAt)showPause();});
 addEventListener('pagehide',()=>{if(S&&state==='race'&&!S.me.finished&&racing())saveResume();});
 addEventListener('keydown',e=>{if(e.key==='Escape'&&S&&state==='race'&&!S.me.finished&&racing()&&immersive()){if($('#pauseOv').hidden){showPause();}else doContinue();}});
@@ -2061,13 +2063,27 @@ $('#pads').querySelectorAll('button[data-k]').forEach(b=>{const k=b.dataset.k;
 
 /* ================= full screen ================= */
 function immersive(){return document.body.classList.contains('immersive');}
+/* Full screen: the race screen is lifted out to the top of the page (a body-level holder) so nothing else on the
+ * site can squash or cover it, and put back when you leave full screen. */
+let stageHome=null;
+function liftStage(on){
+  const st=$('#stage');if(!st)return;
+  let hold=document.getElementById('hfFull');
+  if(on){
+    if(!hold){hold=document.createElement('div');hold.id='hfFull';document.body.appendChild(hold);}
+    const hf=document.querySelector('.hf:not(#hfFull)');hold.className=(hf?hf.className:'hf')+' hf-full';
+    if(st.parentNode!==hold){stageHome={p:st.parentNode,n:st.nextSibling};hold.appendChild(st);}
+  }else if(stageHome&&st.parentNode===hold){stageHome.p.insertBefore(st,stageHome.n&&stageHome.n.parentNode===stageHome.p?stageHome.n:null);stageHome=null;}
+}
 function enterImmersive(gesture){
+  liftStage(true);
   document.body.classList.add('immersive');(document.querySelector('.hf .wrap')||{classList:{remove(){},add(){}}}).classList.remove('landing');$('#launchOv').hidden=true;$('#bExit').hidden=false;
   if(gesture){const el=$('#stage');try{const p=el.requestFullscreen?el.requestFullscreen({navigationUI:'hide'}):el.webkitRequestFullscreen?el.webkitRequestFullscreen():null;
     if(p&&p.then)p.then(()=>{try{screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{});}catch(e){}}).catch(()=>{});}catch(e){}}
   requestAnimationFrame(resize);setTimeout(resize,300);
 }
 function exitImmersive(){
+  liftStage(false);
   document.body.classList.remove('immersive','racing');(document.querySelector('.hf .wrap')||{classList:{remove(){},add(){}}}).classList.add('landing');$('#bExit').hidden=true;$('#pads').hidden=true;
   try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(()=>{});}catch(e){}
   if(state==='race'){S=null;state=nr?'lobby':'home';if(nr)lobbyPresence();}clearResume();$('#pauseOv').hidden=true;
@@ -2076,7 +2092,8 @@ function exitImmersive(){
 }
 $('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
   if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('car');}return;}
-  wizHome();};
+  // Play = straight to picking your car, then you're racing (other modes are one tap back).
+  state='home';wizFlow='friends';wizShow('car');};
 $('#bExit').onclick=exitImmersive;
 /* PLAY GAME at the top of the page: straight into the full-screen game */
 const toRace=()=>{try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');};
@@ -2166,7 +2183,7 @@ const Sound=(()=>{
     blade:()=>{burst(0.7,{f:3400,q:5,vol:0.14,sweep:1.3});tone(700,0.6,{type:'sawtooth',vol:0.05,slide:1.6});}};
   // driving music: 124 bpm, kick, offbeat hats, a minor-key bassline and stabs
   const BASS=[45,45,57,45,48,48,60,48,43,43,55,43,50,50,52,55],mtof=m=>440*Math.pow(2,(m-69)/12);
-  function music(){if(!ac||mode!=='all')return;const spb=60/124/4;
+  function music(){if(!ac||mode!=='all')return;const spb=60/124/4;if(nextNote<ac.currentTime)nextNote=ac.currentTime+0.05;
     while(nextNote<ac.currentTime+0.25){const t=nextNote-ac.currentTime,s=step%16,bar=Math.floor(step/16)%4;
       if(s%4===0){tone(120,0.22,{vol:0.55,slide:0.35,at:t,dest:mus});}
       if(s%4===2)burst(0.05,{f:8000,type:'highpass',vol:0.13,at:t,dest:mus});
@@ -2175,7 +2192,7 @@ const Sound=(()=>{
       if(bar===3&&(s===0||s===6||s===10))[0,3,7].forEach(k=>tone(mtof(69+k),0.14,{type:'square',vol:0.035,at:t,dest:mus}));
       nextNote+=spb;step++;}}
   function tick(pl,dt){
-    if(!ac)return;music();const t=ac.currentTime;
+    if(!ac)return;if(pl)music();const t=ac.currentTime;
     if(!pl||!S){engG.gain.setTargetAtTime(0,t,0.15);windG.gain.setTargetAtTime(0,t,0.2);sqG.gain.setTargetAtTime(0,t,0.05);scG.gain.setTargetAtTime(0,t,0.05);lastPl=null;return;}
     if(pl!==lastPl){lastPl=pl;lastToasts=pl.toasts.length;lastShake=0;lastCd=99;wasBoost=false;}
     const sp=Math.max(0,(pl.speed||0)/BASE),cd=(S.go-Date.now())/1000;
@@ -2206,7 +2223,7 @@ function soundLabel(){const m=Sound.mode();const b=$('#bSnd');if(b){b.textConten
 $('#bSnd').addEventListener('click',()=>{Sound.cycle();soundLabel();});soundLabel();
 addEventListener('keydown',e=>{if(e.code==='KeyM'&&!(e.target&&/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))){Sound.cycle();soundLabel();}});
 /* ================= loop ================= */
-let last=performance.now(),uiT=0,idleZ=0;
+let last=performance.now(),uiT=0,idleZ=0,idleDrawn=0;
 buildTrack();
 try{G=initGL();applySceneTheme();setupFX();loadPhotoEnv();}catch(e){console.error(e);G=null;}
 if(!G)$('#gl').style.display='none';
@@ -2219,8 +2236,9 @@ function frame(now){
   if(!cv.isConnected)return; // the page was left (in-site navigation): stop the loop
   const dt=Math.min(0.05,(now-last)/1000);last=now;tClock+=dt;
   perfWatch(dt);
-  if(G)ctx.clearRect(0,0,W,H);else{ctx.fillStyle=COL.night;ctx.fillRect(0,0,W,H);}
-  if(S&&state==='race'){
+  const live=S&&state==='race';
+  if(live||!idleDrawn||now-idleDrawn>=4000){if(G)ctx.clearRect(0,0,W,H);else{ctx.fillStyle=COL.night;ctx.fillRect(0,0,W,H);}}
+  if(live){
     if(S.mode==='paid'){stepPaid(dt);readRemotes();}else{if(!S.pausedAt||nr)stepWorld();readRemotes();if(racing()&&!S.pausedAt){updMe(S.me,dt);wpnTick(dt);}}
     if(S.me.waveT>0)S.me.waveT-=dt;
     S.pubT-=dt;if(S.pubT<=0){S.pubT=0.1;publish();}
@@ -2230,8 +2248,11 @@ function frame(now){
     drawHUD(S.me,list);
     uiT-=dt;if(uiT<=0){uiT=0.25;renderBoard(list);if(S.feedDirty)renderFeed();if(!$('#endOv').hidden)showEnd();}
     if(S.mode!=='paid'&&S.me.finished&&!S.endShown&&S.w.wt-S.me.ft>1.8){S.endShown=true;showEnd();}
+  } else if(document.hidden||!cv.offsetParent||(idleDrawn&&now-idleDrawn<4000)){
+    // Not racing: nothing moves and no sound plays until you start (saves the phone's battery and keeps it fast).
+    uiT-=dt;if(uiT<=0){uiT=0.5;if(!S)renderBoard([]);}
   } else {
-    idleZ+=BASE*0.55*dt;if(idleZ>SEG*(FIN-400))idleZ=0;
+    idleDrawn=now;
     const ghost={pos:playerZ+SEG*8+idleZ,x:Math.sin(tClock*0.3)*0.35,skyOff:idleZ*0.002,shake:0,inp:{},boosting:false,finished:true,color:me.color,speed:BASE*0.55};
     if(G)safeGL(ghost,[],dt);else renderView(ghost,[]);
     uiT-=dt;if(uiT<=0){uiT=0.5;if(!S)renderBoard([]);}
@@ -2248,7 +2269,7 @@ window.HFGame={
   racing(){return !!(S&&state==='race');},
   label(){return S&&state==='race'?(S.me.finished?'Race finished · tap to see results':'Race on · tap to go back'):'';},
   mini(on){
-    if(on){document.body.classList.remove('immersive');$('#pads').hidden=true;}
+    if(on){liftStage(false);document.body.classList.remove('immersive');$('#pads').hidden=true;}
     else if(S&&state==='race'){enterImmersive(true);if(!S.me.finished)$('#pads').hidden=false;}
   },
   exit(){try{exitImmersive();}catch(e){document.body.classList.remove('immersive','racing');}},
