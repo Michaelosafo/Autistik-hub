@@ -8,8 +8,8 @@ export const metadata = { title: "Insider · Admin", robots: { index: false, fol
 
 /** Tracked public posts, caller scores, and paper or live buys from the owner's sniper wallets. */
 export default async function InsiderPage() {
-  const { staff, owner } = await adminState();
-  if (!owner) notFound(); // helper admins only get AI Futures and the shared BnbRage
+  const { staff, owner, helper } = await adminState();
+  if (!owner && !helper) notFound();
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <Link href="/admin">Admin</Link> and confirm your 2-step code, then come back.</p></div>;
   return (
     <div className="stack">

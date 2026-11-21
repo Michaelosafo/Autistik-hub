@@ -38,12 +38,11 @@ export async function GET(req: Request, { params }: { params: { action: string }
 
 /**
  * The signed-in admin's AI trader id (the futures trader shares it). Made here the first time if needed, since helper
- * admins can't open the AI Trader page. Helper admins only get AI Futures (no ?desk=…): every other desk is the owner's.
+ * admins may open AI Futures before the AI Trader page. SniperEth, SniperRobinhood and SniperLobbySol stay the owner's (checked below).
  */
 async function mine(req: Request): Promise<number | null> {
   const who = await adminState();
   if (!who.staff) return null;
-  if (!who.owner && new URL(req.url).searchParams.get("desk")) return null;
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return null;
   const sb = supabaseService();
@@ -71,7 +70,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
   const id = desk(req, await mine(req));
   // SniperEth, SniperRobinhood and SniperLobbySol are the owner's only; other admins have the BNB Chain sniper.
   const isOwner = (await adminState()).owner;
-  if (!id) return json({ error: "Admins only. Helper admins have AI Futures and BnbRage; the other desks are the owner's." }, 403);
+  if (!id) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
   const b = await req.json().catch(() => ({}));
   return withTrader(id, async () => {
     const sb = supabaseService();

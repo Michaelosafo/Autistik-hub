@@ -9,8 +9,8 @@ export const metadata = { title: "Remove LP · Admin", robots: { index: false, f
 
 /** Owner admin session: remove liquidity that is sitting in the connected wallet, on BNB Chain only. */
 export default async function RemoveLpPage() {
-  const { staff, owner } = await adminState();
-  if (!owner) notFound(); // helper admins only get AI Futures and the shared BnbRage
+  const { staff, owner, helper } = await adminState();
+  if (!owner && !helper) notFound();
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <Link href="/admin">Admin</Link> and confirm your 2-step code, then come back.</p></div>;
   return (
     <div className="stack">
