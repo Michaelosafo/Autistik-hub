@@ -6,7 +6,7 @@ import { DevScan } from "@/components/ScanTools";
 import { SCAN_CHAINS } from "@/lib/analytics-chains";
 
 /**
- * The AUTISTIK scanner, in the safemoon.ai scanner's dashboard look: metrics, scan bar, threat radar, 0–100 risk
+ * The AUTISTIK scanner dashboard (light / dark with the site theme): metrics, scan bar, threat radar, 0–100 risk
  * gauge, token overview, top pools, every security check, holder analysis and recent scans. Data comes from
  * /api/scanner/quick (GoPlus, honeypot.is, RugCheck, DexScreener, graded by AUTISTIK's advanced audit). AUTISTIK's own
  * tools sit on top (dev wallet, game arena, hot coins, pins) and "Open full analysis" does the tracked scan.
@@ -62,7 +62,7 @@ const short = (a: string) => (a && a.length > 14 ? `${a.slice(0, 6)}…${a.slice
 const pctS = (n: number | null | undefined, d = 1) => (n == null ? "—" : `${n.toFixed(d).replace(/\.0+$/, "")}%`);
 const TICKS = Array.from({ length: 41 }, (_, i) => {
   const a = Math.PI * (1.17 - (i / 40) * 1.34), r1 = 108, r2 = i % 5 ? 114 : 118;
-  return { x1: 120 + r1 * Math.cos(a), y1: 140 - r1 * Math.sin(a), x2: 120 + r2 * Math.cos(a), y2: 140 - r2 * Math.sin(a), c: i < 16 ? "#38bdf8" : i < 26 ? "#ffb347" : "#ff5a3c" };
+  return { x1: 120 + r1 * Math.cos(a), y1: 140 - r1 * Math.sin(a), x2: 120 + r2 * Math.cos(a), y2: 140 - r2 * Math.sin(a), c: i < 16 ? "var(--hx-low)" : i < 26 ? "var(--hx-warn)" : "var(--hx-bad)" };
 });
 
 export default function HyperScanner({ signedIn, tracked, movesToday }: { signedIn: boolean; tracked: number; movesToday: number }) {
@@ -199,19 +199,19 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
               <div className="hx-radar">
                 <svg viewBox="0 0 220 220" aria-hidden="true">
                   <defs>
-                    <radialGradient id="hxRg" cx="50%" cy="50%" r="50%"><stop offset="0" stopColor="#25c7d9" stopOpacity=".35" /><stop offset="1" stopColor="#0d3b45" stopOpacity=".9" /></radialGradient>
-                    <linearGradient id="hxSweep" x1="0" x2="1"><stop offset="0" stopColor="#5ff2ff" stopOpacity="0" /><stop offset="1" stopColor="#5ff2ff" stopOpacity=".55" /></linearGradient>
+                    <radialGradient id="hxRg" cx="50%" cy="50%" r="50%"><stop offset="0" style={{ stopColor: "var(--hx-r1)" }} /><stop offset="1" style={{ stopColor: "var(--hx-r2)" }} /></radialGradient>
+                    <linearGradient id="hxSweep" x1="0" x2="1"><stop offset="0" style={{ stopColor: "var(--hx-sweep)", stopOpacity: 0 }} /><stop offset="1" style={{ stopColor: "var(--hx-sweep)", stopOpacity: 0.5 }} /></linearGradient>
                   </defs>
                   <circle cx="110" cy="110" r="104" fill="url(#hxRg)" />
-                  <g stroke="#5ff2ff" strokeOpacity=".22" fill="none"><circle cx="110" cy="110" r="80" /><circle cx="110" cy="110" r="56" /><circle cx="110" cy="110" r="32" /><path d="M110 6v208M6 110h208M37 37l146 146M183 37 37 183" /></g>
+                  <g style={{ stroke: "var(--hx-rline)" }} strokeOpacity=".25" fill="none"><circle cx="110" cy="110" r="80" /><circle cx="110" cy="110" r="56" /><circle cx="110" cy="110" r="32" /><path d="M110 6v208M6 110h208M37 37l146 146M183 37 37 183" /></g>
                   <path className="hx-sweep" d="M110 110 L110 6 A104 104 0 0 1 200 58 Z" fill="url(#hxSweep)" />
                   {blips.map((b) => {
                     const tag = b.c.level === "bad" && b.i < 3;
                     const w = Math.min(96, 8 + b.c.label.length * 5.2), lx = Math.min(214 - w, Math.max(6, b.x - w / 2)), ly = b.y < 30 ? b.y + 8 : b.y - 20;
                     return (
                       <g key={b.i}>
-                        <circle cx={b.x.toFixed(1)} cy={b.y.toFixed(1)} r="4" fill={b.c.level === "bad" ? "#ff5a3c" : "#ffb347"}><title>{b.c.label}</title></circle>
-                        {tag && <><rect x={lx.toFixed(1)} y={ly.toFixed(1)} width={w.toFixed(1)} height="14" rx="3" fill="#5ff2ff" fillOpacity=".9" /><text className="hx-blip" x={(lx + w / 2).toFixed(1)} y={(ly + 10).toFixed(1)} textAnchor="middle" fill="#04262c">{b.c.label.slice(0, 18)}</text></>}
+                        <circle cx={b.x.toFixed(1)} cy={b.y.toFixed(1)} r="4" style={{ fill: b.c.level === "bad" ? "var(--hx-bad)" : "var(--hx-warn)" }}><title>{b.c.label}</title></circle>
+                        {tag && <><rect x={lx.toFixed(1)} y={ly.toFixed(1)} width={w.toFixed(1)} height="14" rx="3" style={{ fill: "var(--hx-gold2)" }} /><text className="hx-blip" x={(lx + w / 2).toFixed(1)} y={(ly + 10).toFixed(1)} textAnchor="middle" fill="#1a1403">{b.c.label.slice(0, 18)}</text></>}
                       </g>
                     );
                   })}
@@ -224,17 +224,17 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
               <div className="hx-ph"><h2>Risk score</h2>{r && <span className={`hx-grade g-${r.report.grade}`} title="AUTISTIK grade">Grade {r.report.grade}</span>}</div>
               <div className="hx-gwrap">
                 <svg viewBox="0 0 240 170" aria-hidden="true">
-                  <defs><linearGradient id="hxGg" x1="0" x2="1"><stop offset="0" stopColor="#38bdf8" /><stop offset=".5" stopColor="#ffb347" /><stop offset="1" stopColor="#ff5a3c" /></linearGradient></defs>
-                  {TICKS.map((t, i) => <line key={i} x1={t.x1.toFixed(1)} y1={t.y1.toFixed(1)} x2={t.x2.toFixed(1)} y2={t.y2.toFixed(1)} stroke={t.c} strokeOpacity=".75" strokeWidth="2" strokeLinecap="round" />)}
-                  <path d="M30 140 A90 90 0 1 1 210 140" fill="none" stroke="#221f27" strokeWidth="16" strokeLinecap="round" />
+                  <defs><linearGradient id="hxGg" x1="0" x2="1"><stop offset="0" style={{ stopColor: "var(--hx-low)" }} /><stop offset=".5" style={{ stopColor: "var(--hx-warn)" }} /><stop offset="1" style={{ stopColor: "var(--hx-bad)" }} /></linearGradient></defs>
+                  {TICKS.map((t, i) => <line key={i} x1={t.x1.toFixed(1)} y1={t.y1.toFixed(1)} x2={t.x2.toFixed(1)} y2={t.y2.toFixed(1)} style={{ stroke: t.c }} strokeOpacity=".75" strokeWidth="2" strokeLinecap="round" />)}
+                  <path d="M30 140 A90 90 0 1 1 210 140" fill="none" style={{ stroke: "var(--hx-track)" }} strokeWidth="16" strokeLinecap="round" />
                   <path className="hx-arc" d="M30 140 A90 90 0 1 1 210 140" fill="none" stroke="url(#hxGg)" strokeWidth="16" strokeLinecap="round" pathLength={100} strokeDasharray={risk == null ? "0 100" : `${Math.max(1, risk)} 100`} />
                 </svg>
                 <div className="hx-gread"><span>Risk score</span><b>{risk ?? "--"}</b><em>{verdict}</em></div>
               </div>
               <ul className="hx-legend">
-                <li><i style={{ background: "#38bdf8" }} />Low risk<b>0 – 40</b></li>
-                <li><i style={{ background: "#ffb347" }} />Moderate<b>41 – 80</b></li>
-                <li><i style={{ background: "#ff5a3c" }} />High risk<b>81 – 100</b></li>
+                <li><i style={{ background: "var(--hx-low)" }} />Low risk<b>0 – 40</b></li>
+                <li><i style={{ background: "var(--hx-warn)" }} />Moderate<b>41 – 80</b></li>
+                <li><i style={{ background: "var(--hx-bad)" }} />High risk<b>81 – 100</b></li>
               </ul>
               {r && <p className="hx-headline">{r.report.headline}</p>}
             </div>
