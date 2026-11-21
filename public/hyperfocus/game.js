@@ -1424,7 +1424,7 @@ function renderLobby(){
   $('#tokRow').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===menuTok));
   $('#modeDesc').textContent=menuMode==='real'?'Every car is a real holder of this coin, shown by wallet. Each one drives as fast as that wallet is up since it bought in, so 100x wallets fly past you. The last day\'s real buys and sells replay as boosts and slowdowns.':menuMode==='token'?`You race the real-feel crowd of ${menuTok} holders. Buyers boost, sellers drop back, and a rising price speeds everyone up.`:`A free race against nine racers and your friends. Grab GAS cans for a boost and be first to the line.`;
   if(!nr){$('#players').innerHTML=`<li><span class="dot" style="background:${me.color}"></span>${esc(me.nick||'You')}<span class="t">you</span></li>`;return;}
-  const ps=nr.peers();
+  const ps=readyPeers(nr.peers());
   $('#players').innerHTML=ps.length?ps.map(p=>{const q=p.presence||{};const c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888';
     const bi='';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
   if(pubRoom){$('#bStart').hidden=true;$('#modeBox').hidden=true;$('#guestMode').hidden=false;return;}
@@ -1700,6 +1700,10 @@ $('#wSetDone').onclick=()=>wizShow(wizPrev||'mode');
 $('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(b=>b.onclick=()=>{wizFlow=b.dataset.flow;$('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));setTimeout(wizNext,140);});
 $('#wNameNext').onclick=()=>{if(!$('#nick').value.trim()&&(wizFlow==='paid'||wizFlow==='join')){$('#nameHint').innerHTML='<span class="bad">Add your name to join.</span>';return;}readNick();wizNext();};
 $('#nick').addEventListener('keydown',e=>{if(e.key==='Enter')$('#wNameNext').click();});
+/* Only racers who are actually ready show in a room: they have a name, picked their car and are in the room
+ * with the game open. Someone who opened the link but is still choosing, or has switched to another app, is not listed. */
+function readyPeers(ps){return ps.filter(p=>{if(p.sameTab)return true;const q=p.presence||{};return !!q.n&&(q.st==='lobby'||q.st==='race')&&!q.away;});}
+document.addEventListener('visibilitychange',()=>{try{if(nr&&state!=='race')nr.presence({away:document.hidden?1:null});}catch(e){}});
 /* friends join by tapping a link: /hyperfocus?room=jollof-4821 */
 function inviteLink(c){const u=new URL(location.href);u.search='';u.hash='';u.searchParams.set('room',c);return u.toString();}
 async function joinWhenReady(c,host){
@@ -1721,7 +1725,7 @@ function renderInvite(){
   const list=$('#invList'),txt=$('#invTxt');
   if(nr&&code&&!pubRoom){
     $('#invH').textContent=isHost?'Your race room':'You’re in the room';$('#invCode').textContent='Code '+code;
-    const ps=nr.peers(),others=ps.filter(p=>!p.sameTab&&p.presence&&p.presence.n);
+    const ps=readyPeers(nr.peers()),others=ps.filter(p=>!p.sameTab);
     list.hidden=false;list.innerHTML=ps.length?ps.map(p=>{const q=p.presence||{},c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888',fresh=!p.sameTab&&!invSeen.has(p.peer);
       return `<li class="${fresh?'new':''}"><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${p.sameTab?'you':(q.host===1?'host · ':'')+(q.st==='race'?'racing':'joined ✓')}</span></li>`;}).join(''):'<li>Connecting…</li>';
     ps.forEach(p=>invSeen.add(p.peer));
