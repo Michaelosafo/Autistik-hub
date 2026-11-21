@@ -30,20 +30,32 @@ export async function GET(req: Request, { params }: { params: { action: string }
     const out = await Promise.all(ids.map((id) => capped(withTrader(id, () => runFutures())).then((r) => ({ id, r }), (e) => ({ id, r: `error: ${(e as Error).message}` }))));
     return json({ ok: true, ran: out });
   }
-  const id = desk(req, await mine());
+  const id = desk(req, await mine(req));
   if (!id) return json({ error: "Admins only." }, 403);
   if (params.action === "status") return withTrader(id, async () => json(await futStatus()));
   return json({ error: "Unknown." }, 404);
 }
 
-/** The signed-in admin's AI trader id (the futures trader shares it). */
-async function mine(): Promise<number | null> {
+/**
+ * The signed-in admin's AI trader id (the futures trader shares it). Made here the first time if needed, since helper
+ * admins can't open the AI Trader page. Helper admins only get AI Futures (no ?desk=…): every other desk is the owner's.
+ */
+async function mine(req: Request): Promise<number | null> {
   const who = await adminState();
   if (!who.staff) return null;
+  if (!who.owner && new URL(req.url).searchParams.get("desk")) return null;
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return null;
-  const { data } = await supabaseService().from("ai_trader_settings").select("id").eq("user_id", user.id).maybeSingle();
-  return data?.id ? Number(data.id) : null;
+  const sb = supabaseService();
+  const { data } = await sb.from("ai_trader_settings").select("id").eq("user_id", user.id).maybeSingle();
+  if (data?.id) return Number(data.id);
+  const { data: made, error } = await sb.from("ai_trader_settings").insert({ user_id: user.id, enabled: false, mode: "paper", paper_cash: 1, paper_start: 1 }).select("id").single();
+  if (error) {
+    const { data: again } = await sb.from("ai_trader_settings").select("id").eq("user_id", user.id).maybeSingle(); // opened twice at once
+    return again?.id ? Number(again.id) : null;
+  }
+  await sb.from("ai_trader_x_auth").upsert({ id: made.id }, { onConflict: "id", ignoreDuplicates: true });
+  return Number(made.id);
 }
 
 /** ?desk=fx: the admin's Forex trader, ?desk=earn: their Earn desk (each its own id), otherwise their Futures trader. */
@@ -56,10 +68,10 @@ const desk = (req: Request, id: number | null) => {
 const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : undefined; };
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
-  const id = desk(req, await mine());
+  const id = desk(req, await mine(req));
   // SniperEth, SniperRobinhood and SniperLobbySol are the owner's only; other admins have the BNB Chain sniper.
   const isOwner = (await adminState()).owner;
-  if (!id) return json({ error: "Open the AI Trader page once first (Admin → AI trader), then come back." }, 403);
+  if (!id) return json({ error: "Admins only. Helper admins have AI Futures and BnbRage; the other desks are the owner's." }, 403);
   const b = await req.json().catch(() => ({}));
   return withTrader(id, async () => {
     const sb = supabaseService();

@@ -12,14 +12,14 @@ export const maxDuration = 60;
 const KINDS = new Set(["x", "telegram", "reddit", "dex"]);
 
 export async function GET() {
-  if (!(await adminState()).staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  if (!(await (async () => { const w = await adminState(); return w.staff && w.owner; })())) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
   return json(await insiderState());
 }
 
 export async function POST(req: Request) {
   const slow = await rateLimit(req, "admin-insider", 40, 60);
   if (slow) return slow;
-  if (!(await adminState()).staff) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  if (!(await (async () => { const w = await adminState(); return w.staff && w.owner; })())) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
   const b = await req.json().catch(() => null);
   const action = String(b?.action || "");
   const sb = supabaseService();

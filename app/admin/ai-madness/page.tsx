@@ -7,8 +7,8 @@ export const metadata = { title: "Madness · Admin", robots: { index: false, fol
 
 /** Madness: futures at the highest safe leverage with very tight stops, on news + chart. */
 export default async function AIMadnessPage() {
-  const { staff, owner, helper } = await adminState();
-  if (!owner && !helper) notFound();
+  const { staff, owner } = await adminState();
+  if (!owner) notFound(); // helper admins only get AI Futures and the shared BnbRage
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <a href="/admin">Admin</a> and confirm your 2-step code, then come back.</p></div>;
   return <AIFutures desk="mad" />;
 }

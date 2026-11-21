@@ -9,8 +9,8 @@ export const metadata = { title: "Add LP · Admin", robots: { index: false, foll
 
 /** Owner admin session: add liquidity on BNB Chain only. Removing it is a separate tab. */
 export default async function AddLpPage() {
-  const { staff, owner, helper } = await adminState();
-  if (!owner && !helper) notFound();
+  const { staff, owner } = await adminState();
+  if (!owner) notFound(); // helper admins only get AI Futures and the shared BnbRage
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <Link href="/admin">Admin</Link> and confirm your 2-step code, then come back.</p></div>;
   return (
     <div className="stack">

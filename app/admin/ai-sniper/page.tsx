@@ -7,8 +7,8 @@ export const metadata = { title: "Sniper · Admin", robots: { index: false, foll
 
 /** Sniper (high risk): buys brand-new Solana launch coins as they pump; own Solana wallet and money. */
 export default async function AISniperPage() {
-  const { staff, owner, helper } = await adminState();
-  if (!owner && !helper) notFound();
+  const { staff, owner } = await adminState();
+  if (!owner) notFound(); // helper admins only get AI Futures and the shared BnbRage
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <a href="/admin">Admin</a> and confirm your 2-step code, then come back.</p></div>;
   return <AIFutures desk="snipe" />;
 }

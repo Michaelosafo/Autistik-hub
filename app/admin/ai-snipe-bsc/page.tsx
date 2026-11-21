@@ -3,12 +3,12 @@ import AIFutures from "@/components/AIFutures";
 import { adminState } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "SniperBnbSol · Admin", robots: { index: false, follow: false } };
+export const metadata = { title: "SniperBNB · Admin", robots: { index: false, follow: false } };
 
-/** BSC Sniper: paste a token before its liquidity is added; buys the moment liquidity lands. Every admin, own wallets. */
+/** BSC Sniper: paste a token before its liquidity is added; buys the moment liquidity lands. Owner only (personal), own wallets. */
 export default async function BscSniperPage() {
-  const { staff, owner, helper } = await adminState();
-  if (!owner && !helper) notFound();
+  const { staff, owner } = await adminState();
+  if (!owner) notFound();
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <a href="/admin">Admin</a> and confirm your 2-step code, then come back.</p></div>;
   return <AIFutures desk="liq" />;
 }

@@ -45,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: { action: string 
 /** The signed-in admin's trader (made the first time they open the page). The owner's is the original one. */
 async function myTrader(): Promise<number | null> {
   const who = await adminState();
-  if (!who.staff) return null;
+  if (!who.staff || !who.owner) return null; // the AI trader (TG Bot) is the owner's only; helper admins have AI Futures
   const { data: { user } } = await supabaseServer().auth.getUser();
   if (!user) return null;
   const sb = supabaseService();

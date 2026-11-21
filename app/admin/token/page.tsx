@@ -17,8 +17,8 @@ export const metadata = { title: "BSC token · Admin", robots: { index: false, f
  * liquidity straight through PancakeSwap, and try add + remove liquidity on testnet first.
  */
 export default async function AdminTokenPage() {
-  const { staff, owner, helper } = await adminState();
-  if (!owner && !helper) notFound();
+  const { staff, owner } = await adminState();
+  if (!owner) notFound(); // helper admins only get AI Futures and the shared BnbRage
   if (!staff) return <div className="card stack"><b>Enter your 2-step code first</b><p className="muted">Open <Link href="/admin">Admin</Link> and confirm your 2-step code, then come back.</p></div>;
   const [user, { pads, versions }] = await Promise.all([currentUser(), padInfo()]);
   const bsc: Pads = pads.bsc ? { bsc: pads.bsc } : {};

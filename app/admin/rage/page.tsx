@@ -7,7 +7,7 @@ import { adminState } from "@/lib/admin";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "BnbRage · Admin (BNB Chain)", robots: { index: false, follow: false } };
 
-/** BNB Chain only. Deploy, add liquidity, remove liquidity. Uses the admin's own wallet. */
+/** BNB Chain only, shared: the owner and every helper admin use the same team wallets and the same saved CAs. */
 export default async function RagePage() {
   const { staff, owner, helper } = await adminState();
   if (!owner && !helper) notFound();
@@ -18,10 +18,10 @@ export default async function RagePage() {
       <div className="snp-hero">
         <Link href="/admin" className="snp-back">← Admin</Link>
         <h1>💧 BnbRage — BNB Chain only</h1>
-        <p>Deploy a token, add liquidity on PancakeSwap, then remove it when you want. BNB Chain only.</p>
-        <details><summary>How it works</summary><p>This tool is locked to BNB Chain (PancakeSwap V2). Connect your admin wallet on BNB, deploy the token, add liquidity with BNB, and remove liquidity later from the same wallet.</p></details>
+        <p>Deploy a token, add liquidity on PancakeSwap, then remove it when you want. Shared: you and the owner (or your helper admins) see and use the same wallets and tokens.</p>
+        <details><summary>How it works</summary><p>Locked to BNB Chain (PancakeSwap V2). Pick a team wallet (or add one), deploy the token, add liquidity and the first buy with USDT, and remove liquidity later. A wallet or token one admin adds shows for everyone, and anyone on the team can carry on where another left off.</p></details>
       </div>
-      <AdminDirectPool mode="all" />
+      <AdminDirectPool mode="all" team />
     </div>
   );
 }

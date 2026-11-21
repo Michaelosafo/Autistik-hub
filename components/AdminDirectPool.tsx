@@ -4,8 +4,8 @@ import { reportActivity } from "@/lib/activity-client";
 import { ADMIN_DIRECT_TOKEN_ABI, ADMIN_DIRECT_TOKEN_BYTECODE } from "@/lib/admin-direct-token";
 import { EvmRageChain, MAX_RAGE_TAX, RAGE_GAS, rageTaxBps } from "@/lib/admin-rage";
 import { CHAINS, viemChain } from "@/lib/launchpad";
-import { useEffect, useMemo, useState } from "react";
-import { createPublicClient, createWalletClient, custom, encodeDeployData, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPublicClient, createWalletClient, custom, encodeDeployData, encodeFunctionData, formatUnits, getAddress, http, isAddress, parseAbi, parseEther, parseUnits } from "viem";
 
 /**
  * Any admin (after their 2-step code). One flow: deploy, add liquidity, then ask to remove it.
@@ -46,7 +46,7 @@ const ERC20 = parseAbi([
   "function approve(address, uint256) returns (bool)",
 ]);
 const ZERO = "0x0000000000000000000000000000000000000000" as const;
-const SAVED = "autistik-admin-direct-token";
+const SAVED_BASE = "autistik-admin-direct-token";
 const RECORD = "autistik-rage-deploy";
 
 type CtorArgs = {
@@ -105,18 +105,36 @@ type Info = {
  * WanaRobinhood (Robinhood Chain, Uniswap V2). Deploy, add liquidity, first buy (opens trading), remove.
  * The dollar coin (USDT / USDG) pays; the chain's own coin only pays gas.
  */
-export default function AdminDirectPool({ mode = "all", chain = "bsc", name }: { mode?: "deploy" | "add" | "remove" | "all"; chain?: EvmRageChain; name?: string }) {
+/**
+ * team: BnbRage shared by the owner and helper admins. Everyone uses the same team wallets (keys on the server, which
+ * signs only BnbRage steps) and the same saved CAs, so what one of you adds shows for all of you.
+ * store: a separate browser-storage name (Personal RageBNB keeps its saved token apart from other pages).
+ */
+export default function AdminDirectPool({ mode = "all", chain = "bsc", name, team = false, store }: { mode?: "deploy" | "add" | "remove" | "all"; chain?: EvmRageChain; name?: string; team?: boolean; store?: string }) {
   const c = CHAINS[chain];
   const tool = name || (chain === "ethereum" ? "EthRise" : chain === "robinhood" ? "WanaRobinhood" : "BnbRage");
   return (
     <div className="card stack" style={{ gap: 10 }}>
       <div className="notice" style={{ fontWeight: 700 }}>Network: {c.name} · {c.coin} ({c.name} only)</div>
-      <AdminEvmPool key={chain} mode={mode} chainKey={chain} toolName={tool} />
+      <AdminEvmPool key={chain} mode={mode} chainKey={chain} toolName={tool} team={team && chain === "bsc"} store={store} />
     </div>
   );
 }
 
-function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "remove" | "all"; chainKey: EvmRageChain; toolName: string }) {
+type TeamWallet = { slot: number; address: `0x${string}`; label: string | null; added_by: string | null; bnb: string | null; usdt: string | null };
+type TeamCa = { address: string; name: string | null; symbol: string | null; added_by: string | null; current: boolean };
+type TeamState = { wallets: TeamWallet[]; cas: TeamCa[]; log: { who: string; what: string; tx: string | null; created_at: string }[]; owner: boolean };
+async function teamPost(body: Record<string, unknown>) {
+  const r = await fetch("/api/admin/rage-team", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j?.error) throw new Error(j?.error || "Something went wrong.");
+  return j;
+}
+const num = (v: string | null, d = 4) => (v == null ? "–" : Number(v).toLocaleString("en-US", { maximumFractionDigits: d }));
+
+function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy" | "add" | "remove" | "all"; chainKey: EvmRageChain; toolName: string; team: boolean; store?: string }) {
+  const SAVED = store ? `${SAVED_BASE}:${store}` : SAVED_BASE;
+  const LIST = store ? `autistik-admin-direct-tokens:${store}` : "autistik-admin-direct-tokens";
   const CHAIN = CHAINS[chainKey];
   const STABLE = STABLES[chainKey] || STABLES.bsc;
   const USD = STABLE.address, SD = STABLE.decimals, SYM = STABLE.symbol, STD = STABLE.std;
@@ -147,12 +165,51 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
   const buyBps = rageTaxBps(buyTax);
   const sellBps = rageTaxBps(sellTax);
 
+  const [teamS, setTeamS] = useState<TeamState | null>(null);
+  const [teamSlot, setTeamSlot] = useState<number | null>(null);
+  const [teamErr, setTeamErr] = useState("");
+  const [importKey, setImportKey] = useState("");
+  const [teamTick, setTeamTick] = useState(0);
+  const teamLoaded = useRef(false);
+
   useEffect(() => {
+    if (team) return;
     try {
-      const saved = localStorage.getItem(`${SAVED}:${chainKey}`) || (chainKey === "bsc" ? localStorage.getItem(SAVED) : null);
+      const saved = localStorage.getItem(`${SAVED}:${chainKey}`) || (chainKey === "bsc" && !store ? localStorage.getItem(SAVED) : null);
       if (saved && isAddress(saved)) setTokenIn(getAddress(saved));
     } catch { /* private mode */ }
-  }, [chainKey]);
+  }, [chainKey, team, SAVED, store]);
+
+  /** Team mode: the shared wallets and CAs, refreshed every 15s so a wallet or CA one admin adds shows for the others. */
+  useEffect(() => {
+    if (!team) return;
+    let gone = false;
+    const load = async () => {
+      try {
+        const r = await fetch("/api/admin/rage-team", { cache: "no-store" });
+        const j = await r.json();
+        if (gone) return;
+        if (!r.ok || j?.error) { setTeamErr(j?.error || "Couldn't load the team wallets."); return; }
+        setTeamErr("");
+        setTeamS(j as TeamState);
+        setTeamSlot((cur) => (cur && j.wallets.some((w: TeamWallet) => w.slot === cur) ? cur : j.wallets[0]?.slot ?? null));
+        if (!teamLoaded.current) {
+          teamLoaded.current = true;
+          const c = (j.cas as TeamCa[]).find((x) => x.current);
+          if (c && isAddress(c.address)) setTokenIn(getAddress(c.address));
+        }
+      } catch { if (!gone) setTeamErr("Couldn't load the team wallets."); }
+    };
+    load();
+    const id = setInterval(load, 15_000);
+    return () => { gone = true; clearInterval(id); };
+  }, [team, teamTick]);
+
+  useEffect(() => {
+    if (!team || !teamS || !teamSlot) return;
+    const w = teamS.wallets.find((x) => x.slot === teamSlot);
+    if (w) setAccount(w.address);
+  }, [team, teamS, teamSlot]);
 
   useEffect(() => {
     if (!token) { setVerify(null); return; }
@@ -245,10 +302,11 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
     setMsg(/rejected|denied|cancel/i.test(m) ? "You cancelled in your wallet." : /INSUFFICIENT_\w*_AMOUNT|not live/i.test(m) ? (/not live/i.test(m) ? "Trading is still closed, so the pool can't send the tokens back yet. Tap Remove liquidity again." : "The price moved. Try again.") : m || "Something went wrong.");
   }
 
-  function remember(at: string) {
+  function remember(at: string, nm?: string, sym?: string) {
+    if (team) { teamPost({ action: "save-ca", address: at, name: nm, symbol: sym }).then(() => setTeamTick((x) => x + 1)).catch((e) => setMsg(e.message)); return; }
     try {
       localStorage.setItem(`${SAVED}:${chainKey}`, at);
-      if (chainKey === "bsc") localStorage.setItem(SAVED, at);
+      if (chainKey === "bsc" && !store) localStorage.setItem(SAVED, at);
     } catch { /* ignore */ }
   }
 
@@ -340,7 +398,26 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
     }
   }
 
+  /** A team wallet: the page builds each step, the server checks it is a BnbRage step and signs it. */
+  function teamWallet(slot: number, acc: `0x${string}`) {
+    const sendTx = async (to: string | null, data: string, value?: bigint) => {
+      const j = await teamPost({ action: "send", slot, to, data, value: (value ?? 0n).toString() });
+      setTeamTick((x) => x + 1);
+      return j.hash as `0x${string}`;
+    };
+    return {
+      writeContract: (req: any) => sendTx(req.address, encodeFunctionData({ abi: req.abi, functionName: req.functionName, args: req.args }), req.value),
+      sendTransaction: (req: any) => sendTx(req.to ?? null, req.data, req.value),
+    };
+  }
+
   async function wallet() {
+    if (team) {
+      const w = teamS?.wallets.find((x) => x.slot === teamSlot);
+      if (!w) throw new Error("Add or pick a team wallet first.");
+      setAccount(w.address);
+      return { w: teamWallet(w.slot, w.address) as any, acc: w.address };
+    }
     const eth = await pickWallet();
     if (!eth) throw new Error("No wallet chosen.");
     const w = createWalletClient({ chain: vc, transport: custom(eth) }) as any;
@@ -431,7 +508,7 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
       const r = await pub.waitForTransactionReceipt({ hash });
       if (r.status !== "success" || !r.contractAddress) throw new Error("The deploy failed.");
       const at = getAddress(r.contractAddress);
-      remember(at);
+      remember(at, n, s);
       setTokenIn(at);
       setMsg(`✅ ${s} deployed on ${CHAIN.name}. Now add the liquidity below. ${CHAIN.explorer}/token/${at}`);
       void submitVerify(at, { name: n, symbol: s, supply: units.toString(), buyBps, sellBps, taxWallet: taxTo, router: ROUTER });
@@ -619,8 +696,59 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
     <>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>{blurb}</p>
-      {!account && <button className="btn small" type="button" disabled={busy} onClick={() => wallet().catch(fail)}>Connect wallet</button>}
-      {account && <small className="muted">Wallet <span className="mono">{account.slice(0, 6)}…{account.slice(-4)}</span> on {CHAIN.name}</small>}
+      {team ? (
+        <div className="notice stack" style={{ gap: 8 }}>
+          <b>👥 Team wallets <small className="muted" style={{ fontWeight: 400 }}>shared by you and your admins · a wallet any of you adds shows here for everyone</small></b>
+          {teamErr && <small style={{ color: "#ef4444" }}>{teamErr}</small>}
+          {teamS && !teamS.wallets.length && <small className="muted">No team wallets yet. Make one or import one below, then send it USDT (BEP20) and a little BNB for gas.</small>}
+          {teamS?.wallets.map((w) => (
+            <label key={w.slot} className="row" style={{ gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+              <input type="radio" name="rage-team-wallet" checked={teamSlot === w.slot} onChange={() => setTeamSlot(w.slot)} />
+              <span className="stack" style={{ gap: 2, minWidth: 0, flex: 1 }}>
+                <span><b>Wallet {w.slot}</b>{w.label ? ` · ${w.label}` : ""} <span className="mono" style={{ overflowWrap: "anywhere" }}>{w.address}</span></span>
+                <small className="muted">{num(w.usdt, 2)} USDT · {num(w.bnb)} BNB{w.added_by ? ` · added by ${w.added_by}` : ""}</small>
+                {teamS?.owner && (
+                  <span className="row" style={{ gap: 6 }}>
+                    <button className="btn small ghost" type="button" onClick={async (e) => { e.preventDefault(); try { const j = await teamPost({ action: "reveal", slot: w.slot }); prompt(`Private key of team wallet ${w.slot} (copy it, keep it secret):`, j.key); } catch (er: any) { setMsg(er.message); } }}>Show key</button>
+                    <button className="btn small ghost" type="button" onClick={async (e) => { e.preventDefault(); if (!confirm(`Remove team wallet ${w.slot}? Move its coins out first (Show key → import it in your wallet app); after removing, the site can't use it.`)) return; try { await teamPost({ action: "remove", slot: w.slot }); setTeamTick((x) => x + 1); } catch (er: any) { setMsg(er.message); } }}>Remove</button>
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <button className="btn small" type="button" disabled={busy} onClick={async () => { try { const j = await teamPost({ action: "add" }); setTeamSlot(j.slot); setTeamTick((x) => x + 1); setMsg(`New team wallet ${j.slot}: ${j.address}. Send it USDT (BEP20) and a little BNB for gas.`); } catch (e: any) { setMsg(e.message); } }}>+ New team wallet</button>
+            <input value={importKey} onChange={(e) => setImportKey(e.target.value)} placeholder="or paste a private key to import" type="password" autoComplete="off" spellCheck={false} aria-label="Private key to import" style={{ flex: 1, minWidth: 160 }} />
+            <button className="btn small" type="button" disabled={busy || !importKey.trim()} onClick={async () => { try { const j = await teamPost({ action: "add", key: importKey }); setImportKey(""); setTeamSlot(j.slot); setTeamTick((x) => x + 1); setMsg(`Imported as team wallet ${j.slot}: ${j.address}`); } catch (e: any) { setMsg(e.message); } }}>Import</button>
+          </div>
+          <small className="muted">Team wallets only do BnbRage steps (deploy, PancakeSwap liquidity, first buy, remove), always back into the same wallet. {teamS?.owner ? "Only you can show a key or remove a wallet." : "Only the owner can show a key or remove a wallet."}</small>
+          {!!teamS?.cas.length && (
+            <div className="stack" style={{ gap: 4 }}>
+              <b>Team CAs</b>
+              {teamS.cas.map((c) => (
+                <div key={c.address} className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <button className={"btn small" + (token && token.toLowerCase() === c.address.toLowerCase() ? " primary" : "")} type="button" onClick={() => setTokenIn(getAddress(c.address))}>{c.symbol || c.name || "Token"}</button>
+                  <small className="mono" style={{ overflowWrap: "anywhere" }}>{c.address}</small>
+                  <small className="muted">{c.added_by ? `by ${c.added_by}` : ""}{c.current ? " · current" : ""}</small>
+                  <button className="btn small ghost" type="button" onClick={async () => { if (!confirm("Take this CA off the team list?")) return; try { await teamPost({ action: "del-ca", address: c.address }); setTeamTick((x) => x + 1); } catch (e: any) { setMsg(e.message); } }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {!!teamS?.log.length && (
+            <details><summary>Recent team activity</summary>
+              <div className="stack" style={{ gap: 2 }}>
+                {teamS.log.map((l, i) => <small key={i} className="muted">{new Date(l.created_at).toLocaleString()} · {l.who}: {l.what}{l.tx ? <> · <a href={`${CHAIN.explorer}/tx/${l.tx}`} target="_blank" rel="noreferrer">tx</a></> : null}</small>)}
+              </div>
+            </details>
+          )}
+        </div>
+      ) : (
+        <>
+          {!account && <button className="btn small" type="button" disabled={busy} onClick={() => wallet().catch(fail)}>Connect wallet</button>}
+          {account && <small className="muted">Wallet <span className="mono">{account.slice(0, 6)}…{account.slice(-4)}</span> on {CHAIN.name}</small>}
+        </>
+      )}
 
       {showDeploy && (
         <>
@@ -629,7 +757,8 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
               <button className="btn small" type="button" disabled={!token || busy} onClick={() => {
                 if (!token) return;
-                const listKey = `autistik-admin-direct-tokens:${chainKey}`;
+                if (team) { remember(token, name || info?.symbol, symbol || info?.symbol); setMsg(`CA saved for the whole team: ${token}`); return; }
+                const listKey = `${LIST}:${chainKey}`;
                 try {
                   const raw = localStorage.getItem(listKey) || "[]";
                   const list = JSON.parse(raw);
@@ -643,7 +772,8 @@ function AdminEvmPool({ mode, chainKey, toolName }: { mode: "deploy" | "add" | "
                 setName(""); setSymbol(""); setSupply("1000000000"); setBuyTax("0"); setSellTax("0");
                 setTokenIn(""); setInfo(null); setAmtToken(""); setAmtCoin(""); setBuyAmt(""); setAskRemove(false);
                 setMsg("Ready for another deployment. Previous token cleared.");
-                try { localStorage.removeItem(`${SAVED}:${chainKey}`); if (chainKey === "bsc") localStorage.removeItem(SAVED); } catch {}
+                if (team) { teamPost({ action: "clear-current" }).then(() => setTeamTick((x) => x + 1)).catch(() => {}); return; }
+                try { localStorage.removeItem(`${SAVED}:${chainKey}`); if (chainKey === "bsc" && !store) localStorage.removeItem(SAVED); } catch {}
               }}>Start another deployment</button>
               {busy && <button className="btn small ghost" type="button" onClick={() => { setBusy(false); setMsg("Stopped waiting. Reject any pending wallet prompt if shown."); }}>Stop waiting</button>}
             </div>
