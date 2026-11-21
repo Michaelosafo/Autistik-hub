@@ -101,12 +101,18 @@ export function pinAndroid(href: string, pkgOverride?: string): string {
  * hidden link click, then loads that https fallback, and Bitget also handles https — the chooser.
  * https://web3.bitget.com/en/docs/configuration/deeplink
  */
-export function bitgetOpenDapp(dappUrl: string): string {
-  const actionID = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `act-${Date.now().toString(36)}`;
-  const params = new URLSearchParams({ action: "dapp", actionID, version: "1.0", dappName: "AUTISTIK Hub", url: dappUrl });
-  const query = params.toString();
+export function bitgetOpenDapp(dappUrl: string, net?: string): string {
+  // Bitget's documented "pick this network" flag on the page link (_needChain): eth, bnb. With it, Bitget opens the
+  // page on the right network and doesn't ask which network to use.
+  let url = dappUrl;
+  const need = net === "ethereum" ? "eth" : net === "bsc" ? "bnb" : "";
+  if (need) { try { const u = new URL(dappUrl); u.searchParams.set("_needChain", need); url = u.toString(); } catch { /* keep as is */ } }
+  // Only the documented parameters (action, url, version): extra ones made Bitget say "unsupported operation".
+  const query = new URLSearchParams({ action: "dapp", url, version: "1" }).toString();
   const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
-  if (/Android|iPhone|iPad|iPod/i.test(ua)) return `bitkeep://bkconnect?${query}`;
+  // Android: Bitget's own scheme opens only Bitget (an https link also offers Chrome). iOS and computers: the
+  // documented https link, which opens the Bitget app when it's installed.
+  if (/Android/i.test(ua)) return `bitkeep://bkconnect?${query}`;
   return `https://bkcode.vip?${query}`;
 }
 
@@ -711,8 +717,16 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
     set({ busy: "", error: `${top!.name} isn't ready in this browser yet. Wait a second and tap it again.` });
     return;
   }
-  // Bitget on a phone: the same WalletConnect route that already works for Bitget on Solana (see chooseEvmUp).
-  if (isMobile() && top?.name === "Bitget Wallet") { await chooseEvmUp(top); return; }
+  // Bitget on a phone: open this page inside Bitget's own browser (its documented link, on the current network),
+  // where its wallet is built in and connects on the page. The WalletConnect link (bitkeep://wc?uri=…) made Bitget
+  // show "Attempted an unsupported operation" on its home screen.
+  if (isMobile() && top?.name === "Bitget Wallet") {
+    const net = state.network === "solana" ? "solana" : netOf(state.network).key;
+    let here = location.href;
+    try { const u = new URL(location.href); u.searchParams.set("ax_connect", "1"); u.searchParams.set("ax_net", net); here = u.toString(); } catch { /* keep the page link */ }
+    showWalletOpen(top.name, top.logo, bitgetOpenDapp(here, net), top.install);
+    return;
+  }
   // Bitget on a phone goes through WalletConnect like every other wallet (and like Bitget on Solana): its app opens
   // with the connection request and the member comes back here connected. It used to open this site inside
   // Bitget's own browser instead, which asked for a network again rather than showing the request to approve.

@@ -139,6 +139,8 @@ export default function AppShell({ admin, me, onMe, children }: {
       // Came from a Solana connect (e.g. Bitget): stay on Solana here so its Solana wallet is the one connected.
       const net = u.searchParams.get("ax_net");
       if (net === "solana") setNetwork("solana").catch(() => {});
+      // Came from Bitget's "open this page" link on an EVM network: stay on that network here too.
+      else if (net && net !== "solana") setNetwork(net as any).catch(() => {});
       setTimeout(() => { if (net === "solana" ? !getState().sol : (!getState().current && !getState().sol)) pickWallet({ fresh: true }); }, 600);
     } catch {}
   }, []);
