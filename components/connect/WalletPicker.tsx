@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NetIcon from "@/components/connect/NetIcon";
 import { listWallets, type ListedWallet } from "@/lib/connect";
 import ApproveBar from "./ApproveBar";
-import { bitgetOpenDapp, chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
+import { chooseSolInjected, chooseSolWalletConnect, injectedFor, injectedSolFor, warmUp } from "@/lib/connect";
 import { NETWORKS, SOL_APPS, TOP_NETWORKS, TOP_WALLETS, WALLETCONNECT_ID, cancelQr, chooseInjected, chooseSol, chooseWalletConnect, closePicker, getState, insideWallet, isMobile, lastWalletName, legacyInjected, netOf, setNetwork, showWalletOpen, startDiscovery, subscribe } from "@/lib/connect";
 
 type Row = { key: string; name: string; logo: string | null; color?: string; badge?: string; sub: string; here?: boolean; go: () => void };
@@ -79,15 +79,13 @@ export default function WalletPicker() {
       out.push({
         key: w.id, name: w.name, logo: `/wallets/${w.id}.svg`, color: w.color,
         badge: w.name === last ? "Last used" : undefined,
-        sub: mobile && w.id === "bitget" ? "Opens this page inside Bitget, connects in one tap" : viaWc ? (mobile ? `Opens ${w.name} to sign, then back here` : `Scan with ${w.name} on your phone`) : "Get the app",
+        sub: viaWc ? (mobile ? `Opens ${w.name} to sign, then back here` : `Scan with ${w.name} on your phone`) : "Get the app",
         go: () => {
           if (mobile && insideWallet(w.id)) {
             const inj = injectedFor(w.id) || legacyInjected();
             if (inj) chooseInjected(w.name, inj);
             return;
           }
-          // Bitget on a phone: open this page inside Bitget's browser on the current network; it connects there.
-          if (mobile && w.id === "bitget" && w.dapp) { showWalletOpen(w.name, `/wallets/${w.id}.svg`, bitgetOpenDapp(directUrl(getState().network), getState().network), w.install); return; }
           if (viaWc) { chooseWalletConnect(w.id); return; }
           if (mobile && w.dapp) { showWalletOpen(w.name, `/wallets/${w.id}.svg`, w.dapp(directUrl()), w.install); return; }
           window.open(w.install, "_blank", "noopener,noreferrer");

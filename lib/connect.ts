@@ -101,6 +101,17 @@ export function pinAndroid(href: string, pkgOverride?: string): string {
  * hidden link click, then loads that https fallback, and Bitget also handles https — the chooser.
  * https://web3.bitget.com/en/docs/configuration/deeplink
  */
+/**
+ * Bitget's WalletConnect request link. Bitget documents its https host (bkcode.vip) as the link Android supports;
+ * bitkeep://wc?uri=… opened Bitget with "Attempted an unsupported operation". On Android the https link is pinned
+ * to the Bitget app (so Chrome isn't offered); on iPhone it's the universal link, which opens Bitget.
+ */
+const BITGET_LINK = "https://bkcode.vip";
+export function bitgetWcLink(uri: string): string {
+  const path = `bkcode.vip/wc?uri=${encodeURIComponent(uri)}`;
+  return androidUa() ? androidIntent(path, "https", "com.bitkeep.wallet") : `https://${path}`;
+}
+
 export function bitgetOpenDapp(dappUrl: string, net?: string): string {
   // Bitget's documented "pick this network" flag on the page link (_needChain): eth, bnb. With it, Bitget opens the
   // page on the right network and doesn't ask which network to use.
@@ -652,8 +663,9 @@ function upProvider(up: any, t: WcTarget) {
     removeListener: (e: string, f: any) => { const g = wrapped.get(f) || f; (up.removeListener || up.off)?.call(up, e, g); return p; },
     disconnect: () => up.disconnect(),
   };
-  // Requests bring Bitget forward on the phone, like the Solana signing does.
-  try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: walletBase(t), name: t.name })); } catch { /* private mode */ }
+  // Requests bring Bitget forward on the phone, like the Solana signing does. Bitget: its https link
+  // (bitkeep://wc?requestId=… made it say "Attempted an unsupported operation").
+  try { localStorage.setItem("WALLETCONNECT_DEEPLINK_CHOICE", JSON.stringify({ href: t.name === "Bitget Wallet" ? BITGET_LINK : walletBase(t), name: t.name })); } catch { /* private mode */ }
   return p;
 }
 async function finishEvmUp(t: WcTarget, up: any) {
@@ -675,7 +687,7 @@ async function chooseEvmUp(t: WcTarget) {
     if (up.session?.namespaces?.eip155?.accounts?.length) { await finishEvmUp(t, up); return; }
     up.once?.("display_uri", (uri: string) => {
       const base = walletBase(t);
-      const href = base ? wcHref(base, uri, t.pkg) : uri;
+      const href = t.name === "Bitget Wallet" ? bitgetWcLink(uri) : base ? wcHref(base, uri, t.pkg) : uri;
       set({ open: true, qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" });
       openWalletApp(href);
     });
@@ -717,16 +729,8 @@ export async function chooseWalletConnect(walletId?: string | WcTarget) {
     set({ busy: "", error: `${top!.name} isn't ready in this browser yet. Wait a second and tap it again.` });
     return;
   }
-  // Bitget on a phone: open this page inside Bitget's own browser (its documented link, on the current network),
-  // where its wallet is built in and connects on the page. The WalletConnect link (bitkeep://wc?uri=…) made Bitget
-  // show "Attempted an unsupported operation" on its home screen.
-  if (isMobile() && top?.name === "Bitget Wallet") {
-    const net = state.network === "solana" ? "solana" : netOf(state.network).key;
-    let here = location.href;
-    try { const u = new URL(location.href); u.searchParams.set("ax_connect", "1"); u.searchParams.set("ax_net", net); here = u.toString(); } catch { /* keep the page link */ }
-    showWalletOpen(top.name, top.logo, bitgetOpenDapp(here, net), top.install);
-    return;
-  }
+  // Bitget on a phone: Bitget opens with the connection request to approve, and you stay in this browser.
+  if (isMobile() && top?.name === "Bitget Wallet") { await chooseEvmUp(top); return; }
   // Bitget on a phone goes through WalletConnect like every other wallet (and like Bitget on Solana): its app opens
   // with the connection request and the member comes back here connected. It used to open this site inside
   // Bitget's own browser instead, which asked for a network again rather than showing the request to approve.
