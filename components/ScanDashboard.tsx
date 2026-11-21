@@ -4,6 +4,8 @@ import type { PairStats } from "@/lib/market";
 /**
  * The scanner dashboard, brought over from the safemoon.ai scanner: threat radar (red flags as blips), a 0–100 risk
  * gauge (low / moderate / high), the token overview and the top pools by liquidity. Server-rendered SVG, no script.
+ * Colours are AUTISTIK's own theme variables (teal = safe, sun = caution, coral/alert = danger, violet radar), so it
+ * follows light and dark mode like the rest of the site.
  */
 const usd = (x: number | null | undefined) => {
   if (x == null || !isFinite(x)) return "—";
@@ -33,7 +35,7 @@ export default function ScanDashboard({ a, move, chainName, token, std }: { a: A
   const tone = risk == null ? "na" : risk <= 40 ? "low" : risk <= 80 ? "mid" : "high";
   const ticks = Array.from({ length: 41 }, (_, i) => {
     const ang = Math.PI * (1.17 - (i / 40) * 1.34), r1 = 108, r2 = i % 5 ? 114 : 118;
-    return { x1: 120 + r1 * Math.cos(ang), y1: 140 - r1 * Math.sin(ang), x2: 120 + r2 * Math.cos(ang), y2: 140 - r2 * Math.sin(ang), c: i < 16 ? "#38bdf8" : i < 26 ? "#ffb347" : "#ff6a3d" };
+    return { x1: 120 + r1 * Math.cos(ang), y1: 140 - r1 * Math.sin(ang), x2: 120 + r2 * Math.cos(ang), y2: 140 - r2 * Math.sin(ang), c: i < 16 ? "var(--teal)" : i < 26 ? "var(--sun)" : "var(--coral)" };
   });
   const blips = flags.slice(0, 10).map((c, i) => {
     const ang = (i * 137.5 * Math.PI) / 180, rad = 38 + ((i * 29) % 58);
@@ -58,16 +60,16 @@ export default function ScanDashboard({ a, move, chainName, token, std }: { a: A
         <small className="muted">{a.warn} warning{a.warn === 1 ? "" : "s"}</small>
         <svg viewBox="0 0 220 220" className="sd-radar" role="img" aria-label={`${a.bad} red flags and ${a.warn} warnings`}>
           <defs>
-            <radialGradient id="sdRg" cx="50%" cy="50%" r="50%"><stop offset="0" stopColor="#25c7d9" stopOpacity=".35" /><stop offset="1" stopColor="#0d3b45" stopOpacity=".9" /></radialGradient>
-            <linearGradient id="sdSweep" x1="0" x2="1"><stop offset="0" stopColor="#5ff2ff" stopOpacity="0" /><stop offset="1" stopColor="#5ff2ff" stopOpacity=".55" /></linearGradient>
+            <radialGradient id="sdRg" cx="50%" cy="50%" r="50%"><stop offset="0" style={{ stopColor: "var(--violet)", stopOpacity: 0.08 }} /><stop offset="1" style={{ stopColor: "var(--violet)", stopOpacity: 0.22 }} /></radialGradient>
+            <linearGradient id="sdSweep" x1="0" x2="1"><stop offset="0" style={{ stopColor: "var(--violet)", stopOpacity: 0 }} /><stop offset="1" style={{ stopColor: "var(--violet)", stopOpacity: 0.45 }} /></linearGradient>
           </defs>
           <circle cx="110" cy="110" r="104" fill="url(#sdRg)" />
-          <g stroke="#5ff2ff" strokeOpacity=".22" fill="none">
+          <g className="sd-grid" fill="none">
             <circle cx="110" cy="110" r="80" /><circle cx="110" cy="110" r="56" /><circle cx="110" cy="110" r="32" />
             <path d="M110 6v208M6 110h208M37 37l146 146M183 37 37 183" />
           </g>
           <path className="sd-sweep" d="M110 110 L110 6 A104 104 0 0 1 200 58 Z" fill="url(#sdSweep)" />
-          {blips.map((b, i) => <circle key={i} cx={b.x.toFixed(1)} cy={b.y.toFixed(1)} r="4" fill={b.c.level === "bad" ? "#ff5a3c" : "#ffb347"}><title>{b.c.label}</title></circle>)}
+          {blips.map((b, i) => <circle key={i} cx={b.x.toFixed(1)} cy={b.y.toFixed(1)} r="4" className={b.c.level === "bad" ? "sd-blip bad" : "sd-blip"}><title>{b.c.label}</title></circle>)}
         </svg>
         {flags.length > 0 && <ul className="sd-flags">{flags.slice(0, 4).map((c) => <li key={c.label + c.detail} className={c.level}>{c.label}</li>)}</ul>}
       </div>
@@ -76,17 +78,17 @@ export default function ScanDashboard({ a, move, chainName, token, std }: { a: A
         <h3>Risk score</h3>
         <div className="sd-gwrap">
           <svg viewBox="0 0 240 170" aria-hidden="true">
-            <defs><linearGradient id="sdGg" x1="0" x2="1"><stop offset="0" stopColor="#38bdf8" /><stop offset=".5" stopColor="#ffb347" /><stop offset="1" stopColor="#ff5a3c" /></linearGradient></defs>
-            {ticks.map((t, i) => <line key={i} x1={t.x1.toFixed(1)} y1={t.y1.toFixed(1)} x2={t.x2.toFixed(1)} y2={t.y2.toFixed(1)} stroke={t.c} strokeOpacity=".75" strokeWidth="2" strokeLinecap="round" />)}
-            <path d="M30 140 A90 90 0 1 1 210 140" fill="none" stroke="rgba(127,127,140,.22)" strokeWidth="16" strokeLinecap="round" />
+            <defs><linearGradient id="sdGg" x1="0" x2="1"><stop offset="0" style={{ stopColor: "var(--teal)" }} /><stop offset=".5" style={{ stopColor: "var(--sun)" }} /><stop offset="1" style={{ stopColor: "var(--coral)" }} /></linearGradient></defs>
+            {ticks.map((t, i) => <line key={i} x1={t.x1.toFixed(1)} y1={t.y1.toFixed(1)} x2={t.x2.toFixed(1)} y2={t.y2.toFixed(1)} style={{ stroke: t.c }} strokeOpacity=".75" strokeWidth="2" strokeLinecap="round" />)}
+            <path d="M30 140 A90 90 0 1 1 210 140" fill="none" className="sd-track" strokeWidth="16" strokeLinecap="round" />
             <path d="M30 140 A90 90 0 1 1 210 140" fill="none" stroke="url(#sdGg)" strokeWidth="16" strokeLinecap="round" pathLength={100} strokeDasharray={risk == null ? "0 100" : `${Math.max(1, risk)} 100`} />
           </svg>
           <div className="sd-gread"><b>{risk ?? "--"}</b><em>{verdict}</em></div>
         </div>
         <ul className="sd-legend">
-          <li><i style={{ background: "#38bdf8" }} />Low<b>0–40</b></li>
-          <li><i style={{ background: "#ffb347" }} />Moderate<b>41–80</b></li>
-          <li><i style={{ background: "#ff5a3c" }} />High<b>81–100</b></li>
+          <li><i style={{ background: "var(--teal)" }} />Low<b>0–40</b></li>
+          <li><i style={{ background: "var(--sun)" }} />Moderate<b>41–80</b></li>
+          <li><i style={{ background: "var(--coral)" }} />High<b>81–100</b></li>
         </ul>
       </div>
 
