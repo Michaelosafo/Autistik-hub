@@ -1,7 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { Russo_One } from "next/font/google";
 import { APP_COOKIE } from "@/lib/android-app";
-import HFBoot from "./HFBoot";
+import { GameSlot } from "@/components/GameDock";
 import { HF_CSS, HF_MARKUP } from "./markup";
 
 const fontRace = Russo_One({ weight: "400", subsets: ["latin"], display: "swap", variable: "--font-race", adjustFontFallback: true });
@@ -15,7 +15,7 @@ export const metadata = {
 /**
  * Play: Hyperfocus GP, the 3D race. The page shows only the race; the wallet is its own page (/wallet) and the
  * offline swap opens from there (/wallet/offline, which lands on this page's #swap section).
- * The game is plain JavaScript (public/hyperfocus), started by HFBoot.
+ * The game is plain JavaScript (public/hyperfocus), started once by GameDock (components/GameDock.tsx).
  */
 export default function HyperfocusPage() {
   const nonce = headers().get("x-nonce") ?? undefined;
@@ -28,10 +28,9 @@ export default function HyperfocusPage() {
   return (
     <>
       <h1 className="sr-only">Hyperfocus GP</h1>
-      <style dangerouslySetInnerHTML={{ __html: HF_CSS }} />
       {app && <style dangerouslySetInnerHTML={{ __html: '.hf .mcard[data-flow="paid"],.hf [data-step="paid"],.hf #paidOv{display:none!important}' }} />}
-      <div className={"hf " + fontRace.variable} dangerouslySetInnerHTML={{ __html: markup }} suppressHydrationWarning />
-      <HFBoot nonce={nonce} />
+      {/* The game lives in the layout (components/GameDock.tsx) so a race keeps going in a small window when you leave. */}
+      <GameSlot css={HF_CSS} markup={markup} cls={fontRace.variable} nonce={nonce} />
     </>
   );
 }

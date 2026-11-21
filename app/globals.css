@@ -8042,3 +8042,16 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .hx-dev-sum{margin:8px 0;font-size:.84em;color:var(--hx-text)}
 .hx-dev .hx-adv-stats div{background:var(--hx-inset)}
 .hx-htable a{color:var(--hx-gold);font-weight:700;text-decoration:none}
+/* Hyperfocus GP floating window (components/GameDock.tsx): the race keeps going small while you browse. */
+.gd-dock{display:none}
+.gd-dock.on{display:block;position:fixed;z-index:955;right:12px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(240px,46vw);border-radius:14px;overflow:hidden;background:#0d0b1f;border:2px solid #F0B90B;box-shadow:0 14px 36px -10px rgba(0,0,0,.55)}
+@media (min-width:861px){.gd-dock.on{bottom:16px;width:280px}}
+.gd-open{display:block;text-decoration:none;color:#fff}
+.gd-dock .gd-mini.hf{padding:0;font-size:12px;background:#0d0b1f;pointer-events:none}
+.gd-dock .gd-mini .stage{position:relative!important;inset:auto!important;max-width:none!important;margin:0!important;background:#000}
+.gd-dock .gd-mini .view{position:relative!important;inset:auto!important;width:100%!important;aspect-ratio:16/9!important;border:0;border-radius:0}
+.gd-dock .gd-mini .pads,.gd-dock .gd-mini .overlay,.gd-dock .gd-mini .exitb,.gd-dock .gd-mini .rotateHint,.gd-dock .gd-mini .tsheet{display:none!important}
+.gd-lbl{display:block;padding:5px 9px;font-size:.74rem;font-weight:800;background:#17142b;color:#ffd54a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gd-x{position:absolute;top:5px;right:5px;width:26px;height:26px;border-radius:50%;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:.8rem;cursor:pointer;display:grid;place-items:center}
+.gd-x:focus-visible,.gd-open:focus-visible{outline:2px solid #F0B90B;outline-offset:2px}
+.gd-slot{display:contents}

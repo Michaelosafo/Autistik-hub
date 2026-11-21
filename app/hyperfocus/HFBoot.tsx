@@ -47,12 +47,14 @@ async function walletApi(action: string, body: unknown) {
   return j;
 }
 
-/** Starts Hyperfocus GP and lets its Wallet tab use the site's own wallet connection. */
-export default function HFBoot({ nonce }: { nonce?: string }) {
-  useEffect(() => {
+/**
+ * Starts Hyperfocus GP once and lets its Wallet tab use the site's own wallet connection. The game's page lives in
+ * the site layout (components/GameDock.tsx), so it is booted only the first time you open it.
+ */
+export function bootHyperfocus(nonce?: string) {
+  {
     const w = window as any;
-    // The game script runs once per page load; coming back through an in-site link reloads the page cleanly.
-    if (w.__hfBooted) { window.location.reload(); return; }
+    if (w.__hfBooted) return;
     w.__hfBooted = true;
     w.HFWallet = {
       connect: () => pickWallet({ fresh: true }),
@@ -126,6 +128,11 @@ export default function HFBoot({ nonce }: { nonce?: string }) {
       document.body.appendChild(s);
     };
     next();
-  }, [nonce]);
+  }
+}
+
+/** Old entry point: boots the game (kept for pages that still render the markup themselves). */
+export default function HFBoot({ nonce }: { nonce?: string }) {
+  useEffect(() => { bootHyperfocus(nonce); }, [nonce]);
   return null;
 }

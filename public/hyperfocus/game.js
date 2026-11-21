@@ -2062,13 +2062,13 @@ $('#pads').querySelectorAll('button[data-k]').forEach(b=>{const k=b.dataset.k;
 /* ================= full screen ================= */
 function immersive(){return document.body.classList.contains('immersive');}
 function enterImmersive(gesture){
-  document.body.classList.add('immersive');document.querySelector('.wrap').classList.remove('landing');$('#launchOv').hidden=true;$('#bExit').hidden=false;
+  document.body.classList.add('immersive');(document.querySelector('.hf .wrap')||{classList:{remove(){},add(){}}}).classList.remove('landing');$('#launchOv').hidden=true;$('#bExit').hidden=false;
   if(gesture){const el=$('#stage');try{const p=el.requestFullscreen?el.requestFullscreen({navigationUI:'hide'}):el.webkitRequestFullscreen?el.webkitRequestFullscreen():null;
     if(p&&p.then)p.then(()=>{try{screen.orientation&&screen.orientation.lock&&screen.orientation.lock('landscape').catch(()=>{});}catch(e){}}).catch(()=>{});}catch(e){}}
   requestAnimationFrame(resize);setTimeout(resize,300);
 }
 function exitImmersive(){
-  document.body.classList.remove('immersive','racing');document.querySelector('.wrap').classList.add('landing');$('#bExit').hidden=true;$('#pads').hidden=true;
+  document.body.classList.remove('immersive','racing');(document.querySelector('.hf .wrap')||{classList:{remove(){},add(){}}}).classList.add('landing');$('#bExit').hidden=true;$('#pads').hidden=true;
   try{if(document.fullscreenElement&&document.exitFullscreen)document.exitFullscreen().catch(()=>{});}catch(e){}
   if(state==='race'){S=null;state=nr?'lobby':'home';if(nr)lobbyPresence();}clearResume();$('#pauseOv').hidden=true;
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);$('#launchOv').hidden=false;
@@ -2242,3 +2242,21 @@ function frame(now){
 renderBoard([]);
 requestAnimationFrame(frame);
 })();
+
+/* ---------- floating mini window (components/GameDock.tsx): the race keeps going small while you use the rest of the site ---------- */
+window.HFGame={
+  racing(){return !!(S&&state==='race');},
+  label(){return S&&state==='race'?(S.me.finished?'Race finished · tap to see results':'Race on · tap to go back'):'';},
+  mini(on){
+    if(on){document.body.classList.remove('immersive');$('#pads').hidden=true;}
+    else if(S&&state==='race'){enterImmersive(true);if(!S.me.finished)$('#pads').hidden=false;}
+  },
+  exit(){try{exitImmersive();}catch(e){document.body.classList.remove('immersive','racing');}},
+  close(){
+    try{if(nr){nr.leave().catch(()=>{});nr=null;}}catch(e){}
+    try{leavePublic();}catch(e){}
+    clearResume();S=null;state='home';
+    ['endOv','lobbyOv','pauseOv'].forEach(id=>{const el=$('#'+id);if(el)el.hidden=true;});
+    try{exitImmersive();}catch(e){document.body.classList.remove('immersive','racing');}$('#homeOv').hidden=false;wizHome();
+  },
+};

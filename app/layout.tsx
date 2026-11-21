@@ -6,6 +6,7 @@ import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
 import Shell from "@/components/Shell";
 import LiveDock from "@/components/rooms/LiveDock";
+import GameDock from "@/components/GameDock";
 import SiteBackdrop from "@/components/SiteBackdrop";
 import Welcome from "@/components/Welcome";
 import WalletGate from "@/components/WalletGate";
@@ -84,7 +85,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <Welcome />
         {user && needWallet && !appNoMoney && <WalletGate uid={user.id} />}
         {/* Keeps a live playing while members move around the site. */}
-        <LiveDock><Shell me={me}>{children}</Shell></LiveDock>
+        <LiveDock><GameDock><Shell me={me}>{children}</Shell></GameDock></LiveDock>
         <BotFab />
         {/* Remembers the pages visited in this tab, for the "← Back" buttons. */}
         <Suspense fallback={null}><NavTrail /></Suspense>
