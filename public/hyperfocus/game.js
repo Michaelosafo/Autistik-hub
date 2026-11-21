@@ -1328,8 +1328,9 @@ function showEnd(){clearResume();
   $('#resTbl').innerHTML=`<tr><th>Pos</th><th>Racer</th><th>Result</th><th>${S.w.mode==='fun'?'Distance':'Bag / holding'}</th></tr>`+list.map((r,i)=>{
     const d=r.d||disp(r),human=r.me||r.remote;
     return `<tr class="${r.me?'me':r.remote?'friend':''}"><td>${i+1}</td><td class="${human?'':'a'}">${esc(human?r.name+(r.me?' (you)':''):(d.name||d.label))}</td><td>${r.finished?(r.ft-Math.max(0,0)).toFixed(1)+'s':'racing'}</td><td>${human&&S.w.mode!=='fun'?fmtUsd(r.me?myValue(r):r.value):esc(d.sub)}</td></tr>`;}).join('');
-  const canRestart=!nr||isHost;
-  $('#bAgain').hidden=!canRestart;$('#endWait').hidden=canRestart;$('#bLobby').textContent=nr?'Back to lobby':'Change race';
+  const canRestart=!nr||isHost||pubRoom;
+  $('#bAgain').hidden=!canRestart;$('#endWait').hidden=canRestart;$('#bLobby').textContent=nr&&!pubRoom?'Back to lobby':'Change race';
+  if(pubRoom)$('#bAgain').textContent='Next online race';
   $('#endOv').hidden=false;$('#pads').hidden=true;document.body.classList.remove('racing');
 }
 
@@ -1347,7 +1348,7 @@ function setNetStatus(t,ok){$('#netStatus').textContent=t;$('#bCreate').disabled
 function readNick(){const n=$('#nick').value.trim().replace(/\s+/g,' ').slice(0,16);me.nick=n||'Racer';try{localStorage.setItem('pumprally-nick',me.nick);}catch(e){}return me.nick;}
 function homeErr(t){const e=$('#homeErr');e.textContent=t||'';e.hidden=!t;}
 async function enterRoom(c,host){
-  homeErr('');readNick();menuMode='fun';
+  homeErr('');readNick();menuMode='fun';leavePublic();
   try{nr=await room.join(c);}catch(e){homeErr(e&&e.code==='not_permitted'?'You can’t join races from here.':'Couldn’t join that race. Check the code and try again.');return;}
   code=c;isHost=host;hostGo=null;saveRoom(c,host);
   if(peersUnsub)peersUnsub();
@@ -1388,8 +1389,9 @@ function showLobby(){
   state='lobby';S=null;
   ['homeOv','endOv','launchOv'].forEach(id=>$('#'+id).hidden=true);$('#lobbyOv').hidden=false;$('#pads').hidden=true;document.body.classList.remove('racing');
   if(!immersive()){$('#lobbyOv').hidden=true;$('#launchOv').hidden=false;}
-  $('#codeTxt').textContent=nr?code:'Solo';$('#lobbyLbl').textContent=nr?'Race code':'Mode';
-  $('#bCopy').hidden=!nr;$('#lobbyHint').hidden=!nr;$('#shareRow').hidden=!nr;$('#shareLink').value=nr&&code?inviteLink(code):'';
+  const priv=nr&&!pubRoom;
+  $('#codeTxt').textContent=priv?code:pubRoom?'Online':'Solo';$('#lobbyLbl').textContent=priv?'Race code':'Mode';
+  $('#bCopy').hidden=!priv;$('#lobbyHint').hidden=!priv;$('#shareRow').hidden=!priv;$('#shareLink').value=priv&&code?inviteLink(code):'';
   renderLobby();
 }
 function renderBuy(){
@@ -1425,6 +1427,7 @@ function renderLobby(){
   const ps=nr.peers();
   $('#players').innerHTML=ps.length?ps.map(p=>{const q=p.presence||{};const c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888';
     const bi='';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
+  if(pubRoom){$('#bStart').hidden=true;$('#modeBox').hidden=true;$('#guestMode').hidden=false;return;}
   if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a free race':hp.presence.mode==='real'?'a real-token race':'a Token race'}${hp.presence.tok&&hp.presence.mode!=='fun'?' with '+(hp.presence.mode==='real'?(REAL[hp.presence.tok]&&REAL[hp.presence.tok].symbol?'$'+REAL[hp.presence.tok].symbol:'a pasted coin'):hp.presence.tok):''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
 }
 $('#nick').value=me.nick;
@@ -1449,7 +1452,34 @@ renderGarage();
 $('#bCreate').onclick=()=>{if(!room)return;const c=WORDS[Math.floor(Math.random()*WORDS.length)]+'-'+(1000+Math.floor(Math.random()*9000));enterRoom(c,true);};
 $('#bJoin').onclick=()=>{if(!room)return;const c=$('#joinCode').value.trim().toLowerCase().replace(/\s+/g,'-');if(!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(c)){homeErr('That code doesn’t look right. It should look like jollof-4821.');return;}enterRoom(c,false);};
 $('#joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#bJoin').click();});
-$('#bSolo').onclick=()=>{readNick();if(nr){nr.leave().catch(()=>{});nr=null;forgetRoom();}isHost=false;menuMode='fun';menuTok=Object.keys(TOK)[Math.floor(Math.random()*Object.keys(TOK).length)];hostStart();};
+/* ---------- Race online: public matches with whoever else is playing (invite rooms stay private) ----------
+ * Everyone who taps "Race online" inside the same 20-second window lands in the same public room (pub-<window>) and
+ * starts together when the window closes, on the same track, the same coin and the same rules (a standard free
+ * race). Computer racers fill the empty places. No host: every player works out the same start time and seed. */
+const PUB_MS=20000;let pubRoom=false,pubTimer=0;
+function soloOffline(){isHost=false;menuMode='fun';menuTok=Object.keys(TOK)[Math.floor(Math.random()*Object.keys(TOK).length)];hostStart();}
+async function enterPublic(){
+  readNick();homeErr('');
+  if(nr){await nr.leave().catch(()=>{});nr=null;}
+  forgetRoom();clearInterval(pubTimer);pubRoom=false;
+  if(!room){soloOffline();return;}
+  const now=Date.now();let w=Math.floor(now/PUB_MS);if(now%PUB_MS>PUB_MS-5000)w++;// under 5 s left: take the next match
+  const c='pub-'+w,keys=Object.keys(TOK),tok=keys[w%keys.length],go=(w+1)*PUB_MS+3000;
+  try{nr=await room.join(c);}catch(e){soloOffline();return;}
+  code=c;isHost=false;hostGo=null;pubRoom=true;menuMode='fun';menuTok=tok;
+  if(peersUnsub)peersUnsub();knownPeers=new Map();
+  peersUnsub=nr.onPeers(()=>{peerDiff();if(state==='lobby')renderLobby();},()=>{});
+  lobbyPresence();showLobby();
+  const tick=()=>{
+    if(!pubRoom||code!==c){clearInterval(pubTimer);return;}
+    const left=Math.max(0,Math.ceil((go-3000-Date.now())/1000)),n=nr?nr.peers().filter(p=>p.presence&&p.presence.n).length:1;
+    const g=$('#guestMode');if(g&&state==='lobby'){g.hidden=false;g.textContent=`🌍 Online race · ${n} player${n===1?'':'s'} here · starts in ${left}s. Anyone who joins now races with you; computer racers fill the rest.`;}
+    if(Date.now()>=go-3000&&state==='lobby'){clearInterval(pubTimer);startRace('fun',tok,go,`pub|${w}|fun|${tok}`);}
+  };
+  tick();pubTimer=setInterval(tick,500);
+}
+function leavePublic(){clearInterval(pubTimer);if(pubRoom&&nr){nr.leave().catch(()=>{});nr=null;code=null;}pubRoom=false;}
+$('#bSolo').onclick=()=>{enterPublic();};
 $('#bCopy').onclick=()=>{const t=code||'';const done=()=>{$('#bCopy').textContent='Copied';setTimeout(()=>$('#bCopy').textContent='Copy code',1500);};
   if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done).catch(sel);else sel();
   function sel(){const r=document.createRange();r.selectNodeContents($('#codeTxt'));const s=getSelection();s.removeAllRanges();s.addRange(r);}};
@@ -1685,7 +1715,7 @@ function renderInvite(){
   if(!INV)return;const nm=$('#invName');
   if(document.activeElement!==nm)nm.value=me.nick&&me.nick!=='Racer'?me.nick:'';
   const list=$('#invList'),txt=$('#invTxt');
-  if(nr&&code){
+  if(nr&&code&&!pubRoom){
     $('#invH').textContent=isHost?'Your race room':'You’re in the room';$('#invCode').textContent='Code '+code;
     const ps=nr.peers(),others=ps.filter(p=>!p.sameTab&&p.presence&&p.presence.n);
     list.hidden=false;list.innerHTML=ps.length?ps.map(p=>{const q=p.presence||{},c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888',fresh=!p.sameTab&&!invSeen.has(p.peer);
@@ -2007,9 +2037,9 @@ async function hostStart(){
   else startRace(menuMode,tk,go,`solo|${go}|${Math.random()}`);
 }
 $('#bStart').onclick=hostStart;
-$('#bAgain').onclick=hostStart;
-$('#bLobby').onclick=()=>{if(S&&S.mode==='paid'||state==='paid-wait'){if(nr){nr.leave().catch(()=>{});nr=null;}S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();$('#bLobby').textContent='Back to lobby';return;}if(nr)lobbyPresence();showLobby();};
-$('#bLeave').onclick=()=>{if(nr){nr.leave().catch(()=>{});nr=null;}forgetRoom();code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;wizHome();renderBoard([]);$('#feed').innerHTML='';renderInvite();};
+$('#bAgain').onclick=()=>{if(pubRoom){enterPublic();return;}hostStart();};
+$('#bLobby').onclick=()=>{if(pubRoom){leavePublic();S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();return;}if(S&&S.mode==='paid'||state==='paid-wait'){if(nr){nr.leave().catch(()=>{});nr=null;}S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();$('#bLobby').textContent='Back to lobby';return;}if(nr)lobbyPresence();showLobby();};
+$('#bLeave').onclick=()=>{leavePublic();if(nr){nr.leave().catch(()=>{});nr=null;}forgetRoom();code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;wizHome();renderBoard([]);$('#feed').innerHTML='';renderInvite();};
 
 /* ================= input ================= */
 const KEYS={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',Space:'gas',ArrowUp:'gas',KeyW:'gas',ShiftLeft:'gas',ShiftRight:'gas',ArrowDown:'brake',KeyS:'brake'};
