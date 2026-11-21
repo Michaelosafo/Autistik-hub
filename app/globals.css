@@ -7814,3 +7814,39 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .rg-step.sb{--c1:#22c55e;--c2:#0ea5e9}
 .rg-step.s3{--c1:#0ea5e9;--c2:#6366f1}
 .rg-step.s4{--c1:#9945FF;--c2:#ec4899}
+
+/* Scanner dashboard (components/ScanDashboard.tsx), from the safemoon.ai scanner: radar, risk gauge, overview, pools. */
+.sd{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.sd-panel{position:relative;background:linear-gradient(165deg,#11131c,#0b0c12);color:#e9ecf5;border:1px solid rgba(95,242,255,.14);border-radius:18px;padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0;overflow:hidden}
+.sd-panel h3{font-size:.78em;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#9aa3bd}
+.sd-panel .muted{color:#9aa3bd}
+.sd-big{font-family:var(--f-display);font-size:2.6em;line-height:1;color:#ff6a3d}
+.sd-radar{width:100%;max-width:220px;align-self:center}
+.sd-sweep{transform-origin:110px 110px;animation:sdSweep 4s linear infinite}
+@keyframes sdSweep{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.sd-sweep{animation:none}}
+.sd-flags{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:5px}
+.sd-flags li{font-size:.74em;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(255,179,71,.14);color:#ffb347}
+.sd-flags li.bad{background:rgba(255,90,60,.16);color:#ff7a5c}
+.sd-gwrap{position:relative;max-width:260px;width:100%;align-self:center}
+.sd-gwrap svg{width:100%;display:block}
+.sd-gread{position:absolute;left:0;right:0;top:46%;display:flex;flex-direction:column;align-items:center;gap:2px}
+.sd-gread b{font-family:var(--f-display);font-size:2.4em;line-height:1}
+.sd-gread em{font-style:normal;font-weight:800;font-size:.86em}
+.sd-gauge.low .sd-gread em{color:#38bdf8}.sd-gauge.mid .sd-gread em{color:#ffb347}.sd-gauge.high .sd-gread em{color:#ff5a3c}.sd-gauge.na .sd-gread em{color:#9aa3bd}
+.sd-legend{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:.8em}
+.sd-legend li{display:flex;align-items:center;gap:8px}
+.sd-legend i{width:10px;height:10px;border-radius:3px}
+.sd-legend b{margin-left:auto;color:#9aa3bd;font-weight:700}
+.sd-ov dl{margin:0;display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.sd-ov dt{font-size:.74em;color:#9aa3bd;font-weight:700}
+.sd-ov dd{margin:0;font-weight:800;overflow-wrap:anywhere}
+.sd-ov .up{color:#22d3a0}.sd-ov .down{color:#ff5a3c}
+.sd-pools{grid-column:1/-1}
+.sd-pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.sd-pool{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:rgba(95,242,255,.06);border:1px solid rgba(95,242,255,.12)}
+.sd-pool b{font-size:.86em;text-transform:capitalize}
+.sd-pool span{font-family:var(--f-display);font-size:1.2em;color:#5ff2ff}
+.sd-pool small{color:#9aa3bd;font-size:.76em}
+@media (max-width:900px){.sd{grid-template-columns:1fr 1fr}.sd-ov{grid-column:1/-1}}
+@media (max-width:560px){.sd{grid-template-columns:1fr}}

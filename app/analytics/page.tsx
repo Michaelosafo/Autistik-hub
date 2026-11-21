@@ -60,7 +60,7 @@ export default async function AnalyticsPage() {
           <div><b>{SCAN_CHAINS.length}</b><span>networks</span></div>
           <div><b>{(tracked ?? 0).toLocaleString("en-US")}</b><span>tokens tracked</span></div>
           <div><b>{(movesToday ?? 0).toLocaleString("en-US")}</b><span>wallet moves today</span></div>
-          <div><b>10 min</b><span>refresh</span></div>
+          <div><b>30+</b><span>checks per scan</span></div>
         </div>
         <Link href="/pro" className="an-pro"><b>Pro</b> · 3 timeframes, whale radar, track record &amp; analyst report →</Link>
       </section>

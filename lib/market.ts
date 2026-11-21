@@ -91,6 +91,9 @@ export type PairStats = {
   buysH1: number; sellsH1: number; buysH24: number | null; sellsH24: number | null; volumeH24: number | null; liquidityUsd: number | null; marketCap: number | null; imageUrl: string | null;
   /** When the deepest pool was created (ms), and how many pools the token has. */
   pairCreatedAt?: number | null; pools?: number;
+  /** Pools by liquidity (deepest first, up to 6) and which project links DexScreener lists. */
+  poolList?: { dex: string; quote: string; liquidityUsd: number | null; volumeH24: number | null }[];
+  links?: { x: boolean; telegram: boolean; website: boolean };
 };
 
 /** Adds one 24-hour figure up across pools; null when no pool reports it. */
@@ -116,6 +119,15 @@ export async function getPairStats(slug: string, token: string): Promise<PairSta
       pairCreatedAt: num(p.pairCreatedAt), pools: pairs.length,
       // The token's logo, when the project added one on DexScreener.
       imageUrl: (pairs as any[]).map((x) => x?.info?.imageUrl).find((u) => typeof u === "string" && u.startsWith("https://") && u.length < 600) ?? null,
+      poolList: [...pairs].sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0)).slice(0, 6).map((x) => ({
+        dex: String(x?.dexId || "DEX").slice(0, 24), quote: String(x?.quoteToken?.symbol || "").slice(0, 12),
+        liquidityUsd: num(x?.liquidity?.usd), volumeH24: num(x?.volume?.h24),
+      })),
+      links: (() => {
+        const l = (pairs as any[]).flatMap((x) => [...(x?.info?.socials || []), ...(x?.info?.websites || [])]);
+        const u = (v: any) => String(v?.url || "") + " " + String(v?.type || "");
+        return { x: l.some((v) => /(x|twitter)\.com\/|twitter|^\s*x\b/i.test(u(v))), telegram: l.some((v) => /t\.me\/|telegram/i.test(u(v))), website: l.some((v) => !!v?.label || /website/i.test(String(v?.type || ""))) };
+      })(),
     };
   } catch { return null; }
 }

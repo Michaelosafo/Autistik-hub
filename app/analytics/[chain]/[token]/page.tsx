@@ -28,6 +28,8 @@ import { trustScore } from "@/lib/trust-score";
 import { audit } from "@/lib/analytics-audit";
 import { simulateHoneypot } from "@/lib/honeypot-sim";
 import AuditCard from "@/components/AuditCard";
+import ScanDashboard from "@/components/ScanDashboard";
+import { rugcheck } from "@/lib/rugcheck";
 import { currentUser, supabaseServer, supabaseService } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +92,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
 
   const movePromise = getPairStats(c.dex, t.token);
   const simPromise = c.kind === "evm" ? simulateHoneypot(chain, t.token) : Promise.resolve(null);
+  const rugPromise = c.kind === "solana" ? rugcheck(t.token) : Promise.resolve(null);
   const candlePromise = getCandles(chain, t.pair);
   const lockPromise = Promise.all([locksFor(chain, t.token, t.pair), lockerOn(chain)]).catch(() => [[], null] as [LockView[], null]);
   const pinPromise = user ? sb.from("token_pins").select("token").eq("user_id", user.id).eq("chain", chain).eq("token", t.token) : Promise.resolve({ data: [] as any[] });
@@ -143,7 +146,9 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
   const sim = await simPromise;
   // A honeypot found by either test counts; the simulation's measured taxes win over GoPlus's estimate.
   const sec = { ...s, honeypot: s.honeypot === true || sim?.honeypot === true ? true : s.honeypot ?? sim?.honeypot ?? null, buyTax: sim?.buyTax ?? s.buyTax, sellTax: sim?.sellTax ?? s.sellTax };
-  const report = audit({ security: sec, sim, move, topShare: top.length ? topShare : null, devPct: dev ? Number(dev.pct) || 0 : null, solana: c.kind === "solana" });
+  const rug = await rugPromise;
+  const report = audit({ security: sec, sim, move, topShare: top.length ? topShare : null, devPct: dev ? Number(dev.pct) || 0 : null, solana: c.kind === "solana", rug });
+  const std = c.kind === "solana" ? "SPL" : chain === "bsc" ? "BEP-20" : "ERC-20";
   const trust = trustScore({ security: sec, topShare: top.length ? topShare : null, bundle: (holders || []).length ? bundle.level : null });
 
   // Opened from a dev wallet page: a way back to that wallet, kept while switching tabs.
@@ -202,6 +207,7 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
         ))}
       </nav>
 
+      {(view === "overview" || view === "safety") && <ScanDashboard a={report} move={move} chainName={c.name} token={t.token} std={std} />}
       {view === "overview" && <AuditCard a={report} compact more={withDev(`/analytics/${chain}/${t.token}?view=safety`)} />}
       {view === "safety" && <AuditCard a={report} />}
       {view === "safety" && <BundleCard b={bundle} explorer={c.explorer} token={t.token} />}

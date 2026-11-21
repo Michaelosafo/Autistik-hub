@@ -38,7 +38,7 @@ export default function AuditCard({ a, compact, more }: { a: Audit; compact?: bo
           ))}
         </div>
       )}
-      <small className="muted">From GoPlus contract checks, a live buy/sell simulation (honeypot.is), DexScreener and our holder scan. Checks can miss things: not financial advice.</small>
+      <small className="muted">From GoPlus contract checks, a live buy/sell simulation (honeypot.is), RugCheck (Solana), DexScreener and our holder scan. Checks can miss things: not financial advice.</small>
     </section>
   );
 }

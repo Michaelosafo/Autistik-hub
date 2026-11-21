@@ -1,11 +1,12 @@
 /**
  * The Scanner's advanced audit: every contract, holder and market check in plain words, grouped, with an A–F grade.
  * Inputs: GoPlus security (lib/analytics.ts), the honeypot.is simulation (lib/honeypot-sim.ts), DexScreener pool
- * stats (lib/market.ts getPairStats) and our holder list. Checks we couldn't read are shown as "unknown" and don't
+ * stats (lib/market.ts getPairStats), RugCheck for Solana (lib/rugcheck.ts) and our holder list. Checks we couldn't read are shown as "unknown" and don't
  * count for or against the grade.
  */
 import type { HoneypotSim } from "@/lib/honeypot-sim";
 import type { PairStats } from "@/lib/market";
+import type { RugReport } from "@/lib/rugcheck";
 
 export type AuditLevel = "ok" | "warn" | "bad" | "unknown";
 export type AuditCheck = { level: AuditLevel; label: string; detail: string };
@@ -16,8 +17,8 @@ const pct = (n: number) => (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) +
 const usd = (n: number) => "$" + Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 const age = (ms: number) => { const d = (Date.now() - ms) / 86_400_000; return d < 1 / 24 ? "under an hour" : d < 1 ? `${Math.round(d * 24)} hours` : d < 60 ? `${Math.round(d)} days` : `${Math.round(d / 30)} months`; };
 
-export function audit({ security, sim, move, topShare, devPct, solana }: {
-  security: any; sim: HoneypotSim | null; move: PairStats | null; topShare: number | null; devPct: number | null; solana?: boolean;
+export function audit({ security, sim, move, topShare, devPct, solana, rug }: {
+  security: any; sim: HoneypotSim | null; move: PairStats | null; topShare: number | null; devPct: number | null; solana?: boolean; rug?: RugReport | null;
 }): Audit {
   const s = security || {};
   const groups: AuditGroup[] = [];
@@ -52,6 +53,8 @@ export function audit({ security, sim, move, topShare, devPct, solana }: {
   risk(sell, s.cooldown, "Trading cooldown", "There's a wait between trades, so you may not be able to sell fast.", "No wait between trades.", "warn");
   risk(sell, s.pausable, "Pause trading", "The owner can pause all transfers, which stops selling.", "Transfers can't be paused.");
   risk(sell, s.blacklist, "Blacklist", "The owner can block wallets from selling.", "No blacklist.", "warn");
+  risk(sell, s.whitelist, "Whitelist", "Only wallets on the owner's list can trade.", "Anyone can trade.", "warn");
+  if (rug && rug.transferFeePct > 0) add(sell, rug.transferFeePct > 10 ? "bad" : rug.transferFeePct > 5 ? "warn" : "ok", "Transfer fee", `${pct(rug.transferFeePct)} is taken on every transfer.`);
 
   // ---------------------------------------------------------------- owner powers
   const own = g("Owner powers");
@@ -67,6 +70,10 @@ export function audit({ security, sim, move, topShare, devPct, solana }: {
   risk(own, s.externalCall, "Outside calls", "The contract calls other contracts, which can hide behaviour.", "No risky outside calls.", "warn");
   risk(own, s.antiWhaleChange, "Max-buy limits", "The owner can change how much one wallet can buy or hold.", "Wallet limits can't be changed.", "warn");
   if (s.freezable != null) risk(own, s.freezable, "Freeze wallets", "The owner can freeze wallets.", "Wallets can't be frozen.");
+  // Solana: RugCheck fills in mint / freeze authority when GoPlus has no answer.
+  if (rug && s.mintable == null) risk(own, rug.mintAuthority, "Mint authority", "More tokens can still be minted.", "Revoked: no new tokens can be made.");
+  if (rug && s.freezable == null) risk(own, rug.freezeAuthority, "Freeze authority", "Wallets can be frozen, so you may not be able to sell.", "Revoked: wallets can't be frozen.");
+  risk(own, s.metadataMutable, "Name & logo", "The owner can still change the token's name and picture.", "The token's name and picture are locked.", "warn");
   if (s.openSource != null) add(own, s.openSource ? "ok" : "bad", "Contract code", s.openSource ? "Public and verified, anyone can read it." : "Hidden: nobody can check what it does.");
 
   // ---------------------------------------------------------------- supply & holders
@@ -75,6 +82,11 @@ export function audit({ security, sim, move, topShare, devPct, solana }: {
     const safe = Math.min(100, (s.lp.locked ?? 0) + (s.lp.burned ?? 0));
     add(sup, safe >= 90 ? "ok" : safe >= 50 ? "warn" : "bad", "Liquidity lock", safe >= 90 ? `${pct(safe)} of the pool is locked or burned.` : `Only ${pct(safe)} of the pool is locked or burned: the rest can be pulled.`);
   }
+  if (!s.lp && rug?.lpLockedPct != null) {
+    const safe = rug.lpLockedPct;
+    add(sup, safe >= 90 ? "ok" : safe >= 50 ? "warn" : "bad", "Liquidity lock", safe >= 90 ? `${pct(safe)} of the pool is locked or burned (RugCheck).` : `Only ${pct(safe)} of the pool is locked or burned: the rest can be pulled.`);
+  }
+  if ((topShare == null || topShare <= 0) && rug?.top10Pct != null) topShare = rug.top10Pct;
   if (topShare != null && topShare > 0) add(sup, topShare > 50 ? "bad" : topShare > 30 ? "warn" : "ok", "Top wallets", `The biggest wallets hold ${pct(topShare)} of the supply${topShare > 30 ? ", so a few sellers can crash the price" : ""}.`);
   const dev = devPct ?? s.creatorPct;
   if (dev != null) add(sup, dev > 10 ? "bad" : dev > 5 ? "warn" : "ok", "Dev's share", dev > 0.01 ? `The dev holds ${pct(dev)}.` : "The dev holds none.");
@@ -103,7 +115,12 @@ export function audit({ security, sim, move, topShare, devPct, solana }: {
   risk(mkt, s.fakeToken, "Copycat", "This looks like a fake copy of a known token.", "Not a known copycat.");
   risk(mkt, s.airdropScam, "Airdrop scam", "Flagged as an airdrop scam.", "Not flagged as an airdrop scam.");
   risk(mkt, s.sameCreatorHoneypot, "Creator's past", "The same creator made honeypot tokens before.", "The creator has no known honeypots.");
+  if (move?.links) {
+    const l = [move.links.x && "X", move.links.telegram && "Telegram", move.links.website && "website"].filter(Boolean) as string[];
+    add(mkt, l.length ? "ok" : "warn", "Project socials", l.length ? `Lists ${l.join(", ")}.` : "No X, Telegram or website listed: anonymous projects rug more often.");
+  }
   if (s.trusted) add(mkt, "ok", "Known project", "On GoPlus's trusted list.");
+  for (const x of rug?.risks || []) add(mkt, x.level === "danger" ? "bad" : "warn", x.name, x.detail || "Flagged by RugCheck.");
   for (const r of s.risks || []) add(mkt, "warn", "Flagged", r);
 
   const kept = groups.filter((x) => x.checks.length);
@@ -115,6 +132,8 @@ export function audit({ security, sim, move, topShare, devPct, solana }: {
   let score = 100 - bad * 18 - warn * 6;
   const fatal = hp || s.changeBalance === true || s.cannotSellAll === true || s.fakeToken === true || s.airdropScam === true || (sim?.holdersTested && (sim.holdersFailed ?? 0) / sim.holdersTested > 0.2);
   if (fatal) score = Math.min(score, 10);
+  // A Solana token whose wallets can be frozen: you might not be able to sell.
+  if (solana && (s.freezable === true || (s.freezable == null && rug?.freezeAuthority))) score = Math.min(score, 35);
   score = Math.max(0, Math.min(100, Math.round(score)));
   const grade = score >= 85 ? "A" : score >= 70 ? "B" : score >= 55 ? "C" : score >= 35 ? "D" : "F";
   const headline = fatal ? "Dangerous: you may lose everything you put in."
