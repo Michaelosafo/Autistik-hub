@@ -70,7 +70,7 @@ export default async function DevPage({ params, searchParams }: { params: { chai
         <nav className="scan-tabs" aria-label="Sections">
           {([
             ["Overview", `/analytics/${chain}/${from}`], ["Dev wallet", null], ["Wallets", `/analytics/${chain}/${from}?view=wallets`],
-            ["Trades", `/analytics/${chain}/${from}?view=trades`], ["Safety", `/analytics/${chain}/${from}?view=safety`], ["Game arena", `/arena/${chain}/${from}`],
+            ["Trades", `/analytics/${chain}/${from}?view=trades`], ["Safety", `/analytics/${chain}/${from}?view=safety`],
           ] as const).map(([name, href]) => href
             ? <Link key={name} href={href} scroll={false}>{name}</Link>
             : <Link key={name} href={at("")} aria-current="page" scroll={false}>{name}</Link>)}

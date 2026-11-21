@@ -12,7 +12,7 @@ import BundleCard from "@/components/BundleCard";
  * The AUTISTIK scanner dashboard (light / dark with the site theme): metrics, scan bar, threat radar, 0–100 risk
  * gauge, token overview, top pools, every security check, holder analysis and recent scans. Data comes from
  * /api/scanner/quick (GoPlus, honeypot.is, RugCheck, DexScreener, graded by AUTISTIK's advanced audit). AUTISTIK's own
- * tools sit on top (dev wallet, game arena, hot coins, pins) and "Open full analysis" does the tracked scan.
+ * tools sit on top (dev wallet, hot coins, pins) and "Open full analysis" does the tracked scan.
  */
 type Level = "ok" | "warn" | "bad" | "unknown";
 type Check = { level: Level; label: string; detail: string; group: string };
@@ -20,19 +20,19 @@ type Result = {
   chain: string; chainName: string; std: string; token: string; name: string | null; symbol: string | null; logo: string | null;
   move: any; report: { grade: string; score: number | null; headline: string; bad: number; warn: number; ok: number; groups: { title: string; checks: { level: Level; label: string; detail: string }[] }[] };
   holders: { wallet: string; label: string | null; pct: number | null; kind: string }[];
+  dev: string | null;
 };
 type Recent = { chain: string; token: string; label: string; risk: number | null };
 
 const ICONS: Record<string, JSX.Element> = {
   token: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
   dev: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
-  arena: <><circle cx="12" cy="12" r="9" /><path d="M12 7l3 2-1 4h-4l-1-4zM12 3v4M21 12h-4M3 12h4M12 21v-4" /></>,
   hot: <path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z" />,
   pins: <path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />,
 };
 const TOOLS = [
   { k: "token", name: "Token scan" }, { k: "dev", name: "Dev wallet" },
-  { k: "arena", name: "Game arena", href: "/arena" }, { k: "hot", name: "Hot coins", href: "/momentum" }, { k: "pins", name: "My pins", href: "/analytics/pins" },
+{ k: "hot", name: "Hot coins", href: "/momentum" }, { k: "pins", name: "My pins", href: "/analytics/pins" },
 ] as const;
 const DEMOS = [
   { chain: "bsc", token: "0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82", name: "PancakeSwap (CAKE)" },
@@ -271,11 +271,12 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
                 <div><dt>Contract</dt><dd title={r?.token}>{r ? short(r.token) : "—"}</dd></div>
                 <div><dt>Blockchain</dt><dd>{r ? `${r.chainName} · ${r.std}` : "—"}</dd></div>
                 <div><dt>Pool age</dt><dd>{age(m?.pairCreatedAt)}</dd></div>
+                <div><dt>Dev / deployer</dt><dd>{r?.dev ? <Link href={`/analytics/dev/${r.chain}/${r.dev}?from=${r.token}`} title={r.dev}>{short(r.dev)} →</Link> : "—"}</dd></div>
               </dl>
               {r && (
                 <div className="hx-actions">
                   <button type="button" className="hx-btn" onClick={openFull} disabled={opening}>{opening ? "Opening…" : signedIn ? "Open full analysis →" : "Sign in for full analysis →"}</button>
-                  <Link className="hx-ghost" href={`/arena/${r.chain}/${r.token}`}>Game arena</Link>
+                  {r.dev && <Link className="hx-ghost" href={`/analytics/dev/${r.chain}/${r.dev}?from=${r.token}`}>Dev wallet</Link>}
                 </div>
               )}
             </div>
@@ -360,6 +361,7 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
                   <ZoneCard z={adv.zone} symbol={adv.symbol || r.symbol || "TOKEN"} />
                   <TradePlans plans={adv.plans} symbol={adv.symbol || r.symbol || "this token"} />
                   <BundleCard b={adv.bundle} explorer={adv.explorer} token={adv.token} />
+                  <DevPanel adv={adv} chain={r.chain} />
                   <div className="hx-panel">
                     <div className="hx-ph"><h2>Who might sell next</h2><span className="hx-tag">{adv.groups.length} connected group{adv.groups.length === 1 ? "" : "s"}</span></div>
                     {!adv.suspects.length ? <p className="hx-empty">✓ No wallet looks likely to sell right now.</p> : (
@@ -395,6 +397,53 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+/** The token's dev (deployer): their record, latest tokens, and the follow switch for new-token alerts. */
+function DevPanel({ adv, chain }: { adv: any; chain: string }) {
+  const [on, setOn] = useState<boolean>(!!adv.following);
+  const [busy, setBusy] = useState(false);
+  const w: string | null = adv.devWallet;
+  const d = adv.devInfo;
+  if (!w) return <div className="hx-panel"><div className="hx-ph"><h2>Dev wallet</h2></div><p className="hx-empty">We couldn't find who deployed this token yet.</p></div>;
+  async function toggle() {
+    setBusy(true);
+    const res = await fetch("/api/analytics/dev-follow", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain, wallet: w, on: !on, from: adv.token }) });
+    setBusy(false);
+    if (res.ok) setOn(!on);
+  }
+  const cls = !d ? "n" : d.verdict.kind === "push" ? "g" : d.verdict.kind === "careful" ? "o" : d.verdict.kind === "avoid" ? "r" : "n";
+  const st: Record<string, string> = { bonded: "g", alive: "g", curve: "o", dead: "r", unknown: "n" };
+  return (
+    <div className="hx-panel hx-dev">
+      <div className="hx-ph"><h2>Dev wallet</h2>{d && <span className={`hx-pill ${cls}`}>{d.label} · {d.score}/100</span>}</div>
+      <div className="hx-dev-top">
+        <span className="mono" title={w}>{short(w)}</span>
+        <button type="button" className={"hx-follow" + (on ? " on" : "")} onClick={toggle} disabled={busy} aria-pressed={on}>{on ? "🔔 Following: alert on new tokens" : "🔕 Follow this dev"}</button>
+      </div>
+      {d ? (
+        <>
+          <p className="hx-dev-sum"><b>{d.verdict.title}</b> {d.summary}</p>
+          <div className="hx-adv-stats">
+            <div><span>Tokens made</span><b>{d.stats.launched}</b></div>
+            <div><span>Bonded</span><b>{d.stats.bonded}</b></div>
+            <div><span>Still alive</span><b>{d.stats.alive}</b></div>
+            <div><span>Bond chance</span><b>{Math.round(d.bondChance)}%</b></div>
+          </div>
+          {d.tokens.length > 0 && (
+            <table className="hx-htable" style={{ marginTop: 8 }}><thead><tr><th>Their tokens</th><th>Status</th><th>Peak cap</th></tr></thead><tbody>
+              {d.tokens.map((t: any) => (
+                <tr key={t.token}><td title={t.token}><Link href={`/analytics?chain=${chain}&token=${t.token}`}>{t.symbol ? `$${t.symbol}` : short(t.token)}</Link>{t.token.toLowerCase() === String(adv.token).toLowerCase() ? " (this one)" : ""}</td><td><span className={`hx-pill ${st[t.status] || "n"}`}>{t.status}</span></td><td>{usd(t.athCap ?? t.marketCap)}</td></tr>
+              ))}
+            </tbody></table>
+          )}
+          {d.limited && <small className="hx-sub">{d.limited}</small>}
+        </>
+      ) : <p className="hx-empty">Reading this dev&apos;s history… open their full record below.</p>}
+      <Link className="hx-ghost" style={{ marginTop: 8 }} href={`/analytics/dev/${chain}/${w}?from=${adv.token}`}>Full dev record →</Link>
+      <small className="hx-sub">{on ? "You'll get an alert the moment this wallet creates a new token." : "Follow to get an alert when this wallet creates a new token."}</small>
     </div>
   );
 }

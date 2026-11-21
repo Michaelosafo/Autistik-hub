@@ -44,7 +44,7 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
   // Play: the games.
-  { name: "Play", icon: "i-ball", tip: "Race in Hyperfocus GP", match: ["/hyperfocus", "/arena"], items: [
+  { name: "Play", icon: "i-ball", tip: "Race in Hyperfocus GP", match: ["/hyperfocus"], items: [
     { href: "/hyperfocus#race", name: "Hyperfocus GP", note: "Race every holder in 3D, with friends, or play to win", icon: "i-ball" },
   ] },
   // Lock: lock liquidity or tokens, and everything that earns while it is locked.
@@ -82,7 +82,7 @@ const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?
   { href: "/board", name: "Board", icon: "i-rocket", match: ["/board", "/launchpad", "/momentum", "/analytics", "/pro"] },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers", "/liquidity", "/stake", "/susu", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
-  { href: "/hyperfocus#race", name: "Play", icon: "i-ball", match: ["/hyperfocus", "/arena"] },
+  { href: "/hyperfocus#race", name: "Play", icon: "i-ball", match: ["/hyperfocus"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet"] },
 ];
 

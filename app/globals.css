@@ -8034,3 +8034,11 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .hx-spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--hx-line);border-top-color:var(--hx-gold2);animation:hxSweep .8s linear infinite}
 @media (max-width:760px){.hx-adv-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.hx-adv .card{padding:10px 12px}}
 .hx-adv .plans h2,.hx-adv .plans h3,.hx-adv .zone-box h2{text-transform:none;letter-spacing:-.01em;color:var(--ink);font-size:1em}
+.hx-dev-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.hx-dev-top .mono{font-size:.86em;color:var(--hx-text)}
+.hx-follow{all:unset;cursor:pointer;font-size:.78em;font-weight:800;padding:6px 11px;border-radius:999px;border:1px solid var(--hx-line);background:var(--hx-inset);color:var(--hx-text)}
+.hx-follow.on{background:var(--sun-soft);border-color:var(--hx-gold2);color:var(--hx-gold)}
+.hx-follow:focus-visible{outline:2px solid var(--hx-gold2);outline-offset:2px}
+.hx-dev-sum{margin:8px 0;font-size:.84em;color:var(--hx-text)}
+.hx-dev .hx-adv-stats div{background:var(--hx-inset)}
+.hx-htable a{color:var(--hx-gold);font-weight:700;text-decoration:none}

@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   return json({
     chain, chainName: c.name, std: sol ? "SPL" : chain === "bsc" ? "BEP-20" : "ERC-20", token,
     name: move?.name || (gp as any)?.name || null, symbol: move?.symbol || (gp as any)?.symbol || null, logo: move?.imageUrl || null,
-    move, report,
+    move, report, dev: gp?.creator || null,
     holders: holders.slice(0, 7).map((h) => ({
       wallet: h.wallet, label: h.label || null, pct: h.pct ?? null,
       kind: h.locked ? "Locked" : h.isContract ? (h.label || "Contract") : creator && String(h.wallet).toLowerCase() === creator ? "Creator" : "Wallet",

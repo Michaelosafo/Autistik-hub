@@ -190,9 +190,11 @@ function TikBody({ t, me, onRemoved, compact, hot, parentAlias, detail }: CardPr
     if (error && error.code !== "23505") { setTickled(!next); setTickles((n) => n + (next ? -1 : 1)); }
     else refreshTrending();
   }
-  /** A link that opens this Tik directly (share it anywhere). */
+  /** A link that opens this Tik directly (share it anywhere), with the poster's name in it. */
   async function copyLink() {
-    const url = `${location.origin}/tik?tik=${t.id}`;
+    // The poster's account name is in the link: autistik.io/tik/<name>/<id>.
+    const name = String(a?.alias || "member").normalize("NFKD").replace(/[^\w\s-]/g, "").trim().replace(/[\s_]+/g, "-").toLowerCase() || "member";
+    const url = `${location.origin}/tik/${encodeURIComponent(name)}/${t.id}`;
     try { await navigator.clipboard.writeText(url); } catch { window.prompt("Copy this link:", url); }
     setCopied(true); setTimeout(() => setCopied(false), 1800);
   }

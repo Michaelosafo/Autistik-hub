@@ -52,14 +52,14 @@ function status(h: any, last: any) {
   return { cls: "", text: "Holding" };
 }
 
-const VIEWS = [["overview", "Overview"], ["chess", "Game arena"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
+const VIEWS = [["overview", "Overview"], ["chess", "Overview"], ["wallets", "Wallets"], ["trades", "Trades"], ["safety", "Safety"]] as const;
 type View = (typeof VIEWS)[number][0];
 
 export default async function TokenAnalytics({ params, searchParams }: { params: { chain: string; token: string }; searchParams: { view?: string; dev?: string } }) {
   const view: View = (VIEWS.find(([k]) => k === searchParams.view)?.[0]) ?? "overview";
   if (!isAChain(params.chain) || !isChainAddress(params.chain, params.token)) notFound();
-  // The game arena is its own page now, apart from the scanner; old links still land there.
-  if (view === "chess") redirect(`/arena/${params.chain}/${params.token}`);
+  // The Game arena was removed: old ?view=chess links open the overview.
+  if (view === "chess") redirect(`/analytics/${params.chain}/${params.token}`);
   const chain = params.chain, c = ACHAINS[chain];
   const sb = supabaseServer();
   let { data: t } = await sb.from("tracked_tokens").select("*").eq("chain", chain).eq("token", params.token).maybeSingle();
@@ -201,7 +201,6 @@ export default async function TokenAnalytics({ params, searchParams }: { params:
           ["wallets", "Wallets", `/analytics/${chain}/${t.token}?view=wallets`],
           ["trades", "Trades", `/analytics/${chain}/${t.token}?view=trades`],
           ["safety", "Safety", `/analytics/${chain}/${t.token}?view=safety`],
-          ["chess", "Game arena", `/arena/${chain}/${t.token}`],
         ] as const).filter(([, , href]) => href).map(([k, name, href]) => (
           <Link key={k} href={withDev(href!)} aria-current={view === k ? "page" : undefined} scroll={false}>{name}</Link>
         ))}

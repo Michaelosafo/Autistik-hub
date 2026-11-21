@@ -8,14 +8,12 @@ import AnalyticsScan from "@/components/AnalyticsScan";
 const ICONS: Record<string, JSX.Element> = {
   token: <><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>,
   dev: <><circle cx="12" cy="8" r="4" /><path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></>,
-  arena: <><circle cx="12" cy="12" r="9" /><path d="M12 7l3 2-1 4h-4l-1-4zM12 3v4M21 12h-4M3 12h4M12 21v-4" /></>,
   hot: <path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-5 1-9z" />,
   pins: <path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />,
 };
 const TOOLS = [
   { k: "token", name: "Token scan", blurb: "Safety, holders, buy or sell read" },
   { k: "dev", name: "Dev wallet", blurb: "Past tokens, bonded, chance to do well" },
-  { k: "arena", name: "Game arena", blurb: "Holders on a pitch", href: "/arena" },
   { k: "hot", name: "Hot coins", blurb: "Momentum right now", href: "/momentum" },
   { k: "pins", name: "My pins", blurb: "Your alerts", href: "/analytics/pins" },
 ] as const;

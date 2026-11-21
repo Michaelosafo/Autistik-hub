@@ -38,8 +38,8 @@ export default function Welcome() {
   useEffect(() => {
     if (skip) return;
     go.current?.focus();
-    // The Google Play app has no arena (it's a money feature there): just the hello.
-    const t = setTimeout(() => { if (!appNoMoney()) setLine(1); }, ARENA_MS);
+    // Just the hello (the Game arena that used to follow was removed).
+    const t = setTimeout(() => {}, ARENA_MS);
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") open(); };
     document.addEventListener("keydown", key);
     return () => { clearTimeout(t); clearTimeout(timer.current); document.removeEventListener("keydown", key); };
@@ -49,21 +49,15 @@ export default function Welcome() {
   return (
     <div className={"welcome" + (phase === "open" ? " opening" : "")} role="dialog" aria-modal="true" aria-label="Welcome to AUTISTIK">
       <div className="welcome-in">
-        {line === 0 ? (
+        {line === 0 && (
           <div className="welcome-bubble" key="hi">
             <b>Hi, welcome to AUTISTIK!</b>
             <span>I&apos;m Autistik, the mascot. This is a community for autistic people and the people who care about them. Using our tools helps fund real support for autistic people.</span>
-          </div>
-        ) : (
-          <div className="welcome-bubble arena" key="arena" aria-live="polite">
-            <b>⚽ Have you played the Game arena?</b>
-            <span>Every holder is a player on a pitch. Diamond hands vs paper hands: watch who sells, then join the match.</span>
           </div>
         )}
         <Mascot />
         <div className="welcome-btns">
           <button ref={go} type="button" className="welcome-go" onClick={open}>Go to site <span aria-hidden="true">→</span></button>
-          {line === 1 && <button type="button" className="welcome-go arena" onClick={() => { setPhase("gone"); router.push("/arena"); }}>⚽ Play the arena</button>}
         </div>
       </div>
     </div>
