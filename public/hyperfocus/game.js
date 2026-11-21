@@ -1660,7 +1660,9 @@ $('#scanMine').onclick=async()=>{
 };
 $('#bScanL').onclick=()=>openScan();
 /* ---------- step-by-step menu: each choice moves straight on to the next question ---------- */
-const FLOWS={friends:['mode','name','car','look','friends'],paid:['mode','name','car','look','paid'],real:['mode','name','car','look'],join:['name']};
+/* Simple start: pick the race, pick a car, and you're in. No colour or helmet step (your saved look is used).
+ * Free play goes straight into an online race; an invite link goes straight into your friend's room. */
+const FLOWS={friends:['mode','car'],paid:['mode','name','car','paid'],real:['mode','car'],join:['car']};
 let wizFlow='friends',wizAt='mode',wizPrev=null,pendingRoom=null,pendingHost=false;
 const ROOM_RE=/^[a-z0-9][a-z0-9_.-]{0,47}$/;
 (function(){try{const r=new URLSearchParams(location.search).get('room');let saved=null;try{saved=JSON.parse(localStorage.getItem('hf-room')||'null');}catch(e){}
@@ -1673,6 +1675,7 @@ function wizShow(step){
   const fl=FLOWS[wizFlow]||FLOWS.friends,i=fl.indexOf(step);
   $('#wDots').innerHTML=step==='settings'?'':fl.map((_,k)=>`<i class="${k<=i?'on':''}"></i>`).join('');
   $('#wBack').hidden=step!=='settings'&&i<=0;
+  if(step==='car')$('#carHint')&&($('#carHint').textContent=wizFlow==='join'?`Pick your car to join race ${pendingRoom||''}.`:wizFlow==='friends'?'Pick your car. The race starts straight away.':'Pick your car.');
   if(step==='name'){$('#nameHint').textContent=wizFlow==='join'?`You’re joining race ${pendingRoom||''}. Your friend sees this name in their lobby before they start.`:'Everyone in the race sees this name.';setTimeout(()=>{try{$('#nick').focus();}catch(e){}},60);}
   if(step==='paid')pdOpen();
   if(step==='mode')paidCard();
@@ -1687,7 +1690,8 @@ async function paidCard(){
 function wizNext(){const fl=FLOWS[wizFlow]||[],i=fl.indexOf(wizAt);if(i<0)return;if(i>=fl.length-1){wizDone();return;}wizShow(fl[i+1]);}
 function wizDone(){
   if(wizFlow==='real'){openScan();return;}
-  if(wizFlow==='join'&&pendingRoom){const c=pendingRoom;pendingRoom=null;joinWhenReady(c);}
+  if(wizFlow==='friends'){enterPublic();return;}
+  if(wizFlow==='join'&&pendingRoom){if(!me.nick||me.nick==='Racer')readNick();const c=pendingRoom;pendingRoom=null;joinWhenReady(c);}
 }
 function wizHome(){state='home';wizFlow='friends';$('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(x=>x.setAttribute('aria-pressed','false'));wizShow('mode');}
 $('#wBack').onclick=()=>{if(wizAt==='settings'){wizShow(wizPrev||'mode');return;}const fl=FLOWS[wizFlow],i=fl.indexOf(wizAt);if(i>0)wizShow(fl[i-1]);};
@@ -2071,7 +2075,7 @@ function exitImmersive(){
   requestAnimationFrame(resize);
 }
 $('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
-  if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('name');}return;}
+  if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('car');}return;}
   wizHome();};
 $('#bExit').onclick=exitImmersive;
 /* PLAY GAME at the top of the page: straight into the full-screen game */
