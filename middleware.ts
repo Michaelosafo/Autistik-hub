@@ -47,6 +47,11 @@ export async function middleware(request: NextRequest) {
     if (from && !same) {
       return finish(NextResponse.json({ error: "Requests must come from this site." }, { status: 403 }));
     }
+    // Browsers also say where a request came from (Sec-Fetch-Site); refuse changes another website triggers even
+    // when it hides the Origin header. Server-to-server calls (webhooks, crons) don't send this header.
+    if (request.headers.get("sec-fetch-site") === "cross-site") {
+      return finish(NextResponse.json({ error: "Requests must come from this site." }, { status: 403 }));
+    }
   }
 
   let response = next();
