@@ -5,6 +5,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { SOL_DECIMALS } from "@/lib/launchpad";
 import { SOL_ADDR, buildAddLiquidity, buildPool } from "@/lib/solana-launch";
 import { buildAdminCollect, buildAdminMint, buildAdminWithdraw, readAdminToken } from "@/lib/solana-launch-admin";
+import { buildMeteoraAdd, buildMeteoraPool, buildMeteoraRemove, isMeteoraPool, meteoraOk } from "@/lib/solana-meteora";
 import { parseUnits } from "viem";
 
 // LobbySol pays in USDT: USDT is swapped to SOL (Jupiter) right before liquidity goes in, and SOL back to USDT after
@@ -71,7 +72,9 @@ export async function POST(req: Request) {
         if (tokens <= 0n || lamports <= 0n) return json({ error: "Type how many tokens and how much SOL to put in." }, 400);
         if (lamports < 10_000_000n) return json({ error: "Put in at least 0.01 SOL." }, 400);
         if (info.pool) return json({ error: "That token already has a pool. Add liquidity to it instead." }, 400);
-        return json(await buildPool(owner, b.mint, tokens, lamports));
+        // Standard tokens: a Meteora DAMM v2 pool (~0.03 SOL). Taxed Token-2022 tokens: Raydium (~0.2 SOL).
+        if (await meteoraOk(b.mint)) return json({ ...(await buildMeteoraPool(owner, b.mint, tokens, lamports)), venue: "meteora" });
+        return json({ ...(await buildPool(owner, b.mint, tokens, lamports)), venue: "raydium" });
       }
       case "add": {
         if (!SOL_ADDR.test(String(b?.pool || ""))) return json({ error: "Missing the pool." }, 400);
@@ -79,11 +82,16 @@ export async function POST(req: Request) {
         let amount = 0n;
         try { amount = parseUnits(String(b?.amount || ""), side === "sol" ? 9 : Number(b?.decimals ?? SOL_DECIMALS)); } catch { /* bad number */ }
         if (amount <= 0n) return json({ error: "Type an amount." }, 400);
+        if (await isMeteoraPool(b.pool)) {
+          if (side !== "sol") return json({ error: "Add to a Meteora pool by its SOL amount." }, 400);
+          return json(await buildMeteoraAdd(owner, b.pool, amount));
+        }
         return json(await buildAddLiquidity(owner, b.pool, side, amount));
       }
       case "remove": {
         if (!SOL_ADDR.test(String(b?.pool || ""))) return json({ error: "Missing the pool." }, 400);
         const pct = Number(b?.pct);
+        if (await isMeteoraPool(b.pool)) return json(await buildMeteoraRemove(owner, b.pool, pct));
         return json(await buildAdminWithdraw(owner, b.pool, pct));
       }
       case "balances": {

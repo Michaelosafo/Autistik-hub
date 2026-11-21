@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@meteora-ag/cp-amm-sdk": "^1.5.1",
     "@privy-io/react-auth": "^3.50.0",
     "@raydium-io/raydium-sdk-v2": "0.2.74-alpha",
     "@solana-program/memo": "^0.16.0",

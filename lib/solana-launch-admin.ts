@@ -12,6 +12,7 @@ import {
 import { ComputeBudgetProgram, TransactionInstruction } from "@solana/web3.js";
 import { Raydium, TxVersion, Percent } from "@raydium-io/raydium-sdk-v2";
 import BN from "bn.js";
+import { meteoraOk, readMeteoraPool } from "@/lib/solana-meteora";
 
 export async function readAdminToken(owner: string | null, mintAddr: string, poolId?: string) {
   const mint = new PublicKey(mintAddr);
@@ -23,7 +24,10 @@ export async function readAdminToken(owner: string | null, mintAddr: string, poo
   const parsed = await conn.getParsedAccountInfo(mint).catch(() => null);
   const info: any = (parsed?.value?.data as any)?.parsed?.info;
   const decimals = Number(info?.decimals ?? 6);
-  const pool = await findPool(mintAddr, poolId);
+  // LobbySol pools are on Meteora now (much cheaper to create); older ones are on Raydium.
+  const met = await readMeteoraPool(mintAddr, owner, decimals).catch(() => null);
+  const pool = met ? null : await findPool(mintAddr, poolId && !met ? poolId : undefined).catch(() => null);
+  const cheap = await meteoraOk(mintAddr).catch(() => false);
   let tokenBal = "0", solBal = "0", feeBps: number | null = null;
   if (owner) {
     try {
@@ -50,7 +54,9 @@ export async function readAdminToken(owner: string | null, mintAddr: string, poo
     tokenBal,
     solBal,
     feeBps,
-    pool: pool ? {
+    /** SOL a new pool costs: Meteora (standard tokens) about 0.03, Raydium (taxed Token-2022 tokens) about 0.2. */
+    poolCost: cheap ? 0.03 : 0.2, venue: met ? "meteora" : pool ? "raydium" : cheap ? "meteora" : "raydium",
+    pool: met ? met : pool ? {
       pool: pool.pool,
       lpMint: pool.lpMint,
       tokenReserve: pool.tokenReserve,
