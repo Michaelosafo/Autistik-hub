@@ -90,10 +90,11 @@ const TRANSFER = parseAbiItem("event Transfer(address indexed from, address inde
 const num = (v: unknown) => { const n = Number(v); return isFinite(n) ? n : 0; };
 const lower = (a: string) => a.toLowerCase();
 
-type Holder = { wallet: string; balance: string; isContract?: boolean; label?: string | null; tokenAccount?: string };
+type Holder = { wallet: string; balance: string; isContract?: boolean; label?: string | null; tokenAccount?: string; pct?: number | null; locked?: boolean };
 type GoPlus = { creator: string | null; owner: string | null; holders: Holder[]; security: Record<string, unknown> };
 
-async function goplus(chain: AChain, token: string): Promise<GoPlus | null> {
+/** GoPlus token security (also used by the public quick scanner, app/api/scanner/quick). */
+export async function goplus(chain: AChain, token: string): Promise<GoPlus | null> {
   try {
     const r = await fetch(`https://api.gopluslabs.io/api/v1/token_security/${ACHAINS[chain].goplus}?contract_addresses=${token}`, { signal: AbortSignal.timeout(8000), cache: "no-store" });
     const j = r.ok ? await r.json() : null;
@@ -107,6 +108,7 @@ async function goplus(chain: AChain, token: string): Promise<GoPlus | null> {
       owner: addr(x.owner_address),
       holders: (Array.isArray(x.holders) ? x.holders : []).filter((h: any) => addr(h.address)).map((h: any) => ({
         wallet: getAddress(h.address), balance: String(h.balance ?? "0"), isContract: h.is_contract === 1 || h.is_contract === "1",
+        pct: h.percent === undefined || h.percent === "" ? null : num(h.percent) * 100, locked: h.is_locked === 1 || h.is_locked === "1",
         label: ours && lower(h.address) === ours ? "AUTISTIK Locker" : h.tag ? String(h.tag).slice(0, 40) : null,
       })),
       security: {

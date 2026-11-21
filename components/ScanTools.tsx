@@ -40,7 +40,7 @@ export default function ScanTools({ signedIn }: { signedIn: boolean }) {
   );
 }
 
-function DevScan() {
+export function DevScan() {
   const router = useRouter();
   const [wallet, setWallet] = useState("");
   const [net, setNet] = useState("bsc");

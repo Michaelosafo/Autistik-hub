@@ -94,6 +94,7 @@ export type PairStats = {
   /** Pools by liquidity (deepest first, up to 6) and which project links DexScreener lists. */
   poolList?: { dex: string; quote: string; liquidityUsd: number | null; volumeH24: number | null }[];
   links?: { x: boolean; telegram: boolean; website: boolean };
+  name?: string | null; symbol?: string | null;
 };
 
 /** Adds one 24-hour figure up across pools; null when no pool reports it. */
@@ -119,6 +120,7 @@ export async function getPairStats(slug: string, token: string): Promise<PairSta
       pairCreatedAt: num(p.pairCreatedAt), pools: pairs.length,
       // The token's logo, when the project added one on DexScreener.
       imageUrl: (pairs as any[]).map((x) => x?.info?.imageUrl).find((u) => typeof u === "string" && u.startsWith("https://") && u.length < 600) ?? null,
+      name: p?.baseToken?.name ? String(p.baseToken.name).slice(0, 64) : null, symbol: p?.baseToken?.symbol ? String(p.baseToken.symbol).slice(0, 24) : null,
       poolList: [...pairs].sort((a, b) => (num(b?.liquidity?.usd) ?? 0) - (num(a?.liquidity?.usd) ?? 0)).slice(0, 6).map((x) => ({
         dex: String(x?.dexId || "DEX").slice(0, 24), quote: String(x?.quoteToken?.symbol || "").slice(0, 12),
         liquidityUsd: num(x?.liquidity?.usd), volumeH24: num(x?.volume?.h24),
