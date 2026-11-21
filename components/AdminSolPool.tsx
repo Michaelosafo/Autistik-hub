@@ -43,6 +43,9 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
   const [amtToken, setAmtToken] = useState("");
   // LobbySol: the liquidity side is typed in USDT; it's swapped to SOL (Jupiter) right before it goes into the pool.
   const [amtSol, setAmtSol] = useState("");
+  // The first buy (USDT → token), sent right after the liquidity, like BnbRage / EthRise / WanaRobinhood.
+  const [buyAmt, setBuyAmt] = useState("");
+  const [buyPending, setBuyPending] = useState(false);
   const [bal, setBal] = useState<{ sol: number; usdt: number; solUsd: number } | null>(null);
   const [pct, setPct] = useState(100);
   const [askRemove, setAskRemove] = useState(false);
@@ -201,10 +204,12 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     if (!amtToken || !amtSol) { setMsg("Type both amounts."); return; }
     const usdt = Number(amtSol);
     if (!(usdt > 0)) { setMsg("Type the USDT amount."); return; }
+    const firstBuy = Number(buyAmt);
+    if (!(firstBuy > 0)) { setMsg("Set the first-buy amount (USDT) first. That buy is sent right after the liquidity."); return; }
     setBusy(true);
     try {
       const b0 = await balances(sw);
-      if (b0.usdt + 1e-9 < usdt) { setMsg(`Not enough USDT: this wallet has ${b0.usdt.toFixed(2)} USDT on Solana. Add USDT (SPL) or lower the amount.`); return; }
+      if (b0.usdt + 1e-9 < usdt + firstBuy) { setMsg(`Not enough USDT: this wallet has ${b0.usdt.toFixed(2)} USDT on Solana, and this needs ${(usdt + firstBuy).toFixed(2)} (${usdt} for the liquidity + ${firstBuy} for the first buy). Add USDT (SPL) or lower the amounts.`); return; }
       const feeNeed = info.pool ? 0.02 : SOL_POOL_COST;
       if (b0.sol < feeNeed) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : " (Raydium charges about 0.15 SOL to create a pool)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
       // 1) USDT → SOL for the pool side.
@@ -230,8 +235,54 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
         setMsg(`✅ Liquidity added (paid ${usdt} USDT). ${CHAIN.explorer}/tx/${sig}`);
       }
       void swapSig;
+      // 3) The first buy, straight after the liquidity.
+      setBuyPending(true);
+      const ok = await firstBuyWith(sw, firstBuy);
+      if (!ok) return;
       if (mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
     } catch (e) { setMsg(`${solErr(e)} If the USDT was already swapped, the SOL is in your wallet: tap Add liquidity again.`); } finally { setBusy(false); }
+  }
+
+  /**
+   * The first buy: USDT → the token through Jupiter. A brand-new Raydium pool takes a few seconds to show up in
+   * Jupiter's routes, so it asks again every 5 seconds for about a minute. Returns false if it didn't go through
+   * (the "Sign first buy" panel stays up).
+   */
+  async function firstBuyWith(w: SolWallet, usdtAmt: number): Promise<boolean> {
+    try {
+      const b = await balances(w);
+      if (b.usdt + 1e-9 < usdtAmt) { setMsg(`The first buy needs ${usdtAmt} USDT, but this wallet has ${b.usdt.toFixed(2)} USDT. Add USDT and tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
+      if (b.sol < 0.005) { setMsg(`Add a little SOL for fees (about 0.005 SOL), then tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
+      let built: { tx?: string; wait?: boolean } = {};
+      for (let i = 0; i < 12; i++) {
+        setMsg(i ? `Waiting for the new pool to be tradable for the first buy… (${i * 5}s)` : "Preparing the first buy (USDT)…");
+        built = await rageSol<{ tx?: string; wait?: boolean }>("first-buy", { owner: w.account.address, mint, usdt: String(usdtAmt) });
+        if (built.tx) break;
+        await new Promise((res) => setTimeout(res, 5000));
+      }
+      if (!built.tx) { setMsg(`The pool isn't tradable through Jupiter yet. Tap "Sign first buy" in a moment. The liquidity is safe in the pool.`); return false; }
+      setMsg(`Confirm in your wallet: first buy with ${usdtAmt} USDT.`);
+      const sig = await sign(w, built.tx, `first buy with ${usdtAmt} USDT`);
+      reportActivity("swap", "solana", sig, `First buy ${usdtAmt} USDT of ${info?.symbol || "token"}`);
+      setBuyPending(false); setBuyAmt(""); setTick((x) => x + 1);
+      setMsg(`✅ First buy is in (${usdtAmt} USDT). ${CHAIN.explorer}/tx/${sig}`);
+      return true;
+    } catch (e) { setMsg(`${solErr(e)} The liquidity is safe in the pool: tap "Sign first buy" to try again.`); return false; }
+  }
+  async function continueBuy(useAll: boolean) {
+    if (!sw) { setMsg("The Solana wallet isn't connected any more. Tap \"Connect a Solana wallet\" first."); connect(); return; }
+    setBusy(true);
+    try {
+      let amt = Number(buyAmt);
+      if (useAll) {
+        const b = await balances(sw);
+        if (!(b.usdt > 0.1)) { setMsg("This wallet has no USDT for the first buy. Add USDT (SPL) first."); return; }
+        amt = Math.floor(b.usdt * 100) / 100;
+      }
+      if (!(amt > 0)) { setMsg("Type the first-buy amount in USDT."); return; }
+      const ok = await firstBuyWith(sw, amt);
+      if (ok && mode === "all" && confirm("Done. Remove the liquidity now?")) setAskRemove(true);
+    } finally { setBusy(false); }
   }
 
   async function remove() {
@@ -352,10 +403,25 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
               <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
                 {info.pool ? "The pool already has a price. The USDT amount is what you add (swapped to SOL); the tokens follow that price." : `A new pool needs both amounts. Keep about ${SOL_POOL_COST} SOL spare for Raydium's pool fee and rent.`}
               </p>
+              <b className="rg-step sb"><i>⚡</i>First buy</b>
+              <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. It&apos;s paid in USDT and sent from this wallet straight after the liquidity goes in. On Solana the pool can be traded as soon as it exists, so the first buy goes out as fast as the network allows.</p>
+              <label className="field"><span>First buy (USDT)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="10" aria-label="First buy amount in USDT" /></label>
               <label className="field"><span>{info.symbol || "Tokens"}</span><input value={amtToken} onChange={(e) => onToken(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
               <label className="field"><span>USDT <small className="muted">swapped to SOL for the {info.symbol || "token"}/SOL pool</small></span><input value={amtSol} onChange={(e) => setAmtSol(e.target.value.trim())} inputMode="decimal" placeholder="0" /></label>
-              <button className="btn primary" type="button" disabled={busy || !amtToken || !amtSol} onClick={add}>{info.pool ? "Add liquidity" : "Create pool"}</button>
+              <button className="btn primary" type="button" disabled={busy || !amtToken || !amtSol || !buyAmt} onClick={add}>{info.pool ? "Add liquidity + first buy" : "Create pool + first buy"}</button>
             </>
+          )}
+          {showAdd && buyPending && info.pool && (
+            <div className="notice stack" style={{ gap: 6, borderColor: "#9945FF" }}>
+              <b>▶ Continue: liquidity is in, first buy still to sign</b>
+              <small>If a step didn&apos;t go through, sign it again here: nothing is lost.</small>
+              <label className="field"><span>First buy (USDT)</span><input value={buyAmt} onChange={(e) => setBuyAmt(e.target.value.trim())} inputMode="decimal" placeholder="10" aria-label="First buy amount in USDT" /></label>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <button className="btn primary" type="button" disabled={busy || !buyAmt} onClick={() => continueBuy(false)}>Sign first buy</button>
+                <button className="btn" type="button" disabled={busy} onClick={() => continueBuy(true)}>Buy with all my USDT{bal ? ` (${bal.usdt.toFixed(2)})` : ""}</button>
+                <button className="btn ghost" type="button" disabled={busy} onClick={() => { setBuyPending(false); setMsg("First buy skipped."); }}>Skip the first buy</button>
+              </div>
+            </div>
           )}
           {showRemove && (askRemove || mode !== "all" || lp > 0n) && (
             info.pool ? (

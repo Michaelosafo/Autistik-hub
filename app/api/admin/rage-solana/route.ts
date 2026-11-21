@@ -30,7 +30,8 @@ export const maxDuration = 60;
 
 /**
  * Rage on Solana, for an admin who has entered their 2-step code. Builds transactions the admin's own wallet signs:
- * create the token, open a Raydium pool, add liquidity, remove that wallet's LP, or collect a Token-2022 transfer fee.
+ * create the token, open a Raydium pool, add liquidity, the first buy (USDT → token), remove that wallet's LP, or
+ * collect a Token-2022 transfer fee.
  * Nothing here can move anyone else's money.
  */
 export async function POST(req: Request) {
@@ -105,6 +106,21 @@ export async function POST(req: Request) {
         if (raw < 500_000n) return json({ error: "Type at least 0.5 USDT." }, 400);
         const r = await jupSwap(owner, SOL_USDT, SOL_MINT, raw);
         return json({ tx: r.tx, sol: Number(r.min) / 1e9, solOut: Number(r.out) / 1e9 });
+      }
+      case "first-buy": {
+        // LobbySol's first buy: USDT → the token, straight after the liquidity goes in (5% slippage for a new pool).
+        if (!SOL_ADDR.test(String(b?.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
+        let raw = 0n;
+        try { raw = parseUnits(String(b?.usdt || ""), 6); } catch { /* bad number */ }
+        if (raw < 100_000n) return json({ error: "Type at least 0.1 USDT for the first buy." }, 400);
+        try {
+          const r = await jupSwap(owner, SOL_USDT, String(b.mint), raw, 500);
+          return json({ tx: r.tx, out: r.out });
+        } catch (e: any) {
+          // A brand-new pool takes a few seconds to show up in Jupiter's routes: the page asks again.
+          if (/route|not tradable|TOKEN_NOT_TRADABLE|COULD_NOT_FIND/i.test(String(e?.message || ""))) return json({ wait: true });
+          throw e;
+        }
       }
       case "swap-out": {
         // SOL → USDT after removing liquidity.
