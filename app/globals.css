@@ -8017,3 +8017,20 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .sd-ov dl{gap:6px 10px}
 .sd-ov dd{font-size:.88em}
 @media (max-width:760px){.sd{grid-template-columns:1fr 1fr}.sd-ov,.sd-pools{grid-column:1/-1}.sd-radar{max-width:120px}.sd-gwrap{max-width:140px}}
+/* Advanced scan panels inside the dashboard (buy / sell read, zones, plans, bundles, who might sell). */
+.hx-adv{display:flex;flex-direction:column;gap:8px}
+.hx-adv-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 2px 0}
+.hx-adv-head h2{font-size:.95em;letter-spacing:.02em;text-transform:none;color:var(--hx-text)}
+.hx-adv-lock{display:flex;flex-direction:column;gap:6px;align-items:flex-start;font-size:.88em}
+.hx-adv-lock b{color:var(--hx-text)}
+.hx-adv-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.hx-adv-stats div{padding:7px 9px;border-radius:10px;border:1px solid var(--hx-line);background:var(--hx-panel);display:flex;flex-direction:column;min-width:0}
+.hx-adv-stats span{font-size:.66em;font-weight:700;color:var(--hx-muted)}
+.hx-adv-stats b{font-family:var(--f-display);font-size:1.05em;color:var(--hx-text)}
+.hx-adv .card{padding:12px 14px;border-radius:14px;font-size:.92em}
+.hx-adv .card h2{font-size:1.1em;color:var(--ink);text-transform:none;letter-spacing:-.01em}
+.hx-adv details summary{cursor:pointer;font-weight:700;font-size:.86em;margin-top:4px}
+.hx-adv .fin-note{font-size:.72em;color:var(--hx-muted);margin:0}
+.hx-spin{width:18px;height:18px;border-radius:50%;border:2px solid var(--hx-line);border-top-color:var(--hx-gold2);animation:hxSweep .8s linear infinite}
+@media (max-width:760px){.hx-adv-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.hx-adv .card{padding:10px 12px}}
+.hx-adv .plans h2,.hx-adv .plans h3,.hx-adv .zone-box h2{text-transform:none;letter-spacing:-.01em;color:var(--ink);font-size:1em}

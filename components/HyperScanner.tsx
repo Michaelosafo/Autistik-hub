@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { DevScan } from "@/components/ScanTools";
 import { SCAN_CHAINS } from "@/lib/analytics-chains";
+import ZoneCard from "@/components/ZoneCard";
+import TradePlans from "@/components/TradePlans";
+import BundleCard from "@/components/BundleCard";
 
 /**
  * The AUTISTIK scanner dashboard (light / dark with the site theme): metrics, scan bar, threat radar, 0–100 risk
@@ -36,6 +39,7 @@ const DEMOS = [
   { chain: "ethereum", token: "0x6982508145454ce325ddbe47a25d4ec3d2311933", name: "PEPE" },
 ];
 const RKEY = "autistik-hx-recent";
+const SIG: Record<string, string> = { buy: "Buy", take_profit: "Take profit", sell: "Sell", wait: "Wait", avoid: "Avoid" };
 const SOL = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const usd = (x: unknown) => {
@@ -76,6 +80,9 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
   const [stats, setStats] = useState({ scans: 0, threats: 0 });
   const [recent, setRecent] = useState<Recent[]>([]);
   const [opening, setOpening] = useState(false);
+  const [adv, setAdv] = useState<any>(null);
+  const [advBusy, setAdvBusy] = useState(false);
+  const [advErr, setAdvErr] = useState("");
   const top = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -99,6 +106,8 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
       if (!res.ok || d.error) { setHint({ text: d.error || "Couldn't scan that token. Try again.", err: true }); return; }
       const x = d as Result;
       setR(x);
+      setAdv(null); setAdvErr("");
+      if (signedIn) void advanced(x.chain, x.token);
       const risk = x.report.score == null ? null : 100 - x.report.score;
       const label = x.symbol || short(x.token);
       setStats((s) => ({ scans: s.scans + 1, threats: s.threats + x.report.bad }));
@@ -109,6 +118,18 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
       const u = new URL(location.href); u.searchParams.set("chain", x.chain); u.searchParams.set("token", x.token); history.replaceState(null, "", u);
     } catch { setHint({ text: "Couldn't reach the scanner. Check your connection and try again.", err: true }); }
     finally { setBusy(false); }
+  }
+
+  /** Advanced scan: buy / sell read, entry zones, trade plans, bundle check, who might sell (signed-in members). */
+  async function advanced(ch: string, token: string) {
+    setAdvBusy(true); setAdvErr("");
+    try {
+      const res = await fetch("/api/scanner/advanced", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chain: ch, token }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || d.error) { setAdvErr(d.error || "Couldn't run the advanced scan. Try again."); return; }
+      setAdv(d);
+    } catch { setAdvErr("Couldn't reach the scanner. Try again."); }
+    finally { setAdvBusy(false); }
   }
 
   async function openFull() {
@@ -291,6 +312,70 @@ export default function HyperScanner({ signedIn, tracked, movesToday }: { signed
               </table>
             </div>
           </section>
+
+          {r && (
+            <section className="hx-adv" aria-label="Advanced scan">
+              <div className="hx-adv-head">
+                <h2>⚡ Advanced scan</h2>
+                <span className="hx-tag">entry · exit · zones · bundles</span>
+              </div>
+              {!signedIn ? (
+                <div className="hx-panel hx-adv-lock">
+                  <b>Buy or sell read, entry zones, trade plans with targets, bundle check and who might sell next.</b>
+                  <p className="hx-empty">Sign in to run the advanced scan on {r.symbol || short(r.token)}. It also turns on sell alerts for it.</p>
+                  <button type="button" className="hx-btn" onClick={openFull}>Sign in for the advanced scan →</button>
+                </div>
+              ) : advBusy ? (
+                <div className="hx-panel hx-adv-lock"><span className="hx-spin" aria-hidden="true" /><b>Reading the top wallets, trades and chart…</b><p className="hx-empty">The first advanced scan of a token takes up to a minute.</p></div>
+              ) : advErr ? (
+                <div className="hx-panel hx-adv-lock"><p className="hx-hint err" style={{ margin: 0 }}>{advErr}</p><button type="button" className="hx-btn" onClick={() => advanced(r.chain, r.token)}>Try again</button></div>
+              ) : adv ? (
+                <>
+                  <div className="hx-adv-stats">
+                    <div><span>Top wallets hold</span><b>{adv.stats.topShare == null ? "—" : pctS(adv.stats.topShare)}</b></div>
+                    <div><span>Buys / sells 24h</span><b>{adv.stats.buys24 == null ? "—" : <><span className="up">{Number(adv.stats.buys24).toLocaleString("en-US")}</span> / <span className="down">{Number(adv.stats.sells24 ?? 0).toLocaleString("en-US")}</span></>}</b></div>
+                    <div><span>Top-wallet sells 24h</span><b>{adv.stats.topSells24}</b></div>
+                    <div><span>Holders</span><b>{adv.stats.holders ? Number(adv.stats.holders).toLocaleString("en-US") : "—"}</b></div>
+                  </div>
+                  <div className={"card stack verdict " + adv.call.kind}>
+                    <div className="label">Buy or sell? The read right now</div>
+                    <div className="verdict-top">
+                      <span className="verdict-emoji" aria-hidden>{adv.call.emoji}</span>
+                      <div className="grow"><h2>{adv.call.title}</h2><p>{adv.call.summary}</p></div>
+                    </div>
+                    {adv.call.kind !== "avoid" && (
+                      <div className="verdict-meter" aria-label={`Buy score ${adv.call.score} out of 100`}>
+                        <span style={{ left: `${adv.call.score}%` }} /><small>Sell</small><small>Wait</small><small>Buy</small>
+                      </div>
+                    )}
+                    <div className="signal-now" aria-label="Signal right now">
+                      <span className="label">Signal right now</span>
+                      <span className={"sig " + adv.now.short}>Day trade: <b>{SIG[adv.now.short] || adv.now.short}</b></span>
+                      <span className={"sig " + adv.now.long}>Long term: <b>{SIG[adv.now.long] || adv.now.long}</b></span>
+                    </div>
+                    {adv.call.reasons?.length > 0 && (
+                      <details><summary>Why?</summary><ul className="signals">{adv.call.reasons.map((x: any, i: number) => <li key={i} className={x.level}>{x.text}</li>)}</ul></details>
+                    )}
+                  </div>
+                  <ZoneCard z={adv.zone} symbol={adv.symbol || r.symbol || "TOKEN"} />
+                  <TradePlans plans={adv.plans} symbol={adv.symbol || r.symbol || "this token"} />
+                  <BundleCard b={adv.bundle} explorer={adv.explorer} token={adv.token} />
+                  <div className="hx-panel">
+                    <div className="hx-ph"><h2>Who might sell next</h2><span className="hx-tag">{adv.groups.length} connected group{adv.groups.length === 1 ? "" : "s"}</span></div>
+                    {!adv.suspects.length ? <p className="hx-empty">✓ No wallet looks likely to sell right now.</p> : (
+                      <table className="hx-htable"><thead><tr><th>Wallet</th><th>Holds</th><th>Sell risk</th></tr></thead><tbody>
+                        {adv.suspects.map((x: any) => (
+                          <tr key={x.wallet}><td title={x.wallet}>{short(x.wallet)}{x.isDev ? " (dev)" : ""}</td><td>{pctS(x.pct, 2)}</td><td><span className={"hx-pill " + (x.risk.level === "high" ? "r" : x.risk.level === "medium" ? "o" : "g")}>{x.risk.score}/100</span></td></tr>
+                        ))}
+                      </tbody></table>
+                    )}
+                    {adv.know?.length > 0 && <ul className="signals" style={{ marginTop: 8 }}>{adv.know.map((x: any, i: number) => <li key={i} className={x.level}>{x.text}</li>)}</ul>}
+                  </div>
+                  <p className="fin-note">Nothing here is financial advice. It&apos;s worked out automatically from blockchain activity and can be wrong. Never put in more than you can afford to lose.</p>
+                </>
+              ) : null}
+            </section>
+          )}
 
           <section className="hx-panel hx-recent">
             <div className="hx-ph"><h2>Recent scans</h2><span className="hx-tag">on this device</span></div>
