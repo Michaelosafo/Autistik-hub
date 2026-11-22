@@ -113,12 +113,9 @@ export default function WalletPicker() {
       // on the other networks. Phantom, Solflare, Backpack, Coinbase: open this site inside the app on a phone.
       const viaWc = !!WALLETCONNECT_ID && !!(a.wc || a.native);
       out.push({ key: "sol-app-" + a.id, name: a.name, logo: a.logo, badge: mobile && !viaWc ? "⚡ Direct" : undefined,
-        sub: mobile && a.id === "bitget" ? "Direct: opens this page inside Bitget, connects in one tap" : viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Direct: opens autistik.io inside ${a.name}, connects in one tap` : "Not on this browser: get the app",
+        sub: viaWc ? (mobile ? `Opens ${a.name} to approve` : `Scan with ${a.name} on your phone`) : mobile ? `Direct: opens autistik.io inside ${a.name}, connects in one tap` : "Not on this browser: get the app",
         go: () => {
           if (insideWallet(a.id)) { showWalletOpen(a.name, a.logo, a.dapp(directUrl("solana")), a.install); return; }
-          // Bitget on a phone: WalletConnect on Solana opened Bitget with nothing to approve. Open this page inside
-          // Bitget's own browser instead, where its Solana wallet is built in and connects on the page.
-          if (mobile && a.id === "bitget") { showWalletOpen(a.name, a.logo, a.dapp(directUrl("solana")), a.install); return; }
           if (viaWc) { chooseSolWalletConnect({ name: a.name, logo: a.logo, wc: a.wc, native: a.native, install: a.install }); return; }
           if (mobile) showWalletOpen(a.name, a.logo, a.dapp(directUrl("solana")), a.install);
           else window.open(a.install, "_blank", "noopener,noreferrer");

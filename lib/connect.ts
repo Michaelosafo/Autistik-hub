@@ -1017,6 +1017,14 @@ export async function listWallets(page: number, search = ""): Promise<{ wallets:
 // ---------------------------------------------------------------- Solana over WalletConnect (Bitget, Trust, OKX…)
 
 const SOL_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
+/**
+ * Bitget: the same links the EVM WalletConnect route uses. The generic link on Android was bitkeep://wc?uri=…, which
+ * opened Bitget with nothing to approve, so the picker used to send Bitget phones into Bitget's own browser, where
+ * Bitget asks which Solana-type network the page needs (Solana, Eclipse, SOON…). bkcode.vip/wc shows the approval.
+ */
+const isBitget = (t: { name: string }) => t.name === "Bitget Wallet";
+const solWcBase = (t: WcTarget) => (isBitget(t) ? BITGET_LINK : walletBase(t));
+const solWcHref = (t: WcTarget, uri: string, base: string) => (isBitget(t) ? bitgetWcLink(uri) : wcHref(base, uri, t.pkg));
 let solWc: any = null;
 async function initSolWc() {
   if (solWc) return solWc;
@@ -1116,10 +1124,10 @@ export async function chooseSolWalletConnect(t: WcTarget) {
   }
   const mobile = isMobile();
   // Phone with the link already made: open the wallet inside this tap, then wait for the approval.
-  const base = walletBase(t);
+  const base = solWcBase(t);
   if (mobile && base && solPreReady()) {
     const p = solPre!;
-    const href = wcHref(base, p.uri, t.pkg);
+    const href = solWcHref(t, p.uri, base);
     set({ open: true, busy: "", error: "", qr: { uri: p.uri, name: t.name, logo: t.logo, install: t.install, href } });
     openWalletApp(href);
     try { await p.done; solPre = null; await finishSolWc(t, p.up); }
@@ -1135,11 +1143,10 @@ export async function chooseSolWalletConnect(t: WcTarget) {
   try {
     const up = await initSolWc();
     // A link made in the background but not used yet: use it instead of starting a second connection.
-    if (solPreReady()) { const p = solPre!; const href = base && mobile ? wcHref(base, p.uri, t.pkg) : undefined; set({ qr: { uri: p.uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); if (href) openWalletApp(href); await p.done; solPre = null; await finishSolWc(t, up); return; }
+    if (solPreReady()) { const p = solPre!; const href = base && mobile ? solWcHref(t, p.uri, base) : undefined; set({ qr: { uri: p.uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); if (href) openWalletApp(href); await p.done; solPre = null; await finishSolWc(t, up); return; }
     if (up.session?.namespaces?.solana?.accounts?.[0]) { await finishSolWc(t, up); return; }
     up.once?.("display_uri", (uri: string) => {
-      const base = walletBase(t);
-      if (mobile && base) { const href = wcHref(base, uri, t.pkg); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); openWalletApp(href); }
+      if (mobile && base) { const href = solWcHref(t, uri, base); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); openWalletApp(href); }
       else set({ qr: { uri, name: t.name, logo: t.logo, install: t.install }, busy: "" });
     });
     await up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
@@ -1154,7 +1161,7 @@ async function finishSolWc(t: WcTarget, up: any) {
   const acct = String(up.session?.namespaces?.solana?.accounts?.[0] || "");
   const address = acct.split(":")[2];
   if (!address) throw new Error("The wallet didn't share a Solana account.");
-  await chooseSol(wcSolWallet(t.name, t.logo, up, address, walletBase(t)));
+  await chooseSol(wcSolWallet(t.name, t.logo, up, address, solWcBase(t)));
   try { localStorage.setItem("aw-sol-wc", JSON.stringify(t)); } catch { /* private mode */ }
 }
 /** A Solana WalletConnect session from before a reload (or the trip to the wallet app). */
