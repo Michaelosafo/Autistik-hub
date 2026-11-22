@@ -480,12 +480,19 @@ async function copyBuy(s: FSettings, mv: Move, quiet = false): Promise<string> {
       // PancakeSwap straight away (fast, and works on tokens the route service doesn't know yet); else the route service.
       const { directBuy } = await import("@/lib/ai-liq-snipe");
       const usdtPay = useStable && st!.symbol === "USDT";
-      const direct = (!useStable || usdtPay) ? await directBuy(a, s, token, usd, usdtPay, slipOf(s)).catch((e) => { directErr = (e as Error).message; return null; }) : null;
+      // Bitget Wallet's swap service first when paying with BNB (see lib/bitget-swap.ts); if it can't quote or build
+      // the order, PancakeSwap and the route service as before. A sent Bitget order never falls back (no double buy).
+      let viaBitget: { raw: bigint; decimals: number; hash: string; slip: number } | null = null;
+      if (!useStable) {
+        const bg = await import("@/lib/bitget-swap");
+        if (bg.bitgetOn()) viaBitget = await bg.bitgetBuy(a, token, usd / bnbUsd, slipOf(s)).catch((e) => { if (e instanceof bg.BitgetNotSent) { directErr = `Bitget Wallet: ${e.message}`; return null; } throw e; });
+      }
+      const direct = viaBitget ? viaBitget : (!useStable || usdtPay) ? await directBuy(a, s, token, usd, usdtPay, slipOf(s)).catch((e) => { directErr = [directErr, (e as Error).message].filter(Boolean).join("; "); return null; }) : null;
       const r = direct || await c.withFastSend(fast, () => (useStable ? c.liveBuyOn("bsc", w, token, usd, slipTax(s), st) : c.liveBuyOn("bsc", w, token, usd / bnbUsd, slipTax(s)))).catch((e) => { throw new Error(directErr ? `${directErr}; route service: ${(e as Error).message}` : (e as Error).message); });
       if (!(r.raw > 0n)) throw new Error("the swap went through but no coins arrived");
       const qty = Number(r.raw) / 10 ** r.decimals;
       await row(usd, usd / qty, qty, r.hash, slot, pay);
-      await flog("open", `👥 Wallet ${slot} bought ${sym} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had, minus the buy's gas)" : ""}: ${who} just bought it. ${link}`);
+      await flog("open", `👥 Wallet ${slot} bought ${sym}${viaBitget ? " via Bitget Wallet" : ""} for ${pay === "BNB" ? `${(usd / bnbUsd).toFixed(4)} BNB ($${usd.toFixed(2)})` : `$${usd.toFixed(2)} ${pay}`}${usd < want * 0.9 ? " (all it had, minus the buy's gas)" : ""}: ${who} just bought it. ${link}`);
       return slot;
     } catch (e) {
       errs.push((e as Error).message);
