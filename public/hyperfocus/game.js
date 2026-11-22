@@ -1529,7 +1529,7 @@ function setBuy(v,typed){menuBuy=v;try{localStorage.setItem('hf-buyin',String(v)
 function renderLobby(){
   renderBuy();
   const hostView=!nr||isHost;
-  $('#modeBox').hidden=!hostView;$('#bStart').hidden=!hostView;$('#guestMode').hidden=hostView;
+  $('#modeBox').hidden=!hostView;$('#bStart').hidden=!hostView;$('#guestMode').hidden=hostView;{const bi=$('#lobbyOv .buyin');if(bi)bi.hidden=false;}
   $('#mTok').setAttribute('aria-pressed',menuMode==='token');$('#mFun').setAttribute('aria-pressed',menuMode==='fun');$('#mReal').setAttribute('aria-pressed',menuMode==='real');
   $('#mReal').hidden=!window.HFWallet;$('#realBox').hidden=menuMode!=='real';
   // the menu already chose the race: no race-type, coin or buy-in choices here
@@ -1540,7 +1540,7 @@ function renderLobby(){
   const ps=readyPeers(nr.peers());
   $('#players').innerHTML=ps.length?ps.map(p=>{const q=p.presence||{};const c=typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#888888';
     const bi='';return `<li><span class="dot" style="background:${c}"></span>${esc(q.n||'Joining…')}<span class="t">${q.host===1?'host · ':''}${p.sameTab?'you':q.st==='race'?'racing':'ready'}${esc(bi)}</span></li>`;}).join(''):'<li>Connecting…</li>';
-  if(pubRoom){$('#bStart').hidden=true;$('#modeBox').hidden=true;$('#guestMode').hidden=false;return;}
+  if(pubRoom){$('#bStart').hidden=false;$('#bStart').disabled=false;$('#bStart').textContent='▶ Start now';$('#modeBox').hidden=true;$('#guestMode').hidden=false;{const bi=$('#lobbyOv .buyin');if(bi)bi.hidden=true;}return;}
   if(!isHost){const hp=hostPeer();$('#guestMode').textContent=hp?`${hp.presence.n||'The host'} picked ${hp.presence.mode==='fun'?'a free race':hp.presence.mode==='real'?'a real-token race':'a Token race'}${hp.presence.tok&&hp.presence.mode!=='fun'?' with '+(hp.presence.mode==='real'?(REAL[hp.presence.tok]&&REAL[hp.presence.tok].symbol?'$'+REAL[hp.presence.tok].symbol:'a pasted coin'):hp.presence.tok):''}. Waiting for them to start…`:'Waiting for the host to arrive…';}
 }
 $('#nick').value=me.nick;
@@ -1569,7 +1569,7 @@ $('#joinCode').addEventListener('keydown',e=>{if(e.key==='Enter')$('#bJoin').cli
  * Everyone who taps "Race online" inside the same 20-second window lands in the same public room (pub-<window>) and
  * starts together when the window closes, on the same track, the same coin and the same rules (a standard free
  * race). Computer racers fill the empty places. No host: every player works out the same start time and seed. */
-const PUB_MS=20000;let pubRoom=false,pubTimer=0;
+const PUB_MS=10000;let pubRoom=false,pubTimer=0;
 function soloOffline(){isHost=false;menuMode='fun';menuTok=Object.keys(TOK)[Math.floor(Math.random()*Object.keys(TOK).length)];hostStart();}
 async function enterPublic(){
   readNick();homeErr('');
@@ -2159,7 +2159,7 @@ async function hostStart(){
   if(nr){hostGo=go;lobbyPresence();startRace(menuMode,tk,go,`${code}|${go}|${menuMode}|${tk}`);}
   else startRace(menuMode,tk,go,`solo|${go}|${Math.random()}`);
 }
-$('#bStart').onclick=hostStart;
+$('#bStart').onclick=()=>{if(pubRoom){leavePublic();soloOffline();return;}hostStart();};
 $('#bAgain').onclick=()=>{if(pubRoom){enterPublic();return;}hostStart();};
 $('#bLobby').onclick=()=>{if(pubRoom){leavePublic();S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();return;}if(S&&S.mode==='paid'||state==='paid-wait'){if(nr){nr.leave().catch(()=>{});nr=null;}S=null;state='home';$('#endOv').hidden=true;$('#pads').hidden=true;document.body.classList.remove('racing');$('#homeOv').hidden=false;wizHome();$('#bLobby').textContent='Back to lobby';return;}if(nr)lobbyPresence();showLobby();};
 $('#bLeave').onclick=()=>{leavePublic();if(nr){nr.leave().catch(()=>{});nr=null;}forgetRoom();code=null;isHost=false;state='home';S=null;$('#lobbyOv').hidden=true;$('#homeOv').hidden=false;wizHome();renderBoard([]);$('#feed').innerHTML='';renderInvite();};
