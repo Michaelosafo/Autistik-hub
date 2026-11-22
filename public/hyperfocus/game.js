@@ -698,7 +698,8 @@ function loadModel(name){
       return {geo:g,mat,leaf:cut};});}));
   return MODELS[name];}
 // things added after the world is built (models load in the background) still come down when the world changes
-function lateAdd(fn){const gen=G.worldGen;return(...a)=>{if(!G||G.worldGen!==gen)return;const sa=G.scene.add.bind(G.scene),list=G.trackObjs;G.scene.add=(...o)=>{list.push(...o);return sa(...o);};try{fn(...a);}finally{G.scene.add=sa;}};}
+function warmGL(){if(!G||G.warmT)return;G.warmT=setTimeout(()=>{G.warmT=0;try{G.renderer.compile(G.scene,G.camera);}catch(e){}},30);}
+function lateAdd(fn){const gen=G.worldGen;return(...a)=>{if(!G||G.worldGen!==gen)return;const sa=G.scene.add.bind(G.scene),list=G.trackObjs;G.scene.add=(...o)=>{list.push(...o);return sa(...o);};try{fn(...a);}finally{G.scene.add=sa;}warmGL();};}
 function palmGeo(){
   if(G.palm)return G.palm;
   // trunk: a curved, slightly tapering column with ring bands
@@ -1071,7 +1072,9 @@ function tireMats(){
 }
 const CARM={};
 function carModel(dir){
-  if(!CARM[dir])CARM[dir]=new Promise((ok,no)=>{if(!THREE.GLTFLoader){no();return;}new THREE.GLTFLoader().load(HFB+'cars/'+dir+'/scene.gltf',g=>ok(g.scene),undefined,no);});
+  if(!CARM[dir])CARM[dir]=new Promise((ok,no)=>{if(!THREE.GLTFLoader){no();return;}new THREE.GLTFLoader().load(HFB+'cars/'+dir+'/scene.gltf',g=>{
+    // send every texture to the graphics chip now, not on the first frame the car is drawn
+    g.scene.traverse(o=>{if(o.isMesh&&o.material)['map','normalMap','roughnessMap','metalnessMap','emissiveMap','aoMap','clearcoatMap','clearcoatNormalMap','transmissionMap'].forEach(k=>{const t=o.material[k];if(t&&G&&G.renderer.initTexture)try{G.renderer.initTexture(t);}catch(e){}});});ok(g.scene);},undefined,no);});
   return CARM[dir];}
 function fitModel(src,mc,color,human){
   const m=src.clone(true),pivot=new THREE.Group(),inner=new THREE.Group();inner.add(m);pivot.add(inner);
@@ -1201,7 +1204,7 @@ function makeCar(color,type,helmet,human){
     const hide=[];g.children.forEach(o=>{if(!keep.has(o))hide.push(o);});
     // the real model shows as soon as it has loaded; only if it can't load does a built car of the same style stand in
     let ok=false;hide.forEach(o=>o.visible=false);const fb=setTimeout(()=>{if(!ok)hide.forEach(o=>o.visible=true);},6000);
-    carModel(human?mc.dir:mc.dir+'_lo').then(src=>{ok=true;clearTimeout(fb);hide.forEach(o=>o.visible=false);g.userData.wheels=null;g.add(fitModel(src,mc,color,human));}).catch(()=>{clearTimeout(fb);hide.forEach(o=>o.visible=true);});}
+    carModel(human?mc.dir:mc.dir+'_lo').then(src=>{ok=true;clearTimeout(fb);hide.forEach(o=>o.visible=false);g.userData.wheels=null;g.add(fitModel(src,mc,color,human));warmGL();}).catch(()=>{clearTimeout(fb);hide.forEach(o=>o.visible=true);});}
   G.scene.add(g);return g;
 }
 function smoke(car,p,amt){
@@ -1260,7 +1263,7 @@ function renderGL(pl,others,dt,showMe){
   tp(pl.pos,pl.x,_o);const fx=Math.sin(_o.ang),fz=Math.cos(_o.ang);
   const sp=clamp((pl.speed||0)/BASE,0,2);
   const cm=S?camMode:0;
-  let back=10.2+sp*1.4,height=3.25+sp*0.3,ahead=15,lookY=1.25;
+  let back=8.4+sp*0.8,height=2.55+sp*0.12,ahead=16,lookY=1.9;
   if(cm===1){back=6.8+sp*0.8;height=2.2+sp*0.15;ahead=12;lookY=1.1;}
   else if(cm===2){const hp=SHAPES[me.car]||SHAPES.street;back=-(hp.L/2-0.4);height=hp.fender+0.85;ahead=30;lookY=hp.fender+0.45;}
   else if(cm===3){back=-9.5;height=1.5;ahead=-1;lookY=0.9;}
@@ -1273,7 +1276,7 @@ function renderGL(pl,others,dt,showMe){
   _v2.set(_o.x+fx*ahead,_o.y+lookY,_o.z+fz*ahead);G.lookAt.lerp(_v2,G.lookAt.lengthSq()?k:1);G.camera.lookAt(G.lookAt);
   const seg=segAt(pl.pos);G.roll+=((stv*0.6+seg.curve*0.12*Math.min(1,sp))*0.03-G.roll)*Math.min(1,dt*4);G.camera.rotateZ(G.roll);
   if(pl.boosting&&!reduce){G.camera.position.x+=(Math.random()-0.5)*0.06;G.camera.position.y+=(Math.random()-0.5)*0.05;}
-  const fov=(cm===2&&!lookBack?70:60)+sp*13+(pl.boosting?9:0);G.camera.fov+=(fov-G.camera.fov)*Math.min(1,dt*4);G.camera.updateProjectionMatrix();
+  const fov=(cm===2&&!lookBack?70:64)+sp*8+(pl.boosting?7:0);G.camera.fov+=(fov-G.camera.fov)*Math.min(1,dt*4);G.camera.updateProjectionMatrix();
   // sun follows the player so the shadows stay sharp around the cars
   G.sun.position.set(_o.x+46,_o.y+82,_o.z+30);G.sun.target.position.set(_o.x+fx*8,_o.y,_o.z+fz*8);
   G.head.position.set(_o.x+fx*3.5,_o.y+1.4,_o.z+fz*3.5);G.head.target.position.set(_o.x+fx*40,_o.y,_o.z+fz*40);
@@ -1599,7 +1602,7 @@ function setBuy(v,typed){menuBuy=v;try{localStorage.setItem('hf-buyin',String(v)
 function renderLobby(){
   renderBuy();
   const hostView=!nr||isHost;
-  $('#modeBox').hidden=!hostView;$('#bStart').hidden=!hostView;$('#guestMode').hidden=hostView;{const bi=$('#lobbyOv .buyin');if(bi)bi.hidden=false;}
+  $('#modeBox').hidden=!hostView;$('#bStart').hidden=!hostView;$('#guestMode').hidden=hostView;{const bi=$('#lobbyOv .buyin');if(bi)bi.hidden=menuMode==='fun';}
   $('#mTok').setAttribute('aria-pressed',menuMode==='token');$('#mFun').setAttribute('aria-pressed',menuMode==='fun');$('#mReal').setAttribute('aria-pressed',menuMode==='real');
   $('#mReal').hidden=!window.HFWallet;$('#realBox').hidden=menuMode!=='real';
   // the menu already chose the race: no race-type, coin or buy-in choices here
