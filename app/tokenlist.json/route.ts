@@ -2,7 +2,9 @@ import { CHAINS, type ChainKey } from "@/lib/launchpad";
 import { supabaseService } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
-export const revalidate = 300;
+// Built on request, not during the Vercel build: the database call hung there and timed out the whole deploy.
+// Vercel's edge still caches it for 5 minutes (s-maxage below).
+export const dynamic = "force-dynamic";
 
 const SITE = (process.env.NEXT_PUBLIC_SITE_URL || "https://autistik.io").replace(/\/$/, "");
 
@@ -37,5 +39,5 @@ export async function GET() {
     tags: { autistik: { name: "AUTISTIK", description: "Launched on the AUTISTIK Launch Pad" } },
     tokens,
   };
-  return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "public, max-age=300" } });
+  return new Response(JSON.stringify(body), { headers: { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "public, max-age=300, s-maxage=300, stale-while-revalidate=600" } });
 }
