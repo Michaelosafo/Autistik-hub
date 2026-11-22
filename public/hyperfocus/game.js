@@ -1019,7 +1019,7 @@ function carMats(){
   G.mat.dark=new THREE.MeshStandardMaterial({color:0x111018,metalness:0.4,roughness:0.5,envMap:G.env,envMapIntensity:0.6});
   G.mat.carbon=new THREE.MeshStandardMaterial({color:0x17171c,metalness:0.55,roughness:0.32,envMap:G.env,envMapIntensity:0.8});
   G.mat.white=new THREE.MeshStandardMaterial({color:0xf4f2ee,metalness:0.2,roughness:0.3,envMap:G.env});
-  G.mat.glassP=new THREE.MeshPhysicalMaterial({color:0x0b0d14,metalness:0.35,roughness:0.04,envMap:G.env,envMapIntensity:1.8,clearcoat:1,clearcoatRoughness:0.02,transparent:true,opacity:0.9});
+  G.mat.glassP=new THREE.MeshPhysicalMaterial({color:0x26323f,metalness:0.2,roughness:0.03,envMap:G.env,envMapIntensity:1.6,clearcoat:1,clearcoatRoughness:0.02,transparent:true,opacity:0.5,depthWrite:false});
   G.mat.tireS=new THREE.MeshStandardMaterial({color:0x0b0b0e,roughness:0.9,metalness:0});
   G.mat.amber=new THREE.MeshBasicMaterial({color:0xffb347});
   G.mat.led=new THREE.MeshBasicMaterial({color:0xff1f3a});
@@ -1139,7 +1139,12 @@ function makeCar(color,type,helmet,human){
   // the driver, seen through the glass
   const hm=new THREE.MeshStandardMaterial({color:new THREE.Color(helmet||'#f1edff'),metalness:0.3,roughness:0.2,envMap:G.env});
   if(!G.geo.helm){G.geo.helm=new THREE.SphereGeometry(0.42,18,14);}
-  const head=new THREE.Mesh(G.geo.helm,hm);head.position.set(0.62,p.roof-0.58,(p.roofF+p.roofR)/2+0.25);g.add(head);
+  const dz=(p.roofF+p.roofR)/2+0.2,dy=p.roof-0.55;
+  const head=new THREE.Mesh(G.geo.helm,hm);head.scale.setScalar(0.88);head.position.set(0.62,dy,dz);g.add(head);
+  if(!G.geo.visor){G.geo.visor=new THREE.SphereGeometry(0.38,16,10,-Math.PI*0.32,Math.PI*0.64,Math.PI*0.36,Math.PI*0.22);G.geo.wheelR=new THREE.TorusGeometry(0.3,0.045,8,20);G.geo.torso=new THREE.CylinderGeometry(0.34,0.4,1,12);}
+  const vis=new THREE.Mesh(G.geo.visor,G.mat.lens);vis.position.set(0.62,dy,dz);g.add(vis);
+  const torso=new THREE.Mesh(G.geo.torso,new THREE.MeshStandardMaterial({color:0x1f2430,roughness:0.7}));torso.scale.set(1.15,1,0.8);torso.position.set(0.62,dy-0.78,dz-0.12);torso.rotation.x=-0.18;g.add(torso);
+  const swh=new THREE.Mesh(G.geo.wheelR,G.mat.dark);swh.position.set(0.62,dy-0.48,dz+0.72);swh.rotation.x=-0.5;g.add(swh);
   // an arm that waves out of the window when the driver says hi
   let arm=null;if(human){arm=new THREE.Group();arm.position.set(p.bw/2-0.02,p.roof-0.7,(p.roofF+p.roofR)/2+0.25);
     const fore=new THREE.Mesh(G.geo.arm||(G.geo.arm=new THREE.CylinderGeometry(0.09,0.11,0.85,8)),G.mat.dark);fore.position.y=0.42;arm.add(fore);
@@ -1206,8 +1211,8 @@ function renderGL(pl,others,dt,showMe){
   G.me.visible=showMe;
   const stv=pl.steer!=null?-pl.steer:pl.inp&&pl.inp.left?1:pl.inp&&pl.inp.right?-1:(tiltOn&&S?-tiltVal:0);
   const spd=clamp((pl.speed||0)/BASE,0,2),cv0=segAt(pl.pos).curve;
-  G.yaw=(G.yaw||0)+(((stv*0.26)-(pl.vx||0)*0.06+cv0*0.03)*Math.min(1,spd)-(G.yaw||0))*Math.min(1,dt*5);
-  if(showMe){placeCar(G.me,pl,{boost:pl.boosting&&!pl.finished,brake:pl.inp&&pl.inp.brake,steer:stv},_o);{const near=clamp((1.06-Math.abs(pl.x||0))/0.18,0.2,1);G.yaw*=near>=1?1:(0.85+0.15*near);}G.me.rotation.y+=G.yaw;G.me.rotation.z=-G.yaw*0.14;
+  G.yaw=(G.yaw||0)+(((stv*0.62)-(pl.vx||0)*0.1+cv0*0.06)*Math.min(1,spd)-(G.yaw||0))*Math.min(1,dt*4.2);
+  if(showMe){placeCar(G.me,pl,{boost:pl.boosting&&!pl.finished,brake:pl.inp&&pl.inp.brake,steer:stv},_o);{const near=clamp((1.06-Math.abs(pl.x||0))/0.18,0.2,1);G.yaw*=near>=1?1:(0.85+0.15*near);}G.me.rotation.y+=G.yaw;G.me.rotation.z=-G.yaw*0.18;
     if(Math.abs(G.yaw)>0.13&&spd>0.45&&!reduce)smoke(G.me,SHAPES[me.car]||SHAPES.street,Math.abs(G.yaw));}
   smokeTick(dt);
   const seen=new Set();
@@ -1231,6 +1236,7 @@ function renderGL(pl,others,dt,showMe){
   else if(cm===2){back=-0.6;height=1.95;ahead=20;lookY=1.6;}
   else if(cm===3){back=-9.5;height=1.5;ahead=-1;lookY=0.9;}
   _v.set(_o.x-fx*back,_o.y+height,_o.z-fz*back);
+  if(cm<2){const sw=(G.yaw||0)*(cm===1?3:4.4);_v.x+=fz*sw;_v.z-=fx*sw;}
   const k=G.camInit?1-Math.exp(-dt*(cm===2?20:7)):1;G.camInit=true;
   G.camera.position.lerp(_v,k);
   const minY=tp(Math.max(0,pl.pos-back/SC),pl.x,_o2).y+(cm>=2?0.8:1.4);if(G.camera.position.y<minY)G.camera.position.y=minY;
