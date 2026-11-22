@@ -2106,10 +2106,23 @@ function exitImmersive(){
   ['homeOv','lobbyOv','endOv'].forEach(id=>$('#'+id).hidden=true);$('#launchOv').hidden=false;
   requestAnimationFrame(resize);
 }
-$('#bLaunch').onclick=()=>{enterImmersive(true);if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
+/* first time on this phone: accept the privacy policy and terms, then pick Tilt or Touch steering */
+const FIRST={get agreed(){try{return localStorage.getItem('hf-agree')==='1';}catch(e){return true;}},get steer(){try{return localStorage.getItem('hf-steer')||'';}catch(e){return 'touch';}}};
+function firstRun(next){
+  if(!FIRST.agreed){$('#agreeOv').hidden=false;
+    $('#bAgree').onclick=()=>{try{localStorage.setItem('hf-agree','1');localStorage.setItem('hf-agree-at',new Date().toISOString());}catch(e){}$('#agreeOv').hidden=true;firstRun(next);};
+    $('#bDisagree').onclick=()=>{$('#agreeOv').hidden=true;exitImmersive();};return;}
+  if(!FIRST.steer){$('#steerOv').hidden=false;
+    const pick=m=>{try{localStorage.setItem('hf-steer',m);}catch(e){}$('#steerOv').hidden=true;if(m==='tilt'&&!tiltOn)$('#bTilt').click();if(m==='touch'&&tiltOn)$('#bTilt').click();next();};
+    $('#bSteerTilt').onclick=()=>pick('tilt');$('#bSteerTouch').onclick=()=>pick('touch');return;}
+  if(FIRST.steer==='tilt'&&!tiltOn)$('#bTilt').click(); // turn tilt back on after a reload (needs this tap)
+  next();
+}
+$('#bLaunch').onclick=()=>{enterImmersive(true);firstRun(launchGame);};
+function launchGame(){if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
   if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('car');}return;}
   // Play = straight to picking your car, then you're racing (other modes are one tap back).
-  state='home';wizFlow='friends';wizShow('car');};
+  state='home';wizFlow='friends';wizShow('car');}
 $('#bExit').onclick=exitImmersive;
 /* PLAY GAME at the top of the page: straight into the full-screen game */
 const toRace=()=>{try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');};
