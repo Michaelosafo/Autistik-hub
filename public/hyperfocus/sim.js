@@ -18,6 +18,7 @@ const HFSim = (() => {
     future: { speed: 1.09, handle: 1.06, boost: 0.92, off: 1.2 },
     retro: { speed: 1.05, handle: 0.92, boost: 1.14, off: 0.95 },
     phantom: { speed: 1.1, handle: 1.02, boost: 0.9, off: 1.15 },
+    psycho: { speed: 1.08, handle: 1.1, boost: 0.95, off: 1.1 },
   };
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
   function rng(seed) {
