@@ -3,6 +3,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // a new version tag on every deploy, so phones load the newest game files instead of a cached copy
+  env: { NEXT_PUBLIC_HF_V: (process.env.VERCEL_GIT_COMMIT_SHA || String(Date.now())).slice(0, 10) },
   // Keeps first deploys smooth; run `npx tsc --noEmit` locally to see type hints.
   typescript: { ignoreBuildErrors: true },
   eslint: { ignoreDuringBuilds: true },

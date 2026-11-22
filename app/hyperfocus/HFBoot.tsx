@@ -2,18 +2,19 @@
 import { useEffect } from "react";
 import { getState, pickWallet, subscribe } from "@/lib/connect";
 
+const HF_V = process.env.NEXT_PUBLIC_HF_V || "1";
 // The game's scripts, loaded in order once the page is on screen.
 const SCRIPTS = [
   "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
   "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js",
-  "/hyperfocus/swap.js",
+  "/hyperfocus/swap.js?v=" + HF_V,
   "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js",
-  "/hyperfocus/GLTFLoader.js",
-  "/hyperfocus/fx.js",
+  "/hyperfocus/GLTFLoader.js?v=" + HF_V,
+  "/hyperfocus/fx.js?v=" + HF_V,
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js",
-  "/hyperfocus/net.js",
-  "/hyperfocus/sim.js",
-  "/hyperfocus/game.js",
+  "/hyperfocus/net.js?v=" + HF_V,
+  "/hyperfocus/sim.js?v=" + HF_V,
+  "/hyperfocus/game.js?v=" + HF_V,
 ];
 
 const short = (a: string, n = 6) => (a.length > n + 6 ? `${a.slice(0, n)}…${a.slice(-4)}` : a);
