@@ -1026,6 +1026,18 @@ const isBitget = (t: { name: string }) => t.name === "Bitget Wallet";
 const solWcBase = (t: WcTarget) => (isBitget(t) ? BITGET_LINK : walletBase(t));
 /** The Solana chain id the wallet approved (some wallets still answer on the older mainnet id). */
 const SOL_MAINNET_OLD = "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ";
+// The connect request, as Reown's own AppKit sends it for Solana: optional namespaces, every Solana method, and both
+// mainnet ids (the older one is a workaround for wallets such as Bitget that only answer on it). Asking for the new id
+// alone let Bitget connect on the old one and then quietly ignore every signing request sent on the new one.
+const SOL_CONNECT = {
+  optionalNamespaces: {
+    solana: {
+      methods: ["solana_signMessage", "solana_signTransaction", "solana_requestAccounts", "solana_getAccounts", "solana_signAllTransactions", "solana_signAndSendTransaction"],
+      chains: [SOL_MAINNET, SOL_MAINNET_OLD],
+      events: ["accountsChanged", "chainChanged"],
+    },
+  },
+};
 function solChainOf(up: any): string {
   const ns = up?.session?.namespaces?.solana;
   const ids: string[] = [...(ns?.chains || []), ...(ns?.accounts || []).map((a: string) => a.split(":").slice(0, 2).join(":"))];
@@ -1038,7 +1050,7 @@ async function initSolWc() {
   const { UniversalProvider } = await import("@walletconnect/universal-provider");
   solWc = await UniversalProvider.init({
     projectId: WALLETCONNECT_ID,
-    customStoragePrefix: "autistik-sol",
+    customStoragePrefix: "autistik-sol2", // v2: sessions made with both Solana chain ids (older ones are dropped)
     metadata: {
       name: "AUTISTIK Hub", description: "Autism community, wallet and launch pad", url: location.origin, icons: [`${location.origin}/icons/icon-512.png`, `${location.origin}/icon.svg`],
       redirect: { native: location.origin + location.pathname, universal: location.origin + location.pathname },
@@ -1112,7 +1124,7 @@ export async function prepareSolWc() {
     const uri = await new Promise<string>((res, rej) => {
       const t = setTimeout(() => rej(new Error("timeout")), 15_000);
       up.once?.("display_uri", (u: string) => { clearTimeout(t); res(u); });
-      done = up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
+      done = up.connect(SOL_CONNECT);
       done.catch(() => { if (solPre?.up === up) solPre = null; });
     });
     solPre = { uri, at: Date.now(), up, done };
@@ -1158,7 +1170,7 @@ export async function chooseSolWalletConnect(t: WcTarget) {
       if (mobile && base) { const href = solWcHref(t, uri, base); set({ qr: { uri, name: t.name, logo: t.logo, install: t.install, href }, busy: "" }); openWalletApp(href); }
       else set({ qr: { uri, name: t.name, logo: t.logo, install: t.install }, busy: "" });
     });
-    await up.connect({ namespaces: { solana: { methods: ["solana_signTransaction", "solana_signMessage"], chains: [SOL_MAINNET], events: [] } } });
+    await up.connect(SOL_CONNECT);
     await finishSolWc(t, up);
   } catch (e: any) {
     if (state.sol) return;
