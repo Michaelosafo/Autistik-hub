@@ -1024,6 +1024,13 @@ const SOL_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
  */
 const isBitget = (t: { name: string }) => t.name === "Bitget Wallet";
 const solWcBase = (t: WcTarget) => (isBitget(t) ? BITGET_LINK : walletBase(t));
+/** The Solana chain id the wallet approved (some wallets still answer on the older mainnet id). */
+const SOL_MAINNET_OLD = "solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ";
+function solChainOf(up: any): string {
+  const ns = up?.session?.namespaces?.solana;
+  const ids: string[] = [...(ns?.chains || []), ...(ns?.accounts || []).map((a: string) => a.split(":").slice(0, 2).join(":"))];
+  return ids.includes(SOL_MAINNET) ? SOL_MAINNET : ids.includes(SOL_MAINNET_OLD) ? SOL_MAINNET_OLD : SOL_MAINNET;
+}
 const solWcHref = (t: WcTarget, uri: string, base: string) => (isBitget(t) ? bitgetWcLink(uri) : wcHref(base, uri, t.pkg));
 let solWc: any = null;
 async function initSolWc() {
@@ -1073,7 +1080,9 @@ function wcSolWallet(name: string, icon: string, up: any, address: string, base?
           set({ pending: mine });
           if (href) setTimeout(() => openWalletApp(href), 300);
           let r: any;
-          try { r = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin) } }, SOL_MAINNET); }
+          // Same request shape as Reown's own Solana connector: the transaction plus the account that signs it
+          // (Bitget and others don't show the request without pubkey), on the Solana chain id this session uses.
+          try { r = await up.request({ method: "solana_signTransaction", params: { transaction: btoa(bin), pubkey: address } }, solChainOf(up)); }
           finally { if (state.pending === mine) set({ pending: null }); }
           if (typeof r?.transaction === "string") return [{ signedTransaction: Uint8Array.from(atob(r.transaction), (c) => c.charCodeAt(0)) }];
           if (typeof r?.signature !== "string") throw new Error("The wallet didn't sign.");
