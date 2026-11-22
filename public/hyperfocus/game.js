@@ -323,8 +323,11 @@ function startRace(mode,tok,go,seedStr){
 }
 function stepWorld(){
   if(!S||state!=='race')return;
-  const target=Math.floor(Math.max(0,Date.now()-S.go)/1000/STEP);
-  let n=0;while(S.steps<target&&n<240){worldStep(STEP);S.steps++;n++;}
+  const f=Math.max(0,Date.now()-S.go)/1000/STEP,target=Math.floor(f),ai=S.w.ai;
+  let n=0;while(S.steps<target&&n<240){if(S.steps>=target-1||n===239)for(const r of ai){r.pp=r.pos;r.px=r.x;}worldStep(STEP);S.steps++;n++;}
+  // the world moves 30 times a second but the screen draws 60-120: draw each car part-way between its last two steps
+  const a=clamp(f-S.steps,0,1);
+  for(const r of ai){if(r.pp==null){r.rp=r.pos;r.rx=r.x;}else{r.rp=r.pp+(r.pos-r.pp)*a;r.rx=r.px+(r.x-r.px)*a;}}
 }
 function racing(){return S&&state==='race'&&Date.now()>=S.go;}
 /* ---------- weapons (free races only): rockets, bombs and side blades. A hit car spins out and crawls for a couple of seconds ---------- */
@@ -422,6 +425,7 @@ function readRemotes(){
   if(!nr){S.remotes=[];return;}
   const now=Date.now();
   S.waves=S.waves||new Map();
+  const tn=performance.now(),rdt=Math.min(0.1,(tn-(S.rmT||tn))/1000);S.rmT=tn;S.rsm=S.rsm||new Map();const live=new Set();
   S.remotes=nr.peers().filter(p=>!p.sameTab&&p.presence&&p.presence.st==='race'&&p.presence.go===(S.goKey||S.go)&&typeof p.presence.p==='number').map(p=>{
     const q=p.presence,fin=!!q.f;
     const pos=fin?q.p:Math.min(q.p+(q.s||0)*Math.min(1.5,(now-p.updatedAt)/1000),FIN*SEG+SEG*40);
@@ -430,8 +434,12 @@ function readRemotes(){
     S.shotSeen=S.shotSeen||new Map();const sh=+q.sh||0,ss=S.shotSeen.get(p.peer);
     if(sh&&ss!==undefined&&ss!==sh&&(q.sk==='r'||q.sk==='b')&&typeof q.sp==='number')wpnSpawn(q.sk,+q.sp,clamp(+q.sx||0,-1.1,1.1),+q.sv||BASE,p.peer);
     S.shotSeen.set(p.peer,sh);
-    return {bl:q.bl===1,wk:q.wk===1,remote:true,id:p.peer,waveT:wa&&wa.ts&&now-wa.at<2600&&seen?1:0,name:String(q.n||'Friend').slice(0,16),color:typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#ffffff',pos,x:clamp(+q.x||0,-2.3,2.3),speed:+q.s||0,finished:fin,ft:+q.ft||0,value:+q.v||0,boost:!!q.g,coin:q.k,type:CARS[q.t]?q.t:'street',helmet:typeof q.hc==='string'&&/^#[0-9a-f]{6}$/i.test(q.hc)?q.hc:'#f1edff'};
+    const tx=clamp(+q.x||0,-2.3,2.3);let sm=S.rsm.get(p.peer);live.add(p.peer);
+    if(!sm||Math.abs(pos-sm.p)>SEG*25){sm={p:pos,x:tx};S.rsm.set(p.peer,sm);}
+    else{sm.p+=(+q.s||0)*rdt;sm.p+=(pos-sm.p)*Math.min(1,rdt*8);sm.x+=(tx-sm.x)*Math.min(1,rdt*10);}
+    return {rp:sm.p,rx:sm.x,bl:q.bl===1,wk:q.wk===1,remote:true,id:p.peer,waveT:wa&&wa.ts&&now-wa.at<2600&&seen?1:0,name:String(q.n||'Friend').slice(0,16),color:typeof q.c==='string'&&/^#[0-9a-f]{6}$/i.test(q.c)?q.c:'#ffffff',pos,x:clamp(+q.x||0,-2.3,2.3),speed:+q.s||0,finished:fin,ft:+q.ft||0,value:+q.v||0,boost:!!q.g,coin:q.k,type:CARS[q.t]?q.t:'street',helmet:typeof q.hc==='string'&&/^#[0-9a-f]{6}$/i.test(q.hc)?q.hc:'#f1edff'};
   });
+  S.rsm.forEach((v,k)=>{if(!live.has(k))S.rsm.delete(k);});
 }
 function publish(force){
   if(!nr||!S)return;
@@ -495,7 +503,7 @@ function setupFX(){
 function lightGlare(){if(!G||!G.mat.flare)return;G.mat.flare.opacity=G.day?0.18:0.75;G.mat.hglow.opacity=G.day?0.3:1;}
 function applyFXTheme(){lightGlare();if(!G||!G.bloom)return;const day=G.day;G.bloom.strength=day?0.42:0.95;G.bloom.threshold=day?0.88:0.74;G.renderer.toneMappingExposure=day?1.0:0.9;G.bloom.radius=day?0.5:0.7;G.grade.uniforms.warm.value=day&&WORLD==='canyon'?0.025:day?0.008:-0.01;G.grade.uniforms.vig.value=day?0.3:0.42;}
 function resizeFX(cw,ch){if(!G||!G.composer)return;const pr=G.renderer.getPixelRatio();G.composer.setPixelRatio(pr);G.composer.setSize(cw,ch);G.fxaa.uniforms.resolution.value.set(1/(cw*pr),1/(ch*pr));}
-function setGFX(q){GFX=q;try{localStorage.setItem('hf-gfx',q);}catch(e){}if(!G)return;G.renderer.setPixelRatio(gfxRatio());
+function setGFX(q){GFX=q;try{localStorage.setItem('hf-gfx',q);}catch(e){}if(!G)return;G.lite=false;G.sun.castShadow=true;G.renderer.setPixelRatio(gfxRatio());
   const m=q==='ultra'?4096:q==='high'?2048:1024;if(G.sun.shadow.mapSize.x!==m){G.sun.shadow.mapSize.set(m,m);if(G.sun.shadow.map){G.sun.shadow.map.dispose();G.sun.shadow.map=null;}}
   resize();setupFX();}
 /* Detail textures drawn in code: a height field turned into colour and a normal map, so rock, sand and asphalt catch the light. */
@@ -793,11 +801,13 @@ function drawGatePanel(p,k){
   const x=p.c.getContext('2d');x.fillStyle=cn.color;x.fillRect(0,0,256,128);x.fillStyle='rgba(13,11,31,0.92)';x.textAlign='center';
   x.font="46px 'Russo One', sans-serif";x.fillText(k,128,58);x.font="600 32px 'IBM Plex Mono', monospace";x.fillText(cn.rugged?'RUGGED':fmtM(cn.m)+(cn.mom>=0?' ▲':' ▼'),128,104);p.t.needsUpdate=true;
 }
-function labelSprite(key,d){
-  let e=G.labelCache.get(key);
-  if(!e){
-    if(G.labelCache.size>300){G.labelCache.forEach(v=>{v.tex.dispose();v.mat.dispose();});G.labelCache.clear();}
-    const c=document.createElement('canvas');c.width=512;c.height=112;const x=c.getContext('2d');
+/* Each car owns one name-tag texture and redraws it in place when the text changes (building a new texture every
+   few frames for every car caused stutters and piled up GPU memory). */
+function labelSprite(key,d,u){
+  let e=u&&u.lab;
+  if(!e){const c=document.createElement('canvas');c.width=512;c.height=112;const tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;tex.generateMipmaps=false;
+    e={c,x:c.getContext('2d'),tex,mat:new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false})};if(u)u.lab=e;}
+  {const x=e.x;x.clearRect(0,0,512,112);
     const lf=d.mono?"600 44px 'IBM Plex Mono', monospace":"48px 'Russo One', sans-serif",sf="600 38px 'IBM Plex Mono', monospace";
     x.font=lf;const tw=x.measureText(d.label).width;x.font=sf;const sw=x.measureText(d.sub||'').width;
     const pw=Math.min(500,tw+sw+60),px=(512-pw)/2;
@@ -805,8 +815,7 @@ function labelSprite(key,d){
     if(!d.human){x.strokeStyle=d.color;x.lineWidth=4;x.stroke();}
     x.textBaseline='middle';x.font=lf;x.fillStyle=d.human?'#0d0b1f':d.color;x.fillText(d.label,px+20,58);
     x.font=sf;x.fillStyle=d.human?'#0d0b1f':d.subCol;x.fillText(d.sub||'',px+40+tw,58);
-    const tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;
-    e={tex,mat:new THREE.SpriteMaterial({map:tex,transparent:true,depthWrite:false})};G.labelCache.set(key,e);
+    e.tex.needsUpdate=true;
   }
   return e.mat;
 }
@@ -1037,7 +1046,7 @@ function smoke(car,p,amt){
 }
 function smokeTick(dt){if(!G.smoke)return;for(const q of G.smoke){if(q.life<=0)continue;q.life-=dt*0.9;const s=1.2+(1-q.life)*4.5;q.sp.scale.set(s,s,1);q.sp.position.y+=dt*0.6;q.sp.material.opacity=Math.max(0,q.life)*0.45;if(q.life<=0)q.sp.visible=false;}}
 function placeCar(g,r,d,o){
-  tp(r.pos,r.x,o);g.position.set(o.x,o.y,o.z);g.rotation.set(-o.pitch,o.ang,0,'YXZ');
+  tp(r.rp!=null?r.rp:r.pos,r.rx!=null?r.rx:r.x,o);g.position.set(o.x,o.y,o.z);g.rotation.set(-o.pitch,o.ang,0,'YXZ');
   const u=g.userData,night=!G.day;
   if(!!d.rug!==u.rug){u.rug=!!d.rug;u.bodyM.color.set(d.rug?'#5d5a6b':u.baseColor);u.bodyM.emissive.set(d.rug?'#000000':u.baseColor).multiplyScalar(d.rug?0:0.04);}
   const fl=d.moon||d.boost;u.flames.forEach(f=>{f.visible=!!fl&&!reduce;f.material=d.moon?G.mat.flameM:G.mat.flameB;f.scale.y=0.6+Math.random()*0.5;});
@@ -1049,16 +1058,17 @@ function placeCar(g,r,d,o){
     u.wheels.forEach(w=>{w.spin.rotation.x+=roll;if(w.front)w.steer.rotation.y+=(st-w.steer.rotation.y)*0.25;});}
   if(u.blades){const on=u.rigB||(r.bladeT||0)>0||!!r.bl;u.blades.visible=on;if(on){const sp=(r.bladeT>0||r.bl)?0.9:0.25;u.blades.children.forEach((c,i)=>{if(c.type==='Group')c.rotation.y+=c.position.x>0?-sp:sp;});}}
   if((r.wreck||0)>0||r.wk){g.rotation.y+=(tClock*11)%(Math.PI*2);g.position.y+=0.35+Math.abs(Math.sin(tClock*9))*0.25;if(!reduce)smoke(g,SHAPES[u.type]||SHAPES.street,0.7);}
-  if(d.label){const key=d.label+'|'+d.sub+'|'+d.color+'|'+d.subCol+'|'+(d.human?1:0);if(key!==u.key&&(!u.key||tClock-(u.keyT||0)>0.35)){u.key=key;u.keyT=tClock;u.label.material=labelSprite(key,d);}u.label.visible=true;}else u.label.visible=false;
+  if(d.label){const key=d.label+'|'+d.sub+'|'+d.color+'|'+d.subCol+'|'+(d.human?1:0);if(key!==u.key&&(!u.key||tClock-(u.keyT||0)>0.5)){u.key=key;u.keyT=tClock;u.label.material=labelSprite(key,d,u);}u.label.visible=true;}else u.label.visible=false;
 }
 const _o={},_o2={};let _v=null,_v2=null;
+function dropCar(g){G.scene.remove(g);const l=g.userData.lab;if(l){l.tex.dispose();l.mat.dispose();g.userData.lab=null;}}
 function renderGL(pl,others,dt,showMe){
   G.dt=dt;buildGLTrack();
   const fun=S&&S.w.mode==='fun',plSeg=Math.floor(pl.pos/SEG);
   // only the stretches of scenery near the player are drawn
   for(const c of G.chunks)c.mesh.visible=c.to>plSeg-40&&c.from<plSeg+DRAW+90;
   const look=me.color+'|'+me.car+'|'+me.helmet;
-  if(!G.me||G.me.userData.look!==look){if(G.me)G.scene.remove(G.me);G.me=makeCar(me.color,me.car,me.helmet,true);}
+  if(!G.me||G.me.userData.look!==look){if(G.me)dropCar(G.me);G.me=makeCar(me.color,me.car,me.helmet,true);}
   G.me.visible=showMe;
   const stv=pl.steer!=null?-pl.steer:pl.inp&&pl.inp.left?1:pl.inp&&pl.inp.right?-1:(tiltOn&&S?-tiltVal:0);
   const spd=clamp((pl.speed||0)/BASE,0,2),cv0=segAt(pl.pos).curve;
@@ -1068,7 +1078,7 @@ function renderGL(pl,others,dt,showMe){
   smokeTick(dt);
   const seen=new Set();
   for(const r of others){const gap=r.pos-pl.pos;if(gap<-SEG*30||gap>SEG*DRAW)continue;seen.add(r.id);
-    const lk=r.color+'|'+(r.type||'street')+'|'+(r.helmet||'#f1edff');let g=G.cars.get(r.id);if(!g||g.userData.look!==lk){if(g)G.scene.remove(g);g=makeCar(r.color,r.type||'street',r.helmet||'#f1edff',!!r.remote);G.cars.set(r.id,g);}
+    const lk=r.color+'|'+(r.type||'street')+'|'+(r.helmet||'#f1edff');let g=G.cars.get(r.id);if(!g||g.userData.look!==lk){if(g)dropCar(g);g=makeCar(r.color,r.type||'street',r.helmet||'#f1edff',!!r.remote);G.cars.set(r.id,g);}
     g.visible=true;placeCar(g,r,r.d||{color:r.color},_o2);if(r.tx!=null)g.rotation.y+=clamp(-(r.tx-r.x)*0.5,-0.18,0.18);}
   G.cars.forEach((g,id)=>{if(!seen.has(id))g.visible=false;});
   wpnGL(dt);
@@ -1215,9 +1225,10 @@ function renderView(pl,others){
   drawCar(c,W/2+(pl.inp.left?-4:pl.inp.right?4:0),py-4,(camDepth/playerZ)*CARW*W/2,{color:pl.color,brake:pl.inp.brake,boost:pl.boosting&&!pl.finished});
   c.restore();
 }
+let _vg=null,_vgW=0;
 function drawSpeedFx(c,sp,boost){
   const cx=W/2,cy=H*0.52,R=Math.hypot(W,H)/2;
-  const vg=c.createRadialGradient(cx,cy,R*0.45,cx,cy,R*1.05);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.32)');c.fillStyle=vg;c.fillRect(0,0,W,H);
+  if(!(G&&G.composer)){if(_vgW!==W){_vgW=W;_vg=c.createRadialGradient(cx,cy,R*0.45,cx,cy,R*1.05);_vg.addColorStop(0,'rgba(0,0,0,0)');_vg.addColorStop(1,'rgba(0,0,0,0.32)');}c.fillStyle=_vg;c.fillRect(0,0,W,H);}
   const a=clamp((sp-0.7)*0.55+(boost?0.18:0),0,0.55);if(a<=0.01)return;
   c.strokeStyle=`rgba(255,255,255,${a})`;c.lineWidth=1.6;c.beginPath();
   for(let i=0;i<34;i++){const ang=Math.random()*Math.PI*2,r1=R*(0.55+Math.random()*0.25),r2=r1+R*(0.12+Math.random()*0.3*sp);c.moveTo(cx+Math.cos(ang)*r1,cy+Math.sin(ang)*r1*0.62);c.lineTo(cx+Math.cos(ang)*r2,cy+Math.sin(ang)*r2*0.62);}
@@ -1243,7 +1254,7 @@ function drawGauge(c,cx,cy,r,speed,boost){
 function drawHUD(pl,list){
   if(G&&!reduce)drawSpeedFx(ctx,G.speedFx||0,pl.boosting);
   const c=ctx,paid=S.mode==='paid',real=S.w.mode==='real',fun=S.w.mode==='fun'||paid||real,place=placeOf(pl,list);
-  const shadow=on=>{c.shadowColor=on?'rgba(0,0,0,0.55)':'transparent';c.shadowBlur=on?8:0;c.shadowOffsetY=on?2:0;};
+  const shadow=on=>{c.shadowColor=on?'rgba(0,0,0,0.6)':'transparent';c.shadowBlur=0;c.shadowOffsetY=on?2:0;};
   // progress, top left
   const prog=clamp(pl.pos/(FIN*SEG),0,1);
   shadow(true);c.textAlign='left';c.font=`600 11px ${F_MONO}`;c.fillStyle=COL.gas;c.fillText('PROGRESS',20,26);
@@ -1303,15 +1314,16 @@ function drawHUD(pl,list){
 
 /* ================= DOM panels ================= */
 function renderBoard(list){
-  if(!S){$('#board').innerHTML='<li style="color:var(--dim);display:block">Start a race to see the standings.</li>';return;}
-  $('#board').innerHTML=list.map((r,i)=>{
+  if(!S){$('#board')._h=null;$('#board').innerHTML='<li style="color:var(--dim);display:block">Start a race to see the standings.</li>';return;}
+  const html=list.map((r,i)=>{
     let nm,tag;
     if(r.me||r.remote){nm=`<span class="nm h">${esc(r.me?r.name+' (you)':r.name)}</span>`;tag=`<span class="tagc c-gas">${fmtUsd(r.me?myValue(r):r.value)}</span>`;}
     else{const d=r.d||disp(r);nm=`<span class="nm${S.w.mode==='fun'?' h':''}">${esc(d.name||d.label)}</span>`;
       const cls=d.rug?'c-dim':d.moon?'c-moon':d.subCol===COL.up?'c-up':d.subCol===COL.down?'c-down':S.w.mode==='fun'?'c-up':'c-dim';
       tag=`<span class="tagc ${cls}">${esc(r.finished?'FIN':d.sub)}</span>`;}
     return `<li class="${r.me?'me':r.remote?'friend':''}"><span class="pl">${i+1}</span><span class="dot" style="background:${r.color}"></span>${nm}${tag}</li>`;}).join('');
-  $('#lapInfo').textContent=`${Math.round(clamp(S.me.pos/(FIN*SEG),0,1)*100)}%`;
+  const bd=$('#board');if(bd._h!==html){bd._h=html;bd.innerHTML=html;}
+  const lap=`${Math.round(clamp(S.me.pos/(FIN*SEG),0,1)*100)}%`,li=$('#lapInfo');if(li.textContent!==lap)li.textContent=lap;
   if(S.w.mode!=='fun'&&S.w.mk){const mk=S.w.mk,ch=(mk.P/mk.p0-1)*100;$('#priceInfo').innerHTML=`<span style="color:${ch>=0?COL.up:COL.down}">${esc(tokLabel())} ${fmtPrice(mk.P)} ${ch>=0?'+':''}${ch.toFixed(1)}%</span>`;}else $('#priceInfo').textContent='';
 }
 function renderFeed(){if(!S)return;$('#feed').innerHTML=S.w.feed.slice(0,30).map(t=>`<li>${t}</li>`).join('')||'<li>Quiet so far.</li>';S.feedDirty=false;}
@@ -2235,6 +2247,7 @@ resize();
 /* if racing runs below ~38 frames a second, step the graphics down once so it stays smooth */
 const PERF={acc:0,n:0,done:{}};
 function perfWatch(dt){if(!G||!S||state!=='race'||document.hidden)return;PERF.acc+=dt;PERF.n++;if(PERF.n<240)return;const avg=PERF.acc/PERF.n;PERF.acc=0;PERF.n=0;
+  if(avg>1/38&&GFX==='low'&&!PERF.done.low){PERF.done.low=1;G.lite=true;G.sun.castShadow=false;G.renderer.setPixelRatio(Math.max(0.6,gfxRatio()*0.75));resize();S.me.toasts.push({txt:'GRAPHICS LOWERED FOR SMOOTHER RACING',color:COL.gas,t:2.4});return;}
   if(avg>1/38&&GFX!=='low'&&!PERF.done[GFX]){PERF.done[GFX]=1;setGFX(GFX==='ultra'?'high':'low');try{renderGfx();}catch(e){}S.me.toasts.push({txt:'GRAPHICS LOWERED FOR SMOOTHER RACING',color:COL.gas,t:2.4});}}
 function frame(now){
   if(!cv.isConnected)return; // the page was left (in-site navigation): stop the loop
@@ -2266,9 +2279,8 @@ function frame(now){
 }
 renderBoard([]);
 requestAnimationFrame(frame);
-})();
 
-/* ---------- floating mini window (components/GameDock.tsx): the race keeps going small while you use the rest of the site ---------- */
+/* ---------- floating mini window (components/GameDock.tsx; inside the game's scope so it can see the race): the race keeps going small while you use the rest of the site ---------- */
 window.HFGame={
   racing(){return !!(S&&state==='race');},
   label(){return S&&state==='race'?(S.me.finished?'Race finished · tap to see results':'Race on · tap to go back'):'';},
@@ -2285,3 +2297,4 @@ window.HFGame={
     try{exitImmersive();}catch(e){document.body.classList.remove('immersive','racing');}$('#homeOv').hidden=false;wizHome();
   },
 };
+})();
