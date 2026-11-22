@@ -2223,7 +2223,11 @@ $('#bLaunch').onclick=()=>{enterImmersive(true);firstRun(launchGame);};
 function launchGame(){if(nr&&state==='lobby'){showLobby();return;}if(PD.entry&&PD.entry.room&&ONSITE()){pdWait();return;}$('#homeOv').hidden=false;
   if(pendingRoom){if(pendingHost||(me.nick&&me.nick!=='Racer')){const c=pendingRoom,h=pendingHost;pendingRoom=null;wizHome();joinWhenReady(c,h);}else{state='home';wizFlow='join';wizShow('car');}return;}
   // Play = straight to picking your car, then you're racing (other modes are one tap back).
-  state='home';wizFlow='friends';wizShow('car');}
+  const fl=pickedFlow();state='home';wizFlow=fl;$('#homeOv').querySelectorAll('.mcard[data-flow]').forEach(x=>x.setAttribute('aria-pressed',String(x.dataset.flow===fl)));wizShow(FLOWS[fl][1]);}
+/* the race type chosen on the page (Free play, Win $AUTISTIK, Real token race): PLAY GAME goes straight into it */
+function pickedFlow(){let f='friends';try{f=localStorage.getItem('hf-flow')||'friends';}catch(e){}const b=document.querySelector('#modeChips [data-flow="'+f+'"]');return b&&getComputedStyle(b).display!=='none'&&FLOWS[f]?f:'friends';}
+(function(){const row=$('#modeChips');if(!row)return;const show=()=>{const f=pickedFlow();row.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.flow===f)));};
+  row.querySelectorAll('button').forEach(b=>b.onclick=()=>{try{localStorage.setItem('hf-flow',b.dataset.flow);}catch(e){}show();});show();})();
 $('#bExit').onclick=exitImmersive;
 /* PLAY GAME at the top of the page: straight into the full-screen game */
 const toRace=()=>{try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');};

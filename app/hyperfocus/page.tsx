@@ -28,7 +28,7 @@ export default function HyperfocusPage() {
   return (
     <>
       <h1 className="sr-only">Hyperfocus GP</h1>
-      {app && <style dangerouslySetInnerHTML={{ __html: '.hf .mcard[data-flow="paid"],.hf [data-step="paid"],.hf #paidOv{display:none!important}' }} />}
+      {app && <style dangerouslySetInnerHTML={{ __html: '.hf .mcard[data-flow="paid"],.hf .modechips [data-flow="paid"],.hf [data-step="paid"],.hf #paidOv{display:none!important}' }} />}
       {/* The game lives in the layout (components/GameDock.tsx) so a race keeps going in a small window when you leave. */}
       <GameSlot css={HF_CSS} markup={markup} cls={fontRace.variable} nonce={nonce} />
     </>
