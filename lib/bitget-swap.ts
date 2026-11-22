@@ -49,7 +49,7 @@ function checkSig(sigHex: string, data: Buffer): boolean {
   try { return rsaVerify("sha256", data, createPublicKey(BGW_KEY), Buffer.from(sigHex.replace(/^0x/i, ""), "hex")); } catch { return false; }
 }
 
-async function call(path: string, body: object, checked = false): Promise<any> {
+export async function bgwCall(path: string, body: object, checked = false): Promise<any> {
   const ts = String(Date.now());
   const bodyStr = JSON.stringify(body);
   const sign = "0x" + createHash("sha256").update("POST" + path + bodyStr + ts).digest("hex");
@@ -92,16 +92,16 @@ export async function bitgetBuy(a: PrivateKeyAccount, token: string, bnb: number
   const base = { fromChain: "bnb", fromSymbol: "BNB", fromContract: "", fromAmount: amount, fromAddress: from, toChain: "bnb", toSymbol: "", toContract: token, toAddress: from };
   let order: any;
   try {
-    const q = await call("/swap-go/swapx/quote", { ...base, tab_type: "swap", publicKey: "", slippage: slip, requestId: String(Date.now()) });
+    const q = await bgwCall("/swap-go/swapx/quote", { ...base, tab_type: "swap", publicKey: "", slippage: slip, requestId: String(Date.now()) });
     const best = (q?.quoteResults || [])[0];
     if (!best?.market?.id) throw new Error("Bitget Wallet has no route for this coin yet");
     const market = best.market.id, protocol = best.market.protocol || best.protocol || "";
-    const cf = await call("/swap-go/swapx/confirm", {
+    const cf = await bgwCall("/swap-go/swapx/confirm", {
       ...base, market, protocol, slippage: slip, recommendSlippage: slip, gasLevel: "fast", features: ["user_gas"], lastOutAmount: String(best.outAmount || ""),
       mevProtection: { chain: "bnb", mevFee: "0", amountMin: amount, mevTarget: true, mode: "smart" },
     });
     if (!cf?.orderId) throw new Error("Bitget Wallet didn't give an order");
-    order = await call("/swap-go/swapx/makeOrder", { orderId: cf.orderId, ...base, slippage: slip, market, protocol, source: "agent" }, true);
+    order = await bgwCall("/swap-go/swapx/makeOrder", { orderId: cf.orderId, ...base, slippage: slip, market, protocol, source: "agent" }, true);
     if (!order?.txs?.length) throw new Error("Bitget Wallet's order had nothing to sign");
     // Sign each transaction with this wallet's key. Only plain transactions from this wallet on BNB Chain are signed.
     for (const t of order.txs) {
@@ -124,11 +124,11 @@ export async function bitgetBuy(a: PrivateKeyAccount, token: string, bnb: number
     throw new BitgetNotSent((e as Error).message);
   }
   // From here the order is out: never fall back to another route (it could buy twice).
-  await call("/swap-go/swapx/send", { orderId: order.orderId, txs: order.txs });
+  await bgwCall("/swap-go/swapx/send", { orderId: order.orderId, txs: order.txs });
   let hash = "";
   for (let i = 0; i < 30; i++) {
     await sleep(1500);
-    const st = await call("/swap-go/swapx/getOrderDetails", { orderId: order.orderId }).catch(() => null);
+    const st = await bgwCall("/swap-go/swapx/getOrderDetails", { orderId: order.orderId }).catch(() => null);
     const det = st?.details;
     if (det?.toTxId || det?.fromTxId) hash = det.toTxId || det.fromTxId;
     if (det?.status === "success") break;

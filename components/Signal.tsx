@@ -1,0 +1,272 @@
+"use client";
+
+/**
+ * Signal (owner only): swap or bridge any token through Bitget Wallet's swap service, from whichever wallet is
+ * connected, with the coins sent to the address you choose (your connected wallet by default).
+ *
+ * The page asks /api/signal for routes and the order; your wallet signs and sends it here in the browser. On EVM
+ * chains the order goes to Bitget Wallet's swap contract (an approval first when you pay with a token, not the
+ * chain's own coin); on Solana your wallet signs Bitget's transaction and the Hub's node sends it.
+ */
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { getState, subscribe, pickWallet, setNetwork, switchEvm } from "@/lib/connect";
+import { signAndSend } from "@/lib/sol-wallet";
+
+type ChainKey = "bnb" | "eth" | "base" | "arbitrum" | "matic" | "sol";
+const CH: Record<ChainKey, { name: string; id: number; native: string; scan: string }> = {
+  bnb: { name: "BNB Chain", id: 56, native: "BNB", scan: "https://bscscan.com/tx/" },
+  eth: { name: "Ethereum", id: 1, native: "ETH", scan: "https://etherscan.io/tx/" },
+  base: { name: "Base", id: 8453, native: "ETH", scan: "https://basescan.org/tx/" },
+  arbitrum: { name: "Arbitrum", id: 42161, native: "ETH", scan: "https://arbiscan.io/tx/" },
+  matic: { name: "Polygon", id: 137, native: "POL", scan: "https://polygonscan.com/tx/" },
+  sol: { name: "Solana", id: 0, native: "SOL", scan: "https://solscan.io/tx/" },
+};
+type Tok = { chain: ChainKey; contract: string; symbol: string; name?: string; icon?: string };
+type Route = { market: string; protocol: string; label: string; out: string; min: string; gasUsd: number | null; slip: string | null };
+const native = (c: ChainKey): Tok => ({ chain: c, contract: "", symbol: CH[c].native, name: CH[c].native });
+
+async function api<T = any>(action: string, body: object): Promise<T> {
+  const r = await fetch("/api/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, ...body }) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || `Error ${r.status}`);
+  return d;
+}
+
+// ---------------------------------------------------------------- small helpers
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58bytes(s: string): Uint8Array {
+  let n = 0n;
+  for (const ch of s) { const i = B58.indexOf(ch); if (i < 0) throw new Error("Bad transaction from Bitget Wallet"); n = n * 58n + BigInt(i); }
+  const out: number[] = [];
+  while (n > 0n) { out.unshift(Number(n % 256n)); n /= 256n; }
+  for (const ch of s) { if (ch !== "1") break; out.unshift(0); }
+  return Uint8Array.from(out);
+}
+const b64 = (u: Uint8Array) => { let s = ""; u.forEach((x) => (s += String.fromCharCode(x))); return btoa(s); };
+const hex = (v: bigint) => "0x" + v.toString(16);
+const toWei = (v: unknown) => { const s = String(v ?? "0"); if (s.startsWith("0x")) return BigInt(s); if (!s.includes(".")) return BigInt(s || "0"); return BigInt(Math.round(Number(s) * 1e18)); };
+const toInt = (v: unknown) => { const s = String(v ?? "0"); return s.startsWith("0x") ? BigInt(s) : BigInt(Math.floor(Number(s) || 0)); };
+function rawAmount(human: string, dec: number): bigint {
+  const [i, f = ""] = human.trim().split(".");
+  return BigInt(i || "0") * 10n ** BigInt(dec) + BigInt((f + "0".repeat(dec)).slice(0, dec) || "0");
+}
+const pad = (a: string) => a.toLowerCase().replace(/^0x/, "").padStart(64, "0");
+const short = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function waitReceipt(p: any, hash: string) {
+  for (let i = 0; i < 90; i++) {
+    const r = await p.request({ method: "eth_getTransactionReceipt", params: [hash] }).catch(() => null);
+    if (r) { if (r.status === "0x0") throw new Error("That transaction failed on chain."); return; }
+    await sleep(2000);
+  }
+  throw new Error("The network is slow; check your wallet before trying again.");
+}
+
+// ---------------------------------------------------------------- token picker
+function TokenPick({ label, chain, tok, onChain, onTok }: { label: string; chain: ChainKey; tok: Tok; onChain: (c: ChainKey) => void; onTok: (t: Tok) => void }) {
+  const [q, setQ] = useState("");
+  const [list, setList] = useState<Tok[]>([]);
+  useEffect(() => {
+    const k = q.trim();
+    if (!k) { setList([]); return; }
+    const t = setTimeout(() => { api<{ list: Tok[] }>("search", { keyword: k, chain }).then((d) => setList(d.list)).catch(() => setList([])); }, 350);
+    return () => clearTimeout(t);
+  }, [q, chain]);
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <b>{label}</b>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <select value={chain} onChange={(e) => onChain(e.target.value as ChainKey)} aria-label={`${label} network`}>
+          {(Object.keys(CH) as ChainKey[]).map((c) => <option key={c} value={c}>{CH[c].name}</option>)}
+        </select>
+        <span className="btn small" aria-live="polite">{tok.symbol}{tok.contract ? ` · ${short(tok.contract)}` : ""}</span>
+        {tok.contract && <button className="btn small" onClick={() => onTok(native(chain))}>Use {CH[chain].native}</button>}
+      </div>
+      <input placeholder="Search a token or paste its address" value={q} onChange={(e) => setQ(e.target.value)} />
+      {list.length > 0 && (
+        <div className="stack" style={{ gap: 4, maxHeight: 220, overflowY: "auto" }}>
+          {list.map((t) => (
+            <button key={t.chain + t.contract} className="btn small" style={{ justifyContent: "flex-start", textAlign: "left" }} onClick={() => { onTok(t); setQ(""); setList([]); }}>
+              {t.icon ? <img src={t.icon} alt="" width={18} height={18} style={{ borderRadius: 9, marginRight: 6 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : null}
+              {t.symbol} <span className="muted" style={{ marginLeft: 6 }}>{t.name} · {short(t.contract || "native")}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- page
+export default function Signal() {
+  const conn = useSyncExternalStore(subscribe, getState, getState);
+  const [evmAddr, setEvmAddr] = useState("");
+  const solAddr = conn.sol?.account?.address || "";
+  useEffect(() => {
+    const p = conn.current?.provider;
+    if (!p) { setEvmAddr(""); return; }
+    p.request({ method: "eth_accounts" }).then((a: string[]) => setEvmAddr(a?.[0] || "")).catch(() => setEvmAddr(""));
+  }, [conn.current]);
+
+  const [fromChain, setFromChain] = useState<ChainKey>("bnb");
+  const [toChain, setToChain] = useState<ChainKey>("bnb");
+  const [fromTok, setFromTok] = useState<Tok>(native("bnb"));
+  const [toTok, setToTok] = useState<Tok | null>(null);
+  const [amount, setAmount] = useState("");
+  const [slip, setSlip] = useState("1");
+  const [receive, setReceive] = useState("");
+  const [receiveTouched, setReceiveTouched] = useState(false);
+  const [routes, setRoutes] = useState<Route[]>([]);
+  const [pick, setPick] = useState(0);
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState<{ kind: "ok" | "err" | "info"; text: string; links?: { label: string; href: string }[] } | null>(null);
+
+  const fromAddr = fromChain === "sol" ? solAddr : evmAddr;
+  const defReceive = toChain === "sol" ? solAddr : evmAddr;
+  useEffect(() => { if (!receiveTouched) setReceive(defReceive); }, [defReceive, receiveTouched]);
+  useEffect(() => { setRoutes([]); }, [fromChain, toChain, fromTok, toTok, amount, receive]);
+
+  const fields = useMemo(() => toTok && ({
+    fromChain, fromSymbol: fromTok.symbol, fromContract: fromTok.contract, fromAmount: amount, fromAddress: fromAddr,
+    toChain, toSymbol: toTok.symbol, toContract: toTok.contract, toAddress: receive.trim(),
+  }), [fromChain, fromTok, amount, fromAddr, toChain, toTok, receive]);
+
+  async function connectFrom() {
+    try { if (fromChain === "sol") await setNetwork("solana" as any); else await pickWallet(); }
+    catch (e) { setMsg({ kind: "err", text: (e as Error).message }); }
+  }
+
+  async function getQuote() {
+    if (!fields) return setMsg({ kind: "err", text: "Pick the token you want to receive." });
+    setBusy("Getting routes from Bitget Wallet…"); setMsg(null);
+    try {
+      const d = await api<{ routes: Route[] }>("quote", fields);
+      setRoutes(d.routes); setPick(0);
+      if (!d.routes.length) setMsg({ kind: "err", text: "Bitget Wallet has no route for this right now. Try another amount or token." });
+    } catch (e) { setMsg({ kind: "err", text: (e as Error).message }); }
+    setBusy("");
+  }
+
+  async function go() {
+    const r = routes[pick];
+    if (!fields || !r) return;
+    setMsg(null);
+    try {
+      setBusy("Building the order…");
+      const o = await api<{ orderId: string; txs: any[] }>("order", { ...fields, market: r.market, protocol: r.protocol, slippage: r.slip || slip, lastOut: r.out });
+      if (!o.txs.length) throw new Error("Bitget Wallet's order had nothing to sign. Get a new quote.");
+      const sent: string[] = [];
+      if (fromChain === "sol") {
+        if (!conn.sol) throw new Error("Connect a Solana wallet first.");
+        for (const t of o.txs) {
+          const st = t.serializedTx || t.data?.serializedTx || t.data?.data?.serializedTx || t.deriveTransaction?.serializedTx;
+          if (!st) throw new Error("Bitget Wallet's Solana order had no transaction.");
+          setBusy("Approve it in your wallet…");
+          sent.push(await signAndSend({ wallet: conn.sol.wallet, account: conn.sol.account }, b64(b58bytes(st))));
+        }
+      } else {
+        const p = conn.current?.provider;
+        if (!p || !evmAddr) throw new Error("Connect a wallet first.");
+        setBusy(`Switching your wallet to ${CH[fromChain].name}…`);
+        await switchEvm(p, CH[fromChain].id);
+        let approved = !fromTok.contract;
+        for (const t of o.txs) {
+          const d = t.deriveTransaction || (typeof t.data === "object" && t.data ? t.data : {});
+          if (Number(t.chainId || d.chainId || CH[fromChain].id) !== CH[fromChain].id) throw new Error("Bitget Wallet's order was for another network.");
+          const to = String(t.to || d.to || ""), data = String(typeof t.data === "string" ? t.data : d.calldata || d.data || "0x");
+          if (!/^0x[0-9a-fA-F]{40}$/.test(to)) throw new Error("Bitget Wallet's order looked wrong.");
+          if (!approved) {
+            // Paying with a token: let the swap contract spend it first (only if it can't already).
+            const decHex = await p.request({ method: "eth_call", params: [{ to: fromTok.contract, data: "0x313ce567" }, "latest"] }).catch(() => "0x12");
+            const need = rawAmount(amount, Number(BigInt(decHex || "0x12")));
+            const allowHex = await p.request({ method: "eth_call", params: [{ to: fromTok.contract, data: "0xdd62ed3e" + pad(evmAddr) + pad(to) }, "latest"] }).catch(() => "0x0");
+            if (BigInt(allowHex || "0x0") < need) {
+              setBusy(`Approve ${fromTok.symbol} in your wallet (one time)…`);
+              const ah = await p.request({ method: "eth_sendTransaction", params: [{ from: evmAddr, to: fromTok.contract, data: "0x095ea7b3" + pad(to) + "f".repeat(64), value: "0x0" }] });
+              setBusy("Waiting for the approval…");
+              await waitReceipt(p, ah);
+            }
+            approved = true;
+          }
+          setBusy("Approve the swap in your wallet…");
+          const gas = toInt(d.gasLimit ?? t.gasLimit);
+          const h = await p.request({ method: "eth_sendTransaction", params: [{ from: evmAddr, to, data, value: hex(toWei(d.value ?? t.value)), ...(gas > 0n ? { gas: hex(gas) } : {}) }] });
+          sent.push(h);
+          setBusy("Waiting for the network…");
+          await waitReceipt(p, h);
+        }
+      }
+      const links = sent.map((h, i) => ({ label: sent.length > 1 ? `Transaction ${i + 1}` : "Transaction", href: CH[fromChain].scan + h }));
+      if (fromChain !== toChain) {
+        setMsg({ kind: "info", text: `Sent. The bridge to ${CH[toChain].name} usually takes a few minutes; the coins arrive at ${short(fields.toAddress)}.`, links });
+        for (let i = 0; i < 40; i++) {
+          await sleep(6000);
+          const s = await api<{ status: string; toTx: string | null }>("status", { orderId: o.orderId }).catch(() => null);
+          if (s?.status === "success") { setMsg({ kind: "ok", text: `Done: the coins arrived on ${CH[toChain].name}.`, links: [...links, ...(s.toTx ? [{ label: "Arrival", href: CH[toChain].scan + s.toTx }] : [])] }); break; }
+          if (s && /fail|refund/i.test(s.status)) { setMsg({ kind: "err", text: `Bitget Wallet reports the bridge ${s.status}.`, links }); break; }
+        }
+      } else {
+        setMsg({ kind: "ok", text: `Done: swapped through Bitget Wallet, sent to ${short(fields.toAddress)}.`, links });
+      }
+      setRoutes([]);
+    } catch (e) {
+      setMsg({ kind: "err", text: (e as Error).message });
+    }
+    setBusy("");
+  }
+
+  const r = routes[pick];
+  return (
+    <div className="stack" style={{ maxWidth: 560, margin: "0 auto" }}>
+      <div className="card stack">
+        <h1 style={{ margin: 0 }}>Signal</h1>
+        <p className="muted" style={{ margin: 0 }}>Swap or bridge through Bitget Wallet. Your wallet signs, and the coins go to your wallet. Only you can open this page.</p>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <span className="muted">Paying from:</span>
+          {fromAddr ? <b>{short(fromAddr)}</b> : <button className="btn small primary" onClick={connectFrom}>Connect {fromChain === "sol" ? "a Solana" : "a"} wallet</button>}
+        </div>
+      </div>
+
+      <div className="card stack">
+        <TokenPick label="You pay" chain={fromChain} tok={fromTok} onChain={(c) => { setFromChain(c); setFromTok(native(c)); }} onTok={setFromTok} />
+        <input inputMode="decimal" placeholder={`Amount of ${fromTok.symbol}`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} />
+      </div>
+
+      <div className="card stack">
+        <TokenPick label="You receive" chain={toChain} tok={toTok || { chain: toChain, contract: "", symbol: "Pick a token" }} onChain={(c) => { setToChain(c); setToTok(null); }} onTok={setToTok} />
+        <label className="stack" style={{ gap: 4 }}>
+          <span className="muted">Receive at ({toChain === "sol" ? "Solana" : "EVM"} address)</span>
+          <input value={receive} onChange={(e) => { setReceive(e.target.value.trim()); setReceiveTouched(true); }} placeholder={toChain === "sol" ? "Your Solana address" : "Your 0x… address"} />
+        </label>
+        <label className="row" style={{ gap: 8 }}>
+          <span className="muted">Slippage %</span>
+          <input style={{ width: 80 }} inputMode="decimal" value={slip} onChange={(e) => setSlip(e.target.value.replace(/[^0-9.]/g, ""))} />
+        </label>
+        <button className="btn primary" disabled={!!busy || !toTok || !amount || !fromAddr || !receive} onClick={getQuote}>Get routes</button>
+      </div>
+
+      {routes.length > 0 && (
+        <div className="card stack">
+          <b>Routes from Bitget Wallet</b>
+          {routes.map((x, i) => (
+            <button key={x.market + i} className="btn" aria-pressed={i === pick} style={{ justifyContent: "space-between", outline: i === pick ? "2px solid currentColor" : undefined }} onClick={() => setPick(i)}>
+              <span>{x.label}</span>
+              <span>{Number(x.out).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toTok?.symbol}</span>
+            </button>
+          ))}
+          {r && <p className="muted" style={{ margin: 0 }}>At least {Number(r.min).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toTok?.symbol}{r.gasUsd != null ? ` · network fee about $${Number(r.gasUsd).toFixed(2)}` : ""}{fromChain !== toChain ? " · bridges need about $10 or more" : ""}</p>}
+          <button className="btn primary" disabled={!!busy} onClick={go}>{fromChain === toChain ? "Swap" : "Bridge"} through Bitget Wallet</button>
+        </div>
+      )}
+
+      {busy && <div className="notice">{busy}</div>}
+      {msg && (
+        <div className={msg.kind === "err" ? "notice warn" : "notice"}>
+          {msg.text}
+          {msg.links?.map((l) => <div key={l.href}><a href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a></div>)}
+        </div>
+      )}
+    </div>
+  );
+}
