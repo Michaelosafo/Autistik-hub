@@ -669,7 +669,7 @@ function addChunked(geo,mat,list,opt){
 }
 function buildGLTrack(){
   if(!G||G.track)return;
-  PICK_KEYS.forEach(k=>{const m=CARS[k].model;if(m)carModel(m.dir).catch(()=>{});});// start loading every car at once
+  PICK_KEYS.forEach(k=>{const m=CARS[k].model;if(m){carModel(m.dir+'_lo').catch(()=>{});if(k===me.car)carModel(m.dir).catch(()=>{});}});// start loading every car at once
   G.worldGen=(G.worldGen||0)+1;
   computeC3();computeCaps();
   // remember what the world adds, so switching worlds can take it down again
@@ -1201,7 +1201,7 @@ function makeCar(color,type,helmet,human){
     const hide=[];g.children.forEach(o=>{if(!keep.has(o))hide.push(o);});
     // the real model shows as soon as it has loaded; only if it can't load does a built car of the same style stand in
     let ok=false;hide.forEach(o=>o.visible=false);const fb=setTimeout(()=>{if(!ok)hide.forEach(o=>o.visible=true);},6000);
-    carModel(mc.dir).then(src=>{ok=true;clearTimeout(fb);hide.forEach(o=>o.visible=false);g.userData.wheels=null;g.add(fitModel(src,mc,color,human));}).catch(()=>{clearTimeout(fb);hide.forEach(o=>o.visible=true);});}
+    carModel(human?mc.dir:mc.dir+'_lo').then(src=>{ok=true;clearTimeout(fb);hide.forEach(o=>o.visible=false);g.userData.wheels=null;g.add(fitModel(src,mc,color,human));}).catch(()=>{clearTimeout(fb);hide.forEach(o=>o.visible=true);});}
   G.scene.add(g);return g;
 }
 function smoke(car,p,amt){
@@ -1267,7 +1267,7 @@ function renderGL(pl,others,dt,showMe){
   if(lookBack&&S){back=-5.2;height=3.4;ahead=-34;lookY=1.4;}
   _v.set(_o.x-fx*back,_o.y+height,_o.z-fz*back);
   if(cm<2&&!lookBack){const sw=(G.yaw||0)*(cm===1?3:4.4);_v.x+=fz*sw;_v.z-=fx*sw;}
-  const k=G.camInit?1-Math.exp(-dt*(cm===2?20:7)):1;G.camInit=true;
+  const k=G.camInit?1-Math.exp(-dt*(cm===2?14:7)):1;G.camInit=true;
   G.camera.position.lerp(_v,k);
   const minY=tp(Math.max(0,pl.pos-back/SC),pl.x,_o2).y+(cm>=2?0.8:1.4);if(G.camera.position.y<minY)G.camera.position.y=minY;
   _v2.set(_o.x+fx*ahead,_o.y+lookY,_o.z+fz*ahead);G.lookAt.lerp(_v2,G.lookAt.lengthSq()?k:1);G.camera.lookAt(G.lookAt);
@@ -1928,7 +1928,7 @@ function renderInvite(){
   invMsg='';
 }
 function invNameOk(){const v=$('#invName').value.trim().replace(/\s+/g,' ').slice(0,16);if(v){me.nick=v;$('#nick').value=v;try{localStorage.setItem('pumprally-nick',v);}catch(e){}}
-  return !!(me.nick&&me.nick!=='Racer');}
+  const ok=!!(me.nick&&me.nick!=='Racer');if(!ok){const ln=$('#landNick');if(ln){ln.classList.remove('need');void ln.offsetWidth;ln.classList.add('need');ln.focus();ln.scrollIntoView({block:'center'});}}return ok;}
 async function invCopyLink(){const url=inviteLink(code);
   try{await navigator.clipboard.writeText(url);$('#invCopy').textContent='Link copied ✓';setTimeout(renderInvite,1800);return;}catch(e){}
   try{if(navigator.share){await navigator.share({title:'Hyperfocus GP',text:`Race me in Hyperfocus GP (code ${code})`,url});return;}}catch(e){if(e&&e.name==='AbortError')return;}
@@ -2299,10 +2299,10 @@ function pickedFlow(){let f='friends';try{f=localStorage.getItem('hf-flow')||'fr
   row.querySelectorAll('button').forEach(b=>b.onclick=()=>{try{localStorage.setItem('hf-flow',b.dataset.flow);}catch(e){}show();});show();})();
 $('#bExit').onclick=exitImmersive;
 /* your racing name, typed on the page before you play */
-(function(){const ln=$('#landNick');if(!ln)return;ln.value=me.nick&&me.nick!=='Racer'?me.nick:'';
+(function(){const ln=$('#landNick');if(!ln)return;ln.value=me.nick&&me.nick!=='Racer'?me.nick:'';{const iv=$('#invName');if(iv)iv.value=ln.value;}
   const save=()=>{const v=ln.value.trim().replace(/\s+/g,' ').slice(0,16);if(!v)return;me.nick=v;$('#nick').value=v;const iv=$('#invName');if(iv)iv.value=v;try{localStorage.setItem('pumprally-nick',v);}catch(e){}};
   ln.addEventListener('input',save);ln.addEventListener('change',save);
-  $('#bPlayTop').addEventListener('click',save,true);})();
+  $('#bPlayTop').addEventListener('click',e=>{save();if(!ln.value.trim()){e.stopImmediatePropagation();e.preventDefault();ln.classList.remove('need');void ln.offsetWidth;ln.classList.add('need');ln.focus();ln.placeholder='Type your racing name first';}},true);})();
 /* PLAY GAME at the top of the page: straight into the full-screen game */
 const toRace=()=>{try{history.replaceState(null,'','#race');}catch(e){}if(window.HFShowTab)window.HFShowTab('race');};
 $('#bPlayTop').onclick=()=>{toRace();$('#bLaunch').click();};
@@ -2329,8 +2329,9 @@ $('#bTilt').addEventListener('click',async()=>{
 const CAMS=['BEHIND CAR','CLOSE CHASE','DRIVER VIEW','FRONT VIEW'];
 let camMode=0,lookBack=false;try{camMode=parseInt(localStorage.getItem('hf-cam')||'0',10)===2?2:0;}catch(e){}
 /* CAM: behind the car or the driver's view (low, wide, the road big). BACK (hold, or C): look behind you */
-function nextCam(){camMode=camMode===2?0:2;try{localStorage.setItem('hf-cam',String(camMode));}catch(e){}if(G)G.camInit=false;if(S&&S.me)S.me.toasts.push({txt:CAMS[camMode],color:COL.gas,t:1.4});}
-$('#bCam').addEventListener('click',nextCam);
+function camLabel(){const b=$('#bCam');if(b)b.innerHTML=camMode===2?'🛣️<small>ROAD</small>':'🚗<small>CAR</small>';}
+function nextCam(){camMode=camMode===2?0:2;setTimeout(camLabel,0);try{localStorage.setItem('hf-cam',String(camMode));}catch(e){}if(G)G.camInit=false;if(S&&S.me)S.me.toasts.push({txt:CAMS[camMode],color:COL.gas,t:1.4});}
+$('#bCam').addEventListener('click',nextCam);camLabel();
 {const bb=$('#bBack');if(bb){const on=v=>e=>{if(e&&e.cancelable)e.preventDefault();lookBack=v;bb.setAttribute('aria-pressed',String(v));if(G)G.camInit=false;};
   bb.addEventListener('pointerdown',on(true));['pointerup','pointercancel','pointerleave'].forEach(t=>bb.addEventListener(t,on(false)));bb.addEventListener('contextmenu',e=>e.preventDefault());}}
 addEventListener('keydown',e=>{if((e.key==='c'||e.key==='C')&&!e.repeat&&S&&state==='race'&&!/input|textarea/i.test((e.target&&e.target.tagName)||'')){lookBack=true;if(G)G.camInit=false;}});
