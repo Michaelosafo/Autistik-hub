@@ -61,8 +61,17 @@ async function mine(req: Request): Promise<number | null> {
 const desk = (req: Request, id: number | null) => {
   const d = new URL(req.url).searchParams.get("desk");
   const off: Record<string, number> = { fx: FX_DESK, earn: EARN_DESK, turbo: TURBO_DESK, snipe: SNIPE_DESK, copy: COPY_DESK, liq: LIQ_DESK, mad: MAD_DESK };
+  if (id && d === "liq" && team(req)) return LIQ_DESK + TEAM_TRADER;
   return id && d && off[d] ? off[d] + id : id;
 };
+/**
+ * SniperBNB under BnbRage is shared, like BnbRage's team wallets: the owner and every helper admin work the same
+ * sniper (the owner's: trader 1), so a wallet or token any of them adds shows for all. ?g=personal keeps each admin's own.
+ * Revealing a key, removing a wallet and sending coins out to another address stay owner only there.
+ */
+const TEAM_TRADER = 1;
+const team = (req: Request) => new URL(req.url).searchParams.get("team") === "1";
+const OWNER_ONLY_IN_TEAM = new Set(["copy-key-reveal", "copy-key-remove", "sniper-withdraw", "sniper-withdraw-preview", "sniper-sol-reveal", "key-reveal", "sol-key-reveal", "reset"]);
 
 const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : undefined; };
 
@@ -71,6 +80,7 @@ export async function POST(req: Request, { params }: { params: { action: string 
   // SniperEth, SniperRobinhood and SniperLobbySol are the owner's only; other admins have the BNB Chain sniper.
   const isOwner = (await adminState()).owner;
   if (!id) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
+  if (team(req) && !isOwner && OWNER_ONLY_IN_TEAM.has(params.action)) return json({ error: "On the team sniper only the owner can do that (reveal a key, remove a wallet or send coins out)." }, 403);
   const b = await req.json().catch(() => ({}));
   return withTrader(id, async () => {
     const sb = supabaseService();

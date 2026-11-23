@@ -485,7 +485,7 @@ async function call(action: string, body: unknown) {
   return d;
 }
 
-export default function AIFutures({ desk, net = "bsc" }: { desk?: "fx" | "earn" | "turbo" | "snipe" | "copy" | "liq" | "mad"; /** Sniper desk only: SniperBnbSol ("bsc"), SniperLobbySol ("solana"), SniperEth ("ethereum"), SniperRobinhood ("robinhood"). */ net?: "bsc" | "solana" | "ethereum" | "robinhood" } = {}) {
+export default function AIFutures({ desk, net = "bsc", team = false }: { /** SniperBNB under BnbRage: the shared team sniper. */ team?: boolean; desk?: "fx" | "earn" | "turbo" | "snipe" | "copy" | "liq" | "mad"; /** Sniper desk only: SniperBnbSol ("bsc"), SniperLobbySol ("solana"), SniperEth ("ethereum"), SniperRobinhood ("robinhood"). */ net?: "bsc" | "solana" | "ethereum" | "robinhood" } = {}) {
   const liqDesk = desk === "liq"; // SniperBnbSol / SniperLobbySol: Copy's wallets and trade cards, its own token list
   const solSnipe = liqDesk && net === "solana";
   const v2Snipe = liqDesk && (net === "ethereum" || net === "robinhood");
@@ -493,7 +493,7 @@ export default function AIFutures({ desk, net = "bsc" }: { desk?: "fx" | "earn" 
   const SNIPER = net === "ethereum" ? "SniperEth" : net === "robinhood" ? "SniperRobinhood" : net === "solana" ? "SniperLobbySol" : "SniperBNB";
   const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", copyDesk = desk === "copy" || liqDesk, madDesk = desk === "mad";
   const snipeDesk = desk === "snipe" || copyDesk; // Sniper and Copy: spot coins from the shared Solana wallet
-  DESK = desk ? `?desk=${desk}` : "";
+  DESK = desk ? `?desk=${desk}${team && desk === "liq" ? "&team=1" : ""}` : "";
   const NAME = liqDesk ? SNIPER : copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
   const TAG = liqDesk ? (v2Snipe ? `${NETNAME} only: paste a ${NETNAME} token, tick one or more wallets, and they all buy with ${net === "robinhood" ? "USDG" : "USDT"} the moment liquidity lands on Uniswap V2.` : solSnipe ? "Solana only: paste a Solana token, tick one or more wallets, and they all buy with USDT the moment it can be bought." : "BNB Chain only: paste a BSC token, tick one or more wallets, and they all buy the moment liquidity lands.")
     : copyDesk ? "Copies the wallets you paste: when they buy on BNB Chain, your wallets buy too."

@@ -23,7 +23,7 @@ export const TRADER_TABS: Tab[] = [
 export const CHAIN_GROUPS: { name: string; label: string; sub: string; acc: string; ownerOnly: boolean; tabs: Tab[] }[] = [
   { name: "🟡 BNB Chain · shared with your admins", label: "💧 BnbRage", sub: "Rage + SniperBNB · shared", acc: "#F0B90B", ownerOnly: false, tabs: [
     { href: "/admin/rage", label: "💧 Deploy · liquidity", sub: "Team wallets · deploy · add · remove", acc: "#ef4444", shared: true },
-    { href: "/admin/ai-snipe-bsc", label: "⚡ SniperBNB", sub: "Buys when liquidity lands · your own wallets", acc: "#22c55e", shared: true },
+    { href: "/admin/ai-snipe-bsc", label: "⚡ SniperBNB", sub: "Buys when liquidity lands · team wallets", acc: "#22c55e", shared: true },
   ] },
   { name: "🔒 Personal BNB", label: "🔒 Personal RageBNB", sub: "Rage + SniperBNB · only you", acc: "#F0B90B", ownerOnly: true, tabs: [
     { href: "/admin/rage-personal", label: "💧 Deploy · liquidity", sub: "Your wallet · deploy · add · remove", acc: "#ef4444" },
