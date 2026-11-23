@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { getState, subscribe, pickWallet, setNetwork, switchEvm } from "@/lib/connect";
 import { signAndSend } from "@/lib/sol-wallet";
+import SignalPrivate from "./SignalPrivate";
 
 type ChainKey = "bnb" | "eth" | "base" | "arbitrum" | "matic" | "sol";
 const CH: Record<ChainKey, { name: string; id: number; native: string; scan: string }> = {
@@ -126,6 +127,8 @@ export default function Signal() {
   const [receiveTouched, setReceiveTouched] = useState(false);
   const [router, setRouter] = useState<RouterKey>(() => { try { const v = localStorage.getItem("signal-router"); return v === "lifi" || v === "okx" ? v : "bitget"; } catch { return "bitget"; } });
   const [okxOn, setOkxOn] = useState(false);
+  const [mode, setMode] = useState<"swap" | "private">("swap");
+  useEffect(() => { try { if (localStorage.getItem("signal-mode") === "private") setMode("private"); } catch { /* private mode */ } }, []);
   useEffect(() => { api<{ okx: boolean }>("routers", {}).then((d) => setOkxOn(d.okx)).catch(() => {}); }, []);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [pick, setPick] = useState(0);
@@ -288,7 +291,15 @@ export default function Signal() {
           {fromAddr ? <><b>{short(fromAddr)}</b>{conn.current?.name && fromChain !== "sol" ? <span className="muted">({conn.current.name})</span> : null}<button className="btn small" onClick={connectFrom} disabled={!!busy}>Switch wallet</button></>
             : <button className="btn small primary" onClick={connectFrom} disabled={!!busy}>Connect {fromChain === "sol" ? "a Solana" : "a"} wallet</button>}
         </div>
+        <div className="row" style={{ gap: 8 }} role="tablist" aria-label="Signal mode">
+          {([["swap", "Swap & bridge"], ["private", "Private (XMR)"]] as const).map(([k, l]) => (
+            <button key={k} type="button" role="tab" aria-selected={mode === k} className={mode === k ? "btn small primary" : "btn small"} disabled={!!busy}
+              onClick={() => { setMode(k); try { localStorage.setItem("signal-mode", k); } catch { /* private mode */ } }}>{l}</button>
+          ))}
+        </div>
       </div>
+
+      {mode === "private" ? <SignalPrivate /> : <>
 
       <div className="card stack">
         <TokenPick label="You pay" chain={fromChain} tok={fromTok} onChain={(c) => { setFromChain(c); setFromTok(native(c)); }} onTok={setFromTok} />
@@ -344,6 +355,7 @@ export default function Signal() {
           {msg.links?.map((l) => <div key={l.href}><a href={l.href} target="_blank" rel="noopener noreferrer">{l.label} ↗</a></div>)}
         </div>
       )}
+      </>}
     </div>
   );
 }
