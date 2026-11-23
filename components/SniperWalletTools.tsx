@@ -24,7 +24,7 @@ async function ask<T>(action: string, body: unknown): Promise<T> {
   return d as T;
 }
 
-export default function SniperWalletTools({ slot, address: evmAddress, amounts, setChainAmount, net: netIn }: {
+export default function SniperWalletTools({ slot, address: evmAddress, amounts, setChainAmount, net: netIn, others = [] }: {
   slot: number; address: string; others?: { slot: number; address: string }[]; busy?: boolean; act?: Act;
   /** This wallet's snipe amount per chain, in $ (USDT). Only "bsc" is used. */
   amounts?: Record<string, number>; setChainAmount?: (chain: string, value: number | null) => void;
@@ -68,7 +68,7 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
       .catch((e) => { if (!gone) setErr((e as Error).message); })
       .finally(() => { if (!gone) setLoading(false); });
     return () => { gone = true; };
-  }, [slot, net, sol, v2, solAddr]);
+  }, [slot, net, sol, v2, solAddr, again]);
 
   async function solKey(action: "sniper-sol-create" | "sniper-sol-import") {
     let key = "";
@@ -103,6 +103,46 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
     if (v.trim() && !(x > 0)) { setErr("Type an amount greater than zero, or leave it empty."); return; }
     setErr("");
     setChainAmount(net, v.trim() ? x : null);
+  }
+
+  // Move money (BNB sniper): ↔ Transfer to another team wallet, 🌉 Bridge to another chain, ⬆ Withdraw to any address.
+  const [mv, setMv] = useState<null | "transfer" | "bridge" | "withdraw">(null);
+  const [asset, setAsset] = useState<"USDT" | "BNB">("USDT");
+  const [toSlot, setToSlot] = useState<number>(0);
+  const [toChain, setToChain] = useState("base");
+  const [toAddr, setToAddr] = useState("");
+  const [mvAmt, setMvAmt] = useState("");
+  const [moving, setMoving] = useState(false);
+  const [mvNote, setMvNote] = useState("");
+  const CHAINS: [string, string][] = [["bsc", "BNB Chain"], ["base", "Base"], ["ethereum", "Ethereum"], ["arbitrum", "Arbitrum"], ["solana", "Solana"]];
+  async function move() {
+    setErr(""); setMvNote("");
+    const amount = mvAmt.trim().toLowerCase() === "max" ? "max" : Number(mvAmt);
+    if (amount !== "max" && !(amount > 0)) { setErr("Type an amount, or max."); return; }
+    setMoving(true);
+    try {
+      if (mv === "transfer") {
+        if (!toSlot) throw new Error("Pick the wallet to send to.");
+        const p = await ask<any>("sniper-transfer-preview", { from: slot, to: toSlot, asset, amount, chain: "bsc" });
+        if (!confirm(`Send ${p.amount} ${p.symbol} from wallet ${slot} to wallet ${toSlot} (${short(p.to)}) on BNB Chain? Fee about ${p.gasNative} BNB.`)) return;
+        const r = await ask<{ note: string }>("sniper-transfer", { from: slot, to: toSlot, asset, amount, chain: "bsc" });
+        setMvNote(r.note || "Sent.");
+      } else if (mv === "bridge") {
+        if (!toSlot) throw new Error("Pick the wallet to receive it.");
+        const q = await ask<any>("sniper-bridge-quote", { from: slot, to: toSlot, fromChain: "bsc", toChain, assetIn: asset, assetOut: asset === "BNB" ? "" : asset, amount });
+        if (!confirm(`Bridge ${q.amountIn} ${q.symbolIn} (BNB Chain) → about ${q.amountOut} ${q.symbolOut} on ${CHAINS.find((c) => c[0] === toChain)?.[1]}, to wallet ${toSlot} (${short(q.to)})?`)) return;
+        const r = await ask<{ note: string }>("sniper-bridge", { from: slot, to: toSlot, fromChain: "bsc", toChain, assetIn: asset, assetOut: asset === "BNB" ? "" : asset, amount, minOutRaw: q.amountOutRaw });
+        setMvNote(r.note || "Bridge sent.");
+      } else if (mv === "withdraw") {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(toAddr.trim())) throw new Error("Paste a BNB Chain address (0x…).");
+        const p = await ask<any>("sniper-withdraw-preview", { slot, asset, amount, to: toAddr.trim() });
+        if (!confirm(`Withdraw ${p.amount} ${p.symbol} from wallet ${slot} to ${p.to}? Fee about ${p.gasNative} BNB. Check the address: this can't be undone.`)) return;
+        const r = await ask<{ note: string }>("sniper-withdraw", { slot, asset, amount, to: toAddr.trim() });
+        setMvNote(r.note || "Sent.");
+      }
+      setMvAmt(""); setAgain((n) => n + 1);
+    } catch (e) { setErr((e as Error).message); }
+    finally { setMoving(false); }
   }
 
   if (sol && !solAddr) {
@@ -141,6 +181,42 @@ export default function SniperWalletTools({ slot, address: evmAddress, amounts, 
       )}
       <small className="muted">Fund it with <b>{STABLE} on {NETNAME} ({STD})</b> to snipe, plus a little {GAS} for fees.</small>
       {sol && <div className="row" style={{ gap: 6, flexWrap: "wrap" }}><button type="button" className="btn small ghost" onClick={showSolKey}>Show Solana private key</button></div>}
+      {net === "bsc" && (
+        <div className="stack" style={{ gap: 6 }}>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            {others.length > 0 && <button type="button" className={"btn small" + (mv === "transfer" ? " primary" : "")} onClick={() => setMv(mv === "transfer" ? null : "transfer")}>↔ Transfer</button>}
+            <button type="button" className={"btn small" + (mv === "bridge" ? " primary" : "")} onClick={() => setMv(mv === "bridge" ? null : "bridge")}>🌉 Bridge</button>
+            <button type="button" className={"btn small" + (mv === "withdraw" ? " primary" : "")} onClick={() => setMv(mv === "withdraw" ? null : "withdraw")}>⬆ Withdraw</button>
+          </div>
+          {mv && (
+            <div className="stack" style={{ gap: 6, padding: 8, border: "1px solid rgba(255,255,255,.12)", borderRadius: 10 }}>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <select value={asset} onChange={(e) => setAsset(e.target.value as "USDT" | "BNB")} aria-label="Coin">
+                  <option value="USDT">USDT ({usd(usdt)})</option>
+                  <option value="BNB">BNB ({amt(bnb)})</option>
+                </select>
+                <input style={{ width: 110 }} inputMode="decimal" placeholder="Amount" value={mvAmt} onChange={(e) => setMvAmt(e.target.value.replace(/[^0-9.maxMAX]/g, ""))} aria-label="Amount" />
+                <button type="button" className="btn small ghost" onClick={() => setMvAmt("max")}>Max</button>
+              </div>
+              {mv === "bridge" && (
+                <select value={toChain} onChange={(e) => setToChain(e.target.value)} aria-label="To network">
+                  {CHAINS.filter((c) => c[0] !== "bsc").map(([k, n]) => <option key={k} value={k}>To {n}</option>)}
+                </select>
+              )}
+              {(mv === "transfer" || mv === "bridge") && (
+                <select value={toSlot} onChange={(e) => setToSlot(Number(e.target.value))} aria-label="To wallet">
+                  <option value={0}>Pick the wallet to receive it…</option>
+                  {mv === "bridge" && <option value={slot}>Wallet {slot} (this one, on the other chain)</option>}
+                  {others.map((o) => <option key={o.slot} value={o.slot}>Wallet {o.slot} · {short(o.address)}</option>)}
+                </select>
+              )}
+              {mv === "withdraw" && <input value={toAddr} onChange={(e) => setToAddr(e.target.value.trim())} placeholder="Send to address (0x…)" aria-label="Withdraw to address" />}
+              <button type="button" className="btn small primary" disabled={moving} onClick={move}>{moving ? "Working…" : mv === "transfer" ? "Review transfer" : mv === "bridge" ? "Get bridge quote" : "Review withdraw"}</button>
+              {mvNote && <small className="muted">{mvNote}</small>}
+            </div>
+          )}
+        </div>
+      )}
       {err && <small className="aic-warn" role="alert">{err}</small>}
     </div>
   );
