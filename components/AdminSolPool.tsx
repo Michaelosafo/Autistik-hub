@@ -221,15 +221,20 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
       const paySol = b0.usdt + 1e-9 < usdt + firstBuy && b0.solUsd > 0 && b0.sol - feeNeed0 - 0.01 >= (usdt + firstBuy) / b0.solUsd;
       if (!paySol && b0.usdt + 1e-9 < usdt + firstBuy) { setMsg(`Not enough on Solana: this wallet has ${b0.usdt.toFixed(2)} USDT and ${b0.sol.toFixed(4)} SOL (about $${(b0.sol * b0.solUsd).toFixed(2)}), and this needs $${(usdt + firstBuy).toFixed(2)} (${usdt} for the liquidity + ${firstBuy} for the first buy) plus about ${feeNeed0} SOL for fees. Add USDT or SOL, or lower the amounts.`); return; }
       const feeNeed = info.pool ? 0.02 : info.poolCost ?? SOL_POOL_COST;
-      if (b0.sol < feeNeed) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : info.venue === "meteora" ? " (creating the Meteora pool costs about 0.03 SOL)" : " (Raydium charges about 0.15 SOL to create a pool for taxed tokens)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
+      // Short of SOL for the fees but holding spare USDT: swap that bit to SOL along with the liquidity swap.
+      const feeTopUsd = !paySol && b0.sol < feeNeed && b0.solUsd > 0 ? Math.ceil(((feeNeed - b0.sol) + 0.006) * b0.solUsd * 100) / 100 : 0;
+      const canTop = feeTopUsd > 0 && b0.sol >= 0.004 && b0.usdt + 1e-9 >= usdt + firstBuy + feeTopUsd;
+      if (b0.sol < feeNeed && !canTop) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : info.venue === "meteora" ? " (creating the Meteora pool costs about 0.03 SOL)" : " (Raydium charges about 0.15 SOL to create a pool for taxed tokens)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
       // 1) USDT → SOL for the pool side.
       let swapSig = "", solIn: string;
       if (paySol) solIn = (usdt / b0.solUsd).toFixed(9);
       else {
         setMsg(`Confirm in your wallet: swap ${usdt} USDT to SOL for the pool.`);
-        const sw1 = await rageSol<{ tx: string; sol: number }>("swap-in", { owner: sw.account.address, usdt: String(usdt) });
-        swapSig = await sign(sw, sw1.tx, `swap ${usdt} USDT to SOL`);
-        solIn = (sw1.sol * 0.999).toFixed(9);
+        const swapUsd = canTop ? +(usdt + feeTopUsd).toFixed(2) : usdt;
+        if (canTop) setMsg(`Confirm in your wallet: swap ${swapUsd} USDT to SOL (${usdt} for the pool + ${feeTopUsd} for the pool fee).`);
+        const sw1 = await rageSol<{ tx: string; sol: number }>("swap-in", { owner: sw.account.address, usdt: String(swapUsd) });
+        swapSig = await sign(sw, sw1.tx, `swap ${swapUsd} USDT to SOL`);
+        solIn = (sw1.sol * (usdt / swapUsd) * 0.999).toFixed(9);
       }
       // 2) The liquidity, with the SOL that arrived.
       if (!info.pool) {

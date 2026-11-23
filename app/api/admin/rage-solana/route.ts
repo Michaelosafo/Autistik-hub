@@ -101,7 +101,23 @@ export async function POST(req: Request) {
         const pk = new PublicKey(owner);
         const [lamports, accs, px] = await Promise.all([
           conn.getBalance(pk),
-          conn.getParsedTokenAccountsByOwner(pk, { mint: new PublicKey(SOL_USDT) }).then((r) => r.value).catch(() => []),
+          // USDT: every USDT account this wallet owns (the usual one and any extra), read on two nodes so a busy node
+          // doesn't show 0, then the wallet's standard USDT account directly as a last check.
+          (async () => {
+            const nodes = [conn, new Connection("https://solana-rpc.publicnode.com", "confirmed"), new Connection("https://api.mainnet-beta.solana.com", "confirmed")];
+            for (const c of nodes) {
+              try {
+                const r = await c.getParsedTokenAccountsByOwner(pk, { mint: new PublicKey(SOL_USDT) });
+                if (r.value.length) return r.value;
+              } catch { /* next node */ }
+            }
+            try {
+              const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
+              const ata = getAssociatedTokenAddressSync(new PublicKey(SOL_USDT), pk, true);
+              const v = await conn.getTokenAccountBalance(ata);
+              return [{ account: { data: { parsed: { info: { tokenAmount: { uiAmount: v.value.uiAmount } } } } } }];
+            } catch { return []; }
+          })(),
           fetch(`${JUP}/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${SOL_USDT}&amount=1000000000&slippageBps=100`, { cache: "no-store", headers: JUP_H, signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => null),
         ]);
         const usdt = (accs as any[]).reduce((a, x) => a + Number(x?.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0), 0);
