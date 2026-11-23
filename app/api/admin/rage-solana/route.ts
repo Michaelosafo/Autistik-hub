@@ -118,11 +118,13 @@ export async function POST(req: Request) {
       case "first-buy": {
         // LobbySol's first buy: USDT → the token, straight after the liquidity goes in (5% slippage for a new pool).
         if (!SOL_ADDR.test(String(b?.mint || ""))) return json({ error: "That isn't a Solana token address." }, 400);
+        // Paid with USDT, or with SOL when the wallet holds SOL instead (pay: "sol", sol: amount).
+        const paySol = b?.pay === "sol";
         let raw = 0n;
-        try { raw = parseUnits(String(b?.usdt || ""), 6); } catch { /* bad number */ }
-        if (raw < 100_000n) return json({ error: "Type at least 0.1 USDT for the first buy." }, 400);
+        try { raw = paySol ? parseUnits(String(b?.sol || ""), 9) : parseUnits(String(b?.usdt || ""), 6); } catch { /* bad number */ }
+        if (paySol ? raw < 500_000n : raw < 100_000n) return json({ error: paySol ? "The first buy is too small." : "Type at least 0.1 USDT for the first buy." }, 400);
         try {
-          const r = await jupSwap(owner, SOL_USDT, String(b.mint), raw, 500);
+          const r = await jupSwap(owner, paySol ? SOL_MINT : SOL_USDT, String(b.mint), raw, 500);
           return json({ tx: r.tx, out: r.out });
         } catch (e: any) {
           // A brand-new pool takes a few seconds to show up in Jupiter's routes: the page asks again.

@@ -209,30 +209,37 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     setBusy(true);
     try {
       const b0 = await balances(sw);
-      if (b0.usdt + 1e-9 < usdt + firstBuy) { setMsg(`Not enough USDT: this wallet has ${b0.usdt.toFixed(2)} USDT on Solana, and this needs ${(usdt + firstBuy).toFixed(2)} (${usdt} for the liquidity + ${firstBuy} for the first buy). Add USDT (SPL) or lower the amounts.`); return; }
+      // Not enough USDT but enough SOL: the pool side is SOL anyway, so pay with SOL (no USDT swap).
+      const feeNeed0 = info.pool ? 0.02 : info.poolCost ?? SOL_POOL_COST;
+      const paySol = b0.usdt + 1e-9 < usdt + firstBuy && b0.solUsd > 0 && b0.sol - feeNeed0 - 0.01 >= (usdt + firstBuy) / b0.solUsd;
+      if (!paySol && b0.usdt + 1e-9 < usdt + firstBuy) { setMsg(`Not enough on Solana: this wallet has ${b0.usdt.toFixed(2)} USDT and ${b0.sol.toFixed(4)} SOL (about $${(b0.sol * b0.solUsd).toFixed(2)}), and this needs $${(usdt + firstBuy).toFixed(2)} (${usdt} for the liquidity + ${firstBuy} for the first buy) plus about ${feeNeed0} SOL for fees. Add USDT or SOL, or lower the amounts.`); return; }
       const feeNeed = info.pool ? 0.02 : info.poolCost ?? SOL_POOL_COST;
       if (b0.sol < feeNeed) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : info.venue === "meteora" ? " (creating the Meteora pool costs about 0.03 SOL)" : " (Raydium charges about 0.15 SOL to create a pool for taxed tokens)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
       // 1) USDT → SOL for the pool side.
-      setMsg(`Confirm in your wallet: swap ${usdt} USDT to SOL for the pool.`);
-      const sw1 = await rageSol<{ tx: string; sol: number }>("swap-in", { owner: sw.account.address, usdt: String(usdt) });
-      const swapSig = await sign(sw, sw1.tx, `swap ${usdt} USDT to SOL`);
-      const solIn = (sw1.sol * 0.999).toFixed(9);
+      let swapSig = "", solIn: string;
+      if (paySol) solIn = (usdt / b0.solUsd).toFixed(9);
+      else {
+        setMsg(`Confirm in your wallet: swap ${usdt} USDT to SOL for the pool.`);
+        const sw1 = await rageSol<{ tx: string; sol: number }>("swap-in", { owner: sw.account.address, usdt: String(usdt) });
+        swapSig = await sign(sw, sw1.tx, `swap ${usdt} USDT to SOL`);
+        solIn = (sw1.sol * 0.999).toFixed(9);
+      }
       // 2) The liquidity, with the SOL that arrived.
       if (!info.pool) {
-        setMsg(`Confirm in your wallet: create the ${info.venue === "meteora" ? "Meteora" : "Raydium"} pool with ${amtToken} ${info.symbol || "tokens"} + ${Number(solIn).toFixed(4)} SOL (from your ${usdt} USDT).`);
+        setMsg(`Confirm in your wallet: create the ${info.venue === "meteora" ? "Meteora" : "Raydium"} pool with ${amtToken} ${info.symbol || "tokens"} + ${Number(solIn).toFixed(4)} SOL (${paySol ? `about $${usdt} of your SOL` : `from your ${usdt} USDT`}).`);
         const r = await rageSol<{ tx: string; pool: string; lpMint: string }>("pool", { owner: sw.account.address, mint, tokens: amtToken, sol: solIn });
         const sig = await sign(sw, r.tx, "create the pool and add liquidity");
         setKnown({ mint, pool: r.pool });
         reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} + ${usdt} USDT (as ${solIn} SOL)`);
         setAmtToken(""); setAmtSol(""); setTick((x) => x + 1);
-        setMsg(`✅ Liquidity is in (paid ${usdt} USDT). ${CHAIN.explorer}/tx/${sig}`);
+        setMsg(`✅ Liquidity is in (paid ${paySol ? `$${usdt} in SOL` : `${usdt} USDT`}). ${CHAIN.explorer}/tx/${sig}`);
       } else {
         setMsg("Confirm in your wallet: add liquidity at the pool's price.");
         const r = await rageSol<{ tx: string }>("add", { owner: sw.account.address, pool: info.pool.pool, side: "sol", amount: solIn, decimals: info.decimals });
         const sig = await sign(sw, r.tx, "add liquidity");
         reportActivity("liquidity", "solana", sig, `Admin added ${usdt} USDT of liquidity to ${info.symbol || "token"} on Raydium`);
         setAmtToken(""); setAmtSol(""); setTick((x) => x + 1);
-        setMsg(`✅ Liquidity added (paid ${usdt} USDT). ${CHAIN.explorer}/tx/${sig}`);
+        setMsg(`✅ Liquidity added (paid ${paySol ? `$${usdt} in SOL` : `${usdt} USDT`}). ${CHAIN.explorer}/tx/${sig}`);
       }
       void swapSig;
       // 3) The first buy, straight after the liquidity.
@@ -251,6 +258,24 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
   async function firstBuyWith(w: SolWallet, usdtAmt: number): Promise<boolean> {
     try {
       const b = await balances(w);
+      // No USDT but enough SOL: pay the first buy in SOL worth the same amount.
+      if (b.usdt + 1e-9 < usdtAmt && b.solUsd > 0 && b.sol - 0.01 >= usdtAmt / b.solUsd) {
+        const solAmt = (usdtAmt / b.solUsd).toFixed(9);
+        let built: { tx?: string; wait?: boolean } = {};
+        for (let i = 0; i < 12; i++) {
+          setMsg(i ? `Waiting for the new pool to be tradable for the first buy… (${i * 5}s)` : "Preparing the first buy (paid in SOL)…");
+          built = await rageSol<{ tx?: string; wait?: boolean }>("first-buy", { owner: w.account.address, mint, pay: "sol", sol: solAmt });
+          if (built.tx) break;
+          await new Promise((res) => setTimeout(res, 5000));
+        }
+        if (!built.tx) { setMsg(`The pool isn't tradable through Jupiter yet. Tap "Sign first buy" in a moment. The liquidity is safe in the pool.`); return false; }
+        setMsg(`Confirm in your wallet: first buy with ${Number(solAmt).toFixed(4)} SOL (about $${usdtAmt}).`);
+        const sig = await sign(w, built.tx, `first buy with ${Number(solAmt).toFixed(4)} SOL`);
+        reportActivity("swap", "solana", sig, `First buy ${Number(solAmt).toFixed(4)} SOL (~$${usdtAmt}) of ${info?.symbol || "token"}`);
+        setBuyPending(false); setBuyAmt(""); setTick((x) => x + 1);
+        setMsg(`✅ First buy is in (${Number(solAmt).toFixed(4)} SOL, about $${usdtAmt}). ${CHAIN.explorer}/tx/${sig}`);
+        return true;
+      }
       if (b.usdt + 1e-9 < usdtAmt) { setMsg(`The first buy needs ${usdtAmt} USDT, but this wallet has ${b.usdt.toFixed(2)} USDT. Add USDT and tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
       if (b.sol < 0.005) { setMsg(`Add a little SOL for fees (about 0.005 SOL), then tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
       let built: { tx?: string; wait?: boolean } = {};
