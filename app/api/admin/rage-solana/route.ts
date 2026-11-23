@@ -105,7 +105,11 @@ export async function POST(req: Request) {
           fetch(`${JUP}/swap/v1/quote?inputMint=${SOL_MINT}&outputMint=${SOL_USDT}&amount=1000000000&slippageBps=100`, { cache: "no-store", headers: JUP_H, signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => null),
         ]);
         const usdt = (accs as any[]).reduce((a, x) => a + Number(x?.account?.data?.parsed?.info?.tokenAmount?.uiAmount || 0), 0);
-        return json({ sol: lamports / 1e9, usdt, solUsd: px?.outAmount ? Number(px.outAmount) / 1e6 : 0 });
+        // SOL's dollar price: Jupiter first, then two public price feeds, so paying with SOL still works when Jupiter is busy.
+        let solUsd = px?.outAmount ? Number(px.outAmount) / 1e6 : 0;
+        if (!(solUsd > 0)) solUsd = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT", { cache: "no-store", signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((d) => Number(d?.price) || 0).catch(() => 0);
+        if (!(solUsd > 0)) solUsd = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd", { cache: "no-store", signal: AbortSignal.timeout(5000) }).then((r) => r.json()).then((d) => Number(d?.solana?.usd) || 0).catch(() => 0);
+        return json({ sol: lamports / 1e9, usdt, solUsd });
       }
       case "swap-in": {
         // USDT → SOL for the pool side.
