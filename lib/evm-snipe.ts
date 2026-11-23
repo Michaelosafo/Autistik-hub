@@ -241,6 +241,43 @@ export async function fireV2(s: FSettings, t: any): Promise<Fire> {
   }
   if (!ready.length) return { bought: 0, why: short.join("; ") || "no wallet can buy" };
 
+  // Bitget Wallet first on Ethereum, like Copy Trade; wallets it can't serve yet buy straight from Uniswap below.
+  const bgOk: number[] = [], bgFired: number[] = [];
+  if (k === "ethereum") {
+    const bg = await import("@/lib/bitget-swap");
+    if (bg.bitgetOn()) {
+      const slip0 = Math.min(49, Math.max(3, n((s as any).liq_slip) || 20));
+      await Promise.all(ready.map(async (p) => {
+        try {
+          const r = await bg.bitgetEvmBuy(p.g.a, "eth", { contract: cfg.usd, symbol: cfg.sym, amount: p.usd }, token, slip0);
+          bgFired.push(p.g.slot);
+          const qty = Number(r.raw) / 10 ** r.decimals;
+          if (!(qty > 0)) throw new Error("the swap went through but no coins arrived");
+          const label = t.label || token.slice(0, 8);
+          await recordV2(s, t, k, token, label, p.usd, qty, r.hash, p.g.slot);
+          bgOk.push(p.g.slot);
+          await flog("open", `⚡ Wallet ${p.g.slot} sniped ${label} on ${cfg.name} via Bitget Wallet for ${p.usd.toFixed(2)} ${cfg.sym}. ${cfg.explorer}/tx/${r.hash}`);
+          void approveToken(k, p.g, token);
+        } catch (e) {
+          if (e instanceof bg.BitgetNotSent) return;
+          if (!bgFired.includes(p.g.slot)) bgFired.push(p.g.slot);
+          await flog("error", `Wallet ${p.g.slot}'s Bitget Wallet buy on ${cfg.name} didn't finish: ${(e as Error).message.slice(0, 140)}`);
+        }
+      }));
+      if (bgFired.length) {
+        for (let i = ready.length - 1; i >= 0; i--) if (bgFired.includes(ready[i].g.slot)) ready.splice(i, 1);
+        gunCache.clear();
+        await Promise.all(guns.filter((g) => bgFired.includes(g.slot)).map(async (g) => { g.nonce = Number(await pc(k).getTransactionCount({ address: g.a.address, blockTag: "pending" }).catch(() => g.nonce)); }));
+        if (!ready.length) return { bought: bgOk.length, sent: true, fired: bgFired, ok: bgOk, why: bgOk.length ? "" : "the Bitget Wallet buys didn't finish" };
+      }
+    }
+  }
+  const merge = (r: Fire): Fire => {
+    if (!bgFired.length) return r;
+    const ok = [...bgOk, ...(r.ok || [])], fired = [...bgFired, ...(r.fired || [])];
+    return { bought: ok.length, sent: true, fired, ok, why: ok.length ? "" : r.why };
+  };
+
   const c = pc(k), slipPct = Math.min(49, Math.max(3, n((s as any).liq_slip) || 20));
   const total = ready.reduce((a, p) => a + p.inRaw, 0n), outAll = quote(total, route);
   const dl = BigInt(Math.floor(Date.now() / 1000) + 300);
@@ -259,7 +296,7 @@ export async function fireV2(s: FSettings, t: any): Promise<Fire> {
     const gas = (hit.gas * 13n) / 10n;
     return { ...p, data: hit.d, gas: gas < BUY_GAS ? gas : hit.gas + 50_000n, before };
   }))).filter(Boolean) as { g: Gun; usd: number; inRaw: bigint; data: `0x${string}`; gas: bigint; before: bigint }[];
-  if (!preps.length) return { bought: 0, why: notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.join("; ") };
+  if (!preps.length) return merge({ bought: 0, why: notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.join("; ") });
 
   // Sign every buy first, then send them all at the same moment.
   const signed = await Promise.all(preps.map(async (p) => ({ ...p, raw: await p.g.a.signTransaction({ chainId: cfg.chainId, nonce: p.g.nonce, gas: p.gas, to: cfg.router, data: p.data, value: 0n, ...(f as any) }) })));
@@ -298,7 +335,7 @@ export async function fireV2(s: FSettings, t: any): Promise<Fire> {
   }));
   if (fired.length) await flog("open", `Buys of ${name} on ${cfg.name} sent together: ${sent.filter(Boolean).map((p) => `#${p!.g.slot} ${ok.includes(p!.g.slot) ? "success" : "failed"}`).join(" · ")}`);
   gunCache.clear();
-  return { bought: ok.length, sent: fired.length > 0, fired, ok, why: ok.length ? "" : short.join("; ") || "no wallet could buy" };
+  return merge({ bought: ok.length, sent: fired.length > 0, fired, ok, why: ok.length ? "" : short.join("; ") || "no wallet could buy" });
 }
 
 /** The bought token approved for the router right after the buy, so selling is one transaction. */

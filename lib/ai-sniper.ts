@@ -202,13 +202,19 @@ async function buy(s: FSettings, c: Pick, cfg: SnipeCfg): Promise<string> {
     const { liveBuyOn, bestStable, nativeUsd } = await import("@/lib/ai-trader-chains");
     const w = await wallets();
     const st = await bestStable("solana", w);
-    let r: { hash: string; raw: bigint; decimals: number };
-    if (st && st.balance >= cfg.usd) r = await liveBuyOn("solana", w, c.mint, cfg.usd, 5, st);
-    else {
-      const solUsd = await nativeUsd("solana");
-      if (!(solUsd > 0)) return "couldn't price SOL";
-      r = await liveBuyOn("solana", w, c.mint, cfg.usd / solUsd, 5, null);
+    let r: { hash: string; raw: bigint; decimals: number } | null = null;
+    const useSt = !!st && st.balance >= cfg.usd;
+    const solUsd = useSt ? 0 : await nativeUsd("solana");
+    if (!useSt && !(solUsd > 0)) return "couldn't price SOL";
+    // Bitget Wallet first, like Copy Trade; if it has no route yet, Jupiter as before. A sent order never falls back.
+    const bg = await import("@/lib/bitget-swap");
+    if (bg.bitgetOn() && w.sol) {
+      const pay = useSt ? { mint: st!.token, symbol: st!.symbol, amount: cfg.usd } : { mint: "", symbol: "SOL", amount: cfg.usd / solUsd };
+      r = await bg.bitgetSolBuy(w.sol, pay, c.mint, 15).catch((e) => { if (e instanceof bg.BitgetNotSent) return null; throw e; });
+      if (r) c = { ...c, why: `${c.why} · via Bitget Wallet` };
     }
+    if (!r) r = useSt ? await liveBuyOn("solana", w, c.mint, cfg.usd, 5, st) : await liveBuyOn("solana", w, c.mint, cfg.usd / solUsd, 5, null);
+    if (!r) return "couldn't buy";
     if (!(r.raw > 0n)) return "the swap went through but no coins arrived";
     qty = Number(r.raw) / 10 ** r.decimals;
     entry = cfg.usd / qty; tx = r.hash;

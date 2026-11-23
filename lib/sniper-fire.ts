@@ -15,6 +15,7 @@ import { NATIVE, WCHAINS, WSOL } from "@/lib/wallet-chains";
 import { build, quote } from "@/lib/wallet-server";
 import { supabaseService } from "@/lib/supabase/server";
 import { sniperSol, solBalances } from "@/lib/sniper-chains";
+import { BG_CHAIN, BitgetNotSent, bitgetEvmBuy, bitgetOn, bitgetSolBuy } from "@/lib/bitget-swap";
 import type { SnipeChain } from "@/lib/sniper-detect";
 
 const n = (v: unknown) => { const x = Number(v); return isFinite(x) ? x : 0; };
@@ -156,12 +157,56 @@ export async function fireChain(s: FSettings, t: any): Promise<Fire> {
   const skip = ready.wallets.filter((w) => !w.ok);
   const go = ready.wallets.filter((w) => w.ok);
   if (!go.length) return { bought: 0, why: skip.map((w) => `#${w.slot} ${w.reason}`).join("; ") || "no wallet can pay" };
+  // Bitget Wallet first, like Copy Trade; wallets Bitget can't serve yet buy straight from the pool / Jupiter.
+  const bg = await bitgetFirst(s, t, chain, pay, go);
+  const rest = go.filter((w) => !bg.fired.includes(w.slot));
+  if (!rest.length) return { bought: bg.ok.length, sent: bg.fired.length > 0, fired: bg.fired, ok: bg.ok, why: bg.ok.length ? "" : bg.why || "the Bitget Wallet buys didn't finish" };
+  let r: Fire;
   try {
-    if (chain === "solana") return await fireSol(s, t, pay, go, skip);
-    return await fireEvm(s, t, chain, pay, go, skip);
+    r = chain === "solana" ? await fireSol(s, t, pay, rest, skip) : await fireEvm(s, t, chain, pay, rest, skip);
   } catch (e) {
-    return { bought: 0, why: (e as Error).message.slice(0, 160) };
+    r = { bought: 0, why: (e as Error).message.slice(0, 160) };
   }
+  if (!bg.fired.length) return r;
+  const ok = [...bg.ok, ...(r.ok || [])], fired = [...bg.fired, ...(r.fired || [])];
+  return { bought: ok.length, sent: true, fired, ok, why: ok.length ? "" : r.why };
+}
+
+/** Each ready wallet buys through Bitget Wallet's swap. A sent order counts as fired (never bought twice). */
+async function bitgetFirst(s: FSettings, t: any, chain: SnipeChain, pay: "native" | "usdt" | "usdc", go: ReadyWallet[]): Promise<{ ok: number[]; fired: number[]; why: string }> {
+  const bgc = BG_CHAIN[chain];
+  const ok: number[] = [], fired: number[] = [];
+  let why = "";
+  if (!bitgetOn() || !bgc) return { ok, fired, why };
+  const slipPct = Math.min(49, Math.max(3, n((s as any).liq_slip) || 20));
+  const unit = unitOf(chain, pay);
+  const [payPx, payIn] = await Promise.all([payUsd(chain, pay).catch(() => (pay === "native" ? 0 : 1)), Promise.resolve(pay === "native" ? "" : tokenIn(chain, pay))]);
+  await Promise.all(go.map(async (w) => {
+    try {
+      let r: { raw: bigint; decimals: number; hash: string };
+      if (bgc === "sol") {
+        const kp = await sniperSol(w.slot);
+        if (!kp) return;
+        r = await bitgetSolBuy(kp, { mint: payIn, symbol: unit, amount: w.need }, String(t.token), slipPct);
+      } else {
+        const a = await copyKey(w.slot);
+        if (!a) return;
+        r = await bitgetEvmBuy(a, bgc, { contract: payIn, symbol: unit, amount: w.need }, String(t.token), slipPct);
+      }
+      fired.push(w.slot);
+      const size = Number(r.raw) / 10 ** r.decimals;
+      if (!(size > 0)) throw new Error("the swap went through but no coins arrived");
+      ok.push(w.slot);
+      const scan = chain === "solana" ? `https://solscan.io/tx/${r.hash}` : `${WCHAINS[chain].explorer}/tx/${r.hash}`;
+      await flog("open", `⚡ Wallet ${w.slot} sniped ${t.label || String(t.token).slice(0, 8)} on ${WCHAINS[chain].name} via Bitget Wallet for ${w.need} ${unit}. ${scan}`);
+      await remember(s, t, chain, w.need, unit, w.slot, r.hash, { size, usd: w.need * (payPx || 0) });
+    } catch (e) {
+      if (e instanceof BitgetNotSent) { why ||= `Bitget Wallet: ${(e as Error).message}`; return; }
+      if (!fired.includes(w.slot)) fired.push(w.slot);
+      await flog("error", `Wallet ${w.slot}'s Bitget Wallet buy on ${WCHAINS[chain].name} didn't finish: ${(e as Error).message.slice(0, 140)}`);
+    }
+  }));
+  return { ok, fired, why };
 }
 
 async function fireEvm(s: FSettings, t: any, chain: SnipeChain, pay: "native" | "usdt" | "usdc", go: ReadyWallet[], skip: ReadyWallet[]): Promise<Fire> {

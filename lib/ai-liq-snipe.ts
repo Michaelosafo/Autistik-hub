@@ -306,7 +306,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[], f
   // A wallet whose buy just reverted tries again on the next block (~0.4 s): fast, without firing twice into one block.
   const cooling = (g: Gun) => Date.now() - (chainFails.get(`${T()}|${t.token.toLowerCase()}|${g.slot}`)?.at || 0) < 400;
   const left = (pick ? allGuns.filter((g) => pick.has(g.slot)) : allGuns).filter((g) => !already.has(g.slot));
-  const guns = left.filter((g) => !cooling(g));
+  let guns = left.filter((g) => !cooling(g));
   const fired: number[] = [], ok: number[] = [];
   if (s.mode === "live" && left.length && !guns.length) return { bought: 0, why: "retrying the wallets whose buy reverted" };
   if (s.mode === "live" && !guns.length) return { bought: 0, why: `none of the wallets picked for it (${[...(pick || [])].map((x) => `#${x}`).join(", ")}) exist any more` };
@@ -350,6 +350,38 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[], f
     const ok = usd >= MIN_USD && g.bnb >= gasKeep(s);
     return { amt, bnbFree, usdtFree, useUsdt, usd: ok ? usd : 0 };
   };
+  // Bitget Wallet first, like Copy Trade: each wallet buys with its USDT through Bitget Wallet's swap (it approves
+  // Bitget's contract itself the first time). Wallets Bitget can't serve yet (no route for a brand-new coin) buy
+  // straight from the pool below. A Bitget order that was sent never falls back (it could buy twice).
+  {
+    const bg = await import("@/lib/bitget-swap");
+    if (bg.bitgetOn() && guns.length) {
+      const viaBg = new Set<number>();
+      await Promise.all(guns.map(async (g) => {
+        const usd = +Math.min(amtFor(g.slot), g.usdt * 0.995).toFixed(2);
+        if (usd < MIN_USD || g.bnb < gasKeep(s)) return;
+        try {
+          const r = await bg.bitgetEvmBuy(g.a, "bnb", { contract: USDT, symbol: "USDT", amount: usd }, token, slip);
+          viaBg.add(g.slot); fired.push(g.slot); sent = true;
+          const got = Number(r.raw) / 10 ** r.decimals;
+          if (!(got > 0)) throw new Error("the buy went through but no coins arrived");
+          await record(s, t, name, usd, got, r.hash, g.slot, "USDT", route);
+          ok.push(g.slot);
+          g.usdt -= usd;
+          await flog("open", `⚡ Wallet ${g.slot} sniped ${name} via Bitget Wallet for $${usd.toFixed(2)} USDT. https://bscscan.com/tx/${r.hash}`);
+          approveForSell(g, s, token).catch(() => {});
+        } catch (e) {
+          if (e instanceof bg.BitgetNotSent) return; // not sent: buys straight from the pool below
+          viaBg.add(g.slot); if (!fired.includes(g.slot)) fired.push(g.slot);
+          await flog("error", `Wallet ${g.slot}'s Bitget Wallet buy of ${name} didn't finish: ${(e as Error).message.slice(0, 140)}`);
+        } finally {
+          if (viaBg.has(g.slot)) g.nonce = Number(await c.getTransactionCount({ address: g.a.address, blockTag: "pending" }).catch(() => g.nonce));
+        }
+      }));
+      guns = guns.filter((g) => !viaBg.has(g.slot));
+      if (!guns.length) return { bought: ok.length, sent, fired, ok, why: ok.length ? "" : "the Bitget Wallet buys didn't finish" };
+    }
+  }
   const totalUsd = route.kind === "v2" ? guns.reduce((a, g) => a + planOf(g).usd, 0) : 0;
   const gasPrice = BigInt(Math.round(snipeGwei(s) * 1e9));
   type Prep = { g: Gun; usd: number; amt: number; useUsdt: boolean; data: `0x${string}`; value: bigint; gas: bigint; before: bigint };
@@ -454,7 +486,7 @@ async function snipe(s: FSettings, t: LiqTarget, route: Route, allGuns: Gun[], f
     const lines = sentTx.filter(Boolean).map((p) => `#${p!.g.slot} ${p!.hash.slice(0, 10)}… ${ok.includes(p!.g.slot) ? "success" : "failed"}`);
     await flog("open", `Buys of ${name} sent together: ${lines.join(" · ")}`);
   }
-  const bought = v3done.filter(Boolean).length + v2done.filter(Boolean).length;
+  const bought = ok.length;
   return { bought, sent, fired, ok, why: bought ? "" : notOpen ? `liquidity is in but it can't be bought yet (${notOpen})` : short.length ? `not enough money: ${short.join("; ")}` : "no wallet could buy" };
 }
 
