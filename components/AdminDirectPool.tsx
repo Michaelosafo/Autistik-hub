@@ -415,6 +415,11 @@ function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy
     if (team) {
       const w = teamS?.wallets.find((x) => x.slot === teamSlot);
       if (!w) throw new Error("Add or pick a team wallet first.");
+      // Team wallets sign on the server (no wallet pop-up), so the team wallet itself pays the gas in BNB.
+      const gas = await pub.getBalance({ address: w.address as `0x${string}` }).catch(() => null);
+      if (gas != null && gas < 500_000_000_000_000n) {
+        throw new Error(`Team wallet ${w.slot} (${w.address}) has ${(Number(gas) / 1e18).toFixed(5)} BNB, so it can't pay the network fee. Send it about 0.005 BNB on BNB Chain (BEP20), then try again. Team wallets sign on the server, so no wallet pop-up appears.`);
+      }
       setAccount(w.address);
       return { w: teamWallet(w.slot, w.address) as any, acc: w.address };
     }
