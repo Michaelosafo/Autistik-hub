@@ -129,7 +129,18 @@ export default async function Home() {
           </div>
           {!user && <p className="lp-member">Part of the community? <Link href="/login?next=/">Sign in</Link> or <Link href="/login?mode=join&amp;next=/">join free</Link> to chat in the groups and save your settings.</p>}
         </div>
-        <div className="lp-hero-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
+        <div className="lp-hero-side">
+          <div className="lp-hero-art" data-sq="up" style={{ ["--sd" as string]: "250ms" }}><Art kind="hero" photo={PHOTOS.hero.src} alt={PHOTOS.hero.alt} /></div>
+          {!user && (
+            <div className="lp-auth" aria-label="New here? Join or sign in">
+              <span className="lp-auth-new">New here?</span>
+              <div className="lp-auth-btns">
+                <Link href="/login?mode=join&amp;next=/" className="lp-btn gold">Sign up free</Link>
+                <Link href="/login?next=/" className="lp-btn">Sign in</Link>
+              </div>
+            </div>
+          )}
+        </div>
       </section>
 
       <section data-sq="up" style={{ ["--sd" as string]: "150ms" }} className="lp-stats" aria-label="AUTISTIK in numbers">

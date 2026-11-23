@@ -1517,6 +1517,11 @@ html[data-calm=on] .ax-sheet-in{animation:none}
 .lp-hero p{color:var(--muted);font-size:1.12em;max-width:560px}
 .lp-ctas{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
 .lp-hero-art{border-radius:28px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.lp-hero-side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.lp-auth{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.lp-auth-new{font-weight:800;color:var(--ink)}
+.lp-auth-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+.lp-auth-btns .lp-btn{padding:14px 16px;font-size:1.05em}
 .lp-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;max-width:1200px;margin:0 auto 28px;padding:0 18px}
 .lp-stats div{padding:16px;border-radius:20px;background:var(--surface-2);border:1px solid var(--line)}
 .lp-stats b{display:block;font-family:var(--f-display);font-size:1.3em;font-variant-numeric:tabular-nums lining-nums;letter-spacing:-.02em}
@@ -1536,6 +1541,7 @@ html[data-calm=on] .ax-sheet-in{animation:none}
   .lp-bar{justify-content:space-between}
   .lp-hero{grid-template-columns:1fr;padding-top:28px}
   .lp-hero-art{order:-1;max-height:240px}
+  .lp-hero-side{order:-1}
   .lp-stats{grid-template-columns:repeat(2,1fr)}
   .lp-stats div:last-child{grid-column:1/-1}
 }
