@@ -132,8 +132,12 @@ export default function Signal() {
     toChain, toSymbol: toTok.symbol, toContract: toTok.contract, toAddress: receive.trim(),
   }), [fromChain, fromTok, amount, fromAddr, toChain, toTok, receive]);
 
+  // Connect, or switch to another wallet: always opens a fresh wallet list (replacing whatever is connected) on the
+  // network you're paying from, the same way LobbySol connects Bitget and other wallets.
+  const NETKEY: Record<ChainKey, string> = { bnb: "bsc", eth: "ethereum", base: "base", arbitrum: "arbitrum", matic: "polygon", sol: "solana" };
   async function connectFrom() {
-    try { if (fromChain === "sol") await setNetwork("solana" as any); else await pickWallet(); }
+    setMsg(null);
+    try { setNetwork(NETKEY[fromChain]).catch(() => {}); await pickWallet({ fresh: true }); }
     catch (e) { setMsg({ kind: "err", text: (e as Error).message }); }
   }
 
@@ -224,7 +228,8 @@ export default function Signal() {
         <p className="muted" style={{ margin: 0 }}>Swap or bridge through Bitget Wallet. Your wallet signs, and the coins go to your wallet. Only you can open this page.</p>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <span className="muted">Paying from:</span>
-          {fromAddr ? <b>{short(fromAddr)}</b> : <button className="btn small primary" onClick={connectFrom}>Connect {fromChain === "sol" ? "a Solana" : "a"} wallet</button>}
+          {fromAddr ? <><b>{short(fromAddr)}</b>{conn.current?.name && fromChain !== "sol" ? <span className="muted">({conn.current.name})</span> : null}<button className="btn small" onClick={connectFrom} disabled={!!busy}>Switch wallet</button></>
+            : <button className="btn small primary" onClick={connectFrom} disabled={!!busy}>Connect {fromChain === "sol" ? "a Solana" : "a"} wallet</button>}
         </div>
       </div>
 
