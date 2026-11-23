@@ -109,6 +109,13 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     if (sw) rageSol<{ sol: number; usdt: number; solUsd: number }>("balances", { owner: sw.account.address }).then((d) => { if (!gone) setBal(d); }).catch(() => {});
     return () => { gone = true; };
   }, [mint, sw?.account.address, tick, knownPool]);
+  // The connected wallet's SOL and USDT, shown as soon as it connects (before any token is picked).
+  useEffect(() => {
+    if (!sw) { setBal(null); return; }
+    let gone = false;
+    rageSol<{ sol: number; usdt: number; solUsd: number }>("balances", { owner: sw.account.address }).then((d) => { if (!gone) setBal(d); }).catch((e) => { if (!gone) setMsg(`Couldn't read this wallet's balance: ${solErr(e)}`); });
+    return () => { gone = true; };
+  }, [sw?.account.address, tick]);
 
   function connect() { setNetwork("solana").catch(() => {}); pickWallet({ fresh: true }); }
   function save(addr: string) {
@@ -376,7 +383,7 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
           {" "}instead: its wallet is built in there, so Connect and every signature pop up right on the page. Enter your Admin 2-step code there once.
         </small>
       )}
-      {sw && <small className="muted">Wallet <span className="mono">{sw.account.address.slice(0, 4)}…{sw.account.address.slice(-4)}</span> on Solana · <button type="button" className="linkish" onClick={connect} disabled={busy}>Switch</button></small>}
+      {sw && <small className="muted">Wallet <span className="mono">{sw.account.address.slice(0, 4)}…{sw.account.address.slice(-4)}</span> on Solana{bal ? <> · <b>{bal.sol.toFixed(4)} SOL</b>{bal.solUsd ? ` (≈$${(bal.sol * bal.solUsd).toFixed(2)})` : ""} · <b>{bal.usdt.toFixed(2)} USDT</b></> : " · reading balance…"} · <button type="button" className="linkish" onClick={connect} disabled={busy}>Switch</button></small>}
 
       {showDeploy && (
         <>
