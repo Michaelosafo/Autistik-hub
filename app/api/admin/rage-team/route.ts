@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 /**
  * BnbRage, shared: the owner and every helper admin (after the 2-step code) see and use the same team wallets and
- * the same CA list. Removing a wallet and showing its private key are owner only.
+ * the same CA list. Helpers have the owner's full access here, including removing a wallet and showing its private key.
  */
 async function who(): Promise<{ ok: boolean; owner: boolean; name: string }> {
   const s = await adminState();
@@ -41,10 +41,8 @@ export async function POST(req: Request) {
     switch (String(b?.action || "")) {
       case "add": return json(await addWallet(me.name, b.key ? String(b.key) : undefined, b.label ? String(b.label) : undefined));
       case "remove":
-        if (!me.owner) return json({ error: "Only the owner can remove a team wallet." }, 403);
         await removeWallet(me.name, b.slot); return json({ ok: true });
       case "reveal":
-        if (!me.owner) return json({ error: "Only the owner can see a team wallet's private key." }, 403);
         return json({ key: await revealWallet(me.name, b.slot) });
       case "send": return json({ hash: await sendFromTeam(me.name, b.slot, { to: b.to ?? null, data: b.data, value: b.value }) });
       case "save-ca": await saveCa(me.name, String(b.address || ""), b.name, b.symbol); return json({ ok: true });

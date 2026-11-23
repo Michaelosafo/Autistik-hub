@@ -707,7 +707,7 @@ function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy
               <span className="stack" style={{ gap: 2, minWidth: 0, flex: 1 }}>
                 <span><b>Wallet {w.slot}</b>{w.label ? ` · ${w.label}` : ""} <span className="mono" style={{ overflowWrap: "anywhere" }}>{w.address}</span></span>
                 <small className="muted">{num(w.usdt, 2)} USDT · {num(w.bnb)} BNB{w.added_by ? ` · added by ${w.added_by}` : ""}</small>
-                {teamS?.owner && (
+                {teamS && (
                   <span className="row" style={{ gap: 6 }}>
                     <button className="btn small ghost" type="button" onClick={async (e) => { e.preventDefault(); try { const j = await teamPost({ action: "reveal", slot: w.slot }); prompt(`Private key of team wallet ${w.slot} (copy it, keep it secret):`, j.key); } catch (er: any) { setMsg(er.message); } }}>Show key</button>
                     <button className="btn small ghost" type="button" onClick={async (e) => { e.preventDefault(); if (!confirm(`Remove team wallet ${w.slot}? Move its coins out first (Show key → import it in your wallet app); after removing, the site can't use it.`)) return; try { await teamPost({ action: "remove", slot: w.slot }); setTeamTick((x) => x + 1); } catch (er: any) { setMsg(er.message); } }}>Remove</button>
@@ -721,7 +721,7 @@ function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy
             <input value={importKey} onChange={(e) => setImportKey(e.target.value)} placeholder="or paste a private key to import" type="password" autoComplete="off" spellCheck={false} aria-label="Private key to import" style={{ flex: 1, minWidth: 160 }} />
             <button className="btn small" type="button" disabled={busy || !importKey.trim()} onClick={async () => { try { const j = await teamPost({ action: "add", key: importKey }); setImportKey(""); setTeamSlot(j.slot); setTeamTick((x) => x + 1); setMsg(`Imported as team wallet ${j.slot}: ${j.address}`); } catch (e: any) { setMsg(e.message); } }}>Import</button>
           </div>
-          <small className="muted">Team wallets only do BnbRage steps (deploy, PancakeSwap liquidity, first buy, remove), always back into the same wallet. {teamS?.owner ? "Only you can show a key or remove a wallet." : "Only the owner can show a key or remove a wallet."}</small>
+          <small className="muted">Team wallets only do BnbRage steps (deploy, PancakeSwap liquidity, first buy, remove), always back into the same wallet. Everyone on the team can show a key or remove a wallet.</small>
           {!!teamS?.cas.length && (
             <div className="stack" style={{ gap: 4 }}>
               <b>Team CAs</b>

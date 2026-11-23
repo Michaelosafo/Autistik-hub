@@ -67,20 +67,19 @@ const desk = (req: Request, id: number | null) => {
 /**
  * SniperBNB under BnbRage is shared, like BnbRage's team wallets: the owner and every helper admin work the same
  * sniper (the owner's: trader 1), so a wallet or token any of them adds shows for all. ?g=personal keeps each admin's own.
- * Revealing a key, removing a wallet and sending coins out to another address stay owner only there.
+ * Helpers have the owner's full access on the team sniper (keys, removing wallets, sending out, every chain).
  */
 const TEAM_TRADER = 1;
 const team = (req: Request) => new URL(req.url).searchParams.get("team") === "1";
-const OWNER_ONLY_IN_TEAM = new Set(["copy-key-reveal", "copy-key-remove", "sniper-withdraw", "sniper-withdraw-preview", "sniper-sol-reveal", "key-reveal", "sol-key-reveal", "reset"]);
+
 
 const clamp = (v: unknown, lo: number, hi: number) => { const x = Number(v); return isFinite(x) ? Math.min(hi, Math.max(lo, x)) : undefined; };
 
 export async function POST(req: Request, { params }: { params: { action: string } }) {
   const id = desk(req, await mine(req));
   // SniperEth, SniperRobinhood and SniperLobbySol are the owner's only; other admins have the BNB Chain sniper.
-  const isOwner = (await adminState()).owner;
+  const isOwner = (await adminState()).owner || (team(req) && !!id); // the team sniper: helpers act as the owner
   if (!id) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
-  if (team(req) && !isOwner && OWNER_ONLY_IN_TEAM.has(params.action)) return json({ error: "On the team sniper only the owner can do that (reveal a key, remove a wallet or send coins out)." }, 403);
   const b = await req.json().catch(() => ({}));
   return withTrader(id, async () => {
     const sb = supabaseService();
