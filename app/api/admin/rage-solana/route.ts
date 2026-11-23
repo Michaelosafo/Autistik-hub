@@ -73,7 +73,8 @@ export async function POST(req: Request) {
         if (lamports < 10_000_000n) return json({ error: "Put in at least 0.01 SOL." }, 400);
         if (info.pool) return json({ error: "That token already has a pool. Add liquidity to it instead." }, 400);
         // Standard tokens: a Meteora DAMM v2 pool (~0.03 SOL). Taxed Token-2022 tokens: Raydium (~0.2 SOL).
-        if (await meteoraOk(b.mint)) return json({ ...(await buildMeteoraPool(owner, b.mint, tokens, lamports)), venue: "meteora" });
+        // The admin picks Meteora (default) or Raydium; taxed tokens can only go to Raydium.
+        if (b?.venue !== "raydium" && await meteoraOk(b.mint)) return json({ ...(await buildMeteoraPool(owner, b.mint, tokens, lamports)), venue: "meteora" });
         return json({ ...(await buildPool(owner, b.mint, tokens, lamports)), venue: "raydium" });
       }
       case "add": {

@@ -46,6 +46,7 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
   // The first buy (USDT → token), sent right after the liquidity, like BnbRage / EthRise / WanaRobinhood.
   const [buyAmt, setBuyAmt] = useState("");
   const [buyPending, setBuyPending] = useState(false);
+  const [venueSel, setVenueSel] = useState<"meteora" | "raydium">(() => { try { return localStorage.getItem("lobbysol-venue") === "raydium" ? "raydium" : "meteora"; } catch { return "meteora"; } });
   const [bal, setBal] = useState<{ sol: number; usdt: number; solUsd: number } | null>(null);
   const [pct, setPct] = useState(100);
   const [askRemove, setAskRemove] = useState(false);
@@ -117,6 +118,9 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     return () => { gone = true; };
   }, [sw?.account.address, tick]);
 
+  const meteoraAllowed = !info || info.pool != null || info.venue === "meteora";
+  const venue: "meteora" | "raydium" = meteoraAllowed ? venueSel : "raydium";
+  const poolFee = venue === "meteora" ? 0.03 : 0.2;
   function connect() { setNetwork("solana").catch(() => {}); pickWallet({ fresh: true }); }
   function save(addr: string) {
     setTokenIn(addr);
@@ -217,14 +221,14 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
     try {
       const b0 = await balances(sw);
       // Not enough USDT but enough SOL: the pool side is SOL anyway, so pay with SOL (no USDT swap).
-      const feeNeed0 = info.pool ? 0.02 : info.poolCost ?? SOL_POOL_COST;
+      const feeNeed0 = info.pool ? 0.02 : poolFee;
       const paySol = b0.usdt + 1e-9 < usdt + firstBuy && b0.solUsd > 0 && b0.sol - feeNeed0 - 0.01 >= (usdt + firstBuy) / b0.solUsd;
       if (!paySol && b0.usdt + 1e-9 < usdt + firstBuy) { setMsg(`Not enough on Solana: this wallet has ${b0.usdt.toFixed(2)} USDT and ${b0.sol.toFixed(4)} SOL (about $${(b0.sol * b0.solUsd).toFixed(2)}), and this needs $${(usdt + firstBuy).toFixed(2)} (${usdt} for the liquidity + ${firstBuy} for the first buy) plus about ${feeNeed0} SOL for fees. Add USDT or SOL, or lower the amounts.`); return; }
-      const feeNeed = info.pool ? 0.02 : info.poolCost ?? SOL_POOL_COST;
+      const feeNeed = info.pool ? 0.02 : poolFee;
       // Short of SOL for the fees but holding spare USDT: swap that bit to SOL along with the liquidity swap.
       const feeTopUsd = !paySol && b0.sol < feeNeed && b0.solUsd > 0 ? Math.ceil(((feeNeed - b0.sol) + 0.006) * b0.solUsd * 100) / 100 : 0;
       const canTop = feeTopUsd > 0 && b0.sol >= 0.004 && b0.usdt + 1e-9 >= usdt + firstBuy + feeTopUsd;
-      if (b0.sol < feeNeed && !canTop) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : info.venue === "meteora" ? " (creating the Meteora pool costs about 0.03 SOL)" : " (Raydium charges about 0.15 SOL to create a pool for taxed tokens)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
+      if (b0.sol < feeNeed && !canTop) { setMsg(`Keep about ${feeNeed} SOL in this wallet for fees${info.pool ? "" : venue === "meteora" ? " (creating the Meteora pool costs about 0.03 SOL)" : " (Raydium charges about 0.15 SOL to create a pool for taxed tokens)"}. You have ${b0.sol.toFixed(4)} SOL. SOL only pays fees; the liquidity is paid in USDT.`); return; }
       // 1) USDT → SOL for the pool side.
       let swapSig = "", solIn: string;
       if (paySol) solIn = (usdt / b0.solUsd).toFixed(9);
@@ -238,8 +242,8 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
       }
       // 2) The liquidity, with the SOL that arrived.
       if (!info.pool) {
-        setMsg(`Confirm in your wallet: create the ${info.venue === "meteora" ? "Meteora" : "Raydium"} pool with ${amtToken} ${info.symbol || "tokens"} + ${Number(solIn).toFixed(4)} SOL (${paySol ? `about $${usdt} of your SOL` : `from your ${usdt} USDT`}).`);
-        const r = await rageSol<{ tx: string; pool: string; lpMint: string }>("pool", { owner: sw.account.address, mint, tokens: amtToken, sol: solIn });
+        setMsg(`Confirm in your wallet: create the ${venue === "meteora" ? "Meteora" : "Raydium"} pool with ${amtToken} ${info.symbol || "tokens"} + ${Number(solIn).toFixed(4)} SOL (${paySol ? `about $${usdt} of your SOL` : `from your ${usdt} USDT`}).`);
+        const r = await rageSol<{ tx: string; pool: string; lpMint: string }>("pool", { owner: sw.account.address, mint, tokens: amtToken, sol: solIn, venue });
         const sig = await sign(sw, r.tx, "create the pool and add liquidity");
         setKnown({ mint, pool: r.pool });
         reportActivity("liquidity", "solana", sig, `Admin added ${amtToken} ${info.symbol || "tokens"} + ${usdt} USDT (as ${solIn} SOL)`);
@@ -437,8 +441,20 @@ export default function AdminSolPool({ mode = "all", name: toolName = "Rage" }: 
           {showAdd && (
             <>
               <b>3. Add liquidity</b>
+              {!info.pool && (
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }} role="radiogroup" aria-label="Where to create the pool">
+                  {(["meteora", "raydium"] as const).map((v) => (
+                    <button key={v} type="button" role="radio" aria-checked={venue === v} disabled={busy || (v === "meteora" && !meteoraAllowed)}
+                      className={venue === v ? "btn small primary" : "btn small"}
+                      onClick={() => { setVenueSel(v); try { localStorage.setItem("lobbysol-venue", v); } catch { /* private mode */ } }}>
+                      {v === "meteora" ? "Meteora (default) · ~0.03 SOL" : "Raydium · ~0.2 SOL"}
+                    </button>
+                  ))}
+                  {!meteoraAllowed && <small className="muted">This token has a transfer tax, so only Raydium can pool it.</small>}
+                </div>
+              )}
               <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>
-                {info.pool ? "The pool already has a price. The USDT amount is what you add (swapped to SOL); the tokens follow that price." : info.venue === "meteora" ? "A new pool needs both amounts. It's created on Meteora: about 0.03 SOL for the pool (no 0.15 SOL Raydium fee)." : `A new pool needs both amounts. Taxed tokens go on Raydium: keep about ${SOL_POOL_COST} SOL spare for Raydium's pool fee and rent.`}
+                {info.pool ? "The pool already has a price. The USDT amount is what you add (swapped to SOL); the tokens follow that price." : venue === "meteora" ? "A new pool needs both amounts. It's created on Meteora: about 0.03 SOL for the pool (no 0.15 SOL Raydium fee)." : `A new pool needs both amounts. Taxed tokens go on Raydium: keep about ${SOL_POOL_COST} SOL spare for Raydium's pool fee and rent.`}
               </p>
               <b className="rg-step sb"><i>⚡</i>First buy</b>
               <p className="muted" style={{ margin: 0, fontSize: ".9em" }}>Set this before you add liquidity. It&apos;s paid in USDT and sent from this wallet straight after the liquidity goes in. On Solana the pool can be traded as soon as it exists, so the first buy goes out as fast as the network allows.</p>
