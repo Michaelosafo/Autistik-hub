@@ -11,6 +11,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { getState, subscribe, pickWallet, setNetwork, switchEvm } from "@/lib/connect";
 import { signAndSend } from "@/lib/sol-wallet";
+import { SwapPanels, toX, type CardIO, type Side } from "@/components/swap/SwapCard";
+import { XCHAIN_BY_KEY, isXNative, type XChain, type XToken } from "@/lib/bridge-chains";
+import { api as wapi, type Holding } from "@/components/wallet/util";
 
 type ChainKey = "bnb" | "eth" | "base" | "arbitrum" | "matic" | "sol";
 const CH: Record<ChainKey, { name: string; id: number; native: string; scan: string }> = {
@@ -35,9 +38,13 @@ const USDT_AT: Record<ChainKey, string> = {
   bnb: "0x55d398326f99059fF775485246999027B3197955", eth: "0xdAC17F958D2ee523a2206206994597C13D831ec7", base: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
   arbitrum: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", matic: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", sol: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
 };
-const usdt = (c: ChainKey): Tok => ({ chain: c, contract: USDT_AT[c], symbol: "USDT", name: "Tether USD" });
-type Bal = { chain: ChainKey; symbol: string; contract: string; amount: string };
-const fmtAmt = (v: string) => Number(v).toLocaleString(undefined, { maximumFractionDigits: Number(v) >= 1 ? 4 : 8 });
+// The swap card speaks the AUTISTIK swap's networks; Signal's routers speak these keys.
+const XKEY: Record<ChainKey, string> = { bnb: "bsc", eth: "ethereum", base: "base", arbitrum: "arbitrum", matic: "polygon", sol: "solana" };
+const FROM_X: Record<string, ChainKey> = Object.fromEntries(Object.entries(XKEY).map(([k, v]) => [v, k as ChainKey]));
+const netOf = (c: ChainKey) => XCHAIN_BY_KEY[XKEY[c]];
+const signalOk = (n: XChain) => (FROM_X[n.key] ? null : "Signal routes BNB Chain, Ethereum, Base, Arbitrum, Polygon and Solana");
+const tokOf = (n: XChain, t: XToken | null): Tok | null => t && ({ chain: FROM_X[n.key], contract: isXNative(n, t.address) ? "" : t.address, symbol: t.symbol, name: t.name });
+const xUsdt = (c: ChainKey): XToken => ({ address: USDT_AT[c], symbol: "USDT", name: "Tether USD", decimals: c === "bnb" ? 18 : 6 });
 
 async function api<T = any>(action: string, body: object): Promise<T> {
   const r = await fetch("/api/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, ...body }) });
@@ -77,42 +84,6 @@ async function waitReceipt(p: any, hash: string) {
   throw new Error("The network is slow; check your wallet before trying again.");
 }
 
-// ---------------------------------------------------------------- token picker
-function TokenPick({ label, chain, tok, onChain, onTok }: { label: string; chain: ChainKey; tok: Tok; onChain: (c: ChainKey) => void; onTok: (t: Tok) => void }) {
-  const [q, setQ] = useState("");
-  const [list, setList] = useState<Tok[]>([]);
-  useEffect(() => {
-    const k = q.trim();
-    if (!k) { setList([]); return; }
-    const t = setTimeout(() => { api<{ list: Tok[] }>("search", { keyword: k, chain }).then((d) => setList(d.list)).catch(() => setList([])); }, 350);
-    return () => clearTimeout(t);
-  }, [q, chain]);
-  return (
-    <div className="stack" style={{ gap: 8 }}>
-      <b>{label}</b>
-      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <select value={chain} onChange={(e) => onChain(e.target.value as ChainKey)} aria-label={`${label} network`}>
-          {(Object.keys(CH) as ChainKey[]).map((c) => <option key={c} value={c}>{CH[c].name}</option>)}
-        </select>
-        <span className="btn small" aria-live="polite">{tok.symbol}{tok.contract ? ` · ${short(tok.contract)}` : ""}</span>
-        {tok.contract && <button className="btn small" onClick={() => onTok(native(chain))}>Use {CH[chain].native}</button>}
-        {tok.contract.toLowerCase() !== USDT_AT[chain].toLowerCase() && <button className="btn small" onClick={() => onTok(usdt(chain))}>Use USDT</button>}
-      </div>
-      <input placeholder="Search a token or paste its address" value={q} onChange={(e) => setQ(e.target.value)} />
-      {list.length > 0 && (
-        <div className="stack" style={{ gap: 4, maxHeight: 220, overflowY: "auto" }}>
-          {list.map((t) => (
-            <button key={t.chain + t.contract} className="btn small" style={{ justifyContent: "flex-start", textAlign: "left" }} onClick={() => { onTok(t); setQ(""); setList([]); }}>
-              {t.icon ? <img src={t.icon} alt="" width={18} height={18} style={{ borderRadius: 9, marginRight: 6 }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} /> : null}
-              {t.symbol} <span className="muted" style={{ marginLeft: 6 }}>{t.name} · {short(t.contract || "native")}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------- page
 export default function Signal() {
   const conn = useSyncExternalStore(subscribe, getState, getState);
@@ -124,10 +95,16 @@ export default function Signal() {
     p.request({ method: "eth_accounts" }).then((a: string[]) => setEvmAddr(a?.[0] || "")).catch(() => setEvmAddr(""));
   }, [conn.current]);
 
-  const [fromChain, setFromChain] = useState<ChainKey>("bnb");
-  const [toChain, setToChain] = useState<ChainKey>("bnb");
-  const [fromTok, setFromTok] = useState<Tok>(native("bnb"));
-  const [toTok, setToTok] = useState<Tok | null>(null);
+  // The coins, picked in the swap card's sheet (your funds on every network show first; paste any contract address).
+  const [fromNet, setFromNet] = useState<XChain>(netOf("bnb"));
+  const [xFrom, setXFrom] = useState<XToken | null>(xUsdt("bnb"));
+  const [toNet, setToNet] = useState<XChain>(netOf("sol"));
+  const [xTo, setXTo] = useState<XToken | null>(xUsdt("sol"));
+  const fromChain = FROM_X[fromNet.key], toChain = FROM_X[toNet.key];
+  const fromTok = useMemo(() => tokOf(fromNet, xFrom) || native(fromChain), [fromNet, xFrom, fromChain]);
+  const toTok = useMemo(() => tokOf(toNet, xTo), [toNet, xTo]);
+  const [logos, setLogos] = useState<Record<number, string>>({});
+  useEffect(() => { wapi<{ logos: Record<number, string> }>("x-chains", {}).then((d) => setLogos(d.logos)).catch(() => {}); }, []);
   const [amount, setAmount] = useState("");
   const [slip, setSlip] = useState("1");
   const [receive, setReceive] = useState("");
@@ -141,24 +118,23 @@ export default function Signal() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err" | "info"; text: string; links?: { label: string; href: string }[] } | null>(null);
 
   const fromAddr = fromChain === "sol" ? solAddr : evmAddr;
-  // Your funds: the chain's own coin and USDT on every network, read as soon as a wallet is connected.
-  const [bals, setBals] = useState<Bal[] | null>(null);
-  const [balKey, setBalKey] = useState(0);
-  const [picked, setPicked] = useState<Bal | null>(null);
+  // What you hold of the coin you pay with (for the card's balance and Max).
+  const [have, setHave] = useState<number | null>(null);
   useEffect(() => {
-    if (!evmAddr && !solAddr) { setBals(null); return; }
-    let on = true; setBals(null);
-    api<{ list: Bal[] }>("balances", { evm: evmAddr, sol: solAddr }).then((d) => { if (on) setBals(d.list); }).catch(() => { if (on) setBals([]); });
+    setHave(null);
+    const owner = fromChain === "sol" ? solAddr : evmAddr;
+    if (!owner || !xFrom || !fromNet.wchain) return;
+    let on = true;
+    wapi<{ holdings: Holding[] }>("balances", { chain: fromNet.wchain, owner, extra: isXNative(fromNet, xFrom.address) ? [] : [xFrom.address] })
+      .then((d) => { if (!on) return; const h = d.holdings.find((x) => toX(fromNet, x).address.toLowerCase() === xFrom.address.toLowerCase()); setHave(h?.amount ?? 0); })
+      .catch(() => {});
     return () => { on = false; };
-  }, [evmAddr, solAddr, balKey]);
-  function pickFunds(b: Bal) {
-    setPicked(b); setMsg(null);
-    setFromChain(b.chain); setFromTok(b.contract ? (b.symbol === "USDT" ? usdt(b.chain) : { chain: b.chain, contract: b.contract, symbol: b.symbol }) : native(b.chain));
-    setAmount(b.contract ? b.amount : "");
+  }, [fromNet, xFrom, evmAddr, solAddr, fromChain]);
+  function pickCoin(side: Side, net: XChain, t: XToken) {
+    if (side === "from") { setFromNet(net); setXFrom(t); setAmount(""); } else { setToNet(net); setXTo(t); }
     if (router === "okx") setRouter("bitget");
-    setToTok(null);
   }
-  function bridgeTo(c: ChainKey) { setToChain(c); setToTok(usdt(c)); }
+  function flip() { const n = fromNet, t = xFrom; setFromNet(toNet); setXFrom(xTo); setToNet(n); setXTo(t); setAmount(""); }
   const defReceive = toChain === "sol" ? solAddr : evmAddr;
   useEffect(() => { if (!receiveTouched) setReceive(defReceive); }, [defReceive, receiveTouched]);
   useEffect(() => { setRoutes([]); }, [fromChain, toChain, fromTok, toTok, amount, receive, router]);
@@ -316,53 +292,31 @@ export default function Signal() {
         </div>
       </div>
 
-      {(evmAddr || solAddr) && (
-        <div className="card stack">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <b>Your funds</b>
-            <button className="btn small" onClick={() => setBalKey((n) => n + 1)} disabled={bals === null}>Refresh</button>
-          </div>
-          {bals === null ? <span className="muted">Checking your wallet on every network…</span>
-            : !bals.length ? <span className="muted">No USDT or coins found on {evmAddr && solAddr ? "these wallets" : "this wallet"}.{!solAddr ? " Connect a Solana wallet to see Solana too." : ""}</span>
-            : <div className="stack" style={{ gap: 6 }}>
-                {bals.map((b) => (
-                  <button key={b.chain + b.symbol} type="button" className="btn" aria-pressed={picked?.chain === b.chain && picked?.symbol === b.symbol}
-                    style={{ justifyContent: "space-between", outline: picked?.chain === b.chain && picked?.symbol === b.symbol ? "2px solid currentColor" : undefined }}
-                    onClick={() => pickFunds(b)} disabled={!!busy}>
-                    <span>{b.symbol} <span className="muted">· {CH[b.chain].name}</span></span>
-                    <b>{fmtAmt(b.amount)}</b>
-                  </button>
-                ))}
-                <small className="muted">Tap one to bridge it.</small>
-              </div>}
-          {picked && (
-            <div className="stack" style={{ gap: 6 }}>
-              <b>Bridge {picked.symbol} from {CH[picked.chain].name} to</b>
-              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                {(Object.keys(CH) as ChainKey[]).filter((c) => c !== picked.chain).map((c) => (
-                  <button key={c} type="button" className={toChain === c && toTok?.symbol === "USDT" ? "btn small primary" : "btn small"} onClick={() => bridgeTo(c)} disabled={!!busy}>USDT · {CH[c].name}</button>
-                ))}
-              </div>
-              <small className="muted">Or pick any token below under "You receive".</small>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="card stack">
-        <TokenPick label="You pay" chain={fromChain} tok={fromTok} onChain={(c) => { setFromChain(c); setFromTok(native(c)); }} onTok={setFromTok} />
-        <div className="row" style={{ gap: 8 }}>
-          <input style={{ flex: 1 }} inputMode="decimal" placeholder={`Amount of ${fromTok.symbol}`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} />
-          {(() => { const b = bals?.find((x) => x.chain === fromChain && x.contract.toLowerCase() === fromTok.contract.toLowerCase()); return b ? <button type="button" className="btn small" onClick={() => setAmount(b.contract ? b.amount : String(Math.max(0, Number(b.amount) - (fromChain === "sol" ? 0.01 : fromChain === "eth" ? 0.003 : 0.002))))}>Max {fmtAmt(b.amount)}</button> : null; })()}
-        </div>
+      <div className="sw-card sc-card" style={{ padding: 12 }}>
+        <SwapPanels
+          io={{
+            amount, setAmount: (v: string) => setAmount(v),
+            balance: have, onMax: have ? () => setAmount(String(fromTok.contract ? have : Math.max(0, have - (fromChain === "sol" ? 0.01 : fromChain === "eth" ? 0.003 : 0.002)))) : null,
+            inUsd: null,
+            out: routes[pick] ? Number(routes[pick].out).toLocaleString(undefined, { maximumFractionDigits: 6 }) : <span className="tx-dim">0</span>,
+            outUsd: null,
+            toExtra: (
+              <label className="stack" style={{ gap: 4, marginTop: 8 }}>
+                <span className="muted" style={{ fontSize: 13 }}>Send to {receive && receive === defReceive ? "(your wallet)" : ""}</span>
+                <div className="row" style={{ gap: 6 }}>
+                  <input style={{ flex: 1, minWidth: 0 }} value={receive} onChange={(e) => { setReceive(e.target.value.trim()); setReceiveTouched(true); }} placeholder={toChain === "sol" ? "Paste a Solana address" : "Paste a 0x… address"} />
+                  <button type="button" className="btn small" onClick={async () => { try { const t = (await navigator.clipboard.readText()).trim(); if (t) { setReceive(t); setReceiveTouched(true); } } catch { /* no clipboard access */ } }}>Paste</button>
+                  {receiveTouched && defReceive && receive !== defReceive && <button type="button" className="btn small" onClick={() => { setReceive(defReceive); setReceiveTouched(false); }}>Mine</button>}
+                </div>
+              </label>
+            ),
+          } as CardIO}
+          from={{ net: fromNet, token: xFrom }} to={{ net: toNet, token: xTo }} logos={logos}
+          owners={{ evm: evmAddr || null, sol: solAddr || null }} allow={signalOk} allowTo={signalOk} fromAll
+          onPick={pickCoin} onFlip={flip} />
       </div>
 
       <div className="card stack">
-        <TokenPick label="You receive" chain={toChain} tok={toTok || { chain: toChain, contract: "", symbol: "Pick a token" }} onChain={(c) => { setToChain(c); setToTok(null); }} onTok={setToTok} />
-        <label className="stack" style={{ gap: 4 }}>
-          <span className="muted">Receive at ({toChain === "sol" ? "Solana" : "EVM"} address)</span>
-          <input value={receive} onChange={(e) => { setReceive(e.target.value.trim()); setReceiveTouched(true); }} placeholder={toChain === "sol" ? "Your Solana address" : "Your 0x… address"} />
-        </label>
         <label className="row" style={{ gap: 8 }}>
           <span className="muted">Slippage %</span>
           <input style={{ width: 80 }} inputMode="decimal" value={slip} onChange={(e) => setSlip(e.target.value.replace(/[^0-9.]/g, ""))} />

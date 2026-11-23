@@ -34,9 +34,13 @@ const Chevron = ({ up }: { up?: boolean }) => (
  * The swap card: the coin you pay with and how much, a round button to switch the two, and the coin you get.
  * Tapping a coin opens the token sheet, where the network is picked too.
  */
-export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip }: {
+export function SwapPanels({ io, from, to, logos, owners, allow, allowTo, fromAll, onPick, onFlip }: {
   io: CardIO; from: Pick; to: Pick; logos: Record<number, string>; owners: Owners;
   allow?: (c: XChain) => string | null; onPick: (side: Side, net: XChain, token: XToken) => void; onFlip: () => void;
+  /** Limits the networks for the coin you get (the pay side uses `allow`). */
+  allowTo?: (c: XChain) => string | null;
+  /** Open the pay-side sheet on "All networks", so every coin you hold shows first. */
+  fromAll?: boolean;
 }) {
   const [sheet, setSheet] = useState<Side | null>(null);
   // Amounts are typed in US dollars; the token amount the swap uses is worked out from the coin's price. Coins without
@@ -142,7 +146,7 @@ export function SwapPanels({ io, from, to, logos, owners, allow, onPick, onFlip 
         {io.toExtra}
       </div>
       {sheet && (
-        <TokenSheet side={sheet} current={sheet === "from" ? from : to} logos={logos} owners={owners} allow={sheet === "from" ? allow : undefined}
+        <TokenSheet side={sheet} current={sheet === "from" ? from : to} logos={logos} owners={owners} allow={sheet === "from" ? allow : allowTo} startAll={sheet === "from" && fromAll}
           onPick={(net, t) => { onPick(sheet, net, t); setSheet(null); }} onClose={() => setSheet(null)} />
       )}
     </div>
@@ -172,11 +176,11 @@ const isAddr = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s) || /^[1-9A-HJ-NP-Za-
  * Pick a coin: search by name or paste a contract address, narrow to favourites, all networks or one network, and
  * see what you hold. Every coin shows its network's badge.
  */
-export function TokenSheet({ side, current, logos, owners, allow, onPick, onClose }: {
-  side: Side; current: Pick; logos: Record<number, string>; owners: Owners; allow?: (c: XChain) => string | null;
+export function TokenSheet({ side, current, logos, owners, allow, startAll, onPick, onClose }: {
+  side: Side; current: Pick; logos: Record<number, string>; owners: Owners; allow?: (c: XChain) => string | null; startAll?: boolean;
   onPick: (net: XChain, t: XToken) => void; onClose: () => void;
 }) {
-  const [tab, setTab] = useState<"fav" | "all" | number>(current.net.id);
+  const [tab, setTab] = useState<"fav" | "all" | number>(startAll ? "all" : current.net.id);
   const [q, setQ] = useState("");
   const [grid, setGrid] = useState(false);
   const [held, setHeld] = useState<Partial<Record<WChainKey, Holding[]>>>({});
