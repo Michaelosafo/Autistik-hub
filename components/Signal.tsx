@@ -22,7 +22,14 @@ const CH: Record<ChainKey, { name: string; id: number; native: string; scan: str
   sol: { name: "Solana", id: 0, native: "SOL", scan: "https://solscan.io/tx/" },
 };
 type Tok = { chain: ChainKey; contract: string; symbol: string; name?: string; icon?: string };
-type Route = { market: string; protocol: string; label: string; out: string; min: string; gasUsd: number | null; slip: string | null };
+type Exec = { kind: "evm"; chainId: number; tx: { to: string; data: string; value: string; gas?: string }; spender?: string } | { kind: "sol"; txB64: string };
+type Route = { market?: string; protocol?: string; label: string; out: string; min: string; gasUsd: number | null; slip?: string | null; router?: "lifi" | "okx"; exec?: Exec; track?: { fromChain: string; toChain: string } };
+type RouterKey = "bitget" | "lifi" | "okx";
+const ROUTERS: { key: RouterKey; name: string; note: string }[] = [
+  { key: "bitget", name: "Bitget Wallet", note: "Swaps and bridges" },
+  { key: "lifi", name: "LI.FI", note: "Swaps and bridges, many bridges" },
+  { key: "okx", name: "OKX DEX", note: "Swaps on one network" },
+];
 const native = (c: ChainKey): Tok => ({ chain: c, contract: "", symbol: CH[c].native, name: CH[c].native });
 
 async function api<T = any>(action: string, body: object): Promise<T> {
@@ -117,6 +124,9 @@ export default function Signal() {
   const [slip, setSlip] = useState("1");
   const [receive, setReceive] = useState("");
   const [receiveTouched, setReceiveTouched] = useState(false);
+  const [router, setRouter] = useState<RouterKey>(() => { try { const v = localStorage.getItem("signal-router"); return v === "lifi" || v === "okx" ? v : "bitget"; } catch { return "bitget"; } });
+  const [okxOn, setOkxOn] = useState(false);
+  useEffect(() => { api<{ okx: boolean }>("routers", {}).then((d) => setOkxOn(d.okx)).catch(() => {}); }, []);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [pick, setPick] = useState(0);
   const [busy, setBusy] = useState("");
@@ -125,7 +135,7 @@ export default function Signal() {
   const fromAddr = fromChain === "sol" ? solAddr : evmAddr;
   const defReceive = toChain === "sol" ? solAddr : evmAddr;
   useEffect(() => { if (!receiveTouched) setReceive(defReceive); }, [defReceive, receiveTouched]);
-  useEffect(() => { setRoutes([]); }, [fromChain, toChain, fromTok, toTok, amount, receive]);
+  useEffect(() => { setRoutes([]); }, [fromChain, toChain, fromTok, toTok, amount, receive, router]);
 
   const fields = useMemo(() => toTok && ({
     fromChain, fromSymbol: fromTok.symbol, fromContract: fromTok.contract, fromAmount: amount, fromAddress: fromAddr,
@@ -143,11 +153,11 @@ export default function Signal() {
 
   async function getQuote() {
     if (!fields) return setMsg({ kind: "err", text: "Pick the token you want to receive." });
-    setBusy("Getting routes from Bitget Wallet…"); setMsg(null);
+    setBusy(`Getting routes from ${ROUTERS.find((x) => x.key === router)!.name}…`); setMsg(null);
     try {
-      const d = await api<{ routes: Route[] }>("quote", fields);
+      const d = await api<{ routes: Route[] }>("quote", { ...fields, router, slippage: slip });
       setRoutes(d.routes); setPick(0);
-      if (!d.routes.length) setMsg({ kind: "err", text: "Bitget Wallet has no route for this right now. Try another amount or token." });
+      if (!d.routes.length) setMsg({ kind: "err", text: "No route for this right now. Try another amount, token or router." });
     } catch (e) { setMsg({ kind: "err", text: (e as Error).message }); }
     setBusy("");
   }
@@ -157,6 +167,7 @@ export default function Signal() {
     if (!fields || !r) return;
     setMsg(null);
     try {
+      if (r.exec) { await goDirect(r); return; }
       setBusy("Building the order…");
       const o = await api<{ orderId: string; txs: any[] }>("order", { ...fields, market: r.market, protocol: r.protocol, slippage: r.slip || slip, lastOut: r.out });
       if (!o.txs.length) throw new Error("Bitget Wallet's order had nothing to sign. Get a new quote.");
@@ -220,12 +231,58 @@ export default function Signal() {
     setBusy("");
   }
 
+  /** LI.FI and OKX: the route already has its transaction; approve the token if needed, sign, send, track. */
+  async function goDirect(r: Route) {
+    const ex = r.exec!, links: { label: string; href: string }[] = [];
+    let hash = "";
+    if (ex.kind === "sol") {
+      if (!conn.sol) throw new Error("Connect a Solana wallet first.");
+      setBusy("Approve it in your wallet…");
+      hash = await signAndSend({ wallet: conn.sol.wallet, account: conn.sol.account }, ex.txB64);
+    } else {
+      const p = conn.current?.provider;
+      if (!p || !evmAddr) throw new Error("Connect a wallet first.");
+      setBusy(`Switching your wallet to ${CH[fromChain].name}…`);
+      await switchEvm(p, ex.chainId);
+      if (ex.spender && fromTok.contract) {
+        const decHex = await p.request({ method: "eth_call", params: [{ to: fromTok.contract, data: "0x313ce567" }, "latest"] }).catch(() => "0x12");
+        const need = rawAmount(amount, Number(BigInt(decHex || "0x12")));
+        const allowHex = await p.request({ method: "eth_call", params: [{ to: fromTok.contract, data: "0xdd62ed3e" + pad(evmAddr) + pad(ex.spender) }, "latest"] }).catch(() => "0x0");
+        if (BigInt(allowHex || "0x0") < need) {
+          setBusy(`Approve ${fromTok.symbol} in your wallet (one time)…`);
+          const ah = await p.request({ method: "eth_sendTransaction", params: [{ from: evmAddr, to: fromTok.contract, data: "0x095ea7b3" + pad(ex.spender) + "f".repeat(64), value: "0x0" }] });
+          setBusy("Waiting for the approval…");
+          await waitReceipt(p, ah);
+        }
+      }
+      setBusy("Approve the swap in your wallet…");
+      hash = await p.request({ method: "eth_sendTransaction", params: [{ from: evmAddr, to: ex.tx.to, data: ex.tx.data, value: ex.tx.value, ...(ex.tx.gas ? { gas: ex.tx.gas } : {}) }] });
+      setBusy("Waiting for the network…");
+      await waitReceipt(p, hash);
+    }
+    links.push({ label: "Transaction", href: CH[fromChain].scan + hash });
+    const name = r.router === "okx" ? "OKX DEX" : "LI.FI";
+    if (fromChain !== toChain && r.router === "lifi" && r.track) {
+      setMsg({ kind: "info", text: `Sent through ${name}. The bridge to ${CH[toChain].name} usually takes a few minutes; the coins arrive at ${short(receive)}.`, links });
+      for (let i = 0; i < 50; i++) {
+        await sleep(6000);
+        const s = await api<{ status: string; toTx: string | null; tips: string | null }>("status", { router: "lifi", txHash: hash, ...r.track }).catch(() => null);
+        if (s?.status === "success") { setMsg({ kind: "ok", text: `Done: the coins arrived on ${CH[toChain].name}.`, links: [...links, ...(s.toTx ? [{ label: "Arrival", href: CH[toChain].scan + s.toTx }] : [])] }); break; }
+        if (s?.status === "failed") { setMsg({ kind: "err", text: `LI.FI reports the bridge failed${s.tips ? `: ${s.tips}` : ""}.`, links }); break; }
+      }
+    } else {
+      setMsg({ kind: "ok", text: `Done: swapped through ${name}, sent to ${short(receive)}.`, links });
+    }
+    setRoutes([]);
+    setBusy("");
+  }
+
   const r = routes[pick];
   return (
     <div className="stack" style={{ maxWidth: 560, margin: "0 auto" }}>
       <div className="card stack">
         <h1 style={{ margin: 0 }}>Signal</h1>
-        <p className="muted" style={{ margin: 0 }}>Swap or bridge through Bitget Wallet. Your wallet signs, and the coins go to your wallet. Only you can open this page.</p>
+        <p className="muted" style={{ margin: 0 }}>Swap or bridge through Bitget Wallet, LI.FI or OKX DEX. Your wallet signs, the trade goes through that router on chain, and the coins go to your wallet. Only you can open this page.</p>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
           <span className="muted">Paying from:</span>
           {fromAddr ? <><b>{short(fromAddr)}</b>{conn.current?.name && fromChain !== "sol" ? <span className="muted">({conn.current.name})</span> : null}<button className="btn small" onClick={connectFrom} disabled={!!busy}>Switch wallet</button></>
@@ -248,20 +305,35 @@ export default function Signal() {
           <span className="muted">Slippage %</span>
           <input style={{ width: 80 }} inputMode="decimal" value={slip} onChange={(e) => setSlip(e.target.value.replace(/[^0-9.]/g, ""))} />
         </label>
-        <button className="btn primary" disabled={!!busy || !toTok || !amount || !fromAddr || !receive} onClick={getQuote}>Get routes</button>
+        <div className="stack" style={{ gap: 6 }}>
+          <span className="muted">Route through</span>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }} role="radiogroup" aria-label="Router">
+            {ROUTERS.map((x) => {
+              const off = x.key === "okx" && (!okxOn || fromChain !== toChain);
+              return (
+                <button key={x.key} type="button" role="radio" aria-checked={router === x.key} disabled={!!busy || off} title={x.note}
+                  className={router === x.key ? "btn small primary" : "btn small"}
+                  onClick={() => { setRouter(x.key); try { localStorage.setItem("signal-router", x.key); } catch { /* private mode */ } }}>{x.name}</button>
+              );
+            })}
+          </div>
+          {!okxOn && <small className="muted">OKX DEX needs your OKX API keys in Vercel (OKX_API_KEY, OKX_SECRET_KEY, OKX_API_PASSPHRASE, OKX_PROJECT_ID).</small>}
+          {okxOn && fromChain !== toChain && <small className="muted">OKX DEX here swaps on one network; pick Bitget Wallet or LI.FI to bridge.</small>}
+        </div>
+        <button className="btn primary" disabled={!!busy || !toTok || !amount || !fromAddr || !receive || (router === "okx" && (!okxOn || fromChain !== toChain))} onClick={getQuote}>Get routes</button>
       </div>
 
       {routes.length > 0 && (
         <div className="card stack">
-          <b>Routes from Bitget Wallet</b>
+          <b>Routes from {ROUTERS.find((x) => x.key === router)!.name}</b>
           {routes.map((x, i) => (
-            <button key={x.market + i} className="btn" aria-pressed={i === pick} style={{ justifyContent: "space-between", outline: i === pick ? "2px solid currentColor" : undefined }} onClick={() => setPick(i)}>
+            <button key={(x.market || x.label) + i} className="btn" aria-pressed={i === pick} style={{ justifyContent: "space-between", outline: i === pick ? "2px solid currentColor" : undefined }} onClick={() => setPick(i)}>
               <span>{x.label}</span>
               <span>{Number(x.out).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toTok?.symbol}</span>
             </button>
           ))}
           {r && <p className="muted" style={{ margin: 0 }}>At least {Number(r.min).toLocaleString(undefined, { maximumFractionDigits: 6 })} {toTok?.symbol}{r.gasUsd != null ? ` · network fee about $${Number(r.gasUsd).toFixed(2)}` : ""}{fromChain !== toChain ? " · bridges need about $10 or more" : ""}</p>}
-          <button className="btn primary" disabled={!!busy} onClick={go}>{fromChain === toChain ? "Swap" : "Bridge"} through Bitget Wallet</button>
+          <button className="btn primary" disabled={!!busy} onClick={go}>{fromChain === toChain ? "Swap" : "Bridge"} through {ROUTERS.find((x) => x.key === router)!.name}</button>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { bgwCall } from "@/lib/bitget-swap";
+import { lifiRoute, lifiStatus, okxReady, okxRoute, type ChainKey } from "@/lib/signal-routers";
 
 /**
  * Signal (owner only): swaps and bridges routed through Bitget Wallet's swap service. This route only talks to
@@ -46,6 +47,13 @@ export async function POST(req: Request) {
     }
     const slip = String(Math.min(49, Math.max(0.1, Number(b.slippage) || 1)));
 
+    if (b.action === "routers") return json({ okx: okxReady() });
+    // LI.FI and OKX: the route comes with its transaction ready to sign.
+    if (b.action === "quote" && (b.router === "lifi" || b.router === "okx")) {
+      const q = { fromChain: f.fromChain as ChainKey, fromContract: f.fromContract, fromAmount: f.fromAmount!, fromAddress: f.fromAddress, toChain: f.toChain as ChainKey, toContract: f.toContract, toAddress: f.toAddress, slippage: Number(slip) };
+      const r = b.router === "lifi" ? await lifiRoute(q) : await okxRoute(q);
+      return json({ routes: [r] });
+    }
     if (b.action === "quote") {
       const d = await bgwCall("/swap-go/swapx/quote", { ...f, tab_type: "swap", publicKey: "", slippage: "", requestId: String(Date.now()) });
       const routes = (d?.quoteResults || []).map((q: any) => ({
@@ -69,6 +77,7 @@ export async function POST(req: Request) {
       return json({ orderId: o?.orderId || cf.orderId, txs: o?.txs || [], quote: cf.quoteResult || null });
     }
 
+    if (b.action === "status" && b.router === "lifi") return json(await lifiStatus(str(b.txHash, 120), str(b.fromChain), str(b.toChain)));
     if (b.action === "status") {
       const d = await bgwCall("/swap-go/swapx/getOrderDetails", { orderId: str(b.orderId, 96) });
       const det = d?.details || {};
