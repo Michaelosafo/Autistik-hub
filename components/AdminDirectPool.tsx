@@ -462,6 +462,14 @@ function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy
   const usdtOf = async (acc: `0x${string}`) => (await pub.readContract({ address: USD, abi: ERC20, functionName: "balanceOf", args: [acc] })) as bigint;
   /** BNB that must stay in the wallet for gas (BNB is never spent on the token, only on gas). */
   const gasWei = (steps: number) => parseEther((gasNative * steps).toFixed(18));
+  /**
+   * BNB the next steps really need, from the network's gas price right now (BNB Chain gas is often far below the
+   * fixed guess): `units` of gas, plus half again for safety. Falls back to the fixed guess if the price can't be read.
+   */
+  async function gasNeed(units: bigint, steps: number): Promise<bigint> {
+    const gp = await pub.getGasPrice().then((x: bigint) => BigInt(x)).catch(() => 0n);
+    return gp > 0n ? (gp * units * 3n) / 2n : gasWei(steps);
+  }
 
   /** Swap USDT → BNB on PancakeSwap and return the BNB that arrived (for the BNB side of the pool). */
   async function usdtToBnb(w: any, acc: `0x${string}`, usdtAmt: bigint): Promise<bigint> {
@@ -538,8 +546,10 @@ function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy
         setMsg(`Not enough ${SYM}: you have ${fmt(usdt, SD)} ${SYM}, and this needs ${fmt(usdtLiq + buyUsdt, SD)} (${amtCoin} for the liquidity + ${buyAmt} for the first buy). Add ${SYM} (${STD}), or lower the amounts.`);
         return;
       }
-      if (bnb < gasWei(6)) {
-        setMsg(`Keep about ${(gasNative * 6).toFixed(4)} ${CHAIN.coin} in this wallet for gas (you have ${fmt(bnb, 18)}). ${CHAIN.coin} is only used for gas; the liquidity and first buy are paid in ${SYM}.`);
+      // Approvals, the USDT→BNB swap, adding liquidity (creating the pool is the big one), the first buy and opening trading.
+      const need = await gasNeed(6_000_000n, 6);
+      if (bnb < need) {
+        setMsg(`Keep about ${(Number(need) / 1e18).toFixed(5)} ${CHAIN.coin} in this wallet for gas at today's gas price (you have ${fmt(bnb, 18)}). ${CHAIN.coin} is only used for gas; the liquidity and first buy are paid in ${SYM}.`);
         return;
       }
       const priced = info.rToken > 0n && info.rCoin > 0n;
@@ -567,7 +577,8 @@ function AdminEvmPool({ mode, chainKey, toolName, team, store }: { mode: "deploy
         setMsg(`The first buy needs ${fmt(buyUsdt, SD)} ${SYM}, but this wallet has ${fmt(usdt, SD)} ${SYM}. Add ${SYM} and tap "Sign first buy" again${usdt > 0n ? `, or tap "Buy with what's left" (${fmt(usdt, SD)} ${SYM})` : ""}. The liquidity is safe in the pool.`);
         return false;
       }
-      if (bnb < gasWei(2)) { setMsg(`Add a little ${CHAIN.coin} for gas (about ${(gasNative * 2).toFixed(4)} ${CHAIN.coin}), then tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
+      const need2 = await gasNeed(700_000n, 2);
+      if (bnb < need2) { setMsg(`Add a little ${CHAIN.coin} for gas (about ${(Number(need2) / 1e18).toFixed(5)} ${CHAIN.coin}), then tap "Sign first buy" again. The liquidity is safe in the pool.`); return false; }
       const weth = await wethOf();
       const path = [USD, weth, token] as `0x${string}`[];
       await approveIfNeeded(w, acc, USD, buyUsdt, `Allow ${CHAIN.dex} to use your ${SYM}`);
