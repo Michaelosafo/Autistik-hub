@@ -22,7 +22,7 @@ const PIPS: Record<number, [number, number][]> = {
 };
 const fmt = (n: number) => n.toLocaleString("en-US");
 
-function Die({ v, rolling, big }: { v: number; rolling?: boolean; big?: boolean }) {
+export function Die({ v, rolling, big }: { v: number; rolling?: boolean; big?: boolean }) {
   const [face, setFace] = useState(v || 1);
   useEffect(() => {
     if (!rolling) { setFace(v || 1); return; }
