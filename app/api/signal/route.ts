@@ -63,6 +63,41 @@ async function balancesFor(evm: string, sol: string) {
   return (await Promise.all(jobs)).filter((x): x is NonNullable<typeof x> => !!x && Number(x.amount) > 0);
 }
 
+// Bitget's Solana orders: the unsigned transaction can sit under different keys (data.serializedTx, deriveTransaction,
+// a plain string…) and be base58 (v0) or base64 (v1). Find it wherever it is and hand the page plain base64.
+const B58A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function b58decode(s: string): Buffer {
+  let n = 0n;
+  for (const ch of s) { const i = B58A.indexOf(ch); if (i < 0) throw new Error("bad base58"); n = n * 58n + BigInt(i); }
+  const out: number[] = [];
+  while (n > 0n) { out.unshift(Number(n % 256n)); n /= 256n; }
+  for (const ch of s) { if (ch !== "1") break; out.unshift(0); }
+  return Buffer.from(out);
+}
+function solTxB64(t: any): string | null {
+  const seen = new Set<any>();
+  const hits: { v: string; enc?: string }[] = [];
+  const walk = (o: any, enc?: string, depth = 0) => {
+    if (!o || depth > 6 || seen.has(o)) return;
+    if (typeof o === "string") { if (o.length > 150) hits.push({ v: o, enc }); return; }
+    if (typeof o !== "object") return;
+    seen.add(o);
+    const e = typeof o.encoding === "string" ? o.encoding.toLowerCase() : enc;
+    for (const k of ["serializedTx", "serializedTransaction", "tx", "transaction", "rawTx", "data"]) if (typeof o[k] === "string") walk(o[k], e, depth + 1);
+    for (const v of Object.values(o)) walk(v, e, depth + 1);
+  };
+  walk(t);
+  for (const h of hits) {
+    const s = h.v.trim();
+    try {
+      if (h.enc === "base64" || (!h.enc && /[+/=]/.test(s) && /^[A-Za-z0-9+/=]+$/.test(s))) { if (Buffer.from(s, "base64").length > 100) return s; }
+      else if (/^[1-9A-HJ-NP-Za-km-z]+$/.test(s)) { const b = b58decode(s); if (b.length > 100) return b.toString("base64"); }
+      else if (/^[A-Za-z0-9+/=]+$/.test(s)) { if (Buffer.from(s, "base64").length > 100) return s; }
+    } catch { /* try the next one */ }
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   if (!(await adminState()).owner) return json({ error: "Not found." }, 404);
   const b = await req.json().catch(() => ({}));
@@ -124,7 +159,16 @@ export async function POST(req: Request) {
       if (!cf?.orderId) return json({ error: "Bitget Wallet didn't give an order. Get a new quote." }, 502);
       // makeOrder comes back signed by Bitget; bgwCall checks those signatures before anything is shown to sign.
       const o = await bgwCall("/swap-go/swapx/makeOrder", { orderId: cf.orderId, ...f, slippage: slip, market, protocol, source: "agent" }, true);
-      return json({ orderId: o?.orderId || cf.orderId, txs: o?.txs || [], quote: cf.quoteResult || null });
+      const txs = o?.txs || [];
+      if (f.fromChain === "sol") {
+        const solTxs = txs.map(solTxB64);
+        if (!txs.length || solTxs.some((x: string | null) => !x)) {
+          console.error("signal sol order shape", JSON.stringify(txs).slice(0, 1500));
+          return json({ error: "Bitget Wallet's Solana order came back in a shape Signal can't read. Try Jupiter via LI.FI for now." }, 502);
+        }
+        return json({ orderId: o?.orderId || cf.orderId, txs, solTxs, quote: cf.quoteResult || null });
+      }
+      return json({ orderId: o?.orderId || cf.orderId, txs, quote: cf.quoteResult || null });
     }
 
     if (b.action === "status" && b.router === "lifi") return json(await lifiStatus(str(b.txHash, 120), str(b.fromChain), str(b.toChain)));

@@ -54,16 +54,6 @@ async function api<T = any>(action: string, body: object): Promise<T> {
 }
 
 // ---------------------------------------------------------------- small helpers
-const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-function b58bytes(s: string): Uint8Array {
-  let n = 0n;
-  for (const ch of s) { const i = B58.indexOf(ch); if (i < 0) throw new Error("Bad transaction from Bitget Wallet"); n = n * 58n + BigInt(i); }
-  const out: number[] = [];
-  while (n > 0n) { out.unshift(Number(n % 256n)); n /= 256n; }
-  for (const ch of s) { if (ch !== "1") break; out.unshift(0); }
-  return Uint8Array.from(out);
-}
-const b64 = (u: Uint8Array) => { let s = ""; u.forEach((x) => (s += String.fromCharCode(x))); return btoa(s); };
 const hex = (v: bigint) => "0x" + v.toString(16);
 const toWei = (v: unknown) => { const s = String(v ?? "0"); if (s.startsWith("0x")) return BigInt(s); if (!s.includes(".")) return BigInt(s || "0"); return BigInt(Math.round(Number(s) * 1e18)); };
 const toInt = (v: unknown) => { const s = String(v ?? "0"); return s.startsWith("0x") ? BigInt(s) : BigInt(Math.floor(Number(s) || 0)); };
@@ -171,17 +161,16 @@ export default function Signal() {
     try {
       if (r.exec) { await goDirect(r); return; }
       setBusy("Building the order…");
-      const o = await api<{ orderId: string; txs: any[] }>("order", { ...fields, market: r.market, protocol: r.protocol, slippage: r.slip || slip, lastOut: r.out });
+      const o = await api<{ orderId: string; txs: any[]; solTxs?: string[] }>("order", { ...fields, market: r.market, protocol: r.protocol, slippage: r.slip || slip, lastOut: r.out });
       if (!o.txs.length) throw new Error("Bitget Wallet's order had nothing to sign. Get a new quote.");
       const sent: string[] = [];
       if (fromChain === "sol") {
         if (!conn.sol) throw new Error("Connect a Solana wallet first.");
-        for (const t of o.txs) {
-          const st = t.serializedTx || t.data?.serializedTx || t.data?.data?.serializedTx || t.deriveTransaction?.serializedTx;
-          if (!st) throw new Error("Bitget Wallet's Solana order had no transaction.");
+        for (const txB64 of o.solTxs || []) {
           setBusy("Approve it in your wallet…");
-          sent.push(await signAndSend({ wallet: conn.sol.wallet, account: conn.sol.account }, b64(b58bytes(st))));
+          sent.push(await signAndSend({ wallet: conn.sol.wallet, account: conn.sol.account }, txB64));
         }
+        if (!sent.length) throw new Error("Bitget Wallet's Solana order had no transaction.");
       } else {
         const p = conn.current?.provider;
         if (!p || !evmAddr) throw new Error("Connect a wallet first.");
