@@ -2,7 +2,7 @@ import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { rateLimit } from "@/lib/ratelimit";
 import { supabaseServer, supabaseService } from "@/lib/supabase/server";
-import { addWallet, clearCurrent, deleteCa, removeWallet, revealWallet, saveCa, sendFromTeam, teamState } from "@/lib/rage-team";
+import { addWallet, clearCurrent, deleteCa, isGrp, removeWallet, revealWallet, saveCa, sendFromTeam, teamState, type Grp } from "@/lib/rage-team";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,10 +24,16 @@ async function who(): Promise<{ ok: boolean; owner: boolean; name: string }> {
   return { ok: true, owner: s.owner && s.admin, name };
 }
 
-export async function GET() {
+/** ?grp= / body.grp: "bsc" = BnbRage (shared with helpers); "ethereum" (EthRise) and "robinhood" (WanaRobinhood) are owner only. */
+const grpOf = (v: unknown): Grp => (isGrp(v) ? v : "bsc");
+const OWNER_ONLY = "Only the owner can use these wallets.";
+
+export async function GET(req: Request) {
   const me = await who();
   if (!me.ok) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
-  try { return json({ ...(await teamState()), owner: me.owner }); }
+  const g = grpOf(new URL(req.url).searchParams.get("grp"));
+  if (g !== "bsc" && !me.owner) return json({ error: OWNER_ONLY }, 403);
+  try { return json({ ...(await teamState(g)), owner: me.owner }); }
   catch (e) { return json({ error: (e as Error).message }, 500); }
 }
 
@@ -37,17 +43,19 @@ export async function POST(req: Request) {
   const me = await who();
   if (!me.ok) return json({ error: "Admins only. Open the Admin page and enter your 2-step code first." }, 403);
   const b = await req.json().catch(() => ({}));
+  const g = grpOf(b?.grp);
+  if (g !== "bsc" && !me.owner) return json({ error: OWNER_ONLY }, 403);
   try {
     switch (String(b?.action || "")) {
-      case "add": return json(await addWallet(me.name, b.key ? String(b.key) : undefined, b.label ? String(b.label) : undefined));
+      case "add": return json(await addWallet(g, me.name, b.key ? String(b.key) : undefined, b.label ? String(b.label) : undefined));
       case "remove":
-        await removeWallet(me.name, b.slot); return json({ ok: true });
+        await removeWallet(g, me.name, b.slot); return json({ ok: true });
       case "reveal":
-        return json({ key: await revealWallet(me.name, b.slot) });
-      case "send": return json({ hash: await sendFromTeam(me.name, b.slot, { to: b.to ?? null, data: b.data, value: b.value }) });
-      case "save-ca": await saveCa(me.name, String(b.address || ""), b.name, b.symbol); return json({ ok: true });
-      case "clear-current": await clearCurrent(); return json({ ok: true });
-      case "del-ca": await deleteCa(String(b.address || "")); return json({ ok: true });
+        return json({ key: await revealWallet(g, me.name, b.slot) });
+      case "send": return json({ hash: await sendFromTeam(g, me.name, b.slot, { to: b.to ?? null, data: b.data, value: b.value }) });
+      case "save-ca": await saveCa(g, me.name, String(b.address || ""), b.name, b.symbol); return json({ ok: true });
+      case "clear-current": await clearCurrent(g); return json({ ok: true });
+      case "del-ca": await deleteCa(g, String(b.address || "")); return json({ ok: true });
       default: return json({ error: "Unknown." }, 404);
     }
   } catch (e) {

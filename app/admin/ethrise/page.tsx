@@ -20,9 +20,9 @@ export default async function EthRisePage() {
         <Link href="/admin" className="snp-back">← Admin</Link>
         <h1>🔷 EthRise — Ethereum only</h1>
         <p>Deploy a token, add liquidity on Uniswap V2, then remove it when you want. Ethereum only.</p>
-        <details><summary>How it works</summary><p>Connect your admin wallet on Ethereum. Deploy the token (optional buy and sell tax), add liquidity paid in the dollar coin (it&apos;s swapped to ETH for the token/ETH pool so the tax works), make the first buy, which opens trading, and remove the liquidity later from the same wallet. ETH is only used for gas.</p></details>
+        <details><summary>How it works</summary><p>Create or import a wallet below (it signs on the server, no wallet pop-up; only you can see it). Deploy the token (optional buy and sell tax), add liquidity paid in the dollar coin (it&apos;s swapped to ETH for the token/ETH pool so the tax works), make the first buy, which opens trading, and remove the liquidity later from the same wallet. ETH is only used for gas.</p></details>
       </div>
-      <AdminDirectPool mode="all" chain="ethereum" name="EthRise" />
+      <AdminDirectPool mode="all" chain="ethereum" name="EthRise" team />
     </div>
   );
 }
