@@ -1,4 +1,5 @@
 "use client";
+import { liqQuery } from "@/lib/desk-query";
 /**
  * ⚡ SniperBnbSol (net "bsc"): paste a BSC token, tick one or more BNB Chain wallets; they all buy with USDT the
  * moment PancakeSwap liquidity lands. 🎯 SniperLobbySol (net "solana"): the same for a Solana mint, through Jupiter,
@@ -20,7 +21,7 @@ const EXPL: Record<string, string> = { bsc: "https://bscscan.com/token/", ethere
 
 const SOL_RE = /[1-9A-HJ-NP-Za-km-z]{32,44}/;
 async function ask<T>(action: string, body: unknown): Promise<T> {
-  const r = await fetch(`/api/ai-futures/${action}?desk=liq`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/ai-futures/${action}${liqQuery()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Something went wrong.");
   return d as T;

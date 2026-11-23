@@ -1,4 +1,5 @@
 "use client";
+import { setDeskQuery } from "@/lib/desk-query";
 /**
  * Admin: AI Futures. A futures trader separate from the copy-trading bot: its own wallet, settings and trades.
  * Practice or Live (Hyperliquid), never above 3x, every trade with a stop-loss well before liquidation.
@@ -494,6 +495,7 @@ export default function AIFutures({ desk, net = "bsc", team = false }: { /** Sni
   const fxDesk = desk === "fx", earnDesk = desk === "earn", turboDesk = desk === "turbo", copyDesk = desk === "copy" || liqDesk, madDesk = desk === "mad";
   const snipeDesk = desk === "snipe" || copyDesk; // Sniper and Copy: spot coins from the shared Solana wallet
   DESK = desk ? `?desk=${desk}${team && desk === "liq" ? "&team=1" : ""}` : "";
+  setDeskQuery(DESK);
   const NAME = liqDesk ? SNIPER : copyDesk ? "Copy" : madDesk ? "Madness" : snipeDesk ? "Sniper" : turboDesk ? "Turbo" : earnDesk ? "Earn" : fxDesk ? "AI Forex" : "AI Futures";
   const TAG = liqDesk ? (v2Snipe ? `${NETNAME} only: paste a ${NETNAME} token, tick one or more wallets, and they all buy with ${net === "robinhood" ? "USDG" : "USDT"} the moment liquidity lands on Uniswap V2.` : solSnipe ? "Solana only: paste a Solana token, tick one or more wallets, and they all buy with USDT the moment it can be bought." : "BNB Chain only: paste a BSC token, tick one or more wallets, and they all buy the moment liquidity lands.")
     : copyDesk ? "Copies the wallets you paste: when they buy on BNB Chain, your wallets buy too."

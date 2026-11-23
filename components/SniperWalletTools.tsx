@@ -1,4 +1,5 @@
 "use client";
+import { liqQuery } from "@/lib/desk-query";
 /**
  * Sniper wallet card, kept simple: the address, its USDT and gas coin, and its snipe amount.
  * net "bsc" (SniperBnbSol): the BNB Chain address, USDT + BNB. net "solana" (SniperLobbySol): the wallet's Solana
@@ -17,7 +18,7 @@ const usd = (n: number) => `$${n >= 100 ? n.toLocaleString("en-US", { maximumFra
 const amt = (n: number) => (n >= 1 ? n.toLocaleString("en-US", { maximumFractionDigits: 4 }) : n > 0 ? n.toPrecision(4) : "0");
 
 async function ask<T>(action: string, body: unknown): Promise<T> {
-  const r = await fetch(`/api/ai-futures/${action}?desk=liq`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/ai-futures/${action}${liqQuery()}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || "Something went wrong.");
   return d as T;

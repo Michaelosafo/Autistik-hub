@@ -1,4 +1,5 @@
 "use client";
+import { liqQuery } from "@/lib/desk-query";
 /**
  * Copy desk (BNB Chain only): paste wallets to copy, add one or two of your own wallets (private keys) that buy with
  * their own BNB, and set the buy size and safety exits.
@@ -49,7 +50,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   const net = (netIn || "bsc") as "bsc" | "ethereum" | "base" | "arbitrum" | "solana" | "robinhood";
   const reveal = async (slot: number) => {
     if (!confirm(`Show wallet ${slot}'s private key? Anyone who sees it can take the money. Use it to import the wallet into Bitget, MetaMask or Trust.`)) return;
-    const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
+    const r = await fetch(`/api/ai-futures/copy-key-reveal${sniper ? liqQuery() : "?desk=copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { alert(j.error || "Couldn't show it."); return; }
     const copied = await navigator.clipboard?.writeText(j.key).then(() => true, () => false);
@@ -58,7 +59,7 @@ export default function CopyBsc({ s, keys, cfg, busy, act, set, sniper, held, pa
   /** Remove a wallet no matter what (open, stuck or rugged trades). Its key is shown first: it's deleted from here. */
   const remove = async (slot: number) => {
     if (!confirm(`Remove wallet ${slot}? It stops buying and selling right away, and any open trades on it are taken off the board (the coins stay in the wallet). Next you'll see its private key to save.`)) return;
-    const r = await fetch(`/api/ai-futures/copy-key-reveal?desk=${sniper ? "liq" : "copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
+    const r = await fetch(`/api/ai-futures/copy-key-reveal${sniper ? liqQuery() : "?desk=copy"}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slot }) });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j.key) {
       const copied = await navigator.clipboard?.writeText(j.key).then(() => true, () => false);
