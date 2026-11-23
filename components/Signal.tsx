@@ -31,6 +31,13 @@ const ROUTERS: { key: RouterKey; name: string; note: string }[] = [
   { key: "okx", name: "OKX DEX", note: "Swaps on one network" },
 ];
 const native = (c: ChainKey): Tok => ({ chain: c, contract: "", symbol: CH[c].native, name: CH[c].native });
+const USDT_AT: Record<ChainKey, string> = {
+  bnb: "0x55d398326f99059fF775485246999027B3197955", eth: "0xdAC17F958D2ee523a2206206994597C13D831ec7", base: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
+  arbitrum: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", matic: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", sol: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+};
+const usdt = (c: ChainKey): Tok => ({ chain: c, contract: USDT_AT[c], symbol: "USDT", name: "Tether USD" });
+type Bal = { chain: ChainKey; symbol: string; contract: string; amount: string };
+const fmtAmt = (v: string) => Number(v).toLocaleString(undefined, { maximumFractionDigits: Number(v) >= 1 ? 4 : 8 });
 
 async function api<T = any>(action: string, body: object): Promise<T> {
   const r = await fetch("/api/signal", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, ...body }) });
@@ -89,6 +96,7 @@ function TokenPick({ label, chain, tok, onChain, onTok }: { label: string; chain
         </select>
         <span className="btn small" aria-live="polite">{tok.symbol}{tok.contract ? ` · ${short(tok.contract)}` : ""}</span>
         {tok.contract && <button className="btn small" onClick={() => onTok(native(chain))}>Use {CH[chain].native}</button>}
+        {tok.contract.toLowerCase() !== USDT_AT[chain].toLowerCase() && <button className="btn small" onClick={() => onTok(usdt(chain))}>Use USDT</button>}
       </div>
       <input placeholder="Search a token or paste its address" value={q} onChange={(e) => setQ(e.target.value)} />
       {list.length > 0 && (
@@ -133,6 +141,24 @@ export default function Signal() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err" | "info"; text: string; links?: { label: string; href: string }[] } | null>(null);
 
   const fromAddr = fromChain === "sol" ? solAddr : evmAddr;
+  // Your funds: the chain's own coin and USDT on every network, read as soon as a wallet is connected.
+  const [bals, setBals] = useState<Bal[] | null>(null);
+  const [balKey, setBalKey] = useState(0);
+  const [picked, setPicked] = useState<Bal | null>(null);
+  useEffect(() => {
+    if (!evmAddr && !solAddr) { setBals(null); return; }
+    let on = true; setBals(null);
+    api<{ list: Bal[] }>("balances", { evm: evmAddr, sol: solAddr }).then((d) => { if (on) setBals(d.list); }).catch(() => { if (on) setBals([]); });
+    return () => { on = false; };
+  }, [evmAddr, solAddr, balKey]);
+  function pickFunds(b: Bal) {
+    setPicked(b); setMsg(null);
+    setFromChain(b.chain); setFromTok(b.contract ? (b.symbol === "USDT" ? usdt(b.chain) : { chain: b.chain, contract: b.contract, symbol: b.symbol }) : native(b.chain));
+    setAmount(b.contract ? b.amount : "");
+    if (router === "okx") setRouter("bitget");
+    setToTok(null);
+  }
+  function bridgeTo(c: ChainKey) { setToChain(c); setToTok(usdt(c)); }
   const defReceive = toChain === "sol" ? solAddr : evmAddr;
   useEffect(() => { if (!receiveTouched) setReceive(defReceive); }, [defReceive, receiveTouched]);
   useEffect(() => { setRoutes([]); }, [fromChain, toChain, fromTok, toTok, amount, receive, router]);
@@ -290,9 +316,45 @@ export default function Signal() {
         </div>
       </div>
 
+      {(evmAddr || solAddr) && (
+        <div className="card stack">
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <b>Your funds</b>
+            <button className="btn small" onClick={() => setBalKey((n) => n + 1)} disabled={bals === null}>Refresh</button>
+          </div>
+          {bals === null ? <span className="muted">Checking your wallet on every network…</span>
+            : !bals.length ? <span className="muted">No USDT or coins found on {evmAddr && solAddr ? "these wallets" : "this wallet"}.{!solAddr ? " Connect a Solana wallet to see Solana too." : ""}</span>
+            : <div className="stack" style={{ gap: 6 }}>
+                {bals.map((b) => (
+                  <button key={b.chain + b.symbol} type="button" className="btn" aria-pressed={picked?.chain === b.chain && picked?.symbol === b.symbol}
+                    style={{ justifyContent: "space-between", outline: picked?.chain === b.chain && picked?.symbol === b.symbol ? "2px solid currentColor" : undefined }}
+                    onClick={() => pickFunds(b)} disabled={!!busy}>
+                    <span>{b.symbol} <span className="muted">· {CH[b.chain].name}</span></span>
+                    <b>{fmtAmt(b.amount)}</b>
+                  </button>
+                ))}
+                <small className="muted">Tap one to bridge it.</small>
+              </div>}
+          {picked && (
+            <div className="stack" style={{ gap: 6 }}>
+              <b>Bridge {picked.symbol} from {CH[picked.chain].name} to</b>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                {(Object.keys(CH) as ChainKey[]).filter((c) => c !== picked.chain).map((c) => (
+                  <button key={c} type="button" className={toChain === c && toTok?.symbol === "USDT" ? "btn small primary" : "btn small"} onClick={() => bridgeTo(c)} disabled={!!busy}>USDT · {CH[c].name}</button>
+                ))}
+              </div>
+              <small className="muted">Or pick any token below under "You receive".</small>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="card stack">
         <TokenPick label="You pay" chain={fromChain} tok={fromTok} onChain={(c) => { setFromChain(c); setFromTok(native(c)); }} onTok={setFromTok} />
-        <input inputMode="decimal" placeholder={`Amount of ${fromTok.symbol}`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} />
+        <div className="row" style={{ gap: 8 }}>
+          <input style={{ flex: 1 }} inputMode="decimal" placeholder={`Amount of ${fromTok.symbol}`} value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))} />
+          {(() => { const b = bals?.find((x) => x.chain === fromChain && x.contract.toLowerCase() === fromTok.contract.toLowerCase()); return b ? <button type="button" className="btn small" onClick={() => setAmount(b.contract ? b.amount : String(Math.max(0, Number(b.amount) - (fromChain === "sol" ? 0.01 : fromChain === "eth" ? 0.003 : 0.002))))}>Max {fmtAmt(b.amount)}</button> : null; })()}
+        </div>
       </div>
 
       <div className="card stack">

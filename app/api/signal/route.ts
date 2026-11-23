@@ -18,10 +18,60 @@ const okToken = (chain: string, c: unknown) => c === "" || okAddr(chain, c);
 const amt = (v: unknown) => { const s = String(v ?? "").trim(); return /^\d+(\.\d+)?$/.test(s) && Number(s) > 0 ? s : null; };
 const str = (v: unknown, max = 24) => String(v ?? "").slice(0, max);
 
+// ---- balances: the chain's own coin and USDT on every network Signal supports (read straight from public nodes)
+const USDT: Record<string, { c: string; d: number }> = {
+  bnb: { c: "0x55d398326f99059fF775485246999027B3197955", d: 18 }, eth: { c: "0xdAC17F958D2ee523a2206206994597C13D831ec7", d: 6 },
+  base: { c: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", d: 6 }, arbitrum: { c: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9", d: 6 },
+  matic: { c: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F", d: 6 }, sol: { c: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", d: 6 },
+};
+const NATIVE: Record<string, { s: string; d: number }> = { bnb: { s: "BNB", d: 18 }, eth: { s: "ETH", d: 18 }, base: { s: "ETH", d: 18 }, arbitrum: { s: "ETH", d: 18 }, matic: { s: "POL", d: 18 }, sol: { s: "SOL", d: 9 } };
+const RPC: Record<string, string[]> = {
+  bnb: [process.env.NEXT_PUBLIC_BSC_RPC || "", "https://bsc-dataseed.bnbchain.org", "https://bsc-rpc.publicnode.com"],
+  eth: [process.env.NEXT_PUBLIC_ETHEREUM_RPC || "", "https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com"],
+  base: [process.env.NEXT_PUBLIC_BASE_RPC || "", "https://mainnet.base.org", "https://base-rpc.publicnode.com"],
+  arbitrum: [process.env.NEXT_PUBLIC_ARBITRUM_RPC || "", "https://arb1.arbitrum.io/rpc", "https://arbitrum-one-rpc.publicnode.com"],
+  matic: ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com"],
+  sol: [process.env.SOLANA_RPC_URL || "", process.env.NEXT_PUBLIC_SOLANA_RPC || "", "https://solana-rpc.publicnode.com", "https://api.mainnet-beta.solana.com"],
+};
+async function rpc(chain: string, method: string, params: unknown[]) {
+  for (const url of RPC[chain].filter(Boolean)) {
+    try {
+      const r = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }), cache: "no-store", signal: AbortSignal.timeout(6000) });
+      const d = await r.json();
+      if (d && !d.error && d.result !== undefined) return d.result;
+    } catch { /* next node */ }
+  }
+  throw new Error("node unreachable");
+}
+const human = (raw: bigint, dec: number) => { const s = raw.toString().padStart(dec + 1, "0"); const i = s.slice(0, -dec), f = s.slice(-dec).replace(/0+$/, ""); return f ? `${i}.${f}` : i; };
+async function balancesFor(evm: string, sol: string) {
+  const jobs: Promise<{ chain: string; symbol: string; contract: string; amount: string } | null>[] = [];
+  for (const chain of ["bnb", "eth", "base", "arbitrum", "matic"]) {
+    if (!evm) break;
+    jobs.push(rpc(chain, "eth_getBalance", [evm, "latest"]).then((h) => ({ chain, symbol: NATIVE[chain].s, contract: "", amount: human(BigInt(h), 18) })).catch(() => null));
+    jobs.push(rpc(chain, "eth_call", [{ to: USDT[chain].c, data: "0x70a08231" + evm.toLowerCase().replace(/^0x/, "").padStart(64, "0") }, "latest"])
+      .then((h) => ({ chain, symbol: "USDT", contract: USDT[chain].c, amount: human(BigInt(h === "0x" ? "0x0" : h), USDT[chain].d) })).catch(() => null));
+  }
+  if (sol) {
+    jobs.push(rpc("sol", "getBalance", [sol]).then((r) => ({ chain: "sol", symbol: "SOL", contract: "", amount: human(BigInt(r?.value ?? 0), 9) })).catch(() => null));
+    jobs.push(rpc("sol", "getTokenAccountsByOwner", [sol, { mint: USDT.sol.c }, { encoding: "jsonParsed" }]).then((r) => {
+      let raw = 0n;
+      for (const a of r?.value || []) raw += BigInt(a?.account?.data?.parsed?.info?.tokenAmount?.amount || "0");
+      return { chain: "sol", symbol: "USDT", contract: USDT.sol.c, amount: human(raw, 6) };
+    }).catch(() => null));
+  }
+  return (await Promise.all(jobs)).filter((x): x is NonNullable<typeof x> => !!x && Number(x.amount) > 0);
+}
+
 export async function POST(req: Request) {
   if (!(await adminState()).owner) return json({ error: "Not found." }, 404);
   const b = await req.json().catch(() => ({}));
   try {
+    if (b.action === "balances") {
+      const evm = /^0x[0-9a-fA-F]{40}$/.test(String(b.evm ?? "")) ? String(b.evm) : "";
+      const sol = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(b.sol ?? "")) ? String(b.sol) : "";
+      return json({ list: await balancesFor(evm, sol) });
+    }
     if (b.action === "search") {
       const keyword = str(b.keyword, 64).trim();
       if (!keyword) return json({ list: [] });
