@@ -63,6 +63,7 @@ export default function SportBoard() {
   const [fixturesError, setFixturesError] = useState("");
   const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
   const [res, setRes] = useState<any>(null);
+  const [quickPicksOpen, setQuickPicksOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hist, setHist] = useState<any[]>([]);
@@ -99,7 +100,7 @@ export default function SportBoard() {
     const date = new Date(f.date).toISOString().slice(0, 10);
     setHome(h); setAway(a); setMatchDate(date); setRes(null); setErr("");
     setBusy(true);
-    try { setRes(await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name })); loadHist(); }
+    try { setRes(await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name })); setQuickPicksOpen(true); loadHist(); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -109,7 +110,7 @@ export default function SportBoard() {
   async function run() {
     if (!home || !away) return;
     setBusy(true); setErr(""); setRes(null);
-    try { setRes(await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name })); loadHist(); }
+    try { setRes(await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name })); setQuickPicksOpen(true); loadHist(); }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   }
@@ -314,16 +315,21 @@ export default function SportBoard() {
             <div className="notice">
               <b>Value bet guide:</b> Fair odds = 1 ÷ our probability. Example: if our model gives a team 80% chance (fair odds ~1.25) but a bookmaker offers 1.50, that is good value (bookie underestimates the chance). If the bookie offers lower than fair odds, the option is poor value / more likely to lose relative to the price. Always compare the fair odds shown here to whatever bookmaker you use.
             </div>
-            <div className="sb-top">
-              {m.top10.map((o: any, i: number) => (
-                <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
-                  <span className="sb-rank">{i + 1}</span>
-                  <span className="sb-name">{o.name}</span>
-                  <b>{o.p}%</b>
-                  <small className="muted">fair {o.fair}</small>
-                </div>
-              ))}
-            </div>
+            <details open={quickPicksOpen} onToggle={(e) => setQuickPicksOpen((e.currentTarget as HTMLDetailsElement).open)}>
+              <summary>Quick picks · 3 selections</summary>
+              <small className="muted">Automatically selected from this match's analysis using your three requested probability bands.</small>
+              <div className="sb-top">
+                {m.top10.map((o: any, i: number) => (
+                  <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
+                    <span className="sb-rank">{i + 1}</span>
+                    <span className="sb-name">{i === 0 ? "80–90% · " : i === 1 ? "Third green from bottom · " : "Lowest yellow · "}{o.name}</span>
+                    <b>{o.p}%</b>
+                    <small className="muted">fair {o.fair}</small>
+                  </div>
+                ))}
+                {m.top10.length < 3 && <small className="muted">The model did not produce a selection in every requested band for this match.</small>}
+              </div>
+            </details>
             <section className="stack">
               <b>Value checker · compare prices independently</b>
               <small className="muted">Enter the decimal price you can actually get for any selection. The model probability above is calculated without bookmaker odds. Positive expected value is a mathematical edge estimate, not a guarantee; only consider it after enough historical model validation.</small>
