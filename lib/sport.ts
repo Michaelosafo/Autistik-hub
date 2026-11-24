@@ -157,7 +157,7 @@ export function model(lh: number, la: number) {
   // Exactly three quick picks for the match screen:
   // 1) lowest probability in the 80–90% band,
   // 2) third green pick counting upward from the bottom of the 65–79.9% band,
-  // 3) lowest yellow pick in the 45–64.9% band.
+  // 3) the last yellow selection in the analysis order (45–64.9% band).
   const highBand = ranked.filter((x) => x.p >= 80 && x.p <= 90);
   const greenBand = ranked.filter((x) => x.p >= 65 && x.p < 80);
   const yellowBand = ranked.filter((x) => x.p >= 45 && x.p < 65);
