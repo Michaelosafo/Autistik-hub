@@ -162,10 +162,13 @@ export function model(lh: number, la: number) {
   const highBand = ranked.filter((x) => x.p >= 80 && x.p <= 90);
   const greenBand = ranked.filter((x) => x.p >= 65 && x.p < 80);
   const yellowBand = ranked.filter((x) => x.p >= 45 && x.p < 65);
+  const thirdGreen = greenBand.length >= 3 ? greenBand[greenBand.length - 3] : undefined;
+  const secondGreen = greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined;
+  const sameGreenPick = !!thirdGreen && !!secondGreen && thirdGreen.name === secondGreen.name;
   const top10 = [
     { pick: highBand[highBand.length - 1], quickLabel: "80–90% high pick" },
-    { pick: greenBand.length >= 3 ? greenBand[greenBand.length - 3] : undefined, quickLabel: "Third green from bottom" },
-    { pick: greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined, quickLabel: "Second green from bottom" },
+    { pick: thirdGreen, quickLabel: sameGreenPick ? "Third and second green from bottom — same selection" : "Third green from bottom" },
+    { pick: sameGreenPick ? undefined : secondGreen, quickLabel: "Second green from bottom" },
     { pick: yellowBand[yellowBand.length - 1], quickLabel: "Last yellow in analysis" },
   ].filter((entry) => entry.pick).map((entry) => ({ ...entry.pick, quickLabel: entry.quickLabel }));
   return {
