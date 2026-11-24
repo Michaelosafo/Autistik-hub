@@ -158,8 +158,8 @@ export function model(lh: number, la: number) {
   // show every high-confidence pick (80%+), then the next 3 green picks (65–79.9%),
   // then the next 2 yellow picks (45–64.9%). Each group remains probability-ranked.
   const highPicks = ranked.filter((x) => x.p >= 80);
-  const greenPicks = ranked.filter((x) => x.p >= 65 && x.p < 80).slice(0, 3);
-  const yellowPicks = ranked.filter((x) => x.p >= 45 && x.p < 65).slice(0, 2);
+  const greenPicks = ranked.filter((x) => x.p >= 65 && x.p < 80).slice(-3);
+  const yellowPicks = ranked.filter((x) => x.p >= 45 && x.p < 65).slice(-2);
   const top10 = [...highPicks, ...greenPicks, ...yellowPicks];
   return {
     xg: { home: +lh.toFixed(2), away: +la.toFixed(2) },
