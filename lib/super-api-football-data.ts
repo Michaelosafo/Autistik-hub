@@ -55,9 +55,25 @@ export async function matchesOnDate(date: string) {
     .sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
 }
 export async function teamFixtureChoices(teamId: number) {
-  const from = new Date(Date.now()-560*86400_000).toISOString().slice(0,10);
-  const to = new Date(Date.now()+180*86400_000).toISOString().slice(0,10);
-  const all = await api("/fixtures?team="+teamId+"&from="+from+"&to="+to+"&timezone=UTC", 3*3600_000);
+  // API-Football requires a season whenever the team filter is used on /fixtures.
+  // Resolve the club's current league season, then check it and the previous
+  // season so the board can still show the latest completed match near a season turn.
+  const leagueRows = await api("/leagues?team="+teamId+"&current=true", 24*3600_000);
+  const leaguePick = leagueRows.find((x:any)=>x.league?.type==="League") || leagueRows[0];
+  const currentSeason = Number((leaguePick?.seasons || []).find((s:any)=>s.current)?.year || (leaguePick?.seasons || [])[0]?.year);
+  if (!Number.isInteger(currentSeason) || currentSeason < 1900) {
+    throw new Error("API-Football could not determine this team's current season.");
+  }
+  const seasons = [currentSeason, currentSeason - 1];
+  const results = await Promise.all(seasons.map(async (season) => {
+    try {
+      return await api("/fixtures?team="+teamId+"&season="+season+"&timezone=UTC", 3*3600_000);
+    } catch (error) {
+      if (season === currentSeason) throw error;
+      return [];
+    }
+  }));
+  const all = results.flat();
   const now=Date.now();
   const last=all.filter((f:any)=>finished(f)&&Date.parse(f.fixture.date)<now).sort((a:any,b:any)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date))[0];
   const next=all.filter((f:any)=>!finished(f)&&Date.parse(f.fixture.date)>=now).sort((a:any,b:any)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date))[0];
