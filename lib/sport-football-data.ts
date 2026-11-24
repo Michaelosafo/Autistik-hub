@@ -161,7 +161,15 @@ export async function analyse(homeId: number, awayId: number) {
 }
 
 export async function savePrediction(row: Record<string, unknown>) {
-  await sb().from("sport_predictions").insert(row);
+  const { data, error } = await sb().from("sport_predictions").insert(row).select("id").single();
+  if (error) throw new Error(error.message);
+  return data?.id ?? null;
+}
+export async function saveOdds(id: number, selections: unknown, highestChance: unknown) {
+  if (!Number.isInteger(id) || id <= 0) throw new Error("Missing prediction history ID.");
+  const safeSelections = Array.isArray(selections) ? selections.slice(0, 60) : [];
+  const { error } = await sb().from("sport_predictions").update({ note: JSON.stringify({ bookmakerComparison: safeSelections, highestChance }) }).eq("id", id);
+  if (error) throw new Error(error.message);
 }
 export async function history() {
   const { data } = await sb().from("sport_predictions").select("*").order("id", { ascending: false }).limit(30);
