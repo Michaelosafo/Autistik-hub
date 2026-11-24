@@ -140,7 +140,7 @@ async function matchOnDate(homeId: number, awayId: number, date: string) {
   const dateTo = next.toISOString().slice(0, 10);
   const data = await api("/teams/" + homeId + "/matches?dateFrom=" + date + "&dateTo=" + dateTo + "&limit=100", 12 * 3600_000);
   return (data?.matches || []).find((m: Match) =>
-    m.homeTeam?.id === homeId && m.awayTeam?.id === awayId && m.status === "FINISHED"
+    m.homeTeam?.id === homeId && m.awayTeam?.id === awayId && m.status === "FINISHED" && String(m.utcDate || "").slice(0, 10) === date
   ) || null;
 }
 
