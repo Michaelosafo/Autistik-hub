@@ -163,11 +163,11 @@ export function model(lh: number, la: number) {
   const greenBand = ranked.filter((x) => x.p >= 65 && x.p < 80);
   const yellowBand = ranked.filter((x) => x.p >= 45 && x.p < 65);
   const top10 = [
-    highBand[highBand.length - 1],
-    greenBand.length >= 3 ? greenBand[greenBand.length - 3] : undefined,
-    greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined,
-    yellowBand[yellowBand.length - 1],
-  ].filter(Boolean);
+    { pick: highBand[highBand.length - 1], quickLabel: "80–90% high pick" },
+    { pick: greenBand.length >= 3 ? greenBand[greenBand.length - 3] : undefined, quickLabel: "Third green from bottom" },
+    { pick: greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined, quickLabel: "Second green from bottom" },
+    { pick: yellowBand[yellowBand.length - 1], quickLabel: "Last yellow in analysis" },
+  ].filter((entry) => entry.pick).map((entry) => ({ ...entry.pick, quickLabel: entry.quickLabel }));
   return {
     xg: { home: +lh.toFixed(2), away: +la.toFixed(2) },
     home: pct(pH), draw: pct(pD), away: pct(pA),
