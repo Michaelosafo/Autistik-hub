@@ -156,16 +156,16 @@ export function model(lh: number, la: number) {
     .sort((a, b) => b.p - a.p);
   // Four quick picks for the match screen:
   // 1) lowest probability in the 80–90% band,
-  // 2) second green pick counting upward from the bottom,
-  // 3) third green pick counting upward from the bottom,
+  // 2) third green pick counting upward from the bottom,
+  // 3) second green pick counting upward from the bottom,
   // 4) last yellow selection in the analysis order.
   const highBand = ranked.filter((x) => x.p >= 80 && x.p <= 90);
   const greenBand = ranked.filter((x) => x.p >= 65 && x.p < 80);
   const yellowBand = ranked.filter((x) => x.p >= 45 && x.p < 65);
   const top10 = [
     highBand[highBand.length - 1],
-    greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined,
     greenBand.length >= 3 ? greenBand[greenBand.length - 3] : undefined,
+    greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined,
     yellowBand[yellowBand.length - 1],
   ].filter(Boolean);
   return {
