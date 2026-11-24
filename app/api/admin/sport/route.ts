@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { analyse, history, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices } from "@/lib/sport-football-data";
+import { analyse, history, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
 import { getGhanaMatchOdds } from "@/lib/oddsrelay";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,7 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
+      case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
