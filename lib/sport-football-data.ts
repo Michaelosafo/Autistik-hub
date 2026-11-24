@@ -46,6 +46,27 @@ export async function searchTeams(q: string) {
 }
 
 type Match = any;
+
+/** Upcoming/current fixtures plus the team's most recent completed matches for one-click selection. */
+export async function teamFixtureChoices(teamId: number) {
+  const data = await api("/teams/" + teamId + "/matches?limit=30", 5 * 60_000);
+  const now = Date.now();
+  const matches = (data?.matches || []).filter((m: any) =>
+    ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status) &&
+    m.homeTeam?.id && m.awayTeam?.id && m.utcDate
+  );
+  const upcoming = matches.filter((m: any) => m.status !== "FINISHED" && Date.parse(m.utcDate) >= now)
+    .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate)).slice(0, 12);
+  const recent = matches.filter((m: any) => finished(m))
+    .sort((a: any, b: any) => Date.parse(b.utcDate) - Date.parse(a.utcDate)).slice(0, 8);
+  return [...upcoming, ...recent].map((m: any) => ({
+    id: m.id, date: m.utcDate, status: m.status, competition: m.competition?.name || "",
+    home: { id: m.homeTeam.id, name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
+    away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
+    score: finished(m) ? { home: m.score.fullTime.home, away: m.score.fullTime.away } : null,
+  }));
+}
+
 const finished = (m: Match) => m?.status === "FINISHED" && Number.isFinite(m?.score?.fullTime?.home) && Number.isFinite(m?.score?.fullTime?.away);
 const sideGoals = (m: Match, teamId: number) => m.homeTeam?.id === teamId
   ? { gf: m.score.fullTime.home, ga: m.score.fullTime.away, home: true }
