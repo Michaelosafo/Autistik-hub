@@ -220,6 +220,7 @@ export default function SportBoard() {
       </header>
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
+      {!res && (
       <section className="card stack">
         <b>Today's matches · Championship & Champions League</b>
         <small className="muted">Select any fixture to load its prediction shortlist automatically.</small>
@@ -261,6 +262,9 @@ export default function SportBoard() {
         </div>
       </section>
 
+      )}
+
+      {!res && (
       <section className="card stack">
         <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
@@ -271,7 +275,9 @@ export default function SportBoard() {
         {err && <div className="notice warn">{err}</div>}
       </section>
 
-            <section className="card stack">\n        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
+            )}
+
+      <section className="card stack">\n        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
         <small className="muted">Bookmaker prices are compared with this board's model probabilities. Value calculations use the best bookmaker back price for each 1X2 outcome, not exchange lay prices.</small>
         <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching Ghana bookmaker odds…" : "Fetch Ghana bookmaker odds"}</button>
         {oddsError && <div className="notice warn">{oddsError}</div>}
@@ -313,21 +319,8 @@ export default function SportBoard() {
             {res.historical && !res.actual && <div className="notice warn">No completed fixture for these teams was found on this date. The historical model estimate is shown without an actual result.</div>}
             {res.historical && <small className="muted">Historical estimates use the available pre-date match results. This data source does not provide archived bookmaker odds or full match event statistics; bookmaker prices must be entered manually if you have them.</small>}
             {res.actual && <div className="stack"><b>Actual goals</b><div className="sb-table"><div className="sb-tr"><span>Home goals</span><b>{res.actual.homeGoals}</b><span>{home?.name}</span></div><div className="sb-tr"><span>Away goals</span><b>{res.actual.awayGoals}</b><span>{away?.name}</span></div><div className="sb-tr"><span>Actual outcome</span><b>{res.actual.homeGoals > res.actual.awayGoals ? "Home" : res.actual.homeGoals < res.actual.awayGoals ? "Away" : "Draw"}</b><span>Final score</span></div></div></div>}
-            <div className="sb-xg"><span>Expected goals</span><b>{m.xg.home}</b><span>–</span><b>{m.xg.away}</b></div>
-            <ul className="sb-verdict">{res.verdict.map((x: string) => <li key={x}>{x}</li>)}</ul>
-          </section>
-          <section className="card stack">
-            <b>🎯 Predictions ranked by chance</b>
-            <div className="notice">
-              <b>Highest chance:</b> {highestChance?.name || "–"} — {highestChance?.p ?? "–"}% (fair odds {highestChance?.fair ?? "–"}).
-              <br /><b>Best value at the odds you enter:</b> {bestValue ? `${bestValue.name} — EV ${(bestValue.ev * 100).toFixed(1)}%, bookmaker ${bestValue.odds.toFixed(2)} vs fair ${bestValue.fair}` : "No positive expected-value selection entered yet."}
-            </div>
-            <small className="muted">Generated purely from this board's own model (Poisson expected goals from home/away goal strengths and recent form). Not based on any bookmaker odds.</small>
-            <div className="notice">
-              <b>Value bet guide:</b> Fair odds = 1 ÷ our probability. Example: if our model gives a team 80% chance (fair odds ~1.25) but a bookmaker offers 1.50, that is good value (bookie underestimates the chance). If the bookie offers lower than fair odds, the option is poor value / more likely to lose relative to the price. Always compare the fair odds shown here to whatever bookmaker you use.
-            </div>
             <details open={quickPicksOpen} onToggle={(e) => setQuickPicksOpen((e.currentTarget as HTMLDetailsElement).open)}>
-              <summary>Quick picks · 3 selections</summary>
+              <summary>Quick picks · 4 selections</summary>
               <small className="muted">Automatically selected from this match's analysis using your three requested probability bands.</small>
               <div className="sb-top">
                 {m.top10.map((o: any, i: number) => (
@@ -341,6 +334,20 @@ export default function SportBoard() {
                 {m.top10.length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
               </div>
             </details>
+            <div className="sb-xg"><span>Expected goals</span><b>{m.xg.home}</b><span>–</span><b>{m.xg.away}</b></div>
+            <ul className="sb-verdict">{res.verdict.map((x: string) => <li key={x}>{x}</li>)}</ul>
+          </section>
+          <section className="card stack">
+            <b>🎯 Predictions ranked by chance</b>
+            <div className="notice">
+              <b>Highest chance:</b> {highestChance?.name || "–"} — {highestChance?.p ?? "–"}% (fair odds {highestChance?.fair ?? "–"}).
+              <br /><b>Best value at the odds you enter:</b> {bestValue ? `${bestValue.name} — EV ${(bestValue.ev * 100).toFixed(1)}%, bookmaker ${bestValue.odds.toFixed(2)} vs fair ${bestValue.fair}` : "No positive expected-value selection entered yet."}
+            </div>
+            <small className="muted">Generated purely from this board's own model (Poisson expected goals from home/away goal strengths and recent form). Not based on any bookmaker odds.</small>
+            <div className="notice">
+              <b>Value bet guide:</b> Fair odds = 1 ÷ our probability. Example: if our model gives a team 80% chance (fair odds ~1.25) but a bookmaker offers 1.50, that is good value (bookie underestimates the chance). If the bookie offers lower than fair odds, the option is poor value / more likely to lose relative to the price. Always compare the fair odds shown here to whatever bookmaker you use.
+            </div>
+
             <section className="stack">
               <b>Value checker · compare prices independently</b>
               <small className="muted">Enter the decimal price you can actually get for any selection. The model probability above is calculated without bookmaker odds. Positive expected value is a mathematical edge estimate, not a guarantee; only consider it after enough historical model validation.</small>
