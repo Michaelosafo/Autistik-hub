@@ -70,6 +70,29 @@ export async function todayCompetitionMatches() {
     }));
 }
 
+/** Completed fixtures played on one selected calendar date, with verified full-time scores. */
+export async function matchesOnDate(date: string) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
+    throw new Error("Choose a valid match date.");
+  }
+  const next = new Date(date + "T00:00:00Z");
+  next.setUTCDate(next.getUTCDate() + 1);
+  const dateTo = next.toISOString().slice(0, 10);
+  const data = await api("/matches?dateFrom=" + date + "&dateTo=" + dateTo + "&limit=500", 30 * 60_000);
+  return (data?.matches || [])
+    .filter((m: any) => finished(m) && m.homeTeam?.id && m.awayTeam?.id && m.utcDate)
+    .sort((x: any, y: any) => Date.parse(x.utcDate) - Date.parse(y.utcDate))
+    .map((m: any) => ({
+      id: m.id,
+      date: m.utcDate,
+      status: m.status,
+      competition: m.competition?.name || "Football",
+      home: { id: m.homeTeam.id, name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
+      away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
+      score: { home: m.score.fullTime.home, away: m.score.fullTime.away },
+    }));
+}
+
 /** Return exactly the latest completed match and the next scheduled fixture for one-click analysis. */
 export async function teamFixtureChoices(teamId: number) {
   // football-data.org rejects date windows longer than 750 days.
@@ -103,7 +126,7 @@ const sideGoals = (m: Match, teamId: number) => m.homeTeam?.id === teamId
 
 async function teamMatches(teamId: number, before?: string) {
   const cutoff = before ? new Date(before) : new Date();
-  const from = new Date(cutoff.getTime() - 370 * 86400_000).toISOString().slice(0, 10);
+  const from = new Date(cutoff.getTime() - 700 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(cutoff.getTime() + 86400_000).toISOString().slice(0, 10);
   const query = before ? `?dateFrom=${from}&dateTo=${to}&limit=100` : "?status=FINISHED&limit=30";
   const data = await api("/teams/" + teamId + "/matches" + query, before ? 12 * 3600_000 : 3 * 3600_000);
@@ -190,11 +213,15 @@ const formPoints = (f: string) => {
 export async function analyse(homeId: number, awayId: number, matchDate?: string) {
   const cutoff = matchDate ? new Date(matchDate + "T00:00:00Z") : new Date();
   if (Number.isNaN(cutoff.getTime())) throw new Error("Invalid match date.");
-  const historical = !!matchDate && cutoff.getTime() < Date.now() - 86400_000;
-  const [hm, am, actualMatch] = await Promise.all([
+  // Look up the fixture first so a completed game from earlier today is treated
+  // as historical too, rather than using statistics that include the result.
+  const actualMatch = matchDate ? await matchOnDate(homeId, awayId, matchDate) : null;
+  const dateIsPast = !!matchDate && cutoff.getTime() < new Date().setUTCHours(0, 0, 0, 0);
+  const kickoffIsPast = !!actualMatch && Date.parse(actualMatch.utcDate) < Date.now();
+  const historical = dateIsPast || kickoffIsPast;
+  const [hm, am] = await Promise.all([
     teamMatches(homeId, historical ? matchDate : undefined),
     teamMatches(awayId, historical ? matchDate : undefined),
-    historical ? matchOnDate(homeId, awayId, matchDate!) : Promise.resolve(null),
   ]);
   if (!hm.length || !am.length) throw new Error("Not enough completed match data for one of these teams on the free data plan.");
   const h = summarise(homeId, hm), a = summarise(awayId, am);
