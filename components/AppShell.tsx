@@ -14,7 +14,7 @@ import NetIcon from "@/components/connect/NetIcon";
 import { NETWORKS, TOP_NETWORKS, TOP_WALLETS, disconnectSol, disconnectWallet, getState, netOf, pickWallet, restoreSol, restoreWallet, setNetwork, subscribe } from "@/lib/connect";
 
 /** Pages that open inside the App (the trading interface). Everything else is the website. */
-export const APP_PATHS = ["/app", "/mood", "/chats", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena", "/hyperfocus", "/dice", "/roll"];
+export const APP_PATHS = ["/app", "/mood", "/chats", "/spaces", "/board", "/swap", "/wallet", "/stake", "/susu", "/rewards", "/lockers", "/liquidity", "/analytics", "/momentum", "/launchpad", "/trade", "/perps", "/pro", "/arena", "/hyperfocus", "/dice", "/roll", "/play"];
 export const isAppPath = (p: string) => APP_PATHS.some((a) => p === a || p.startsWith(a + "/"));
 
 type Item = { href: string; name: string; note?: string; icon?: string };
@@ -44,7 +44,8 @@ const MENU: { name: string; icon: string; tip: string; match: string[]; items: I
     { href: "/perps", name: "Perpetuals", note: "Long or short with leverage", icon: "i-trend" },
   ] },
   // Play: the games.
-  { name: "Play", icon: "i-ball", tip: "Race in Hyperfocus GP or roll Dice", match: ["/hyperfocus", "/dice", "/roll"], items: [
+  { name: "Tik Play", icon: "i-ball", tip: "All the games: Hyperfocus GP, Roll the Dice, Dice", match: ["/play", "/hyperfocus", "/dice", "/roll"], items: [
+    { href: "/play", name: "All games", note: "Every AUTISTIK game in one place", icon: "i-ball" },
     { href: "/hyperfocus#race", name: "Hyperfocus GP", note: "Race every holder in 3D, with friends, or play to win", icon: "i-ball" },
     { href: "/dice", name: "Dice", note: "Put chips in the pot, highest roll takes it all (play chips)", icon: "i-ball" },
     { href: "/roll", name: "Roll the Dice", note: "Real AUTISTIK: $0.50 in, highest roll takes the pot (hold $10, 18+)", icon: "i-ball" },
@@ -84,7 +85,7 @@ const BOTTOM: { href: string; name: string; icon: string; match: string[]; main?
   { href: "/board", name: "Board", icon: "i-rocket", match: ["/board", "/launchpad", "/momentum", "/analytics", "/pro"] },
   { href: "/lockers", name: "Lock", icon: "i-safe", match: ["/lockers", "/liquidity", "/stake", "/susu", "/rewards"] },
   { href: "/swap", name: "Swap", icon: "i-trend", match: ["/swap", "/perps", "/trade"], main: true },
-  { href: "/hyperfocus#race", name: "Play", icon: "i-ball", match: ["/hyperfocus", "/dice", "/roll"] },
+  { href: "/play", name: "Tik Play", icon: "i-ball", match: ["/play", "/hyperfocus", "/dice", "/roll"] },
   { href: "/wallet", name: "Wallet", icon: "i-wallet", match: ["/wallet"] },
 ];
 
