@@ -51,9 +51,24 @@ const sideGoals = (m: Match, teamId: number) => m.homeTeam?.id === teamId
   ? { gf: m.score.fullTime.home, ga: m.score.fullTime.away, home: true }
   : { gf: m.score.fullTime.away, ga: m.score.fullTime.home, home: false };
 
-async function teamMatches(teamId: number) {
-  const data = await api("/teams/" + teamId + "/matches?status=FINISHED&limit=30", 3 * 3600_000);
-  return (data?.matches || []).filter(finished).sort((a: Match, b: Match) => Date.parse(b.utcDate) - Date.parse(a.utcDate));
+async function teamMatches(teamId: number, before?: string) {
+  const cutoff = before ? new Date(before) : new Date();
+  const from = new Date(cutoff.getTime() - 370 * 86400_000).toISOString().slice(0, 10);
+  const to = new Date(cutoff.getTime() + 86400_000).toISOString().slice(0, 10);
+  const query = before ? `?dateFrom=${from}&dateTo=${to}&limit=100` : "?status=FINISHED&limit=30";
+  const data = await api("/teams/" + teamId + "/matches" + query, before ? 12 * 3600_000 : 3 * 3600_000);
+  return (data?.matches || []).filter(finished)
+    .filter((m: Match) => Date.parse(m.utcDate) < cutoff.getTime())
+    .sort((a: Match, b: Match) => Date.parse(b.utcDate) - Date.parse(a.utcDate))
+    .slice(0, 30);
+}
+async function matchOnDate(homeId: number, awayId: number, date: string) {
+  const next = new Date(date + "T00:00:00Z"); next.setUTCDate(next.getUTCDate() + 1);
+  const dateTo = next.toISOString().slice(0, 10);
+  const data = await api("/teams/" + homeId + "/matches?dateFrom=" + date + "&dateTo=" + dateTo + "&limit=100", 12 * 3600_000);
+  return (data?.matches || []).find((m: Match) =>
+    m.homeTeam?.id === homeId && m.awayTeam?.id === awayId && m.status === "FINISHED"
+  ) || null;
 }
 
 function summarise(teamId: number, matches: Match[]) {
@@ -122,12 +137,21 @@ const formPoints = (f: string) => {
   return a.length ? [...a].reduce((n, c) => n + (c === "W" ? 3 : c === "D" ? 1 : 0), 0) / (a.length * 3) : 0.5;
 };
 
-export async function analyse(homeId: number, awayId: number) {
-  const [hm, am] = await Promise.all([teamMatches(homeId), teamMatches(awayId)]);
+export async function analyse(homeId: number, awayId: number, matchDate?: string) {
+  const cutoff = matchDate ? new Date(matchDate + "T23:59:59Z") : new Date();
+  if (Number.isNaN(cutoff.getTime())) throw new Error("Invalid match date.");
+  const historical = !!matchDate && cutoff.getTime() < Date.now() - 86400_000;
+  const [hm, am, actualMatch] = await Promise.all([
+    teamMatches(homeId, historical ? matchDate : undefined),
+    teamMatches(awayId, historical ? matchDate : undefined),
+    historical ? matchOnDate(homeId, awayId, matchDate!) : Promise.resolve(null),
+  ]);
   if (!hm.length || !am.length) throw new Error("Not enough completed match data for one of these teams on the free data plan.");
   const h = summarise(homeId, hm), a = summarise(awayId, am);
   const hCode = h.competition?.code || "PL", aCode = a.competition?.code || "PL";
-  const [hAvg, aAvg] = await Promise.all([competitionAverages(hCode), competitionAverages(aCode)]);
+  const [hAvg, aAvg] = historical
+    ? [{ home: Math.max(0.5, h.season.goalsFor.home ?? 1.45), away: Math.max(0.5, h.season.goalsAgainst.home ?? 1.15), teams: 0 }, { home: Math.max(0.5, a.season.goalsAgainst.away ?? 1.45), away: Math.max(0.5, a.season.goalsFor.away ?? 1.15), teams: 0 }]
+    : await Promise.all([competitionAverages(hCode), competitionAverages(aCode)]);
   const hAtt = (h.season.goalsFor.home ?? hAvg.home) / hAvg.home;
   const hDef = (h.season.goalsAgainst.home ?? hAvg.away) / hAvg.away;
   const aAtt = (a.season.goalsFor.away ?? aAvg.away) / aAvg.away;
@@ -156,7 +180,7 @@ export async function analyse(homeId: number, awayId: number) {
     averages: { home: hAvg, away: aAvg },
     teams: { home: { season: h.season, last5: h.last5 }, away: { season: a.season, last5: a.last5 } },
     strengths: { homeAttack: +hAtt.toFixed(2), homeDefence: +hDef.toFixed(2), awayAttack: +aAtt.toFixed(2), awayDefence: +aDef.toFixed(2) },
-    model: m, h2h, verdict,
+    model: m, h2h, verdict, matchDate: matchDate || null, historical, actual: actualMatch ? { date: actualMatch.utcDate, status: actualMatch.status, homeGoals: actualMatch.score?.fullTime?.home ?? null, awayGoals: actualMatch.score?.fullTime?.away ?? null, competition: actualMatch.competition?.name || "" } : null,
   };
 }
 
