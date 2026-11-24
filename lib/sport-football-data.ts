@@ -49,9 +49,9 @@ type Match = any;
 
 /** Return exactly the latest completed match and the next scheduled fixture for one-click analysis. */
 export async function teamFixtureChoices(teamId: number) {
-  // Request a full date window rather than the provider's small default result set.
-  // The previous limit=30 could omit the team's genuinely latest result.
-  const from = new Date(Date.now() - 370 * 86400_000).toISOString().slice(0, 10);
+  // Search multiple seasons: a team's latest completed match can be more than a year old
+  // when the provider has a gap in current-season data. Keep only the single latest result below.
+  const from = new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(Date.now() + 180 * 86400_000).toISOString().slice(0, 10);
   const data = await api("/teams/" + teamId + "/matches?dateFrom=" + from + "&dateTo=" + to + "&limit=500", 5 * 60_000);
   const now = Date.now();
