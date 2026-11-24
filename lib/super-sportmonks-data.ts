@@ -33,6 +33,25 @@ async function api(path: string, ttl = TTL): Promise<any> {
 }
 
 const rows = (body: any) => Array.isArray(body?.data) ? body.data : [];
+
+/** Fetch every page for date/fixture lists; Sportmonks paginates large match days. */
+async function apiAll(path: string, ttl = TTL): Promise<any[]> {
+  const all: any[] = [];
+  const perPage = 100;
+  for (let page = 1; page <= 20; page++) {
+    const separator = path.includes("?") ? "&" : "?";
+    const body = await api(`${path}${separator}per_page=${perPage}&page=${page}`, ttl);
+    const batch = rows(body);
+    all.push(...batch);
+    const pagination = body?.pagination || body?.meta?.pagination || {};
+    const hasMore = pagination?.has_more === true ||
+      (pagination?.next_page != null && pagination?.next_page !== false) ||
+      (pagination?.current_page != null && Number(pagination.current_page) < Number(pagination.last_page || 0)) ||
+      batch.length === perPage;
+    if (!hasMore || batch.length === 0) break;
+  }
+  return all;
+}
 const participants = (f: any) => {
   const p = Array.isArray(f?.participants) ? f.participants : [];
   const home = p.find((x: any) => x.meta?.location === "home") || p[0];
@@ -80,14 +99,14 @@ export async function searchTeams(q: string) {
 
 export async function todayCompetitionMatches() {
   const today = new Date().toISOString().slice(0, 10);
-  const data = await api("/fixtures/date/" + today + "?include=" + includes, 2 * 60_000);
-  return rows(data).map(fixture).filter(Boolean).sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
+  const data = await apiAll("/fixtures/date/" + today + "?include=" + includes, 2 * 60_000);
+  return data.map(fixture).filter(Boolean).sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
 }
 
 export async function matchesOnDate(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) throw new Error("Choose a valid match date.");
-  const data = await api("/fixtures/date/" + date + "?include=" + includes, 30 * 60_000);
-  return rows(data).map(fixture).filter((f: any) => f?.score && String(f.date).slice(0,10) === date)
+  const data = await apiAll("/fixtures/date/" + date + "?include=" + includes, 30 * 60_000);
+  return data.map(fixture).filter((f: any) => f?.score && String(f.date).slice(0,10) === date)
     .sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
 }
 
