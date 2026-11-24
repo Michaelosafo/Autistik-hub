@@ -8136,3 +8136,33 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .tp-body .muted{font-size:.88em}
 .tp-go{font-weight:800;color:var(--tp,#F0B90B);white-space:nowrap}
 .tp-soon{opacity:.6;border-left-color:var(--line);border-style:dashed}
+
+/* Sport board (/admin/sport) */
+.sb{max-width:860px;margin:0 auto;gap:12px}
+.sb h1{margin:2px 0 4px;font-family:var(--f-display)}
+.sb-team{display:flex;align-items:center;gap:10px}
+.sb-team img{border-radius:8px;background:#fff}
+.sb-team>div{flex:1;display:flex;flex-direction:column}
+.sb-opt{display:flex;align-items:center;gap:8px;padding:8px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.sb-opt img{border-radius:4px;background:#fff}
+.sb-xg{display:flex;align-items:baseline;gap:8px}
+.sb-xg b{font-size:1.6em;font-family:var(--f-display)}
+.sb-verdict{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.sb-bar{display:grid;grid-template-columns:minmax(110px,40%) 1fr 54px;align-items:center;gap:8px;font-size:.92em}
+.sb-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-bar i{display:block;height:10px;border-radius:6px;background:var(--muted)}
+.sb-bar.hi i{background:#16a34a}.sb-bar.mid i{background:#F0B90B}.sb-bar.lo i{background:#94a3b8}
+.sb-bar b{text-align:right}
+.sb-scores{display:flex;flex-wrap:wrap;gap:8px}
+.sb-scores span{padding:6px 10px;border-radius:10px;background:var(--surface-2)}
+.sb-table{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sb-tr{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:6px;padding:7px 10px;border-top:1px solid var(--line);font-size:.88em}
+.sb-tr:first-child{border-top:0}
+.sb-th{font-weight:800;background:var(--surface-2)}
+.sb-two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.sb-two{grid-template-columns:1fr}}
+.sb-g{font-size:.88em}
+.sb-g.W b{color:#16a34a}.sb-g.L b{color:#dc2626}.sb-g.D b{color:#ca8a04}
+.sb-hist{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 0;border-top:1px solid var(--line)}
+.sb-hist>span{flex:1 1 100%}
+.sb-ok{color:#16a34a;font-weight:800}.sb-no{color:#dc2626;font-weight:800}
