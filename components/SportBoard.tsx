@@ -325,9 +325,9 @@ export default function SportBoard() {
               <small className="muted">Automatically selected from this match's analysis using your three requested probability bands.</small>
               <div className="sb-top">
                 {m.top10.map((o: any, i: number) => (
-                  <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
+                  <div key={o.quickLabel + ":" + o.name} className={`sb-top-r ${pctCls(o.p)}`}>
                     <span className="sb-rank">{i + 1}</span>
-                    <span className="sb-name">{i === 0 ? "80–90% · " : i === 1 ? "Third green from bottom · " : i === 2 ? "Second green from bottom · " : "Last yellow in analysis · "}{o.name}</span>
+                    <span className="sb-name">{o.quickLabel || "Selection"} · {o.name}</span>
                     <b>{o.p}%</b>
                     <small className="muted">fair {o.fair}</small>
                   </div>
@@ -431,9 +431,9 @@ export default function SportBoard() {
             </div>
             <div className="sb-top">
               {res.model.top10.map((o: any, i: number) => (
-                <div key={o.name} className={"sb-top-r " + pctCls(o.p)}>
+                <div key={o.quickLabel + ":" + o.name} className={"sb-top-r " + pctCls(o.p)}>
                   <span className="sb-rank">{i + 1}</span>
-                  <span className="sb-name">{(i === 0 ? "80–90% · " : i === 1 ? "Third green from bottom · " : i === 2 ? "Second green from bottom · " : "Last yellow in analysis · ") + o.name}</span>
+                  <span className="sb-name">{(o.quickLabel || "Selection") + " · " + o.name}</span>
                   <b>{o.p}%</b><small className="muted">fair {o.fair}</small>
                 </div>
               ))}
