@@ -80,7 +80,7 @@ export async function matchesOnDate(date: string) {
   const dateTo = next.toISOString().slice(0, 10);
   const data = await api("/matches?dateFrom=" + date + "&dateTo=" + dateTo + "&limit=500", 30 * 60_000);
   return (data?.matches || [])
-    .filter((m: any) => finished(m) && m.homeTeam?.id && m.awayTeam?.id && m.utcDate)
+    .filter((m: any) => finished(m) && m.homeTeam?.id && m.awayTeam?.id && m.utcDate && String(m.utcDate).slice(0, 10) === date)
     .sort((x: any, y: any) => Date.parse(x.utcDate) - Date.parse(y.utcDate))
     .map((m: any) => ({
       id: m.id,
