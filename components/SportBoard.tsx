@@ -115,7 +115,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
-      if (!(d.matches || []).length) setDateMatchesError("No completed matches with verified full-time scores were found for this date.");
+      if (!(d.matches || []).length) setDateMatchesError("The football API returned no completed fixtures with verified full-time scores for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -133,7 +133,7 @@ export default function SportBoard() {
     finally { setFixturesBusy(false); }
   }
   async function chooseFixture(f: any) {
-    setActiveFixtureIndex(todayMatches.findIndex((x: any) => String(x.id) === String(f.id)));
+    setActiveFixtureIndex(dateMatches.findIndex((x: any) => String(x.id) === String(f.id)));
     setShowFullAnalysis(false);
     const h: Team = { id: f.home.id, name: f.home.name, logo: f.home.logo };
     const a: Team = { id: f.away.id, name: f.away.name, logo: f.away.logo };
@@ -306,18 +306,18 @@ export default function SportBoard() {
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
         <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
           <b>Past matches by date</b>
-          <small className="muted">Choose any date to find completed fixtures and their verified full-time scores.</small>
+          <small className="muted">Search all competitions and fixtures available to your football API subscription for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
           <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesError(""); setRes(null); }} /></label>
-          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || !ready} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search matches for this date"}</button>
+          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || !ready} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search all available matches"}</button>
           {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
           {dateMatches.length > 0 && <div className="stack" style={{ gap: 0 }}>
-            <b>{dateMatches.length} completed {dateMatches.length === 1 ? "match" : "matches"}</b>
+            <b>{dateMatches.length} completed {dateMatches.length === 1 ? "match" : "matches"} returned by the API</b><small className="muted">All competitions available in your API feed are included. Tap any fixture to open its historical predictions and full analysis.</small>
             {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <b>{f.home.name} vs {f.away.name}</b>
                 <small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
               </span>
-              <b style={{ whiteSpace: "nowrap" }}>FT {f.score.home}–{f.score.away}</b>
+              <span style={{ display: "grid", justifyItems: "end", gap: 3, whiteSpace: "nowrap" }}><b>FT {f.score.home}–{f.score.away}</b><small className="muted">View analysis ›</small></span>
               <span style={{ color: "var(--muted)" }}>›</span>
             </button>)}
           </div>}
