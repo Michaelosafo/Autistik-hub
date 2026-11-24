@@ -366,15 +366,15 @@ export default function SportBoard() {
                 })}
               </div><button type="button" className="btn primary" disabled={!res?.predictionId || !pricedMarkets.some((o: any) => o.odds != null)} onClick={saveOdds}>Save bookmaker comparison to History</button></>}
             </section>
-            <details>
-              <summary>Review remaining {m.markets.filter((o: any) => !m.top10.some((p: any) => p.name === o.name)).length} markets</summary>
-              <small className="muted">These are the other model estimates, kept here for review. The prioritized shortlist above stays at the top.</small>
+            <section className="stack">
+              <b>Full analysis · all markets</b>
+              <small className="muted">All model selections are shown below the three quick picks, in probability order, for detailed review.</small>
               <div className="sb-top">
-                {m.markets.filter((o: any) => !m.top10.some((p: any) => p.name === o.name)).map((o: any) => (
-                  <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}><span className="sb-rank" /><span className="sb-name">{o.name}</span><b>{o.p}%</b><small className="muted">fair {o.fair ?? "–"}</small></div>
+                {m.markets.map((o: any, i: number) => (
+                  <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}><span className="sb-rank">{i + 1}</span><span className="sb-name">{o.name}</span><b>{o.p}%</b><small className="muted">fair {o.fair ?? "–"}</small></div>
                 ))}
               </div>
-            </details>
+            </section>
           </section>
           <section className="card stack">
             <b>Result</b>
