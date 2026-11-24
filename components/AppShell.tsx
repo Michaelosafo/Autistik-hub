@@ -295,6 +295,25 @@ export default function AppShell({ admin, me, onMe, children }: {
         <span>Crypto is risky. Nothing here is financial advice. Never share your seed phrase.</span>
       </footer>
 
+      <AppTabs admin={admin} more={more} setMore={setMore} />
+    </div>
+  );
+}
+
+/** Three lines (☰) that turn into an ✕ while the menu is open. */
+/**
+ * The phone bottom bar (Home · Board · Lock · Swap · Play · Wallet · ☰ Menu) with its Menu sheet. The App frame uses
+ * it, and so does every other page, so the same bar shows wherever you are on AUTISTIK.
+ */
+export function AppTabs({ admin, more: moreIn, setMore: setMoreIn }: { admin?: boolean; more?: boolean; setMore?: (v: boolean) => void }) {
+  const path = usePathname();
+  const [own, setOwn] = useState(false);
+  const more = moreIn ?? own;
+  const setMore = setMoreIn ?? setOwn;
+  const on = (m: string[]) => m.some((x) => path === x || path.startsWith(x + "/"));
+  useEffect(() => { if (!setMoreIn) setOwn(false); }, [path, setMoreIn]);
+  return (
+    <>
       <nav className="ax-tabs" aria-label="App">
         {BOTTOM.map((b) => (
           <Link key={b.href} href={b.href} className={b.main ? "main" : undefined} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
@@ -317,11 +336,10 @@ export default function AppShell({ admin, me, onMe, children }: {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
-/** Three lines (☰) that turn into an ✕ while the menu is open. */
 function Burger({ open }: { open?: boolean }) {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">

@@ -3,7 +3,7 @@ import { LogoBadge } from "@/components/LogoMark";
 import Tracker from "@/components/Tracker";
 import WalletPicker from "@/components/connect/WalletPicker";
 import Toaster from "@/components/Toaster";
-import AppShell, { isAppPath } from "@/components/AppShell";
+import AppShell, { AppTabs, isAppPath } from "@/components/AppShell";
 import ThemeToggle from "@/components/ThemeToggle";
 import LangPicker from "@/components/LangPicker";
 import DailyMood from "@/components/mood/DailyMood";
@@ -295,11 +295,8 @@ export default function Shell({ me, children }: { me: { id: string; alias: strin
           <footer className="site-note">Nothing on AUTISTIK Hub is financial advice. Crypto is risky: do your own research and never put in more than you can afford to lose.<br />Contact: <a href={`mailto:${LINKS.email}`}>{LINKS.email}</a> · <Link href="/safety">Safety</Link> · <Link href="/privacy">Privacy policy</Link> · <Link href="/terms">Terms of use</Link></footer>
         </main>
       </div>
-      <nav className="tabbar">
-        {nav.filter((n) => !n.railOnly && !(me?.is_admin && n.href === "/safety")).map((n) => n.children
-          ? <button key={n.href} type="button" aria-current={isOn(n) ? "page" : undefined} aria-expanded={sheet?.href === n.href} onClick={() => setSheet(sheet?.href === n.href ? null : n)}><Icon id={n.icon} /><span>{n.short || n.name}</span></button>
-          : <Link key={n.href} href={n.href} aria-current={isOn(n) ? "page" : undefined}><Icon id={n.icon} /><span>{n.short || n.name}</span></Link>)}
-      </nav>
+      {/* Phones: the same bottom bar as the App (Home · Board · Lock · Swap · Play · Wallet · Menu) on every page. */}
+      <AppTabs admin={!!me?.is_admin} />
       {sheet?.children && (
         <div className="nav-sheet" onClick={(e) => e.target === e.currentTarget && setSheet(null)}>
           <div className="nav-sheet-in" role="menu" aria-label={sheet.name}>
