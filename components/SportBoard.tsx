@@ -71,6 +71,15 @@ export default function SportBoard() {
   const [ghanaOdds, setGhanaOdds] = useState<any>(null);
   const [oddsBusy, setOddsBusy] = useState(false);
   const [oddsError, setOddsError] = useState("");
+  const [todayMatches, setTodayMatches] = useState<any[]>([]);
+  const [todayBusy, setTodayBusy] = useState(false);
+  const [todayError, setTodayError] = useState("");
+  async function loadTodayMatches() {
+    setTodayBusy(true); setTodayError("");
+    try { const d = await api<{ matches: any[] }>("todayMatches"); setTodayMatches(d.matches || []); }
+    catch (e) { setTodayError((e as Error).message); }
+    finally { setTodayBusy(false); }
+  }
   async function loadGhanaOdds() {
     if (!home || !away) return;
     setOddsBusy(true); setOddsError(""); setGhanaOdds(null);
@@ -95,7 +104,7 @@ export default function SportBoard() {
     finally { setBusy(false); }
   }
   const loadHist = () => api<{ rows: any[] }>("history").then((d) => setHist(d.rows)).catch(() => {});
-  useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); }, []);
+  useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); loadTodayMatches(); }, []);
 
   async function run() {
     if (!home || !away) return;
@@ -208,6 +217,18 @@ export default function SportBoard() {
         <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
+
+      <section className="card stack">
+        <b>Today's matches · Championship & Champions League</b>
+        <small className="muted">Select any fixture to load its prediction shortlist automatically.</small>
+        <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
+        {todayError && <div className="notice warn">{todayError}</div>}
+        {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
+        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
+        {todayMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}>
+          <span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {f.status.replace("_", " ")}{f.score ? ` · ${f.score.home}–${f.score.away}` : ""}</small></span><b>{busy ? "Loading…" : "Predict"}</b>
+        </button>)}
+      </section>
 
       <section className="card stack">
         <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
