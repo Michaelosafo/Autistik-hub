@@ -115,6 +115,28 @@ export default function SportBoard() {
   }) || [];
   const highestChance = [...(m?.markets || [])].sort((a: any, b: any) => b.p - a.p)[0];
   const bestValue = pricedMarkets.filter((o: any) => o.value).sort((a: any, b: any) => b.ev - a.ev)[0];
+  const oddsValueRows = (ghanaOdds?.matched || []).flatMap((event: any) => {
+    const offers = (event.bookmakers || []).flatMap((book: any) =>
+      (book.markets || []).filter((x: any) => x.key === "h2h").flatMap((x: any) =>
+        (x.outcomes || []).map((outcome: any) => ({ name: String(outcome.name || ""), price: Number(outcome.price), bookmaker: book.title || book.key || "Bookmaker", isExchange: /exchange/i.test(String(book.title || book.key || "")) }))
+      )
+    ).filter((x: any) => !x.isExchange && Number.isFinite(x.price) && x.price > 1);
+    const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
+    const selections = [
+      { name: home?.name || "Home", p: m?.home, matches: (s: string) => norm(s) === norm(home?.name || "") || norm(s).includes(norm(home?.name || "___")) },
+      { name: "Draw", p: m?.draw, matches: (s: string) => ["draw", "the draw", "tie"].includes(norm(s)) },
+      { name: away?.name || "Away", p: m?.away, matches: (s: string) => norm(s) === norm(away?.name || "") || norm(s).includes(norm(away?.name || "___")) },
+    ];
+    return selections.map((selection: any) => {
+      const best = offers.filter((o: any) => selection.matches(o.name)).sort((a: any, b: any) => b.price - a.price)[0];
+      if (!best || !Number.isFinite(selection.p)) return null;
+      const implied = 100 / best.price;
+      const ev = (selection.p / 100) * best.price - 1;
+      return { selection: selection.name, probability: selection.p, odds: best.price, bookmaker: best.bookmaker, implied, ev: ev * 100 };
+    }).filter(Boolean);
+  });
+  const bestOddsValue = oddsValueRows.filter((x: any) => x.ev >= 3).sort((a: any, b: any) => b.probability - a.probability)[0];
+  const highestOddsEV = oddsValueRows.filter((x: any) => x.ev > 0).sort((a: any, b: any) => b.ev - a.ev)[0];
   async function saveOdds() {
     const selections = pricedMarkets.filter((o: any) => o.odds != null).map((o: any) => ({
       name: o.name, probability: o.p, fairOdds: o.fair, bookmakerOdds: o.odds,
@@ -197,14 +219,13 @@ export default function SportBoard() {
         {err && <div className="notice warn">{err}</div>}
       </section>
 
-      <section className="card stack">
-        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
-        <small className="muted">Live raw bookmaker prices for the selected fixture. These prices are separate from the model probabilities. Feed time is shown below; prices can change.</small>
-        <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching Ghana odds…" : "Fetch Ghana bookmaker odds"}</button>
+            <section className="card stack">\n        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
+        <small className="muted">Bookmaker prices are compared with this board's model probabilities. Value calculations use the best bookmaker back price for each 1X2 outcome, not exchange lay prices.</small>
+        <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching Ghana bookmaker odds…" : "Fetch Ghana bookmaker odds"}</button>
         {oddsError && <div className="notice warn">{oddsError}</div>}
         {ghanaOdds && <>
-          <small className="muted">Region: {ghanaOdds.region} · Feed processed: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "not supplied"} · Events scanned: {ghanaOdds.count}</small>
-          {ghanaOdds.matched.length === 0 ? <div className="notice warn">No exact fixture match was returned for these team names and date window. Check the spelling, kickoff date, and available competitions. No odds have been invented.</div> :
+          <small className="muted">Region: {ghanaOdds.region} · Feed processed: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "not supplied"} · Events scanned: {ghanaOdds.count}{ghanaOdds.historical ? " · Historical odds snapshot" : " · Live odds"}</small>
+          {ghanaOdds.matched.length === 0 ? <div className="notice warn">No matching event with odds was returned for these teams and date. Past prices are only available where OddsRelay has archived that region and date. No prices are estimated or invented.</div> :
             ghanaOdds.matched.map((event: any) => <div key={event.id} className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
               <b>{event.home_team} vs {event.away_team}</b>
               <small className="muted">{event.sport_title || "Football"} · Kick-off {new Date(event.commence_time).toLocaleString()}</small>
@@ -217,8 +238,19 @@ export default function SportBoard() {
               </div>)}
             </div>)
           }
-        </>}
-      </section>
+          {m && ghanaOdds.matched.length > 0 && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+            <b>Model vs bookmaker · value check</b>
+            <small className="muted">EV = model probability × decimal odds − 1. A positive result means the offered price is above the model's fair price; it is not a guarantee.</small>
+            {oddsValueRows.length === 0 ? <div className="notice warn">No usable bookmaker 1X2 prices were returned for comparison.</div> : <>
+              {oddsValueRows.map((x: any) => <div key={x.selection} className="sb-top-r">
+                <span className="sb-name">{x.selection}</span><b>{x.probability.toFixed(1)}%</b>
+                <small className="muted">Best {x.odds.toFixed(2)} · {x.bookmaker}</small>
+                <small className={x.ev >= 3 ? "sb-ok" : x.ev > 0 ? "sb-g D" : "sb-no"}>EV {x.ev >= 0 ? "+" : ""}{x.ev.toFixed(1)}%</small>
+              </div>)}
+              {bestOddsValue ? <div className="notice"><b>Best value with a stronger chance:</b> {bestOddsValue.selection} · model {bestOddsValue.probability.toFixed(1)}% · odds {bestOddsValue.odds.toFixed(2)} at {bestOddsValue.bookmaker} · implied {bestOddsValue.implied.toFixed(1)}% · EV +{bestOddsValue.ev.toFixed(1)}%.<small className="muted" style={{ display: "block" }}>Highest-probability 1X2 pick with at least +3% model EV.</small></div> : highestOddsEV ? <div className="notice warn"><b>No strong value pick yet.</b> Best positive-EV price: {highestOddsEV.selection} at {highestOddsEV.odds.toFixed(2)} ({highestOddsEV.bookmaker}), model {highestOddsEV.probability.toFixed(1)}%, EV +{highestOddsEV.ev.toFixed(1)}%. It does not meet the +3% threshold.</div> : <div className="notice warn"><b>No value bet found.</b> None of the bookmaker prices beat the model's fair price.</div>}
+            </>}
+          </div>}
+        </>}\n      </section>
 
       {m && (
         <>
