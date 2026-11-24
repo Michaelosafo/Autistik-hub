@@ -310,9 +310,10 @@ export default function SportBoard() {
               </div><button type="button" className="btn primary" disabled={!res?.predictionId || !pricedMarkets.some((o: any) => o.odds != null)} onClick={saveOdds}>Save bookmaker comparison to History</button></>}
             </section>
             <details>
-              <summary>All {m.markets.length} options</summary>
+              <summary>Review remaining {m.markets.filter((o: any) => !m.top10.some((p: any) => p.name === o.name)).length} markets</summary>
+              <small className="muted">These are the other model estimates, kept here for review. The prioritized shortlist above stays at the top.</small>
               <div className="sb-top">
-                {m.markets.map((o: any) => (
+                {m.markets.filter((o: any) => !m.top10.some((p: any) => p.name === o.name)).map((o: any) => (
                   <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}><span className="sb-rank" /><span className="sb-name">{o.name}</span><b>{o.p}%</b><small className="muted">fair {o.fair ?? "–"}</small></div>
                 ))}
               </div>
