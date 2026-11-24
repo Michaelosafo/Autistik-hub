@@ -120,6 +120,28 @@ export default function SportBoard() {
             <ul className="sb-verdict">{res.verdict.map((x: string) => <li key={x}>{x}</li>)}</ul>
           </section>
           <section className="card stack">
+            <b>🎯 10 options most likely to happen</b>
+            <small className="muted">From this board's own model, not bookmaker odds. "Fair odds" is what the option is worth (1 ÷ chance). If a bookmaker pays more than the fair odds, that option is good value; if it pays less, skip it.</small>
+            <div className="sb-top">
+              {m.top10.map((o: any, i: number) => (
+                <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
+                  <span className="sb-rank">{i + 1}</span>
+                  <span className="sb-name">{o.name}</span>
+                  <b>{o.p}%</b>
+                  <small className="muted">fair {o.fair}</small>
+                </div>
+              ))}
+            </div>
+            <details>
+              <summary>All {m.markets.length} options</summary>
+              <div className="sb-top">
+                {m.markets.map((o: any) => (
+                  <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}><span className="sb-rank" /><span className="sb-name">{o.name}</span><b>{o.p}%</b><small className="muted">fair {o.fair ?? "–"}</small></div>
+                ))}
+              </div>
+            </details>
+          </section>
+          <section className="card stack">
             <b>Result</b>
             <Bar label={`${home?.name} win`} p={m.home} /><Bar label="Draw" p={m.draw} /><Bar label={`${away?.name} win`} p={m.away} />
             <b>Double chance</b>

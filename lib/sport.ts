@@ -131,6 +131,32 @@ export function model(lh: number, la: number) {
   }
   scores.sort((x, y) => y.p - x.p);
   const pct = (x: number) => +(x * 100).toFixed(1);
+  // Every common bet, priced from the same score grid; the 10 likeliest come back with their fair odds (1 ÷ chance).
+  const sum = (f: (h: number, a: number) => boolean) => { let t = 0; for (let h = 0; h <= N; h++) for (let a = 0; a <= N; a++) if (f(h, a)) t += grid[h][a]; return t; };
+  const markets: [string, number][] = [
+    ["Home win (1)", pH], ["Draw (X)", pD], ["Away win (2)", pA],
+    ["Home or draw (1X)", pH + pD], ["Away or draw (X2)", pA + pD], ["Home or away (12)", pH + pA],
+    ["Both teams score: Yes", btts], ["Both teams score: No", 1 - btts],
+    ...(["0.5", "1.5", "2.5", "3.5"] as const).flatMap((l) => [[`Over ${l} goals`, over[l]], [`Under ${l} goals`, 1 - over[l]]] as [string, number][]),
+    ["Under 4.5 goals", 1 - over["4.5"]], ["Under 5.5 goals", sum((h, a) => h + a <= 5)],
+    ["Home team scores", 1 - pois(0, lh)], ["Away team scores", 1 - pois(0, la)],
+    ["Home team over 1.5 goals", sum((h) => h >= 2)], ["Away team over 1.5 goals", sum((_, a) => a >= 2)],
+    ["Home team under 2.5 goals", sum((h) => h <= 2)], ["Away team under 2.5 goals", sum((_, a) => a <= 2)],
+    ["Home win to nil", sum((h, a) => h > a && a === 0)], ["Away win to nil", sum((h, a) => a > h && h === 0)],
+    ["Home win & over 1.5", sum((h, a) => h > a && h + a >= 2)], ["Away win & over 1.5", sum((h, a) => a > h && h + a >= 2)],
+    ["Home or draw & under 3.5", sum((h, a) => h >= a && h + a <= 3)], ["Away or draw & under 3.5", sum((h, a) => a >= h && h + a <= 3)],
+    ["Home win & both score", sum((h, a) => h > a && a > 0)], ["Away win & both score", sum((h, a) => a > h && h > 0)],
+    ["Home -1.5 handicap (win by 2+)", sum((h, a) => h - a >= 2)], ["Away -1.5 handicap (win by 2+)", sum((h, a) => a - h >= 2)],
+    ["Home +1.5 handicap (lose by 1 at most)", sum((h, a) => a - h <= 1)], ["Away +1.5 handicap (lose by 1 at most)", sum((h, a) => h - a <= 1)],
+    ["Total goals 1-3", sum((h, a) => h + a >= 1 && h + a <= 3)], ["Total goals 2-4", sum((h, a) => h + a >= 2 && h + a <= 4)],
+  ];
+  const ranked = markets
+    .map(([name, p]) => ({ name, p: pct(p), fair: p > 0 ? +(1 / p).toFixed(2) : null }))
+    .filter((x) => x.p < 99)
+    .sort((a, b) => b.p - a.p);
+  // "Top 10": the likeliest, but skipping near-certain ones (they pay almost nothing) once 10 good ones exist.
+  const useful = ranked.filter((x) => x.p <= 92);
+  const top10 = (useful.length >= 10 ? useful : ranked).slice(0, 10);
   return {
     xg: { home: +lh.toFixed(2), away: +la.toFixed(2) },
     home: pct(pH), draw: pct(pD), away: pct(pA),
@@ -138,6 +164,7 @@ export function model(lh: number, la: number) {
     btts: pct(btts), over: Object.fromEntries(Object.entries(over).map(([k, v]) => [k, pct(v)])),
     homeScores: pct(1 - pois(0, lh)), awayScores: pct(1 - pois(0, la)),
     scores: scores.slice(0, 5).map((x) => ({ score: x.s, p: pct(x.p) })),
+    top10, markets: ranked,
   };
 }
 

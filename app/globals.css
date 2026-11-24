@@ -8166,3 +8166,8 @@ body:has(.mood-page) .tik-hello, body:has(.mood-page) .mood-page { background: t
 .sb-hist{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 0;border-top:1px solid var(--line)}
 .sb-hist>span{flex:1 1 100%}
 .sb-ok{color:#16a34a;font-weight:800}.sb-no{color:#dc2626;font-weight:800}
+.sb-top{display:flex;flex-direction:column;gap:4px}
+.sb-top-r{display:grid;grid-template-columns:26px 1fr auto 70px;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;background:var(--surface-2);font-size:.92em}
+.sb-top-r.hi{box-shadow:inset 4px 0 0 #16a34a}.sb-top-r.mid{box-shadow:inset 4px 0 0 #F0B90B}.sb-top-r.lo{box-shadow:inset 4px 0 0 #94a3b8}
+.sb-rank{font-weight:900;color:var(--muted)}
+.sb-top-r small{text-align:right}
