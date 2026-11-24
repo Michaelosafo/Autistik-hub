@@ -284,11 +284,11 @@ export default function SportBoard() {
 
       <section className="card stack">
         <b>Today's matches · all subscribed leagues</b>
-        <small className="muted">Fixtures returned by your Sportmonks subscription. Select any match to load its prediction shortlist.</small>
+        <small className="muted">Fixtures returned by your API-Football feed. Select any match to load its prediction shortlist.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
-        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No fixtures returned for today. Check the leagues included in your Sportmonks subscription.</small>}
+        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No fixtures returned for today. Check the leagues included in your API-Football feed.</small>}
         <div className="stack" style={{ gap: 0, marginTop: 8 }}>
           {todayMatches.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
             style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
@@ -310,7 +310,7 @@ export default function SportBoard() {
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
         <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
           <b>Past matches by date</b>
-          <small className="muted">Search all competitions and fixtures available to your Sportmonks subscription for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
+          <small className="muted">Search all competitions and fixtures available to your API-Football feed for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
           <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesError(""); setRes(null); }} /></label>
           <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || !ready} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search all available matches"}</button>
           {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
