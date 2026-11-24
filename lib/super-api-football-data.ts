@@ -1,143 +1,121 @@
 /**
- * SUPER board data adapter: API-Football (API-Sports), isolated from SPORT.
- * Reads SUPER_API_FOOTBALL_KEY and uses a separate cache/history namespace.
+ * SUPER board adapter using Highlightly Football API.
+ * Isolated key/cache/history namespace; SPORT remains on football-data.org.
  */
 import { supabaseService } from "@/lib/supabase/server";
 import { model } from "@/lib/sport";
 
-const BASE = "https://v3.football.api-sports.io";
-const TTL = 6 * 60 * 60_000;
+const BASE = "https://soccer.highlightly.net";
+const TTL = 5 * 60_000;
 const sb = () => supabaseService();
-export const superReady = () => !!process.env.SUPER_API_FOOTBALL_KEY;
+export const superReady = () => !!process.env.SUPER_HIGHLIGHTLY_API_KEY;
 
-async function api(path: string, ttl = TTL): Promise<any[]> {
-  const key = process.env.SUPER_API_FOOTBALL_KEY;
-  if (!key) throw new Error("Add SUPER_API_FOOTBALL_KEY in Vercel, then redeploy.");
-  const cacheKey = "super-api-football:" + path;
+async function api(path: string, ttl = TTL): Promise<any> {
+  const key = process.env.SUPER_HIGHLIGHTLY_API_KEY;
+  if (!key) throw new Error("SUPER_HIGHLIGHTLY_API_KEY is missing in Vercel Production.");
+  const cacheKey = "super-highlightly:" + path;
   const { data: hit } = await sb().from("sport_cache").select("data,at").eq("key", cacheKey).maybeSingle();
-  if (hit && Date.now() - Date.parse(hit.at) < ttl) return hit.data as any[];
-  const r = await fetch(BASE + path, { headers: { "x-apisports-key": key }, cache: "no-store" });
+  if (hit && Date.now() - Date.parse(hit.at) < ttl) return hit.data;
+  const r = await fetch(BASE + path, { headers: { "x-rapidapi-key": key }, cache: "no-store" });
   const body = await r.json().catch(() => ({}));
-  const errors = body?.errors && (Array.isArray(body.errors) ? body.errors : Object.values(body.errors));
-  if (!r.ok || (errors && errors.length)) {
-    if (hit) return hit.data as any[];
-    throw new Error("API-Football: " + String(errors?.[0] || r.statusText || "Provider error").slice(0, 180));
+  if (!r.ok) {
+    const message = body?.message || body?.error || r.statusText || "Provider error";
+    throw new Error("Highlightly (" + r.status + "): " + String(message).slice(0, 200));
   }
-  const data = Array.isArray(body?.response) ? body.response : [];
-  await sb().from("sport_cache").upsert({ key: cacheKey, data, at: new Date().toISOString() });
-  return data;
+  await sb().from("sport_cache").upsert({ key: cacheKey, data: body, at: new Date().toISOString() });
+  return body;
 }
-const finished = (f: any) => ["FT", "AET", "PEN"].includes(String(f?.fixture?.status?.short || ""));
-const fixture = (f: any) => ({
-  id: f.fixture.id, date: f.fixture.date, status: finished(f) ? "FINISHED" : f.fixture.status?.short || "SCHEDULED",
-  competition: f.league?.name || "Football",
-  home: { id: f.teams.home.id, name: f.teams.home.name, logo: f.teams.home.logo || "" },
-  away: { id: f.teams.away.id, name: f.teams.away.name, logo: f.teams.away.logo || "" },
-  score: finished(f) && Number.isFinite(f.goals?.home) && Number.isFinite(f.goals?.away) ? { home: f.goals.home, away: f.goals.away } : null,
-});
-const dateOK = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d + "T00:00:00Z"));
+const rows = (v:any):any[] => Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : [];
+const finished = (m:any) => /^(finished|finished after|awarded)/i.test(String(m?.state?.description || ""));
+const scoreParts = (m:any) => String(m?.state?.score?.current || "").split("-").map((x:string)=>Number(x.trim()));
+const fixture = (m:any) => {
+  const [hg,ag]=scoreParts(m);
+  return {
+    id:m.id, date:m.date, status:finished(m)?"FINISHED":m?.state?.description||"SCHEDULED",
+    competition:m?.league?.name||"Football",
+    home:{id:m?.homeTeam?.id,name:m?.homeTeam?.name,logo:m?.homeTeam?.logo||""},
+    away:{id:m?.awayTeam?.id,name:m?.awayTeam?.name,logo:m?.awayTeam?.logo||""},
+    score:finished(m)&&Number.isFinite(hg)&&Number.isFinite(ag)?{home:hg,away:ag}:null,
+  };
+};
+const dateOK=(d:string)=>/^\\d{4}-\\d{2}-\\d{2}$/.test(d)&&!Number.isNaN(Date.parse(d+"T00:00:00Z"));
 
-export async function searchTeams(q: string) {
-  const s = q.trim(); if (s.length < 3) return [];
-  return (await api("/teams?search=" + encodeURIComponent(s), 7 * 86400_000)).slice(0, 15)
-    .map((x: any) => ({ id: Number(x.team.id), name: x.team.name, country: x.team.country || "", logo: x.team.logo || "" }));
+export async function searchTeams(q:string) {
+  const s=q.trim(); if(s.length<2)return [];
+  const body=await api("/teams?name="+encodeURIComponent(s)+"&limit=100",7*86400_000);
+  return rows(body).filter((x:any)=>x?.id&&x?.name).slice(0,15).map((x:any)=>({
+    id:Number(x.id),name:x.name,country:x.country?.name||"",logo:x.logo||""
+  }));
 }
 export async function todayCompetitionMatches() {
-  const today = new Date().toISOString().slice(0, 10);
-  return (await api("/fixtures?date=" + today, 2 * 60_000)).map(fixture)
-    .filter((f: any) => f.home.id && f.away.id)
-    .sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
+  const today=new Date().toISOString().slice(0,10);
+  const body=await api("/matches?date="+today+"&timezone=Etc%2FUTC&limit=100",60_000);
+  return rows(body).map(fixture).filter((x:any)=>x.home.id&&x.away.id).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
 }
-export async function matchesOnDate(date: string) {
-  if (!dateOK(date)) throw new Error("Choose a valid match date.");
-  return (await api("/fixtures?date=" + date, 30 * 60_000)).map(fixture)
-    .filter((f: any) => f.score && String(f.date).slice(0,10) === date)
-    .sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
+export async function matchesOnDate(date:string) {
+  if(!dateOK(date))throw new Error("Choose a valid match date.");
+  const body=await api("/matches?date="+date+"&timezone=Etc%2FUTC&limit=100",5*60_000);
+  return rows(body).map(fixture).filter((x:any)=>x.home.id&&x.away.id&&x.score).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
 }
-// API-Football's free plan only exposes historical seasons 2022–2024.
-const FREE_PLAN_SEASONS = [2024, 2023, 2022];
-async function leagueFor(teamId:number, before?:string) {
-  const matchYear = before ? Number(before.slice(0,4)) : new Date().getUTCFullYear();
-  const candidates = FREE_PLAN_SEASONS.filter((s) => s <= matchYear);
-  for (const season of candidates) {
-    const rows = await api("/leagues?team="+teamId+"&season="+season, 24*3600_000);
-    const pick = rows.find((x:any)=>x.league?.type==="League") || rows[0];
-    if (pick?.league?.id) {
-      return {id:Number(pick.league.id),name:pick.league.name||"Football",season};
-    }
-  }
-  throw new Error("This team's league has no season available on the API-Football free plan (2022–2024).");
-}
-export async function teamFixtureChoices(teamId: number) {
-  const results = await Promise.all(FREE_PLAN_SEASONS.map(async (season) => {
-    try {
-      return await api("/fixtures?team="+teamId+"&season="+season+"&timezone=UTC", 3*3600_000);
-    } catch {
-      return [];
-    }
-  }));
-  const all = results.flat();
+export async function teamFixtureChoices(teamId:number) {
+  const today=new Date().toISOString().slice(0,10);
+  const [recentBody,futureBody]=await Promise.all([
+    api("/last-five-games?teamId="+teamId,30*60_000),
+    api("/matches?date="+today+"&homeTeamId="+teamId+"&limit=100",60_000).catch(()=>({data:[]})),
+  ]);
+  const recent=rows(recentBody);
+  const future=rows(futureBody);
+  const candidates=[...recent,...future].filter((m:any)=>m.homeTeam?.id===teamId||m.awayTeam?.id===teamId);
+  const unique=Array.from(new Map(candidates.map((m:any)=>[m.id,m])).values());
   const now=Date.now();
-  const last=all.filter((f:any)=>finished(f)&&Date.parse(f.fixture.date)<now).sort((a:any,b:any)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date))[0];
-  const next=all.filter((f:any)=>!finished(f)&&Date.parse(f.fixture.date)>=now).sort((a:any,b:any)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date))[0];
+  const last=unique.filter((m:any)=>finished(m)&&Date.parse(m.date)<now).sort((a:any,b:any)=>Date.parse(b.date)-Date.parse(a.date))[0];
+  const next=unique.filter((m:any)=>!finished(m)&&Date.parse(m.date)>=now).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date))[0];
   return [last,next].filter(Boolean).map(fixture);
 }
-const n=(v:any)=>v==null||v===""?null:Number(String(v).replace("%",""));
-async function teamStats(team:number, league:number, season:number) {
-  const r=await api("/teams/statistics?league="+league+"&season="+season+"&team="+team,12*3600_000);
-  const s=r[0]||{}, fx=s.fixtures||{},g=s.goals||{},ph=Number(fx.played?.home||0),pa=Number(fx.played?.away||0);
-  const avg=(v:any,played:number)=>v==null||!played?null:+(Number(v)/played).toFixed(2);
-  return {
-    form:String(s.form||"").slice(-10),
-    played:{home:ph,away:pa,total:Number(fx.played?.total||0)},wins:fx.wins||{},draws:fx.draws||{},loses:fx.loses||{},
-    goalsFor:{home:avg(g.for?.total?.home,ph),away:avg(g.for?.total?.away,pa),total:n(g.for?.average?.total)},
-    goalsAgainst:{home:avg(g.against?.total?.home,ph),away:avg(g.against?.total?.away,pa),total:n(g.against?.average?.total)},
-    cleanSheets:s.clean_sheet||{},failedToScore:s.failed_to_score||{},
-  };
-}
-async function recent(team:number, season:number, before?:string) {
-  // API-Football requires season on every /fixtures request filtered by team.
-  // Keep the date window for historical analysis, but always send the season.
-  const path=before
-    ? "/fixtures?team="+team+"&season="+season+"&from="+new Date(Date.parse(before+"T00:00:00Z")-700*86400000).toISOString().slice(0,10)+"&to="+before
-    : "/fixtures?team="+team+"&season="+season+"&last=30";
-  return (await api(path,before?12*3600_000:3*3600_000)).filter((f:any)=>finished(f)&&(!before||Date.parse(f.fixture.date)<Date.parse(before+"T00:00:00Z")))
-    .sort((a:any,b:any)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,30);
-}
-function summarize(team:number, matches:any[]) {
-  const rows=matches.map((f:any)=>{
-    const home=f.teams.home.id===team, gf=Number(home?f.goals.home:f.goals.away),ga=Number(home?f.goals.away:f.goals.home);
-    return {date:f.fixture.date,vs:home?f.teams.away.name:f.teams.home.name,home,gf,ga,res:gf>ga?"W":gf===ga?"D":"L",comp:f.league?.name||""};
-  });
-  const all=rows, home=rows.filter(x=>x.home),away=rows.filter(x=>!x.home);
-  const mean=(xs:any[],k:"gf"|"ga")=>xs.length?+(xs.reduce((s,x)=>s+x[k],0)/xs.length).toFixed(2):null;
-  const season={
-    form:rows.slice(0,10).reverse().map(x=>x.res).join(""),
-    played:{home:home.length,away:away.length,total:rows.length},
-    wins:{home:home.filter(x=>x.res==="W").length,away:away.filter(x=>!x.home&&x.res==="W").length,total:rows.filter(x=>x.res==="W").length},
-    draws:{home:home.filter(x=>x.res==="D").length,away:away.filter(x=>!x.home&&x.res==="D").length,total:rows.filter(x=>x.res==="D").length},
-    loses:{home:home.filter(x=>x.res==="L").length,away:away.filter(x=>!x.home&&x.res==="L").length,total:rows.filter(x=>x.res==="L").length},
-    goalsFor:{home:mean(home,"gf"),away:mean(away,"gf"),total:mean(rows,"gf")},
-    goalsAgainst:{home:mean(home,"ga"),away:mean(away,"ga"),total:mean(rows,"ga")},
-    cleanSheets:{home:home.filter(x=>x.ga===0).length,away:away.filter(x=>x.ga===0).length,total:rows.filter(x=>x.ga===0).length},
-    failedToScore:{home:home.filter(x=>x.gf===0).length,away:away.filter(x=>x.gf===0).length,total:rows.filter(x=>x.gf===0).length},
-  };
-  return {season,last5:{games:rows.slice(0,5),avg:{}}};
+function summarize(teamId:number,games:any[]) {
+  const matches=games.map((m:any)=>{
+    const isHome=m.homeTeam?.id===teamId;
+    const [h,a]=scoreParts(m);
+    const gf=isHome?h:a,ga=isHome?a:h;
+    return {date:m.date,vs:isHome?m.awayTeam?.name:m.homeTeam?.name,home:isHome,gf,ga,res:gf>ga?"W":gf===ga?"D":"L",comp:m.league?.name||""};
+  }).filter((x:any)=>Number.isFinite(x.gf)&&Number.isFinite(x.ga)).sort((a:any,b:any)=>Date.parse(b.date)-Date.parse(a.date));
+  const home=matches.filter((x:any)=>x.home),away=matches.filter((x:any)=>!x.home);
+  const mean=(xs:any[],k:"gf"|"ga")=>xs.length?+(xs.reduce((s:number,x:any)=>s+x[k],0)/xs.length).toFixed(2):null;
+  const count=(xs:any[],r:string)=>xs.filter((x:any)=>x.res===r).length;
+  return {season:{
+    form:matches.slice(0,10).reverse().map((x:any)=>x.res).join(""),
+    played:{home:home.length,away:away.length,total:matches.length},
+    wins:{home:count(home,"W"),away:count(away,"W"),total:count(matches,"W")},
+    draws:{home:count(home,"D"),away:count(away,"D"),total:count(matches,"D")},
+    loses:{home:count(home,"L"),away:count(away,"L"),total:count(matches,"L")},
+    goalsFor:{home:mean(home,"gf"),away:mean(away,"gf"),total:mean(matches,"gf")},
+    goalsAgainst:{home:mean(home,"ga"),away:mean(away,"ga"),total:mean(matches,"ga")},
+    cleanSheets:{home:home.filter((x:any)=>x.ga===0).length,away:away.filter((x:any)=>x.ga===0).length,total:matches.filter((x:any)=>x.ga===0).length},
+    failedToScore:{home:home.filter((x:any)=>x.gf===0).length,away:away.filter((x:any)=>x.gf===0).length,total:matches.filter((x:any)=>x.gf===0).length}
+  },last5:{games:matches.slice(0,5),avg:{}}};
 }
 export async function analyse(homeId:number,awayId:number,matchDate?:string) {
-  if(matchDate&&!dateOK(matchDate)) throw new Error("Choose a valid match date.");
-  const cutoff=matchDate?new Date(matchDate+"T00:00:00Z"):new Date();
-  const [hl,al]=await Promise.all([leagueFor(homeId,matchDate),leagueFor(awayId,matchDate)]);
-  const [hmAll,amAll]=await Promise.all([recent(homeId,hl.season,matchDate),recent(awayId,al.season,matchDate)]);
-  if(!hmAll.length||!amAll.length) throw new Error("API-Football returned insufficient completed match history for one or both teams.");
-  const h=summarize(homeId,hmAll),a=summarize(awayId,amAll);
-  const hAvg={home:1.45,away:1.15,teams:0},aAvg={home:1.45,away:1.15,teams:0};
-  const hHome=h.season.goalsFor.home??1.45,hCon=h.season.goalsAgainst.home??1.15;
-  const aAway=a.season.goalsFor.away??1.15,aCon=a.season.goalsAgainst.away??1.45;
-  const lh=Math.max(.2,Math.min(4.5,(hHome+aCon)/2)),la=Math.max(.15,Math.min(4,(aAway+hCon)/2));
+  if(matchDate&&!dateOK(matchDate))throw new Error("Choose a valid match date.");
+  const [hBody,aBody,h2hBody]=await Promise.all([
+    api("/last-five-games?teamId="+homeId,30*60_000),
+    api("/last-five-games?teamId="+awayId,30*60_000),
+    api("/head-2-head?teamIdOne="+homeId+"&teamIdTwo="+awayId,6*3600_000).catch(()=>[])
+  ]);
+  const hGames=rows(hBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
+  const aGames=rows(aBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
+  if(hGames.length<2||aGames.length<2)throw new Error("Highlightly returned too few completed matches for this team. Try another competition or match.");
+  const h=summarize(homeId,hGames),a=summarize(awayId,aGames);
+  const hHome=h.season.goalsFor.home??h.season.goalsFor.total??1.35;
+  const hCon=h.season.goalsAgainst.home??h.season.goalsAgainst.total??1.2;
+  const aAway=a.season.goalsFor.away??a.season.goalsFor.total??1.1;
+  const aCon=a.season.goalsAgainst.away??a.season.goalsAgainst.total??1.35;
+  const lh=Math.max(.2,Math.min(4.5,(hHome+aCon)/2));
+  const la=Math.max(.15,Math.min(4,(aAway+hCon)/2));
   const m=model(lh,la);
-  const actual=matchDate?(await matchesOnDate(matchDate)).find((f:any)=>f.home.id===homeId&&f.away.id===awayId):null;
-  const h2h=hmAll.filter((f:any)=>f.teams.home.id===awayId||f.teams.away.id===awayId).slice(0,6).map((f:any)=>({date:f.fixture.date,home:f.teams.home.name,away:f.teams.away.name,score:String(f.goals.home)+"-"+String(f.goals.away),comp:f.league?.name||""}));
+  const h2h=rows(h2hBody).filter((g:any)=>!matchDate||Date.parse(g.date)<Date.parse(matchDate+"T00:00:00Z")).slice(0,10).map((g:any)=>{
+    const s=String(g.state?.score?.current||"");
+    return {date:g.date,home:g.homeTeam?.name,away:g.awayTeam?.name,score:s.replace(/\\s/g,""),comp:g.league?.name||""};
+  });
   const fav=m.home>=m.away?{side:"home",p:m.home}:{side:"away",p:m.away};
   const verdict=[
     fav.p>=60?"Clear favourite: "+fav.side+" win ("+fav.p+"%).":fav.p>=45?"Leaning "+fav.side+" ("+fav.p+"%), but not safe.":"Close game: home "+m.home+"% / draw "+m.draw+"% / away "+m.away+"%.",
@@ -146,27 +124,37 @@ export async function analyse(homeId:number,awayId:number,matchDate?:string) {
     m.btts>=58?"Both teams to score: yes ("+m.btts+"%).":m.btts<=42?"Both teams to score: no ("+(100-m.btts).toFixed(1)+"%).":"Both teams to score: "+m.btts+"%.",
     "Likeliest score: "+m.scores[0].score+" ("+m.scores[0].p+"%)."
   ];
-  return {leagues:{home:hl,away:al},averages:{home:hAvg,away:aAvg},teams:{home:h,away:a},strengths:{homeAttack:1,homeDefence:1,awayAttack:1,awayDefence:1},model:m,h2h,verdict,matchDate:matchDate||null,historical:!!matchDate&&cutoff.getTime()<new Date().setUTCHours(0,0,0,0),actual:actual?.score?{date:actual.date,status:"FINISHED",homeGoals:actual.score.home,awayGoals:actual.score.away,competition:actual.competition}:null};
+  const actualBody=matchDate?await api("/matches?date="+matchDate+"&homeTeamId="+homeId+"&awayTeamId="+awayId+"&limit=100",5*60_000).catch(()=>({data:[]})):[];
+  const actualMatch=rows(actualBody).find((x:any)=>x.homeTeam?.id===homeId&&x.awayTeam?.id===awayId);
+  const actualScore=actualMatch?String(actualMatch.state?.score?.current||"").split("-").map((x:string)=>Number(x.trim())):[];
+  const historical=!!matchDate&&Date.parse(matchDate+"T00:00:00Z")<Date.now();
+  return {
+    leagues:{home:{id:0,name:hGames[0]?.league?.name||"Football"},away:{id:0,name:aGames[0]?.league?.name||"Football"}},
+    averages:{home:{},away:{}},teams:{home:h,away:a},
+    strengths:{homeAttack:1,homeDefence:1,awayAttack:1,awayDefence:1},model:m,h2h,verdict,
+    matchDate:matchDate||null,historical,
+    actual:actualMatch&&finished(actualMatch)&&actualScore.length===2?{date:actualMatch.date,status:"FINISHED",homeGoals:actualScore[0],awayGoals:actualScore[1],competition:actualMatch.league?.name||"Football"}:null
+  };
 }
 export async function savePrediction(row:Record<string,unknown>) {
   const note=(()=>{try{return JSON.parse(String(row.note||"{}"));}catch{return {};}})();
-  const {data,error}=await sb().from("sport_predictions").insert({...row,note:JSON.stringify({...note,provider:"super-api-football"})}).select("id").single();
-  if(error) throw new Error(error.message);
-  return data?.id??null;
+  const {data,error}=await sb().from("sport_predictions").insert({...row,note:JSON.stringify({...note,provider:"super-highlightly"})}).select("id").single();
+  if(error)throw new Error(error.message);return data?.id??null;
 }
 export async function saveOdds(id:number,selections:unknown,highestChance:unknown) {
-  if(!Number.isInteger(id)||id<=0) throw new Error("Missing prediction history ID.");
+  if(!Number.isInteger(id)||id<=0)throw new Error("Missing prediction history ID.");
   const safe=Array.isArray(selections)?selections.slice(0,60):[];
   const {data:existing}=await sb().from("sport_predictions").select("note").eq("id",id).maybeSingle();
   let prior:any={};try{prior=existing?.note?JSON.parse(existing.note):{};}catch{}
   const {error}=await sb().from("sport_predictions").update({note:JSON.stringify({...prior,bookmakerComparison:safe,highestChance})}).eq("id",id);
-  if(error) throw new Error(error.message);
+  if(error)throw new Error(error.message);
 }
 export async function history() {
-  const {data,error}=await sb().from("sport_predictions").select("*").order("id",{ascending:false}).limit(100);
-  if(error) throw new Error(error.message);
-  return (data||[]).filter((x:any)=>{try{return JSON.parse(x.note||"{}").provider==="super-api-football";}catch{return false;}}).slice(0,30);
+  const {data,error}=await sb().from("sport_predictions").select("*").order("id",{ascending:false}).limit(150);
+  if(error)throw new Error(error.message);
+  return (data||[]).filter((x:any)=>{try{return JSON.parse(x.note||"{}").provider==="super-highlightly";}catch{return false;}}).slice(0,30);
 }
 export async function setResult(id:number,result:string) {
-  await sb().from("sport_predictions").update({result:result.slice(0,20)}).eq("id",id);
+  const {error}=await sb().from("sport_predictions").update({result:result.slice(0,20)}).eq("id",id);
+  if(error)throw new Error(error.message);
 }
