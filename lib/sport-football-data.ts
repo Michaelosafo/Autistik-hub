@@ -49,9 +49,15 @@ type Match = any;
 
 /** Today's EFL Championship and UEFA Champions League fixtures only (Ghana uses UTC). */
 export async function todayCompetitionMatches() {
+  // Use competition-specific endpoints; the combined /matches competition filter can
+  // return an empty collection on some provider plans even when a competition has games.
   const today = new Date().toISOString().slice(0, 10);
-  const data = await api("/matches?dateFrom=" + today + "&dateTo=" + today + "&competitions=ELC,CL", 2 * 60_000);
-  return (data?.matches || [])
+  const codes = [{ code: "ELC", label: "Championship" }, { code: "CL", label: "UEFA Champions League" }];
+  const results = await Promise.all(codes.map(async ({ code, label }) => {
+    const data = await api("/competitions/" + code + "/matches?dateFrom=" + today + "&dateTo=" + today, 2 * 60_000);
+    return (data?.matches || []).map((m: any) => ({ ...m, competition: { ...(m.competition || {}), name: label } }));
+  }));
+  return results.flat()
     .filter((m: any) => m.homeTeam?.id && m.awayTeam?.id && m.utcDate)
     .filter((m: any) => ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status))
     .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
