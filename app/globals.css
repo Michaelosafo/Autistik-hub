@@ -1475,10 +1475,10 @@ html[data-calm=on] .ax-sheet-in{animation:none}
   /* The bar tucks away (typing, scrolling down, or the handle) and a small pill brings it back. */
   .ax-tabs{transition:transform .22s ease}
   .ax-tabs.hide{transform:translateY(calc(100% + 24px));pointer-events:none}
-  .ax-tabs .ax-tuck{position:absolute;top:-13px;left:50%;transform:translateX(-50%);width:54px;height:16px;padding:0;border-radius:10px 10px 0 0;background:var(--lt-bar,rgba(20,17,30,.96));display:grid;place-items:center;font-size:0}
-  .ax-tabs .ax-tuck i{display:block;width:28px;height:4px;border-radius:4px;background:var(--muted);opacity:.6}
+  .ax-tabs .ax-tuck{position:absolute;top:-22px;right:10px;left:auto;transform:none;height:22px;padding:0 10px;border-radius:10px 10px 0 0;background:var(--lt-bar,rgba(20,17,30,.96));border:1px solid var(--line);border-bottom:0;display:grid;place-items:center;color:var(--muted);font-size:.68em;font-weight:800;letter-spacing:.02em}
+  .ax-tabs .ax-tuck span{display:block;line-height:1}
   .ax-pill{position:fixed;left:50%;bottom:calc(8px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:80;display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--lt-bar,rgba(20,17,30,.92));color:var(--ink);font:inherit;font-size:.72em;font-weight:800;box-shadow:0 6px 20px rgba(0,0,0,.35);cursor:pointer;animation:ax-pill-in .2s ease-out}
-  .ax-pill i{display:block;width:22px;height:4px;border-radius:4px;background:currentColor;opacity:.7}
+  .ax-pill span:first-child{font-size:1.2em;line-height:1}
   @keyframes ax-pill-in{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 }
 .ax-pill{display:none}

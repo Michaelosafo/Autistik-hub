@@ -349,13 +349,13 @@ export function AppTabs({ admin, more: moreIn, setMore: setMoreIn }: { admin?: b
           onClick={() => tuck(false)}
           onTouchStart={(e) => { swipe.current = e.touches[0].clientY; }}
           onTouchEnd={(e) => { if (swipe.current != null && swipe.current - e.changedTouches[0].clientY > 20) tuck(false); swipe.current = null; }}>
-          <i aria-hidden="true" /><span>Menu</span>
+          <span aria-hidden="true">⌃</span><span>Show menu</span>
         </button>
       )}
       <nav className={"ax-tabs" + (hidden ? " hide" : "")} aria-label="App" aria-hidden={hidden || undefined}
         onTouchStart={(e) => { swipe.current = e.touches[0].clientY; }}
         onTouchEnd={(e) => { if (swipe.current != null && e.changedTouches[0].clientY - swipe.current > 30) tuck(true); swipe.current = null; }}>
-        <button type="button" className="ax-tuck" aria-label="Hide the menu bar" onClick={() => tuck(true)}><i aria-hidden="true" /></button>
+        <button type="button" className="ax-tuck" aria-label="Hide the menu bar" onClick={() => tuck(true)}><span aria-hidden="true">⌄ Hide</span></button>
         {BOTTOM.map((b) => (
           <Link key={b.href} href={b.href} className={b.main ? "main" : undefined} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
         ))}
