@@ -64,6 +64,8 @@ export default function SportBoard() {
   const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
   const [res, setRes] = useState<any>(null);
   const [quickPicksOpen, setQuickPicksOpen] = useState(false);
+  const [activeFixtureIndex, setActiveFixtureIndex] = useState(-1);
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hist, setHist] = useState<any[]>([]);
@@ -96,6 +98,8 @@ export default function SportBoard() {
     finally { setFixturesBusy(false); }
   }
   async function chooseFixture(f: any) {
+    setActiveFixtureIndex(todayMatches.findIndex((x: any) => String(x.id) === String(f.id)));
+    setShowFullAnalysis(false);
     const h: Team = { id: f.home.id, name: f.home.name, logo: f.home.logo };
     const a: Team = { id: f.away.id, name: f.away.name, logo: f.away.logo };
     const date = new Date(f.date).toISOString().slice(0, 10);
@@ -220,7 +224,6 @@ export default function SportBoard() {
       </header>
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
-      {!res && (
       <section className="card stack">
         <b>Today's matches · Championship & Champions League</b>
         <small className="muted">Select any fixture to load its prediction shortlist automatically.</small>
@@ -261,8 +264,6 @@ export default function SportBoard() {
             </button>)}
         </div>
       </section>
-
-      )}
 
       {!res && (
       <section className="card stack">
@@ -310,7 +311,7 @@ export default function SportBoard() {
           </div>}
         </>}\n      </section>
 
-      {m && (
+      {m && showFullAnalysis && (
         <>
           <section className="card stack">
             <b>{home?.name} vs {away?.name}</b>
@@ -421,6 +422,38 @@ export default function SportBoard() {
         </>
       )}
 
+      {res?.model && !showFullAnalysis && (
+        <div role="dialog" aria-modal="true" aria-label="Quick match predictions" style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(12,10,25,.58)", display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
+          <section className="card stack" style={{ width: "100%", maxWidth: 430, maxHeight: "78vh", overflowY: "auto", boxShadow: "0 18px 60px rgba(0,0,0,.28)", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <div style={{ minWidth: 0 }}><b>{home?.name} vs {away?.name}</b><small className="muted" style={{ display: "block" }}>{res.matchDate || matchDate} · Quick predictions</small></div>
+              <button type="button" className="btn small ghost" onClick={() => { setRes(null); setShowFullAnalysis(false); }}>Close ✕</button>
+            </div>
+            <div className="sb-top">
+              {res.model.top10.map((o: any, i: number) => (
+                <div key={o.name} className={"sb-top-r " + pctCls(o.p)}>
+                  <span className="sb-rank">{i + 1}</span>
+                  <span className="sb-name">{(i === 0 ? "80–90% · " : i === 1 ? "Second green from bottom · " : i === 2 ? "Third green from bottom · " : "Last yellow in analysis · ") + o.name}</span>
+                  <b>{o.p}%</b><small className="muted">fair {o.fair}</small>
+                </div>
+              ))}
+              {res.model.top10.length < 4 && <small className="muted">Only the picks supported by this match's analysis are shown.</small>}
+            </div>
+            <button type="button" className="btn primary" onClick={() => setShowFullAnalysis(true)}>View full analysis ↓</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <button type="button" className="btn small ghost" disabled={activeFixtureIndex <= 0 || busy} onClick={() => chooseFixture(todayMatches[activeFixtureIndex - 1])}>← Previous</button>
+              <small className="muted">{activeFixtureIndex >= 0 ? activeFixtureIndex + 1 : "–"} / {todayMatches.length}</small>
+              <button type="button" className="btn small ghost" disabled={activeFixtureIndex < 0 || activeFixtureIndex >= todayMatches.length - 1 || busy} onClick={() => chooseFixture(todayMatches[activeFixtureIndex + 1])}>Next →</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {showFullAnalysis && m && (
+        <div style={{ position: "sticky", top: 8, zIndex: 20, display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+          <button type="button" className="btn small ghost" onClick={() => setShowFullAnalysis(false)}>← Back to quick dashboard</button>
+        </div>
+      )}
       {hist.length > 0 && (
         <section className="card stack">
           <b>Past predictions</b>
