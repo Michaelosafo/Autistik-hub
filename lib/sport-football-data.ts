@@ -138,7 +138,7 @@ const formPoints = (f: string) => {
 };
 
 export async function analyse(homeId: number, awayId: number, matchDate?: string) {
-  const cutoff = matchDate ? new Date(matchDate + "T23:59:59Z") : new Date();
+  const cutoff = matchDate ? new Date(matchDate + "T00:00:00Z") : new Date();
   if (Number.isNaN(cutoff.getTime())) throw new Error("Invalid match date.");
   const historical = !!matchDate && cutoff.getTime() < Date.now() - 86400_000;
   const [hm, am, actualMatch] = await Promise.all([
@@ -192,7 +192,10 @@ export async function savePrediction(row: Record<string, unknown>) {
 export async function saveOdds(id: number, selections: unknown, highestChance: unknown) {
   if (!Number.isInteger(id) || id <= 0) throw new Error("Missing prediction history ID.");
   const safeSelections = Array.isArray(selections) ? selections.slice(0, 60) : [];
-  const { error } = await sb().from("sport_predictions").update({ note: JSON.stringify({ bookmakerComparison: safeSelections, highestChance }) }).eq("id", id);
+  const { data: existing } = await sb().from("sport_predictions").select("note").eq("id", id).maybeSingle();
+  let prior: any = {};
+  try { prior = existing?.note ? JSON.parse(existing.note) : {}; } catch { prior = {}; }
+  const { error } = await sb().from("sport_predictions").update({ note: JSON.stringify({ ...prior, bookmakerComparison: safeSelections, highestChance }) }).eq("id", id);
   if (error) throw new Error(error.message);
 }
 export async function history() {
