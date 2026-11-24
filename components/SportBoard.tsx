@@ -271,7 +271,10 @@ export default function SportBoard() {
             <div key={h.id} className="sb-hist">
               <span><b>{h.home}</b> vs <b>{h.away}</b> <small className="muted">{new Date(h.created_at).toLocaleDateString()}</small></span>
               <small>Pick: <b>{h.pick}</b> · {h.p_home}/{h.p_draw}/{h.p_away}% · BTTS {h.p_btts}% · O2.5 {h.p_o25}%</small>
-              {h.note && (() => { try { const saved = JSON.parse(h.note); return <small className="muted">Highest chance: {saved.highestChance?.name || "–"} ({saved.highestChance?.probability ?? "–"}%) · {saved.bookmakerComparison?.length || 0} bookmaker prices saved. {saved.bookmakerComparison?.filter((x: any) => x.value).length || 0} positive-EV selections.</small>; } catch { return null; } })()}
+              {h.note && (() => { try { const saved = JSON.parse(h.note); return <div className="stack" style={{ width: "100%", gap: 4 }}>
+                <small className="muted">Highest chance: {saved.highestChance?.name || "–"} ({saved.highestChance?.probability ?? "–"}%) · fair odds {saved.highestChance?.fairOdds ?? "–"}</small>
+                {(saved.bookmakerComparison || []).map((x: any) => <small key={x.name} className={x.value ? "sb-ok" : "muted"}>{x.name}: model {x.probability}% · bookie {Number(x.bookmakerOdds).toFixed(2)} · fair {x.fairOdds} · implied {x.impliedProbability}% · edge {x.edgePercentagePoints}pp · EV {x.expectedValuePercent}% {x.value ? "· VALUE" : "· no value"}</small>)}
+              </div>; } catch { return null; } })()}
               <select value={h.result || ""} onChange={(e) => api("result", { id: h.id, result: e.target.value }).then(loadHist)} aria-label="Real result">
                 <option value="">Result?</option><option>Home</option><option>Draw</option><option>Away</option>
               </select>
