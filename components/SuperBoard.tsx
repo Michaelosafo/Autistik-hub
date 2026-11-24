@@ -100,7 +100,6 @@ export default function SportBoard() {
   const [oddsBusy, setOddsBusy] = useState(false);
   const [oddsError, setOddsError] = useState("");
   const [todayMatches, setTodayMatches] = useState<any[]>([]);
-  const [todayCompetition, setTodayCompetition] = useState<"UEFA Champions League" | "Championship">("UEFA Champions League");
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
   const [dateMatches, setDateMatches] = useState<any[]>([]);
