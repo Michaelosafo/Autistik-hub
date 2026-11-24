@@ -116,7 +116,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
-      if (!(d.matches || []).length) setDateMatchesError("Sportmonks returned no completed fixtures with verified full-time scores for this date.");
+      if (!(d.matches || []).length) setDateMatchesError("API-Football returned no completed fixtures with verified full-time scores for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -270,7 +270,7 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SPORT</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. Super uses Sportmonks match data to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. Super uses its own API-Football data to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
