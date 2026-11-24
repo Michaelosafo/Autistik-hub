@@ -117,7 +117,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
-      if (!(d.matches || []).length) setDateMatchesError("The football API returned no completed fixtures with verified full-time scores for this date.");
+      if (!(d.matches || []).length) setDateMatchesError("Sportmonks returned no completed fixtures with verified full-time scores for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -271,58 +271,39 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SPORT</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. Super uses Sportmonks match data to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
       <section className="card stack">
-        <b>Today's matches · Championship & Champions League</b>
-        <small className="muted">Select any fixture to load its prediction shortlist automatically.</small>
+        <b>Today's matches · all subscribed leagues</b>
+        <small className="muted">Fixtures returned by your Sportmonks subscription. Select any match to load its prediction shortlist.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
-        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-          {(["UEFA Champions League", "Championship"] as const).map((competition) => {
-            const count = todayMatches.filter((f: any) => f.competition === competition).length;
-            const active = todayCompetition === competition;
-            return <button key={competition} type="button" onClick={() => setTodayCompetition(competition)}
-              aria-pressed={active}
-              style={{ padding: "12px 8px", borderRadius: 12, border: active ? "2px solid var(--accent, #eab308)" : "1px solid var(--line)", background: active ? "var(--surface-2, #f1eef9)" : "transparent", color: "inherit", fontWeight: active ? 700 : 500 }}>
-              {competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
-              <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>{count} matches</small>
-            </button>;
-          })}
-        </div>
+        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No fixtures returned for today. Check the leagues included in your Sportmonks subscription.</small>}
         <div className="stack" style={{ gap: 0, marginTop: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 8px", borderBottom: "1px solid var(--line)" }}>
-            <span style={{ fontSize: 24 }}>{todayCompetition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
-            <b>{todayCompetition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
-            <span className="muted" style={{ marginLeft: "auto" }}>{todayMatches.filter((f: any) => f.competition === todayCompetition).length}</span>
-          </div>
-          {todayMatches.filter((f: any) => f.competition === todayCompetition).length === 0
-            ? <small className="muted" style={{ padding: 12 }}>No {todayCompetition === "UEFA Champions League" ? "Champions League" : "Championship"} fixtures found for today.</small>
-            : todayMatches.filter((f: any) => f.competition === todayCompetition).map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
-              style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
-              <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", whiteSpace: "pre-line" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? `\\n${f.score.home}–${f.score.away}` : ""}</span>
-              <span style={{ display: "grid", gap: 5 }}>
-                {[f.home, f.away].map((team: any) => <span key={team.id} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-                  {team.logo ? <img src={team.logo} alt="" width="23" height="23" style={{ objectFit: "contain" }} /> : <span style={{ width: 23 }} />}
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
-                </span>)}
-              </span>
-              <span style={{ fontSize: 22, color: "var(--muted)", textAlign: "center" }}>›</span>
-            </button>)}
+          {todayMatches.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
+            style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
+            <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", whiteSpace: "pre-line" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? "\n" + f.score.home + "–" + f.score.away : ""}</span>
+            <span style={{ display: "grid", gap: 5 }}>
+              {[f.home, f.away].map((team: any) => <span key={team.id} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                {team.logo ? <img src={team.logo} alt="" width="23" height="23" style={{ objectFit: "contain" }} /> : <span style={{ width: 23 }} />}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
+              </span>)}
+              <small className="muted">{f.competition}</small>
+            </span>
+            <span style={{ fontSize: 22, color: "var(--muted)", textAlign: "center" }}>›</span>
+          </button>)}
         </div>
       </section>
-
       {!res && (
       <section className="card stack">
         <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
         <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
           <b>Past matches by date</b>
-          <small className="muted">Search all competitions and fixtures available to your football API subscription for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
+          <small className="muted">Search all competitions and fixtures available to your Sportmonks subscription for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
           <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesError(""); setRes(null); }} /></label>
           <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || !ready} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search all available matches"}</button>
           {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
