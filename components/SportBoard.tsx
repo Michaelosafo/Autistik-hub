@@ -333,7 +333,7 @@ export default function SportBoard() {
                 {m.top10.map((o: any, i: number) => (
                   <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
                     <span className="sb-rank">{i + 1}</span>
-                    <span className="sb-name">{i === 0 ? "80–90% · " : i === 1 ? "Third green from bottom · " : "Lowest yellow · "}{o.name}</span>
+                    <span className="sb-name">{i === 0 ? "80–90% · " : i === 1 ? "Third green from bottom · " :  "Last yellow in analysis · "}{o.name}</span>
                     <b>{o.p}%</b>
                     <small className="muted">fair {o.fair}</small>
                   </div>
