@@ -66,18 +66,27 @@ export default function SportBoard() {
   const [quickPicksOpen, setQuickPicksOpen] = useState(false);
   const [activeFixtureIndex, setActiveFixtureIndex] = useState(-1);
   const [showFullAnalysis, setShowFullAnalysis] = useState(false);
-  const getValidQuickPicks = (items: any[] = []) => {
+  const getValidQuickPicks = (model: any) => {
+    // Always derive the dashboard directly from the complete ranked analysis.
+    // Do not trust a separately cached/serialized shortlist that can have stale labels.
+    const ranked = Array.isArray(model?.markets) ? model.markets : [];
+    const high = ranked.filter((o: any) => Number(o.p) >= 80 && Number(o.p) <= 90);
+    const green = ranked.filter((o: any) => Number(o.p) >= 65 && Number(o.p) < 80);
+    const yellow = ranked.filter((o: any) => Number(o.p) >= 45 && Number(o.p) < 65);
+    const thirdGreen = green.length >= 3 ? green[green.length - 3] : undefined;
+    const secondGreen = green.length >= 2 ? green[green.length - 2] : undefined;
+    const sameGreen = !!thirdGreen && !!secondGreen && thirdGreen.name === secondGreen.name;
+    const picks = [
+      high.length ? { ...high[high.length - 1], quickLabel: "80–90% high pick" } : undefined,
+      thirdGreen ? { ...thirdGreen, quickLabel: sameGreen ? "Third and second green from bottom — same selection" : "Third green from bottom" } : undefined,
+      !sameGreen && secondGreen ? { ...secondGreen, quickLabel: "Second green from bottom" } : undefined,
+      yellow.length ? { ...yellow[yellow.length - 1], quickLabel: "Last yellow in analysis" } : undefined,
+    ].filter(Boolean);
     const seen = new Set<string>();
-    return items.filter((o: any) => {
-      const label = String(o.quickLabel || "");
-      const p = Number(o.p);
-      const isHigh = label.includes("80–90%");
-      const isGreen = label.toLowerCase().includes("green");
-      const isYellow = label.toLowerCase().includes("yellow");
-      if ((isHigh && (p < 80 || p > 90)) || (isGreen && (p < 65 || p >= 80)) || (isYellow && (p < 45 || p >= 65))) return false;
+    return picks.filter((o: any) => {
       const key = String(o.name || "").trim().toLowerCase();
-      if (key && seen.has(key)) return false;
-      if (key) seen.add(key);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
   };
@@ -339,7 +348,7 @@ export default function SportBoard() {
               <summary>Quick picks · 4 selections</summary>
               <small className="muted">Automatically selected from this match's analysis using your three requested probability bands.</small>
               <div className="sb-top">
-                {getValidQuickPicks(m.top10).map((o: any, i: number) => (
+                {getValidQuickPicks(m).map((o: any, i: number) => (
                   <div key={o.quickLabel + ":" + o.name} className={`sb-top-r ${pctCls(o.p)}`}>
                     <span className="sb-rank">{i + 1}</span>
                     <span className="sb-name">{o.quickLabel || "Selection"} · {o.name}</span>
@@ -445,7 +454,7 @@ export default function SportBoard() {
               <button type="button" className="btn small ghost" onClick={() => { setRes(null); setShowFullAnalysis(false); }}>Close ✕</button>
             </div>
             <div className="sb-top">
-              {getValidQuickPicks(res.model.top10).map((o: any, i: number) => (
+              {getValidQuickPicks(res.model).map((o: any, i: number) => (
                 <div key={o.quickLabel + ":" + o.name} className={"sb-top-r " + pctCls(o.p)}>
                   <span className="sb-rank">{i + 1}</span>
                   <span className="sb-name">{(o.quickLabel || "Selection") + " · " + o.name}</span>
