@@ -47,6 +47,23 @@ export async function searchTeams(q: string) {
 
 type Match = any;
 
+/** Today's EFL Championship and UEFA Champions League fixtures only (Ghana uses UTC). */
+export async function todayCompetitionMatches() {
+  const today = new Date().toISOString().slice(0, 10);
+  const data = await api("/matches?dateFrom=" + today + "&dateTo=" + today + "&competitions=ELC,CL", 2 * 60_000);
+  return (data?.matches || [])
+    .filter((m: any) => m.homeTeam?.id && m.awayTeam?.id && m.utcDate)
+    .filter((m: any) => ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status))
+    .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
+    .map((m: any) => ({
+      id: m.id, date: m.utcDate, status: m.status,
+      competition: m.competition?.name || "",
+      home: { id: m.homeTeam.id, name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
+      away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
+      score: finished(m) ? { home: m.score.fullTime.home, away: m.score.fullTime.away } : null,
+    }));
+}
+
 /** Return exactly the latest completed match and the next scheduled fixture for one-click analysis. */
 export async function teamFixtureChoices(teamId: number) {
   // football-data.org rejects date windows longer than 750 days.
