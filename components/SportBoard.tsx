@@ -101,11 +101,23 @@ export default function SportBoard() {
   const [todayCompetition, setTodayCompetition] = useState<"UEFA Champions League" | "Championship">("UEFA Champions League");
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
+  const [dateMatches, setDateMatches] = useState<any[]>([]);
+  const [dateMatchesBusy, setDateMatchesBusy] = useState(false);
+  const [dateMatchesError, setDateMatchesError] = useState("");
   async function loadTodayMatches() {
     setTodayBusy(true); setTodayError("");
     try { const d = await api<{ matches: any[] }>("todayMatches"); setTodayMatches(d.matches || []); }
     catch (e) { setTodayError((e as Error).message); }
     finally { setTodayBusy(false); }
+  }
+  async function searchMatchesByDate() {
+    setDateMatchesBusy(true); setDateMatchesError(""); setDateMatches([]);
+    try {
+      const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
+      setDateMatches(d.matches || []);
+      if (!(d.matches || []).length) setDateMatchesError("No completed matches with verified full-time scores were found for this date.");
+    } catch (e) { setDateMatchesError((e as Error).message); }
+    finally { setDateMatchesBusy(false); }
   }
   async function loadGhanaOdds() {
     if (!home || !away) return;
@@ -292,6 +304,24 @@ export default function SportBoard() {
       <section className="card stack">
         <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
+        <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+          <b>Past matches by date</b>
+          <small className="muted">Choose any date to find completed fixtures and their verified full-time scores.</small>
+          <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesError(""); setRes(null); }} /></label>
+          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || !ready} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search matches for this date"}</button>
+          {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
+          {dateMatches.length > 0 && <div className="stack" style={{ gap: 0 }}>
+            <b>{dateMatches.length} completed {dateMatches.length === 1 ? "match" : "matches"}</b>
+            {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <b>{f.home.name} vs {f.away.name}</b>
+                <small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
+              </span>
+              <b style={{ whiteSpace: "nowrap" }}>FT {f.score.home}–{f.score.away}</b>
+              <span style={{ color: "var(--muted)" }}>›</span>
+            </button>)}
+          </div>}
+        </div>
         <small className="muted">Or choose the opponent manually:</small>
         <TeamPick label="✈️ Away team" team={away} setTeam={(t) => { setAway(t); setRes(null); }} />
         <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} onChange={(e) => { setMatchDate(e.target.value); setRes(null); }} /><small className="muted">Choose today or a past date. For past dates, the model uses matches before the selected date and looks for the actual fixture result.</small></label>
@@ -339,7 +369,7 @@ export default function SportBoard() {
           <section className="card stack">
             <b>{home?.name} vs {away?.name}</b>
             <small className="muted">Selected match date: {res.matchDate || "Today"} {res.historical ? "· Historical pre-match estimate" : "· Current estimate"}</small>
-            {res.actual && <div className="notice"><b>Actual result:</b> {res.actual.homeGoals}–{res.actual.awayGoals} · {res.actual.competition} · {new Date(res.actual.date).toLocaleString()}</div>}
+            {res.actual && <div className="notice"><b>Verified final score:</b> {res.actual.homeGoals}–{res.actual.awayGoals} · {res.actual.competition} · {new Date(res.actual.date).toLocaleString()}<small className="muted" style={{ display: "block" }}>Historical model analysis below uses match data from before kick-off; it does not use this final score to generate the prediction.</small></div>}
             {res.historical && !res.actual && <div className="notice warn">No completed fixture for these teams was found on this date. The historical model estimate is shown without an actual result.</div>}
             {res.historical && <small className="muted">Historical estimates use the available pre-date match results. This data source does not provide archived bookmaker odds or full match event statistics; bookmaker prices must be entered manually if you have them.</small>}
             {res.actual && <div className="stack"><b>Actual goals</b><div className="sb-table"><div className="sb-tr"><span>Home goals</span><b>{res.actual.homeGoals}</b><span>{home?.name}</span></div><div className="sb-tr"><span>Away goals</span><b>{res.actual.awayGoals}</b><span>{away?.name}</span></div><div className="sb-tr"><span>Actual outcome</span><b>{res.actual.homeGoals > res.actual.awayGoals ? "Home" : res.actual.homeGoals < res.actual.awayGoals ? "Away" : "Draw"}</b><span>Final score</span></div></div></div>}
@@ -449,7 +479,7 @@ export default function SportBoard() {
         <div role="dialog" aria-modal="true" aria-label="Quick match predictions" style={{ position: "fixed", inset: 0, zIndex: 1200, background: "rgba(12,10,25,.58)", display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
           <section className="card stack" style={{ width: "100%", maxWidth: 430, maxHeight: "78vh", overflowY: "auto", boxShadow: "0 18px 60px rgba(0,0,0,.28)", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <div style={{ minWidth: 0 }}><b>{home?.name} vs {away?.name}</b><small className="muted" style={{ display: "block" }}>{res.matchDate || matchDate} · Quick predictions</small></div>
+              <div style={{ minWidth: 0 }}><b>{home?.name} vs {away?.name}</b><small className="muted" style={{ display: "block" }}>{res.matchDate || matchDate} · Quick predictions</small>{res.actual && <small className="sb-ok" style={{ display: "block" }}>Final score: {res.actual.homeGoals}–{res.actual.awayGoals} · {res.actual.competition}</small>}</div>
               <button type="button" className="btn small ghost" onClick={() => { setRes(null); setShowFullAnalysis(false); }}>Close ✕</button>
             </div>
             <div className="sb-top">
