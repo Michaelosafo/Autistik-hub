@@ -49,9 +49,9 @@ type Match = any;
 
 /** Return exactly the latest completed match and the next scheduled fixture for one-click analysis. */
 export async function teamFixtureChoices(teamId: number) {
-  // Search multiple seasons: a team's latest completed match can be more than a year old
-  // when the provider has a gap in current-season data. Keep only the single latest result below.
-  const from = new Date(Date.now() - 3 * 365 * 86400_000).toISOString().slice(0, 10);
+  // football-data.org rejects date windows longer than 750 days.
+  // Keep the combined past + future window safely below that limit.
+  const from = new Date(Date.now() - 560 * 86400_000).toISOString().slice(0, 10);
   const to = new Date(Date.now() + 180 * 86400_000).toISOString().slice(0, 10);
   const data = await api("/teams/" + teamId + "/matches?dateFrom=" + from + "&dateTo=" + to + "&limit=500", 5 * 60_000);
   const now = Date.now();
