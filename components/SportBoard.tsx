@@ -181,7 +181,7 @@ export default function SportBoard() {
                   const implied = valid ? 100 / price : null;
                   const edge = valid ? o.p - implied! : null;
                   const ev = valid ? (o.p / 100) * price - 1 : null;
-                  return <div key={o.name} className="sb-top-r">
+                  return <div key={o.name} className="sb-top-r" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                     <span className="sb-name">{o.name}</span>
                     <b>{o.p}%</b>
                     <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
