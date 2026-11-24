@@ -65,6 +65,7 @@ export default function SportBoard() {
   const [res, setRes] = useState<any>(null);
   const [quickPicksOpen, setQuickPicksOpen] = useState(false);
   const [activeFixtureIndex, setActiveFixtureIndex] = useState(-1);
+  const [activeFixtureSource, setActiveFixtureSource] = useState<"today" | "date" | "team">("today");
   const [showFullAnalysis, setShowFullAnalysis] = useState(false);
   const getValidQuickPicks = (model: any) => {
     // The server builds top10 from the same complete ranked analysis. Prefer that
@@ -134,7 +135,13 @@ export default function SportBoard() {
     finally { setFixturesBusy(false); }
   }
   async function chooseFixture(f: any) {
-    setActiveFixtureIndex(dateMatches.findIndex((x: any) => String(x.id) === String(f.id)));
+    const fixtureId = String(f.id);
+    const todayIndex = todayMatches.findIndex((x: any) => String(x.id) === fixtureId);
+    const dateIndex = dateMatches.findIndex((x: any) => String(x.id) === fixtureId);
+    const teamIndex = teamFixtures.findIndex((x: any) => String(x.id) === fixtureId);
+    const source = todayIndex >= 0 ? "today" : dateIndex >= 0 ? "date" : "team";
+    setActiveFixtureSource(source);
+    setActiveFixtureIndex(todayIndex >= 0 ? todayIndex : dateIndex >= 0 ? dateIndex : teamIndex);
     setShowFullAnalysis(false);
     const h: Team = { id: f.home.id, name: f.home.name, logo: f.home.logo };
     const a: Team = { id: f.away.id, name: f.away.name, logo: f.away.logo };
@@ -170,6 +177,7 @@ export default function SportBoard() {
     setOddsError("");
   }
 
+  const activeFixtures = activeFixtureSource === "date" ? dateMatches : activeFixtureSource === "team" ? teamFixtures : todayMatches;
   const H = res?.teams?.home, A = res?.teams?.away, m = res?.model;
   const pricedMarkets = m?.markets?.map((o: any) => {
     const raw = marketOdds[o.name] || "", odds = Number(raw);
@@ -490,9 +498,9 @@ export default function SportBoard() {
             </div>
             <button type="button" className="btn primary" onClick={() => setShowFullAnalysis(true)}>View full analysis ↓</button>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <button type="button" className="btn small ghost" disabled={activeFixtureIndex <= 0 || busy} onClick={() => chooseFixture(todayMatches[activeFixtureIndex - 1])}>← Previous</button>
-              <small className="muted">{activeFixtureIndex >= 0 ? activeFixtureIndex + 1 : "–"} / {todayMatches.length}</small>
-              <button type="button" className="btn small ghost" disabled={activeFixtureIndex < 0 || activeFixtureIndex >= todayMatches.length - 1 || busy} onClick={() => chooseFixture(todayMatches[activeFixtureIndex + 1])}>Next →</button>
+              <button type="button" className="btn small ghost" disabled={activeFixtureIndex <= 0 || busy} onClick={() => chooseFixture(activeFixtures[activeFixtureIndex - 1])}>← Previous</button>
+              <small className="muted">{activeFixtureIndex >= 0 ? activeFixtureIndex + 1 : "–"} / {activeFixtures.length}</small>
+              <button type="button" className="btn small ghost" disabled={activeFixtureIndex < 0 || activeFixtureIndex >= activeFixtures.length - 1 || busy} onClick={() => chooseFixture(activeFixtures[activeFixtureIndex + 1])}>Next →</button>
             </div>
           </section>
         </div>
