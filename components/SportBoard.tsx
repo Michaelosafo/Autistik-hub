@@ -65,6 +65,16 @@ export default function SportBoard() {
   const [hist, setHist] = useState<any[]>([]);
   const [marketOdds, setMarketOdds] = useState<Record<string, string>>({});
   const [showValue, setShowValue] = useState(true);
+  const [ghanaOdds, setGhanaOdds] = useState<any>(null);
+  const [oddsBusy, setOddsBusy] = useState(false);
+  const [oddsError, setOddsError] = useState("");
+  async function loadGhanaOdds() {
+    if (!home || !away) return;
+    setOddsBusy(true); setOddsError(""); setGhanaOdds(null);
+    try { setGhanaOdds(await api("odds", { homeName: home.name, awayName: away.name, matchDate })); }
+    catch (e) { setOddsError((e as Error).message); }
+    finally { setOddsBusy(false); }
+  }
   const loadHist = () => api<{ rows: any[] }>("history").then((d) => setHist(d.rows)).catch(() => {});
   useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); }, []);
 
@@ -164,6 +174,29 @@ export default function SportBoard() {
         <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} onChange={(e) => { setMatchDate(e.target.value); setRes(null); }} /><small className="muted">Choose today or a past date. For past dates, the model uses matches before the selected date and looks for the actual fixture result.</small></label>
         <button type="button" className="btn primary" disabled={!home || !away || busy || !ready || !matchDate} onClick={run}>{busy ? "Checking both teams…" : "Analyse match"}</button>
         {err && <div className="notice warn">{err}</div>}
+      </section>
+
+      <section className="card stack">
+        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
+        <small className="muted">Live raw bookmaker prices for the selected fixture. These prices are separate from the model probabilities. Feed time is shown below; prices can change.</small>
+        <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching Ghana odds…" : "Fetch Ghana bookmaker odds"}</button>
+        {oddsError && <div className="notice warn">{oddsError}</div>}
+        {ghanaOdds && <>
+          <small className="muted">Region: {ghanaOdds.region} · Feed processed: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "not supplied"} · Events scanned: {ghanaOdds.count}</small>
+          {ghanaOdds.matched.length === 0 ? <div className="notice warn">No exact fixture match was returned for these team names and date window. Check the spelling, kickoff date, and available competitions. No odds have been invented.</div> :
+            ghanaOdds.matched.map((event: any) => <div key={event.id} className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+              <b>{event.home_team} vs {event.away_team}</b>
+              <small className="muted">{event.sport_title || "Football"} · Kick-off {new Date(event.commence_time).toLocaleString()}</small>
+              {(event.bookmakers || []).map((book: any) => <div key={book.key} className="stack" style={{ gap: 3 }}>
+                <b>{book.title || book.key}</b>
+                {(book.markets || []).filter((market: any) => market.key === "h2h").map((market: any) => <div key={market.key} className="sb-scores">
+                  {(market.outcomes || []).map((outcome: any) => <span key={outcome.name}>{outcome.name}: <b>{Number(outcome.price).toFixed(2)}</b></span>)}
+                </div>)}
+                <small className="muted">Last updated: {book.last_update ? new Date(book.last_update).toLocaleString() : "not supplied"}</small>
+              </div>)}
+            </div>)
+          }
+        </>}
       </section>
 
       {m && (
