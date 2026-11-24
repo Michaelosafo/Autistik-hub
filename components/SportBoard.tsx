@@ -157,6 +157,20 @@ export default function SportBoard() {
     setBusy(false);
   }
 
+  function startNewManualSearch() {
+    setRes(null);
+    setShowFullAnalysis(false);
+    setQuickPicksOpen(false);
+    setHome(null);
+    setAway(null);
+    setTeamFixtures([]);
+    setFixturesError("");
+    setErr("");
+    setActiveFixtureIndex(-1);
+    setGhanaOdds(null);
+    setOddsError("");
+  }
+
   const H = res?.teams?.home, A = res?.teams?.away, m = res?.model;
   const pricedMarkets = m?.markets?.map((o: any) => {
     const raw = marketOdds[o.name] || "", odds = Number(raw);
@@ -482,7 +496,7 @@ export default function SportBoard() {
           <section className="card stack" style={{ width: "100%", maxWidth: 430, maxHeight: "78vh", overflowY: "auto", boxShadow: "0 18px 60px rgba(0,0,0,.28)", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <div style={{ minWidth: 0 }}><b>{home?.name} vs {away?.name}</b><small className="muted" style={{ display: "block" }}>{res.matchDate || matchDate} · Quick predictions</small>{res.actual && <small className="sb-ok" style={{ display: "block" }}>Final score: {res.actual.homeGoals}–{res.actual.awayGoals} · {res.actual.competition}</small>}</div>
-              <button type="button" className="btn small ghost" onClick={() => { setRes(null); setShowFullAnalysis(false); }}>Close ✕</button>
+              <button type="button" className="btn small ghost" onClick={startNewManualSearch}>Search other teams</button>
             </div>
             <div className="sb-top">
               {getValidQuickPicks(res.model).map((o: any, i: number) => (
@@ -506,7 +520,10 @@ export default function SportBoard() {
 
       {showFullAnalysis && m && (
         <div style={{ position: "sticky", top: 8, zIndex: 20, display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-          <button type="button" className="btn small ghost" onClick={() => setShowFullAnalysis(false)}>← Back to quick dashboard</button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn small ghost" onClick={() => setShowFullAnalysis(false)}>← Back to quick dashboard</button>
+            <button type="button" className="btn small ghost" onClick={startNewManualSearch}>Search other teams</button>
+          </div>
         </div>
       )}
       {hist.length > 0 && (
