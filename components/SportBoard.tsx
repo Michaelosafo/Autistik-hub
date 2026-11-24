@@ -225,9 +225,28 @@ export default function SportBoard() {
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
         {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
-        {todayMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}>
-          <span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {f.status.replace("_", " ")}{f.score ? ` · ${f.score.home}–${f.score.away}` : ""}</small></span><b>{busy ? "Loading…" : "Predict"}</b>
-        </button>)}
+        {["UEFA Champions League", "Championship"].map((competition) => {
+          const games = todayMatches.filter((f: any) => f.competition === competition);
+          if (!games.length) return null;
+          return <div key={competition} className="stack" style={{ gap: 0, marginTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 8px", borderBottom: "1px solid var(--line)" }}>
+              <span style={{ fontSize: 24 }}>{competition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
+              <b>{competition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
+              <span className="muted" style={{ marginLeft: "auto" }}>{games.length}</span>
+            </div>
+            {games.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
+              style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
+              <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? `\\n${f.score.home}–${f.score.away}` : ""}</span>
+              <span style={{ display: "grid", gap: 5 }}>
+                {[f.home, f.away].map((team: any) => <span key={team.id} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+                  {team.logo ? <img src={team.logo} alt="" width="23" height="23" style={{ objectFit: "contain" }} /> : <span style={{ width: 23 }} />}
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
+                </span>)}
+              </span>
+              <span style={{ fontSize: 22, color: "var(--muted)", textAlign: "center" }}>☆</span>
+            </button>)}
+          </div>;
+        })}
       </section>
 
       <section className="card stack">
