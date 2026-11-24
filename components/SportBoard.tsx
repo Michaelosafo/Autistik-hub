@@ -79,6 +79,7 @@ export default function SportBoard() {
     const high = ranked.filter((o: any) => Number(o.p) >= 80 && Number(o.p) <= 90);
     const green = ranked.filter((o: any) => Number(o.p) >= 65 && Number(o.p) < 80);
     const yellow = ranked.filter((o: any) => Number(o.p) >= 45 && Number(o.p) < 65);
+    const firstRed = ranked.find((o: any) => Number(o.p) < 45);
     const thirdGreen = green.length >= 3 ? green[green.length - 3] : undefined;
     const secondGreen = green.length >= 2 ? green[green.length - 2] : undefined;
     const sameGreen = !!thirdGreen && !!secondGreen && thirdGreen.name === secondGreen.name;
@@ -87,6 +88,7 @@ export default function SportBoard() {
       thirdGreen ? { ...thirdGreen, quickLabel: sameGreen ? "Third and second green from bottom — same selection" : "Third green from bottom" } : undefined,
       !sameGreen && secondGreen ? { ...secondGreen, quickLabel: "Second green from bottom" } : undefined,
       yellow.length ? { ...yellow[yellow.length - 1], quickLabel: "Last yellow in analysis" } : undefined,
+      firstRed ? { ...firstRed, quickLabel: "First red in analysis" } : undefined,
     ].filter((o: any) => o && o.name);
   };
   const [busy, setBusy] = useState(false);
@@ -374,8 +376,8 @@ export default function SportBoard() {
             {res.historical && <small className="muted">Historical estimates use the available pre-date match results. This data source does not provide archived bookmaker odds or full match event statistics; bookmaker prices must be entered manually if you have them.</small>}
             {res.actual && <div className="stack"><b>Actual goals</b><div className="sb-table"><div className="sb-tr"><span>Home goals</span><b>{res.actual.homeGoals}</b><span>{home?.name}</span></div><div className="sb-tr"><span>Away goals</span><b>{res.actual.awayGoals}</b><span>{away?.name}</span></div><div className="sb-tr"><span>Actual outcome</span><b>{res.actual.homeGoals > res.actual.awayGoals ? "Home" : res.actual.homeGoals < res.actual.awayGoals ? "Away" : "Draw"}</b><span>Final score</span></div></div></div>}
             <details open={quickPicksOpen} onToggle={(e) => setQuickPicksOpen((e.currentTarget as HTMLDetailsElement).open)}>
-              <summary>Quick picks · 4 selections</summary>
-              <small className="muted">Automatically selected from this match's analysis using your three requested probability bands.</small>
+              <summary>Quick picks · {getValidQuickPicks(m).length} selections</summary>
+              <small className="muted">Automatically selected from this match's analysis: high, green, yellow, plus only the first red pick when available.</small>
               <div className="sb-top">
                 {getValidQuickPicks(m).map((o: any, i: number) => (
                   <div key={o.quickLabel + ":" + o.name} className={`sb-top-r ${pctCls(o.p)}`}>
@@ -385,7 +387,7 @@ export default function SportBoard() {
                     <small className="muted">fair {o.fair}</small>
                   </div>
                 ))}
-                {getValidQuickPicks(m).length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
+                {getValidQuickPicks(m).length < 5 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
               </div>
             </details>
             <div className="sb-xg"><span>Expected goals</span><b>{m.xg.home}</b><span>–</span><b>{m.xg.away}</b></div>
@@ -490,7 +492,7 @@ export default function SportBoard() {
                   <b>{o.p}%</b><small className="muted">fair {o.fair}</small>
                 </div>
               ))}
-              {getValidQuickPicks(res.model.top10).length < 4 && <small className="muted">Only the picks supported by this match's analysis are shown.</small>}
+              {getValidQuickPicks(res.model).length < 5 && <small className="muted">Only the picks supported by this match's analysis are shown.</small>}
             </div>
             <button type="button" className="btn primary" onClick={() => setShowFullAnalysis(true)}>View full analysis ↓</button>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
