@@ -72,7 +72,7 @@ export async function todayCompetitionMatches() {
 
 /** Completed fixtures played on one selected calendar date, with verified full-time scores. */
 export async function matchesOnDate(date: string) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
     throw new Error("Choose a valid match date.");
   }
   const next = new Date(date + "T00:00:00Z");
