@@ -135,9 +135,9 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SPORT</div>
         <h1>⚽ Sport board</h1>
-        <p className="muted">Pick the home team and the away team. The board compares both sides' stats and predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
-      {ready === false && <div className="notice warn">Add <code>APIFOOTBALL_KEY</code> in Vercel (free key at dashboard.api-football.com, 100 requests a day), then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
       <section className="card stack">
         <TeamPick label="🏠 Home team" team={home} setTeam={(t) => { setHome(t); setRes(null); }} />
@@ -155,7 +155,7 @@ export default function SportBoard() {
           </section>
           <section className="card stack">
             <b>🎯 10 options most likely to happen</b>
-            <small className="muted">Generated purely from this board's own model (Poisson expected goals from home/away strengths, form, last-5 shots/xG/passes). Not based on any bookmaker odds.</small>
+            <small className="muted">Generated purely from this board's own model (Poisson expected goals from home/away goal strengths and recent form). Not based on any bookmaker odds.</small>
             <div className="notice">
               <b>Value bet guide:</b> Fair odds = 1 ÷ our probability. Example: if our model gives a team 80% chance (fair odds ~1.25) but a bookmaker offers 1.50, that is good value (bookie underestimates the chance). If the bookie offers lower than fair odds, the option is poor value / more likely to lose relative to the price. Always compare the fair odds shown here to whatever bookmaker you use.
             </div>
@@ -221,7 +221,7 @@ export default function SportBoard() {
               <div className="sb-tr sb-th" role="row"><span role="columnheader">Stat</span><span role="columnheader">{home?.name}</span><span role="columnheader">{away?.name}</span></div>
               {rows.map(([k, a, b]) => <div key={k} className="sb-tr" role="row"><span role="cell">{k}</span><span role="cell">{String(a)}</span><span role="cell">{String(b)}</span></div>)}
             </div>
-            <small className="muted">Season numbers are from each team's own league ({res.leagues.home.name} {res.leagues.home.season}, {res.leagues.away.name} {res.leagues.away.season}); strengths are measured against that league's average so teams from different leagues compare fairly.</small>
+            <small className="muted">Recent goal averages are measured against each team's competition averages. This free data source does not provide the detailed shot and xG fields shown by the previous provider.</small>
           </section>
           <section className="card stack">
             <b>Last 5 matches</b>
