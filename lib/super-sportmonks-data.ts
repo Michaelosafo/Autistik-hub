@@ -49,7 +49,12 @@ const score = (f: any, location: "home" | "away") => {
 };
 const status = (f: any) => String(f?.state?.short_name || f?.state?.name || "").toUpperCase();
 const finished = (f: any) => ["FT", "AET", "PEN", "FINISHED", "FULL TIME"].some((x) => status(f).includes(x));
-const dateOf = (f: any) => String(f?.starting_at || "").replace(" ", "T") + (String(f?.starting_at || "").includes("Z") ? "" : "Z");
+const dateOf = (f: any) => {
+  const raw = String(f?.starting_at || "");
+  if (!raw) return "";
+  const iso = raw.includes("T") ? raw : raw.replace(" ", "T");
+  return /Z$|[+-]\\d{2}:?\\d{2}$/.test(iso) ? iso : iso + "Z";
+};
 function fixture(f: any) {
   const { home, away } = participants(f);
   if (!home?.id || !away?.id) return null;
@@ -103,25 +108,49 @@ export async function teamFixtureChoices(teamId: number) {
 
 function summarize(teamId: number, matches: any[]) {
   const all = matches.slice(0,30);
-  let hGF=0,hGA=0,hN=0,aGF=0,aGA=0,aN=0,w=0,d=0,l=0;
+  let hGF=0,hGA=0,hN=0,aGF=0,aGA=0,aN=0;
+  let hw=0,hd=0,hl=0,aw=0,ad=0,al=0;
   const form = all.slice(0,10).map((f: any) => {
     const isHome=f.home.id===teamId, gf=isHome?f.score.home:f.score.away, ga=isHome?f.score.away:f.score.home;
     if(isHome){hGF+=gf;hGA+=ga;hN++;}else{aGF+=gf;aGA+=ga;aN++;}
-    if(gf>ga){w++;return "W";} if(gf===ga){d++;return "D";} l++;return "L";
+    if(gf>ga){if(isHome)hw++;else aw++;return "W";}
+    if(gf===ga){if(isHome)hd++;else ad++;return "D";}
+    if(isHome)hl++;else al++;return "L";
   }).reverse().join("");
   const recent=all.slice(0,5).map((f: any) => {
     const isHome=f.home.id===teamId, gf=isHome?f.score.home:f.score.away, ga=isHome?f.score.away:f.score.home;
     return {date:f.date,vs:isHome?f.away.name:f.home.name,home:isHome,gf,ga,res:gf>ga?"W":gf===ga?"D":"L",comp:f.competition};
   });
+  const statNames: Record<string,string> = {
+    "Total Shots":"shots","Shots Total":"shots","Shots on Target":"onTarget","Shots On Target":"onTarget",
+    "Shots outsidebox":"longShots","Shots Outside Box":"longShots","Shots insidebox":"boxShots","Shots Inside Box":"boxShots",
+    "Total passes":"passes","Passes":"passes","Passes %":"passPct","Pass Accuracy":"passPct",
+    "Ball Possession":"possession","Corner Kicks":"corners","Goalkeeper Saves":"saves","Saves":"saves",
+    "Expected Goals":"xg","xG":"xg"
+  };
+  const sums: Record<string,number>={}, counts:Record<string,number>={};
+  for(const f of recent){
+    const raw=all.find((x:any)=>x.date===f.date && (x.home.id===teamId || x.away.id===teamId));
+    const participantId=raw?.home.id===teamId?raw.home.id:raw?.away.id;
+    for(const st of raw?.statistics||[]){
+      if(st.participant_id!==participantId) continue;
+      const name=st.type?.name||st.type_name||"";
+      const key=statNames[name] || ({42:"shots",86:"onTarget",34:"corners",45:"possession"} as Record<number,string>)[Number(st.type_id)];
+      const val=Number(st.data?.value ?? st.value);
+      if(key && Number.isFinite(val)){sums[key]=(sums[key]||0)+val;counts[key]=(counts[key]||0)+1;}
+    }
+  }
+  const avg:Record<string,number|null>={};
+  for(const k of ["shots","onTarget","longShots","boxShots","passes","passPct","possession","corners","saves","xg"]) avg[k]=counts[k]?+(sums[k]/counts[k]).toFixed(k==="xg"?2:1):null;
   const stats = {
     form, played:{home:hN,away:aN,total:hN+aN},
-    wins:{home:0,away:0,total:w}, draws:{home:0,away:0,total:d}, loses:{home:0,away:0,total:l},
+    wins:{home:hw,away:aw,total:hw+aw}, draws:{home:hd,away:ad,total:hd+ad}, loses:{home:hl,away:al,total:hl+al},
     goalsFor:{home:hN?+(hGF/hN).toFixed(2):null,away:aN?+(aGF/aN).toFixed(2):null,total:all.length?+((hGF+aGF)/all.length).toFixed(2):null},
     goalsAgainst:{home:hN?+(hGA/hN).toFixed(2):null,away:aN?+(aGA/aN).toFixed(2):null,total:all.length?+((hGA+aGA)/all.length).toFixed(2):null},
-    cleanSheets:{home:0,away:0,total:all.filter((f: any)=> (f.home.id===teamId?f.score.away:f.score.home)===0).length},
-    failedToScore:{home:0,away:0,total:all.filter((f: any)=> (f.home.id===teamId?f.score.home:f.score.away)===0).length},
+    cleanSheets:{home:0,away:0,total:all.filter((f:any)=>(f.home.id===teamId?f.score.away:f.score.home)===0).length},
+    failedToScore:{home:0,away:0,total:all.filter((f:any)=>(f.home.id===teamId?f.score.home:f.score.away)===0).length},
   };
-  return {season:stats,last5:{games:recent,avg:{shots:null,onTarget:null,longShots:null,boxShots:null,passes:null,passPct:null,possession:null,corners:null,saves:null,xg:null}}};
+  return {season:stats,last5:{games:recent,avg}};
 }
 
 export async function analyse(homeId: number, awayId: number, matchDate?: string) {
