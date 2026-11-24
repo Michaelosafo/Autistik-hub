@@ -62,6 +62,8 @@ export default function SportBoard() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hist, setHist] = useState<any[]>([]);
+  const [marketOdds, setMarketOdds] = useState<Record<string, string>>({});
+  const [showValue, setShowValue] = useState(true);
   const loadHist = () => api<{ rows: any[] }>("history").then((d) => setHist(d.rows)).catch(() => {});
   useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); }, []);
 
@@ -167,6 +169,31 @@ export default function SportBoard() {
                 </div>
               ))}
             </div>
+            <section className="stack">
+              <b>Value checker · compare prices independently</b>
+              <small className="muted">Enter the decimal price you can actually get for any selection. The model probability above is calculated without bookmaker odds. Positive expected value is a mathematical edge estimate, not a guarantee; only consider it after enough historical model validation.</small>
+              <button type="button" className="btn small ghost" onClick={() => setShowValue(!showValue)}>{showValue ? "Hide value checker" : "Show value checker"}</button>
+              {showValue && <div className="sb-top">
+                {m.markets.map((o: any) => {
+                  const raw = marketOdds[o.name] || "";
+                  const price = Number(raw);
+                  const valid = raw !== "" && Number.isFinite(price) && price > 1;
+                  const implied = valid ? 100 / price : null;
+                  const edge = valid ? o.p - implied! : null;
+                  const ev = valid ? (o.p / 100) * price - 1 : null;
+                  return <div key={o.name} className="sb-top-r">
+                    <span className="sb-name">{o.name}</span>
+                    <b>{o.p}%</b>
+                    <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <small className="muted">Odds</small>
+                      <input aria-label={o.name + " decimal odds"} inputMode="decimal" type="number" min="1.01" step="0.01" placeholder="e.g. 1.50" value={raw} onChange={(e) => setMarketOdds((s) => ({ ...s, [o.name]: e.target.value }))} style={{ width: 92 }} />
+                    </label>
+                    <small className="muted">{valid ? `Implied ${implied!.toFixed(1)}% · edge ${edge!.toFixed(1)}pp · EV ${(ev! * 100).toFixed(1)}%` : `Fair ${o.fair ?? "–"}`}</small>
+                    {valid && <small className={ev! >= 0.05 ? "sb-ok" : ev! > 0 ? "sb-g D" : "sb-no"}>{ev! >= 0.05 ? "Potential value" : ev! > 0 ? "Small edge" : "No value at this price"}</small>}
+                  </div>;
+                })}
+              </div>}
+            </section>
             <details>
               <summary>All {m.markets.length} options</summary>
               <div className="sb-top">
