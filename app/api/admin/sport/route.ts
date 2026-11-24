@@ -1,6 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, saveOdds, savePrediction, searchTeams, setResult, sportReady } from "@/lib/sport-football-data";
+import { getGhanaMatchOdds } from "@/lib/oddsrelay";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,6 +14,11 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
+      case "odds": {
+        const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
+        if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
+        return json(await getGhanaMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
+      }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
         if (!h || !a || h === a) return json({ error: "Pick two different teams." }, 400);
