@@ -138,9 +138,12 @@ async function teamMatches(teamId: number, before?: string) {
 async function matchOnDate(homeId: number, awayId: number, date: string) {
   const next = new Date(date + "T00:00:00Z"); next.setUTCDate(next.getUTCDate() + 1);
   const dateTo = next.toISOString().slice(0, 10);
-  const data = await api("/teams/" + homeId + "/matches?dateFrom=" + date + "&dateTo=" + dateTo + "&limit=100", 12 * 3600_000);
+  // Use the same all-competitions date feed as the date-search list, so
+  // the score lookup is consistent with the exact fixture the user selected.
+  const data = await api("/matches?dateFrom=" + date + "&dateTo=" + dateTo + "&limit=500", 30 * 60_000);
   return (data?.matches || []).find((m: Match) =>
-    m.homeTeam?.id === homeId && m.awayTeam?.id === awayId && m.status === "FINISHED" && String(m.utcDate || "").slice(0, 10) === date
+    m.homeTeam?.id === homeId && m.awayTeam?.id === awayId &&
+    m.status === "FINISHED" && String(m.utcDate || "").slice(0, 10) === date
   ) || null;
 }
 
