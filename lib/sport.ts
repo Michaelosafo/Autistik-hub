@@ -162,6 +162,8 @@ export function model(lh: number, la: number) {
   const highBand = ranked.filter((x) => x.p >= 80 && x.p <= 90);
   const greenBand = ranked.filter((x) => x.p >= 65 && x.p < 80);
   const yellowBand = ranked.filter((x) => x.p >= 45 && x.p < 65);
+  // Add only the highest-ranked red selection (the first red in the full analysis).
+  const firstRed = ranked.find((x) => x.p < 45);
   const thirdGreen = greenBand.length >= 3 ? greenBand[greenBand.length - 3] : undefined;
   const secondGreen = greenBand.length >= 2 ? greenBand[greenBand.length - 2] : undefined;
   const sameGreenPick = !!thirdGreen && !!secondGreen && thirdGreen.name === secondGreen.name;
@@ -170,6 +172,7 @@ export function model(lh: number, la: number) {
     { pick: thirdGreen, quickLabel: sameGreenPick ? "Third and second green from bottom — same selection" : "Third green from bottom" },
     { pick: sameGreenPick ? undefined : secondGreen, quickLabel: "Second green from bottom" },
     { pick: yellowBand[yellowBand.length - 1], quickLabel: "Last yellow in analysis" },
+    { pick: firstRed, quickLabel: "First red in analysis" },
   ].filter((entry) => entry.pick).map((entry) => ({ ...entry.pick, quickLabel: entry.quickLabel }));
   return {
     xg: { home: +lh.toFixed(2), away: +la.toFixed(2) },
