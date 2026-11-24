@@ -15,6 +15,7 @@ export const TRADER_TABS: Tab[] = [
   { href: "/admin/ai-forex", label: "💱 Forex", sub: "Currencies · trade.xyz", acc: "#06b6d4", shared: true },
   { href: "/admin/ai-copy", label: "👥 Copy", sub: "Copies wallets", acc: "#ec4899", shared: true },
   { href: "/signal", label: "📡 Signal", sub: "Swap · bridge via Bitget · only you", acc: "#00c2ff" },
+  { href: "/admin/sport", label: "⚽ Sport", sub: "Football stats · predictions", acc: "#16a34a" },
 ];
 /**
  * Each chain group is ONE tab (its deploy tool). Open it and a menu inside switches between the group's tools
