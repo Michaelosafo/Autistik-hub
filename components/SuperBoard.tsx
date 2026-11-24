@@ -276,11 +276,11 @@ export default function SportBoard() {
         .sb-no { color: var(--coral); font-weight: 700; }
       `}</style>
       <header>
-        <div className="dz-kick">OWNER · SPORT</div>
+        <div className="dz-kick">OWNER · SUPER</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. Super uses its own API-Football data to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. Super uses its own Highlightly data feed to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
-      {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>SUPER_HIGHLIGHTLY_API_KEY</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
         <b>Today's matches · all subscribed leagues</b>
