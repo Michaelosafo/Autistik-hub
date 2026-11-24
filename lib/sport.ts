@@ -154,13 +154,18 @@ export function model(lh: number, la: number) {
     .map(([name, p]) => ({ name, p: pct(p), fair: p > 0 ? +(1 / p).toFixed(2) : null }))
     .filter((x) => x.p < 99)
     .sort((a, b) => b.p - a.p);
-  // Priority shortlist for the Sport board:
-  // show every high-confidence pick (80%+), then the next 3 green picks (65–79.9%),
-  // then the next 2 yellow picks (45–64.9%). Each group remains probability-ranked.
-  const highPicks = ranked.filter((x) => x.p >= 80);
-  const greenPicks = ranked.filter((x) => x.p >= 65 && x.p < 80).slice(-3);
-  const yellowPicks = ranked.filter((x) => x.p >= 45 && x.p < 65).slice(-2);
-  const top10 = [...highPicks, ...greenPicks, ...yellowPicks];
+  // Exactly three quick picks for the match screen:
+  // 1) lowest probability in the 80–90% band,
+  // 2) third green pick counting upward from the bottom of the 65–79.9% band,
+  // 3) lowest yellow pick in the 45–64.9% band.
+  const highBand = ranked.filter((x) => x.p >= 80 && x.p <= 90);
+  const greenBand = ranked.filter((x) => x.p >= 65 && x.p < 80);
+  const yellowBand = ranked.filter((x) => x.p >= 45 && x.p < 65);
+  const top10 = [
+    highBand[highBand.length - 1],
+    greenBand.length >= 3 ? greenBand[greenBand.length - 3] : greenBand[greenBand.length - 1],
+    yellowBand[yellowBand.length - 1],
+  ].filter(Boolean);
   return {
     xg: { home: +lh.toFixed(2), away: +la.toFixed(2) },
     home: pct(pH), draw: pct(pD), away: pct(pA),
