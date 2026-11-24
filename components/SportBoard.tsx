@@ -66,6 +66,21 @@ export default function SportBoard() {
   const [quickPicksOpen, setQuickPicksOpen] = useState(false);
   const [activeFixtureIndex, setActiveFixtureIndex] = useState(-1);
   const [showFullAnalysis, setShowFullAnalysis] = useState(false);
+  const getValidQuickPicks = (items: any[] = []) => {
+    const seen = new Set<string>();
+    return items.filter((o: any) => {
+      const label = String(o.quickLabel || "");
+      const p = Number(o.p);
+      const isHigh = label.includes("80–90%");
+      const isGreen = label.toLowerCase().includes("green");
+      const isYellow = label.toLowerCase().includes("yellow");
+      if ((isHigh && (p < 80 || p > 90)) || (isGreen && (p < 65 || p >= 80)) || (isYellow && (p < 45 || p >= 65))) return false;
+      const key = String(o.name || "").trim().toLowerCase();
+      if (key && seen.has(key)) return false;
+      if (key) seen.add(key);
+      return true;
+    });
+  };
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [hist, setHist] = useState<any[]>([]);
@@ -324,7 +339,7 @@ export default function SportBoard() {
               <summary>Quick picks · 4 selections</summary>
               <small className="muted">Automatically selected from this match's analysis using your three requested probability bands.</small>
               <div className="sb-top">
-                {m.top10.map((o: any, i: number) => (
+                {getValidQuickPicks(m.top10).map((o: any, i: number) => (
                   <div key={o.quickLabel + ":" + o.name} className={`sb-top-r ${pctCls(o.p)}`}>
                     <span className="sb-rank">{i + 1}</span>
                     <span className="sb-name">{o.quickLabel || "Selection"} · {o.name}</span>
@@ -332,7 +347,7 @@ export default function SportBoard() {
                     <small className="muted">fair {o.fair}</small>
                   </div>
                 ))}
-                {m.top10.length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
+                {getValidQuickPicks(m.top10).length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
               </div>
             </details>
             <div className="sb-xg"><span>Expected goals</span><b>{m.xg.home}</b><span>–</span><b>{m.xg.away}</b></div>
@@ -430,14 +445,14 @@ export default function SportBoard() {
               <button type="button" className="btn small ghost" onClick={() => { setRes(null); setShowFullAnalysis(false); }}>Close ✕</button>
             </div>
             <div className="sb-top">
-              {res.model.top10.map((o: any, i: number) => (
+              {getValidQuickPicks(res.model.top10).map((o: any, i: number) => (
                 <div key={o.quickLabel + ":" + o.name} className={"sb-top-r " + pctCls(o.p)}>
                   <span className="sb-rank">{i + 1}</span>
                   <span className="sb-name">{(o.quickLabel || "Selection") + " · " + o.name}</span>
                   <b>{o.p}%</b><small className="muted">fair {o.fair}</small>
                 </div>
               ))}
-              {res.model.top10.length < 4 && <small className="muted">Only the picks supported by this match's analysis are shown.</small>}
+              {getValidQuickPicks(res.model.top10).length < 4 && <small className="muted">Only the picks supported by this match's analysis are shown.</small>}
             </div>
             <button type="button" className="btn primary" onClick={() => setShowFullAnalysis(true)}>View full analysis ↓</button>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
