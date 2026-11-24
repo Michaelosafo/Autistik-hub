@@ -76,6 +76,24 @@ export default function SportBoard() {
   }
 
   const H = res?.teams?.home, A = res?.teams?.away, m = res?.model;
+  const pricedMarkets = m?.markets?.map((o: any) => {
+    const raw = marketOdds[o.name] || "", odds = Number(raw);
+    const valid = raw !== "" && Number.isFinite(odds) && odds > 1;
+    const implied = valid ? 100 / odds : null, edge = valid ? o.p - implied : null;
+    const ev = valid ? (o.p / 100) * odds - 1 : null;
+    return { ...o, odds: valid ? odds : null, implied, edge, ev, value: valid && ev! > 0 };
+  }) || [];
+  const highestChance = [...(m?.markets || [])].sort((a: any, b: any) => b.p - a.p)[0];
+  const bestValue = pricedMarkets.filter((o: any) => o.value).sort((a: any, b: any) => b.ev - a.ev)[0];
+  async function saveOdds() {
+    const selections = pricedMarkets.filter((o: any) => o.odds != null).map((o: any) => ({
+      name: o.name, probability: o.p, fairOdds: o.fair, bookmakerOdds: o.odds,
+      impliedProbability: +o.implied.toFixed(2), edgePercentagePoints: +o.edge.toFixed(2),
+      expectedValuePercent: +(o.ev * 100).toFixed(2), value: o.value,
+    }));
+    await api("saveOdds", { predictionId: res?.predictionId, selections, highestChance: highestChance ? { name: highestChance.name, probability: highestChance.p, fairOdds: highestChance.fair } : null });
+    await loadHist();
+  }
   const rows: [string, any, any][] = res ? [
     ["League", `${res.leagues.home.name}`, `${res.leagues.away.name}`],
     ["Form (latest last)", H.season.form || "–", A.season.form || "–"],
@@ -154,7 +172,11 @@ export default function SportBoard() {
             <ul className="sb-verdict">{res.verdict.map((x: string) => <li key={x}>{x}</li>)}</ul>
           </section>
           <section className="card stack">
-            <b>🎯 10 options most likely to happen</b>
+            <b>🎯 Predictions ranked by chance</b>
+            <div className="notice">
+              <b>Highest chance:</b> {highestChance?.name || "–"} — {highestChance?.p ?? "–"}% (fair odds {highestChance?.fair ?? "–"}).
+              <br /><b>Best value at the odds you enter:</b> {bestValue ? `${bestValue.name} — EV ${(bestValue.ev * 100).toFixed(1)}%, bookmaker ${bestValue.odds.toFixed(2)} vs fair ${bestValue.fair}` : "No positive expected-value selection entered yet."}
+            </div>
             <small className="muted">Generated purely from this board's own model (Poisson expected goals from home/away goal strengths and recent form). Not based on any bookmaker odds.</small>
             <div className="notice">
               <b>Value bet guide:</b> Fair odds = 1 ÷ our probability. Example: if our model gives a team 80% chance (fair odds ~1.25) but a bookmaker offers 1.50, that is good value (bookie underestimates the chance). If the bookie offers lower than fair odds, the option is poor value / more likely to lose relative to the price. Always compare the fair odds shown here to whatever bookmaker you use.
@@ -173,7 +195,7 @@ export default function SportBoard() {
               <b>Value checker · compare prices independently</b>
               <small className="muted">Enter the decimal price you can actually get for any selection. The model probability above is calculated without bookmaker odds. Positive expected value is a mathematical edge estimate, not a guarantee; only consider it after enough historical model validation.</small>
               <button type="button" className="btn small ghost" onClick={() => setShowValue(!showValue)}>{showValue ? "Hide value checker" : "Show value checker"}</button>
-              {showValue && <div className="sb-top">
+              {showValue && <><div className="sb-top">
                 {m.markets.map((o: any) => {
                   const raw = marketOdds[o.name] || "";
                   const price = Number(raw);
@@ -192,7 +214,7 @@ export default function SportBoard() {
                     {valid && <small className={ev! >= 0.05 ? "sb-ok" : ev! > 0 ? "sb-g D" : "sb-no"}>{ev! >= 0.05 ? "Potential value" : ev! > 0 ? "Small edge" : "No value at this price"}</small>}
                   </div>;
                 })}
-              </div>}
+              </div><button type="button" className="btn primary" disabled={!res?.predictionId || !pricedMarkets.some((o: any) => o.odds != null)} onClick={saveOdds}>Save bookmaker comparison to History</button></>}
             </section>
             <details>
               <summary>All {m.markets.length} options</summary>
@@ -249,6 +271,7 @@ export default function SportBoard() {
             <div key={h.id} className="sb-hist">
               <span><b>{h.home}</b> vs <b>{h.away}</b> <small className="muted">{new Date(h.created_at).toLocaleDateString()}</small></span>
               <small>Pick: <b>{h.pick}</b> · {h.p_home}/{h.p_draw}/{h.p_away}% · BTTS {h.p_btts}% · O2.5 {h.p_o25}%</small>
+              {h.note && (() => { try { const saved = JSON.parse(h.note); return <small className="muted">Highest chance: {saved.highestChance?.name || "–"} ({saved.highestChance?.probability ?? "–"}%) · {saved.bookmakerComparison?.length || 0} bookmaker prices saved. {saved.bookmakerComparison?.filter((x: any) => x.value).length || 0} positive-EV selections.</small>; } catch { return null; } })()}
               <select value={h.result || ""} onChange={(e) => api("result", { id: h.id, result: e.target.value }).then(loadHist)} aria-label="Real result">
                 <option value="">Result?</option><option>Home</option><option>Draw</option><option>Away</option>
               </select>
