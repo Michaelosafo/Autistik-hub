@@ -98,6 +98,38 @@ export default function SportBoard() {
 
   return (
     <div className="sb stack">
+      <style>{`
+        .sb-team, .sb-opt { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 10px; background: var(--surface-2); }
+        .sb-opt { width: 100%; text-align: left; cursor: pointer; border: 1px solid var(--line); }
+        .sb-opt:hover { background: var(--surface); }
+        .sb-bar { display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; align-items: center; font-size: .9em; }
+        .sb-bar i { height: 10px; background: var(--line); border-radius: 5px; position: relative; overflow: hidden; }
+        .sb-bar i::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: inherit; background: var(--violet); }
+        .sb-bar.hi i::after { background: var(--teal); }
+        .sb-bar.mid i::after { background: var(--sun); }
+        .sb-bar.lo i::after { background: var(--coral); }
+        .sb-xg { display: flex; align-items: center; gap: 12px; font-size: 1.4em; font-weight: 700; }
+        .sb-verdict { margin: 0; padding-left: 18px; }
+        .sb-top { display: flex; flex-direction: column; gap: 6px; }
+        .sb-top-r { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 8px; align-items: center; padding: 8px; border-radius: 8px; background: var(--surface-2); }
+        .sb-top-r.hi { border-left: 4px solid var(--teal); }
+        .sb-top-r.mid { border-left: 4px solid var(--sun); }
+        .sb-top-r.lo { border-left: 4px solid var(--coral); }
+        .sb-rank { font-weight: 800; color: var(--muted); }
+        .sb-scores { display: flex; flex-wrap: wrap; gap: 10px; }
+        .sb-scores span { background: var(--surface-2); padding: 6px 12px; border-radius: 999px; }
+        .sb-table { display: flex; flex-direction: column; gap: 2px; font-size: .9em; }
+        .sb-tr { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+        .sb-th { font-weight: 700; }
+        .sb-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .sb-g { padding: 4px 0; font-size: .9em; }
+        .sb-g.W { color: var(--teal); }
+        .sb-g.L { color: var(--coral); }
+        .sb-g.D { color: var(--sun); }
+        .sb-hist { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+        .sb-ok { color: var(--teal); font-weight: 700; }
+        .sb-no { color: var(--coral); font-weight: 700; }
+      `}</style>
       <header>
         <div className="dz-kick">OWNER · SPORT</div>
         <h1>⚽ Sport board</h1>
@@ -121,7 +153,10 @@ export default function SportBoard() {
           </section>
           <section className="card stack">
             <b>🎯 10 options most likely to happen</b>
-            <small className="muted">From this board's own model, not bookmaker odds. "Fair odds" is what the option is worth (1 ÷ chance). If a bookmaker pays more than the fair odds, that option is good value; if it pays less, skip it.</small>
+            <small className="muted">Generated purely from this board's own model (Poisson expected goals from home/away strengths, form, last-5 shots/xG/passes). Not based on any bookmaker odds.</small>
+            <div className="notice">
+              <b>Value bet guide:</b> Fair odds = 1 ÷ our probability. Example: if our model gives a team 80% chance (fair odds ~1.25) but a bookmaker offers 1.50, that is good value (bookie underestimates the chance). If the bookie offers lower than fair odds, the option is poor value / more likely to lose relative to the price. Always compare the fair odds shown here to whatever bookmaker you use.
+            </div>
             <div className="sb-top">
               {m.top10.map((o: any, i: number) => (
                 <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
