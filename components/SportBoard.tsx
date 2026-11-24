@@ -16,7 +16,7 @@ async function api<T = any>(action: string, body: object = {}): Promise<T> {
   return d;
 }
 
-function TeamPick({ label, team, setTeam }: { label: string; team: Team | null; setTeam: (t: Team | null) => void }) {
+function TeamPick({ label, team, setTeam, onChoose }: { label: string; team: Team | null; setTeam: (t: Team | null) => void; onChoose?: (t: Team) => void }) {
   const [q, setQ] = useState("");
   const [list, setList] = useState<Team[]>([]);
   const [busy, setBusy] = useState(false);
@@ -40,7 +40,7 @@ function TeamPick({ label, team, setTeam }: { label: string; team: Team | null; 
       </label>
       {busy && <small className="muted">Searching…</small>}
       {list.map((x) => (
-        <button key={x.id} type="button" className="sb-opt" onClick={() => { setTeam(x); setList([]); }}>
+        <button key={x.id} type="button" className="sb-opt" onClick={() => { setTeam(x); setList([]); onChoose?.(x); }}>
           {x.logo && <img src={x.logo} alt="" width={22} height={22} />}<span>{x.name}</span><small className="muted">{x.country}</small>
         </button>
       ))}
@@ -58,6 +58,9 @@ export default function SportBoard() {
   const [ready, setReady] = useState<boolean | null>(null);
   const [home, setHome] = useState<Team | null>(null);
   const [away, setAway] = useState<Team | null>(null);
+  const [teamFixtures, setTeamFixtures] = useState<any[]>([]);
+  const [fixturesBusy, setFixturesBusy] = useState(false);
+  const [fixturesError, setFixturesError] = useState("");
   const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
   const [res, setRes] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -74,6 +77,22 @@ export default function SportBoard() {
     try { setGhanaOdds(await api("odds", { homeName: home.name, awayName: away.name, matchDate })); }
     catch (e) { setOddsError((e as Error).message); }
     finally { setOddsBusy(false); }
+  }
+  async function loadTeamFixtures(t: Team) {
+    setFixturesBusy(true); setFixturesError(""); setTeamFixtures([]);
+    try { const d = await api<{ fixtures: any[] }>("teamFixtures", { teamId: t.id }); setTeamFixtures(d.fixtures || []); }
+    catch (e) { setFixturesError((e as Error).message); }
+    finally { setFixturesBusy(false); }
+  }
+  async function chooseFixture(f: any) {
+    const h: Team = { id: f.home.id, name: f.home.name, logo: f.home.logo };
+    const a: Team = { id: f.away.id, name: f.away.name, logo: f.away.logo };
+    const date = new Date(f.date).toISOString().slice(0, 10);
+    setHome(h); setAway(a); setMatchDate(date); setRes(null); setErr("");
+    setBusy(true);
+    try { setRes(await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name })); loadHist(); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
   }
   const loadHist = () => api<{ rows: any[] }>("history").then((d) => setHist(d.rows)).catch(() => {});
   useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); }, []);
@@ -169,7 +188,9 @@ export default function SportBoard() {
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
       <section className="card stack">
-        <TeamPick label="🏠 Home team" team={home} setTeam={(t) => { setHome(t); setRes(null); }} />
+        <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
+        {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Choose a current/upcoming fixture or one of the latest completed matches. The opponent and match date will fill automatically.</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>View</b></button>)}</div>}
+        <small className="muted">Or choose the opponent manually:</small>
         <TeamPick label="✈️ Away team" team={away} setTeam={(t) => { setAway(t); setRes(null); }} />
         <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} onChange={(e) => { setMatchDate(e.target.value); setRes(null); }} /><small className="muted">Choose today or a past date. For past dates, the model uses matches before the selected date and looks for the actual fixture result.</small></label>
         <button type="button" className="btn primary" disabled={!home || !away || busy || !ready || !matchDate} onClick={run}>{busy ? "Checking both teams…" : "Analyse match"}</button>
