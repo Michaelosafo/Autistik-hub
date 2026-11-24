@@ -67,8 +67,14 @@ export default function SportBoard() {
   const [activeFixtureIndex, setActiveFixtureIndex] = useState(-1);
   const [showFullAnalysis, setShowFullAnalysis] = useState(false);
   const getValidQuickPicks = (model: any) => {
-    // Always derive the dashboard directly from the complete ranked analysis.
-    // Do not trust a separately cached/serialized shortlist that can have stale labels.
+    // The server builds top10 from the same complete ranked analysis. Prefer that
+    // canonical shortlist so the quick modal and full analysis cannot disagree.
+    const supplied = Array.isArray(model?.top10)
+      ? model.top10.filter((o: any) => o && o.name && Number.isFinite(Number(o.p)))
+      : [];
+    if (supplied.length) return supplied;
+
+    // Backward-compatible fallback for older saved/API responses without top10.
     const ranked = Array.isArray(model?.markets) ? model.markets : [];
     const high = ranked.filter((o: any) => Number(o.p) >= 80 && Number(o.p) <= 90);
     const green = ranked.filter((o: any) => Number(o.p) >= 65 && Number(o.p) < 80);
@@ -76,19 +82,12 @@ export default function SportBoard() {
     const thirdGreen = green.length >= 3 ? green[green.length - 3] : undefined;
     const secondGreen = green.length >= 2 ? green[green.length - 2] : undefined;
     const sameGreen = !!thirdGreen && !!secondGreen && thirdGreen.name === secondGreen.name;
-    const picks = [
+    return [
       high.length ? { ...high[high.length - 1], quickLabel: "80–90% high pick" } : undefined,
       thirdGreen ? { ...thirdGreen, quickLabel: sameGreen ? "Third and second green from bottom — same selection" : "Third green from bottom" } : undefined,
       !sameGreen && secondGreen ? { ...secondGreen, quickLabel: "Second green from bottom" } : undefined,
       yellow.length ? { ...yellow[yellow.length - 1], quickLabel: "Last yellow in analysis" } : undefined,
-    ].filter(Boolean);
-    const seen = new Set<string>();
-    return picks.filter((o: any) => {
-      const key = String(o.name || "").trim().toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    ].filter((o: any) => o && o.name);
   };
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -356,7 +355,7 @@ export default function SportBoard() {
                     <small className="muted">fair {o.fair}</small>
                   </div>
                 ))}
-                {getValidQuickPicks(m.top10).length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
+                {getValidQuickPicks(m).length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
               </div>
             </details>
             <div className="sb-xg"><span>Expected goals</span><b>{m.xg.home}</b><span>–</span><b>{m.xg.away}</b></div>
