@@ -312,9 +312,50 @@ export function AppTabs({ admin, more: moreIn, setMore: setMoreIn }: { admin?: b
   const setMore = setMoreIn ?? setOwn;
   const on = (m: string[]) => m.some((x) => path === x || path.startsWith(x + "/"));
   useEffect(() => { if (!setMoreIn) setOwn(false); }, [path, setMoreIn]);
+  // The bar gets out of the way so pages (AI chats, forms) have room: it hides while you type, slides away as you
+  // scroll down, comes back when you scroll up, and you can tuck it away yourself (small handle) or swipe it down.
+  const [tucked, setTucked] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [scrolledAway, setScrolledAway] = useState(false);
+  useEffect(() => { try { setTucked(localStorage.getItem("ax-tabs-tucked") === "1"); } catch {} }, []);
+  const tuck = (v: boolean) => { setTucked(v); setScrolledAway(false); try { localStorage.setItem("ax-tabs-tucked", v ? "1" : "0"); } catch {} };
+  useEffect(() => {
+    const isField = (t: EventTarget | null) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      if (el.isContentEditable || el.tagName === "TEXTAREA") return true;
+      return el.tagName === "INPUT" && !/^(button|checkbox|radio|range|submit|reset|file|color|image)$/i.test((el as HTMLInputElement).type);
+    };
+    const fin = (e: FocusEvent) => { if (isField(e.target)) setTyping(true); };
+    const fout = () => setTimeout(() => setTyping(isField(document.activeElement)), 60);
+    let last = window.scrollY;
+    const scroll = () => {
+      const y = window.scrollY, d = y - last;
+      if (Math.abs(d) < 12) return;
+      setScrolledAway(d > 0 && y > 120);
+      last = y;
+    };
+    document.addEventListener("focusin", fin); document.addEventListener("focusout", fout);
+    window.addEventListener("scroll", scroll, { passive: true });
+    return () => { document.removeEventListener("focusin", fin); document.removeEventListener("focusout", fout); window.removeEventListener("scroll", scroll); };
+  }, []);
+  useEffect(() => { setScrolledAway(false); }, [path]);
+  const hidden = !more && (tucked || typing || scrolledAway);
+  const swipe = useRef<number | null>(null);
   return (
     <>
-      <nav className="ax-tabs" aria-label="App">
+      {hidden && !typing && (
+        <button type="button" className="ax-pill" aria-label="Show the menu bar"
+          onClick={() => tuck(false)}
+          onTouchStart={(e) => { swipe.current = e.touches[0].clientY; }}
+          onTouchEnd={(e) => { if (swipe.current != null && swipe.current - e.changedTouches[0].clientY > 20) tuck(false); swipe.current = null; }}>
+          <i aria-hidden="true" /><span>Menu</span>
+        </button>
+      )}
+      <nav className={"ax-tabs" + (hidden ? " hide" : "")} aria-label="App" aria-hidden={hidden || undefined}
+        onTouchStart={(e) => { swipe.current = e.touches[0].clientY; }}
+        onTouchEnd={(e) => { if (swipe.current != null && e.changedTouches[0].clientY - swipe.current > 30) tuck(true); swipe.current = null; }}>
+        <button type="button" className="ax-tuck" aria-label="Hide the menu bar" onClick={() => tuck(true)}><i aria-hidden="true" /></button>
         {BOTTOM.map((b) => (
           <Link key={b.href} href={b.href} className={b.main ? "main" : undefined} aria-current={on(b.match) ? "page" : undefined}><svg aria-hidden="true"><use href={"#" + b.icon} /></svg><span>{b.name}</span></Link>
         ))}
