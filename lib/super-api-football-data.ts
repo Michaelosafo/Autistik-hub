@@ -38,7 +38,7 @@ const fixture = (m:any) => {
     score:finished(m)&&Number.isFinite(hg)&&Number.isFinite(ag)?{home:hg,away:ag}:null,
   };
 };
-const dateOK=(d:string)=>/^\\d{4}-\\d{2}-\\d{2}$/.test(d)&&!Number.isNaN(Date.parse(d+"T00:00:00Z"));
+const dateOK=(d:string)=>/^\d{4}-\d{2}-\d{2}$/.test(d)&&!Number.isNaN(Date.parse(d+"T00:00:00Z"));
 
 export async function searchTeams(q:string) {
   const s=q.trim(); if(s.length<2)return [];
