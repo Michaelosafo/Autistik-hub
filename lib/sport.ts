@@ -154,9 +154,13 @@ export function model(lh: number, la: number) {
     .map(([name, p]) => ({ name, p: pct(p), fair: p > 0 ? +(1 / p).toFixed(2) : null }))
     .filter((x) => x.p < 99)
     .sort((a, b) => b.p - a.p);
-  // "Top 10": the likeliest, but skipping near-certain ones (they pay almost nothing) once 10 good ones exist.
-  const useful = ranked.filter((x) => x.p <= 92);
-  const top10 = (useful.length >= 10 ? useful : ranked).slice(0, 10);
+  // Priority shortlist for the Sport board:
+  // show every high-confidence pick (80%+), then the next 3 green picks (65–79.9%),
+  // then the next 2 yellow picks (45–64.9%). Each group remains probability-ranked.
+  const highPicks = ranked.filter((x) => x.p >= 80);
+  const greenPicks = ranked.filter((x) => x.p >= 65 && x.p < 80).slice(0, 3);
+  const yellowPicks = ranked.filter((x) => x.p >= 45 && x.p < 65).slice(0, 2);
+  const top10 = [...highPicks, ...greenPicks, ...yellowPicks];
   return {
     xg: { home: +lh.toFixed(2), away: +la.toFixed(2) },
     home: pct(pH), draw: pct(pD), away: pct(pA),
