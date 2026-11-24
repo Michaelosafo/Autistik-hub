@@ -333,12 +333,12 @@ export default function SportBoard() {
                 {m.top10.map((o: any, i: number) => (
                   <div key={o.name} className={`sb-top-r ${pctCls(o.p)}`}>
                     <span className="sb-rank">{i + 1}</span>
-                    <span className="sb-name">{i === 0 ? "80–90% · " : i === 1 ? "Third green from bottom · " :  "Last yellow in analysis · "}{o.name}</span>
+                    <span className="sb-name">{i === 0 ? "80–90% · " : i === 1 ? "Second green from bottom · " : i === 2 ? "Third green from bottom · " : "Last yellow in analysis · "}{o.name}</span>
                     <b>{o.p}%</b>
                     <small className="muted">fair {o.fair}</small>
                   </div>
                 ))}
-                {m.top10.length < 3 && <small className="muted">The model did not produce a selection in every requested band for this match.</small>}
+                {m.top10.length < 4 && <small className="muted">The model did not produce all four selections for this match. Missing probability bands are left empty rather than filled with a different pick.</small>}
               </div>
             </details>
             <section className="stack">
