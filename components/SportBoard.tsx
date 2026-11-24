@@ -73,6 +73,7 @@ export default function SportBoard() {
   const [oddsBusy, setOddsBusy] = useState(false);
   const [oddsError, setOddsError] = useState("");
   const [todayMatches, setTodayMatches] = useState<any[]>([]);
+  const [todayCompetition, setTodayCompetition] = useState<"UEFA Champions League" | "Championship">("UEFA Champions League");
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
   async function loadTodayMatches() {
@@ -226,28 +227,38 @@ export default function SportBoard() {
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
         {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
-        {["UEFA Champions League", "Championship"].map((competition) => {
-          const games = todayMatches.filter((f: any) => f.competition === competition);
-          if (!games.length) return null;
-          return <div key={competition} className="stack" style={{ gap: 0, marginTop: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 8px", borderBottom: "1px solid var(--line)" }}>
-              <span style={{ fontSize: 24 }}>{competition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
-              <b>{competition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
-              <span className="muted" style={{ marginLeft: "auto" }}>{games.length}</span>
-            </div>
-            {games.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+          {(["UEFA Champions League", "Championship"] as const).map((competition) => {
+            const count = todayMatches.filter((f: any) => f.competition === competition).length;
+            const active = todayCompetition === competition;
+            return <button key={competition} type="button" onClick={() => setTodayCompetition(competition)}
+              aria-pressed={active}
+              style={{ padding: "12px 8px", borderRadius: 12, border: active ? "2px solid var(--accent, #eab308)" : "1px solid var(--line)", background: active ? "var(--surface-2, #f1eef9)" : "transparent", color: "inherit", fontWeight: active ? 700 : 500 }}>
+              {competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
+              <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>{count} matches</small>
+            </button>;
+          })}
+        </div>
+        <div className="stack" style={{ gap: 0, marginTop: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 8px", borderBottom: "1px solid var(--line)" }}>
+            <span style={{ fontSize: 24 }}>{todayCompetition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
+            <b>{todayCompetition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
+            <span className="muted" style={{ marginLeft: "auto" }}>{todayMatches.filter((f: any) => f.competition === todayCompetition).length}</span>
+          </div>
+          {todayMatches.filter((f: any) => f.competition === todayCompetition).length === 0
+            ? <small className="muted" style={{ padding: 12 }}>No {todayCompetition === "UEFA Champions League" ? "Champions League" : "Championship"} fixtures found for today.</small>
+            : todayMatches.filter((f: any) => f.competition === todayCompetition).map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
               style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
-              <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? `\\n${f.score.home}–${f.score.away}` : ""}</span>
+              <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", whiteSpace: "pre-line" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? `\\n${f.score.home}–${f.score.away}` : ""}</span>
               <span style={{ display: "grid", gap: 5 }}>
                 {[f.home, f.away].map((team: any) => <span key={team.id} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
                   {team.logo ? <img src={team.logo} alt="" width="23" height="23" style={{ objectFit: "contain" }} /> : <span style={{ width: 23 }} />}
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
                 </span>)}
               </span>
-              <span style={{ fontSize: 22, color: "var(--muted)", textAlign: "center" }}>☆</span>
+              <span style={{ fontSize: 22, color: "var(--muted)", textAlign: "center" }}>›</span>
             </button>)}
-          </div>;
-        })}
+        </div>
       </section>
 
       <section className="card stack">
