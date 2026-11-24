@@ -47,19 +47,25 @@ export async function searchTeams(q: string) {
 
 type Match = any;
 
-/** Upcoming/current fixtures plus the team's most recent completed matches for one-click selection. */
+/** Return exactly the latest completed match and the next scheduled fixture for one-click analysis. */
 export async function teamFixtureChoices(teamId: number) {
-  const data = await api("/teams/" + teamId + "/matches?limit=30", 5 * 60_000);
+  // Request a full date window rather than the provider's small default result set.
+  // The previous limit=30 could omit the team's genuinely latest result.
+  const from = new Date(Date.now() - 370 * 86400_000).toISOString().slice(0, 10);
+  const to = new Date(Date.now() + 180 * 86400_000).toISOString().slice(0, 10);
+  const data = await api("/teams/" + teamId + "/matches?dateFrom=" + from + "&dateTo=" + to + "&limit=500", 5 * 60_000);
   const now = Date.now();
   const matches = (data?.matches || []).filter((m: any) =>
     ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status) &&
     m.homeTeam?.id && m.awayTeam?.id && m.utcDate
   );
-  const upcoming = matches.filter((m: any) => m.status !== "FINISHED" && Date.parse(m.utcDate) >= now)
-    .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate)).slice(0, 12);
-  const recent = matches.filter((m: any) => finished(m))
-    .sort((a: any, b: any) => Date.parse(b.utcDate) - Date.parse(a.utcDate)).slice(0, 8);
-  return [...upcoming, ...recent].map((m: any) => ({
+  const next = matches
+    .filter((m: any) => m.status !== "FINISHED" && Date.parse(m.utcDate) >= now)
+    .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))[0];
+  const last = matches
+    .filter((m: any) => finished(m) && Date.parse(m.utcDate) < now)
+    .sort((a: any, b: any) => Date.parse(b.utcDate) - Date.parse(a.utcDate))[0];
+  return [last, next].filter(Boolean).map((m: any) => ({
     id: m.id, date: m.utcDate, status: m.status, competition: m.competition?.name || "",
     home: { id: m.homeTeam.id, name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
     away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
