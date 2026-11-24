@@ -58,6 +58,7 @@ export default function SportBoard() {
   const [ready, setReady] = useState<boolean | null>(null);
   const [home, setHome] = useState<Team | null>(null);
   const [away, setAway] = useState<Team | null>(null);
+  const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
   const [res, setRes] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -70,7 +71,7 @@ export default function SportBoard() {
   async function run() {
     if (!home || !away) return;
     setBusy(true); setErr(""); setRes(null);
-    try { setRes(await api("analyse", { home: home.id, away: away.id, homeName: home.name, awayName: away.name })); loadHist(); }
+    try { setRes(await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name })); loadHist(); }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   }
@@ -160,7 +161,8 @@ export default function SportBoard() {
       <section className="card stack">
         <TeamPick label="🏠 Home team" team={home} setTeam={(t) => { setHome(t); setRes(null); }} />
         <TeamPick label="✈️ Away team" team={away} setTeam={(t) => { setAway(t); setRes(null); }} />
-        <button type="button" className="btn primary" disabled={!home || !away || busy || !ready} onClick={run}>{busy ? "Checking both teams…" : "Analyse match"}</button>
+        <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} onChange={(e) => { setMatchDate(e.target.value); setRes(null); }} /><small className="muted">Choose today or a past date. For past dates, the model uses matches before the selected date and looks for the actual fixture result.</small></label>
+        <button type="button" className="btn primary" disabled={!home || !away || busy || !ready || !matchDate} onClick={run}>{busy ? "Checking both teams…" : "Analyse match"}</button>
         {err && <div className="notice warn">{err}</div>}
       </section>
 
@@ -168,6 +170,11 @@ export default function SportBoard() {
         <>
           <section className="card stack">
             <b>{home?.name} vs {away?.name}</b>
+            <small className="muted">Selected match date: {res.matchDate || "Today"} {res.historical ? "· Historical pre-match estimate" : "· Current estimate"}</small>
+            {res.actual && <div className="notice"><b>Actual result:</b> {res.actual.homeGoals}–{res.actual.awayGoals} · {res.actual.competition} · {new Date(res.actual.date).toLocaleString()}</div>}
+            {res.historical && !res.actual && <div className="notice warn">No completed fixture for these teams was found on this date. The historical model estimate is shown without an actual result.</div>}
+            {res.historical && <small className="muted">Historical estimates use the available pre-date match results. This data source does not provide archived bookmaker odds or full match event statistics; bookmaker prices must be entered manually if you have them.</small>}
+            {res.actual && <div className="stack"><b>Actual goals</b><div className="sb-table"><div className="sb-tr"><span>Home goals</span><b>{res.actual.homeGoals}</b><span>{home?.name}</span></div><div className="sb-tr"><span>Away goals</span><b>{res.actual.awayGoals}</b><span>{away?.name}</span></div><div className="sb-tr"><span>Actual outcome</span><b>{res.actual.homeGoals > res.actual.awayGoals ? "Home" : res.actual.homeGoals < res.actual.awayGoals ? "Away" : "Draw"}</b><span>Final score</span></div></div></div>
             <div className="sb-xg"><span>Expected goals</span><b>{m.xg.home}</b><span>–</span><b>{m.xg.away}</b></div>
             <ul className="sb-verdict">{res.verdict.map((x: string) => <li key={x}>{x}</li>)}</ul>
           </section>
