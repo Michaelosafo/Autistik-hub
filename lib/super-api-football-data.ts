@@ -99,10 +99,12 @@ async function teamStats(team:number, league:number, season:number) {
     cleanSheets:s.clean_sheet||{},failedToScore:s.failed_to_score||{},
   };
 }
-async function recent(team:number, before?:string) {
+async function recent(team:number, season:number, before?:string) {
+  // API-Football requires season on every /fixtures request filtered by team.
+  // Keep the date window for historical analysis, but always send the season.
   const path=before
-    ? "/fixtures?team="+team+"&from="+new Date(Date.parse(before+"T00:00:00Z")-700*86400000).toISOString().slice(0,10)+"&to="+before
-    : "/fixtures?team="+team+"&last=30";
+    ? "/fixtures?team="+team+"&season="+season+"&from="+new Date(Date.parse(before+"T00:00:00Z")-700*86400000).toISOString().slice(0,10)+"&to="+before
+    : "/fixtures?team="+team+"&season="+season+"&last=30";
   return (await api(path,before?12*3600_000:3*3600_000)).filter((f:any)=>finished(f)&&(!before||Date.parse(f.fixture.date)<Date.parse(before+"T00:00:00Z")))
     .sort((a:any,b:any)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date)).slice(0,30);
 }
@@ -130,7 +132,7 @@ export async function analyse(homeId:number,awayId:number,matchDate?:string) {
   if(matchDate&&!dateOK(matchDate)) throw new Error("Choose a valid match date.");
   const cutoff=matchDate?new Date(matchDate+"T00:00:00Z"):new Date();
   const [hl,al]=await Promise.all([leagueFor(homeId),leagueFor(awayId)]);
-  const [hmAll,amAll]=await Promise.all([recent(homeId,matchDate),recent(awayId,matchDate)]);
+  const [hmAll,amAll]=await Promise.all([recent(homeId,hl.season,matchDate),recent(awayId,al.season,matchDate)]);
   if(!hmAll.length||!amAll.length) throw new Error("API-Football returned insufficient completed match history for one or both teams.");
   const h=summarize(homeId,hmAll),a=summarize(awayId,amAll);
   const hAvg={home:1.45,away:1.15,teams:0},aAvg={home:1.45,away:1.15,teams:0};
