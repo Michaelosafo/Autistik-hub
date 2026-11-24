@@ -54,22 +54,25 @@ export async function matchesOnDate(date: string) {
     .filter((f: any) => f.score && String(f.date).slice(0,10) === date)
     .sort((a: any,b: any) => Date.parse(a.date)-Date.parse(b.date));
 }
-export async function teamFixtureChoices(teamId: number) {
-  // API-Football requires a season whenever the team filter is used on /fixtures.
-  // Resolve the club's current league season, then check it and the previous
-  // season so the board can still show the latest completed match near a season turn.
-  const leagueRows = await api("/leagues?team="+teamId+"&current=true", 24*3600_000);
-  const leaguePick = leagueRows.find((x:any)=>x.league?.type==="League") || leagueRows[0];
-  const currentSeason = Number((leaguePick?.seasons || []).find((s:any)=>s.current)?.year || (leaguePick?.seasons || [])[0]?.year);
-  if (!Number.isInteger(currentSeason) || currentSeason < 1900) {
-    throw new Error("API-Football could not determine this team's current season.");
+// API-Football's free plan only exposes historical seasons 2022–2024.
+const FREE_PLAN_SEASONS = [2024, 2023, 2022];
+async function leagueFor(teamId:number, before?:string) {
+  const matchYear = before ? Number(before.slice(0,4)) : new Date().getUTCFullYear();
+  const candidates = FREE_PLAN_SEASONS.filter((s) => s <= matchYear);
+  for (const season of candidates) {
+    const rows = await api("/leagues?team="+teamId+"&season="+season, 24*3600_000);
+    const pick = rows.find((x:any)=>x.league?.type==="League") || rows[0];
+    if (pick?.league?.id) {
+      return {id:Number(pick.league.id),name:pick.league.name||"Football",season};
+    }
   }
-  const seasons = [currentSeason, currentSeason - 1];
-  const results = await Promise.all(seasons.map(async (season) => {
+  throw new Error("This team's league has no season available on the API-Football free plan (2022–2024).");
+}
+export async function teamFixtureChoices(teamId: number) {
+  const results = await Promise.all(FREE_PLAN_SEASONS.map(async (season) => {
     try {
       return await api("/fixtures?team="+teamId+"&season="+season+"&timezone=UTC", 3*3600_000);
-    } catch (error) {
-      if (season === currentSeason) throw error;
+    } catch {
       return [];
     }
   }));
@@ -78,13 +81,6 @@ export async function teamFixtureChoices(teamId: number) {
   const last=all.filter((f:any)=>finished(f)&&Date.parse(f.fixture.date)<now).sort((a:any,b:any)=>Date.parse(b.fixture.date)-Date.parse(a.fixture.date))[0];
   const next=all.filter((f:any)=>!finished(f)&&Date.parse(f.fixture.date)>=now).sort((a:any,b:any)=>Date.parse(a.fixture.date)-Date.parse(b.fixture.date))[0];
   return [last,next].filter(Boolean).map(fixture);
-}
-async function leagueFor(teamId:number) {
-  const rows=await api("/leagues?team="+teamId+"&current=true",24*3600_000);
-  const pick=rows.find((x:any)=>x.league?.type==="League")||rows[0];
-  if(!pick) throw new Error("API-Football could not find a current league for one of these teams.");
-  const season=Number((pick.seasons||[]).find((s:any)=>s.current)?.year||(pick.seasons||[])[0]?.year);
-  return {id:Number(pick.league.id),name:pick.league.name||"Football",season};
 }
 const n=(v:any)=>v==null||v===""?null:Number(String(v).replace("%",""));
 async function teamStats(team:number, league:number, season:number) {
@@ -131,7 +127,7 @@ function summarize(team:number, matches:any[]) {
 export async function analyse(homeId:number,awayId:number,matchDate?:string) {
   if(matchDate&&!dateOK(matchDate)) throw new Error("Choose a valid match date.");
   const cutoff=matchDate?new Date(matchDate+"T00:00:00Z"):new Date();
-  const [hl,al]=await Promise.all([leagueFor(homeId),leagueFor(awayId)]);
+  const [hl,al]=await Promise.all([leagueFor(homeId,matchDate),leagueFor(awayId,matchDate)]);
   const [hmAll,amAll]=await Promise.all([recent(homeId,hl.season,matchDate),recent(awayId,al.season,matchDate)]);
   if(!hmAll.length||!amAll.length) throw new Error("API-Football returned insufficient completed match history for one or both teams.");
   const h=summarize(homeId,hmAll),a=summarize(awayId,amAll);
