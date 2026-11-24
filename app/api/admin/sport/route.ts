@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { analyse, history, savePrediction, searchTeams, setResult, sportReady } from "@/lib/sport";
+import { analyse, history, savePrediction, searchTeams, setResult, sportReady } from "@/lib/sport-football-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
