@@ -6,7 +6,7 @@ import { createPublicClient, createWalletClient, custom, decodeEventLog, formatU
 import { LOCK_PRESETS, LOCKER_ABI, LOCKER_CHAINS, LOCKER_ERRORS, TOKEN_ABI, lockerTransport, short, untilText, type LockerChain, type LockerSite } from "@/lib/locker";
 
 type TokenInfo = { address: `0x${string}`; name: string; decimals: number; isLp: boolean; balance: bigint | null };
-type MyLock = { id: bigint; name: string; decimals: number; left: bigint; free: bigint; unlockDate: number; vesting: boolean; isLp: boolean };
+type MyLock = { id: bigint; name: string; decimals: number; left: bigint; free: bigint; unlockDate: number; vesting: boolean; isLp: boolean; owner: `0x${string}` };
 
 const fmt = (v: bigint, d: number) => Number(formatUnits(v, d)).toLocaleString("en-US", { maximumFractionDigits: 6 });
 const day = 86400;
@@ -55,7 +55,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
     if (!eth) throw new Error("No wallet chosen.");
     const w = createWalletClient({ chain: cfg.viem as any, transport: custom(eth) }) as any;
     const [acc] = await w.requestAddresses();
-    try { await w.switchChain({ id: cfg.viem.id }); } catch { await w.addChain({ chain: cfg.viem }); await w.switchChain({ id: cfg.viem.id }); }
+    try { await w.switchChain({ id: cfg.viem.id }); } catch (e: any) {\n      const code = e?.code ?? e?.cause?.code;\n      if (code !== 4902 && !/unknown chain/i.test(String(e?.shortMessage || e?.message || ""))) throw e;\n      await w.addChain({ chain: cfg.viem });\n      await w.switchChain({ id: cfg.viem.id });\n    }
     setAccount(acc);
     return { w, acc: acc as `0x${string}` };
   }
@@ -115,7 +115,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
       if (allowance < units) {
         setMsg(`Step 1 of 2: allow the locker to take your ${info.name}…`);
         const h = await w.writeContract({ account: acc, chain: cfg.viem, address: info.address, abi: TOKEN_ABI, functionName: "approve", args: [site.address, units] });
-        await pub.waitForTransactionReceipt({ hash: h });
+        const approvalReceipt = await pub.waitForTransactionReceipt({ hash: h });\n        if (approvalReceipt.status !== "success") throw new Error("Token approval failed on-chain. The lock was not submitted.");
       }
       setMsg(`${allowance < units ? "Step 2 of 2: " : ""}confirm the lock in your wallet…`);
       const args = steps
@@ -124,7 +124,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
       const { request } = await pub.simulateContract({ account: acc, address: site.address, abi: LOCKER_ABI, ...args } as any);
       const hash = await w.writeContract(request);
       setMsg("Locking… waiting for the network to confirm.");
-      const r = await pub.waitForTransactionReceipt({ hash });
+      const r = const receipt = await pub.waitForTransactionReceipt({ hash });\n      if (receipt.status !== "success") throw new Error("Unlock transaction reverted. Tokens were not released; check the lock schedule and try again when eligible.");
       if (r.status !== "success") { setMsg("The lock failed. Your tokens weren't moved, but the network fee was spent."); return; }
       const ev = r.logs.map((l) => { try { return decodeEventLog({ abi: LOCKER_ABI, ...l }) as any; } catch { return null; } }).find((x) => x?.eventName === "LockAdded");
       setDone({ id: ev ? String(ev.args.id) : "?", hash });
@@ -147,7 +147,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
           pub.readContract({ address: l.token, abi: TOKEN_ABI, functionName: "symbol" }).catch(() => "token"),
           pub.readContract({ address: l.token, abi: TOKEN_ABI, functionName: "decimals" }).catch(() => 18),
         ]);
-        return { id, name: l.isLpToken ? `${sym} (LP)` : String(sym), decimals: Number(dec), left: (l.amount as bigint) - (l.unlockedAmount as bigint), free, unlockDate: Number(l.tgeDate), vesting: l.cycle > 0n, isLp: l.isLpToken };
+        return { id, name: l.isLpToken ? `${sym} (LP)` : String(sym), decimals: Number(dec), left: (l.amount as bigint) - (l.unlockedAmount as bigint), free, unlockDate: Number(l.tgeDate), vesting: l.cycle > 0n, isLp: l.isLpToken, owner: l.owner as `0x${string}` };
       }));
       setMine(rows);
     } catch (e: any) { setMine([]); setMsg(explain(e)); }
@@ -248,7 +248,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
             : mine.map((l) => (
               <div key={String(l.id)} className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <span>#{String(l.id)} · {l.isLp ? "💧" : "🪙"} {fmt(l.left, l.decimals)} {l.name}{l.vesting ? " · in steps" : ""}<br />
-                  <small className="muted">{l.unlockDate * 1000 > Date.now() ? `Unlocks ${new Date(l.unlockDate * 1000).toLocaleDateString()} (${untilText(l.unlockDate)})` : l.free > 0n ? `${fmt(l.free, l.decimals)} ready to unlock` : "Next step not reached yet"}</small>
+                  <small className="muted">{l.unlockDate * 1000 > Date.now() ? `Unlocks ${new Date(l.unlockDate * 1000).toLocaleDateString()} (${untilText(l.unlockDate)})` : l.free > 0n ? `${fmt(l.free, l.decimals)} ready to unlock` : "Next step not reached yet"}<br />Returns to: {short(l.owner)}</small>
                 </span>
                 <button type="button" className="btn small" disabled={busy || l.free === 0n} onClick={() => doUnlock(l.id)}>{l.free > 0n ? "Unlock" : "🔒 Locked"}</button>
               </div>
