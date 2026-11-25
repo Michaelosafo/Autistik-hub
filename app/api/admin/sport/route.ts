@@ -89,7 +89,7 @@ export async function POST(req: Request) {
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis")
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              getOddsPapiMatchOdds(home, away, date)
+              withTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi odds lookup", 18000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
             // Keep the best available price per fixture/market/outcome across Ghana bookmakers.
             const bestBySelection = new Map<string, any>();
             for (const row of mapped) {
-              const k = row.market+"|"+row.selection;
+              const k = row.home+"|"+row.away+"|"+String(row.date || "")+"|"+row.market+"|"+row.selection;
               const old = bestBySelection.get(k);
               if (!old || row.odds > old.odds) bestBySelection.set(k,row);
             }
