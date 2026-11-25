@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "valueScan": {
-        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 3) : [];
+        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
         for (const f of fixtures) {
@@ -48,13 +48,26 @@ export async function POST(req: Request) {
                     if (norm(label) === norm(home)) modelName = "Home win (1)";
                     else if (norm(label) === norm(away)) modelName = "Away win (2)";
                     else if (["draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
+                  } else if (market.key === "double_chance") {
+                    const pick = norm(label).replace(/\\s/g, "");
+                    if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Double chance 1X";
+                    else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Double chance X2";
+                    else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Double chance 12";
                   } else if (market.key === "btts") {
                     modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
                   } else {
                     const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
                     if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
                   }
-                  const modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
+                  let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
+                  if (market.key === "double_chance") {
+                    const p = analysis.model || {};
+                    const pick = norm(label).replace(/\\s/g, "");
+                    const probability = ["1x", "homedraw", "homeordraw"].includes(pick) ? Number(p.home) + Number(p.draw)
+                      : ["x2", "drawaway", "draworaway"].includes(pick) ? Number(p.away) + Number(p.draw)
+                      : ["12", "homeaway", "homeoraway"].includes(pick) ? Number(p.home) + Number(p.away) : 0;
+                    if (probability > 0) modelPick = { name: modelName, p: probability };
+                  }
                   const price = Number(outcome.price);
                   const implied = 100 / price;
                   const noVig = implied / overround * 100;
