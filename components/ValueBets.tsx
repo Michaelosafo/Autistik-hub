@@ -46,8 +46,8 @@ export default function ValueBets({ endpoint }: Props) {
       // Keep each server request small: match analysis and odds lookups are
       // several upstream calls per fixture and a 20-match request exceeded
       // Vercel's 60-second function limit.
-      for(let i=0;i<upcoming.length;i+=1){
-        const batch=upcoming.slice(i,i+1);
+      for(let i=0;i<upcoming.length;i+=3){
+        const batch=upcoming.slice(i,i+3);
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(Array.isArray(d?.rows)?d.rows:[]);
@@ -74,7 +74,7 @@ export default function ValueBets({ endpoint }: Props) {
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
-     {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b>{endpoint === "/api/admin/super" ? <><span>OddsPapi: {feedStatus.keyConfigured ? (feedStatus.active ? "active" : "no active bookmaker") : "key missing"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span>{feedStatus.error && <small>{feedStatus.error}</small>}<small>Highlightly Premium supplies fixtures and match statistics; OddsPapi supplies bookmaker prices.</small></> : <><span>OddsPapi: {feedStatus.oddspapi?.active ? "active" : feedStatus.oddspapi?.keyConfigured ? "no active bookmaker" : "not configured"}</span><span>OddsRelay: {feedStatus.oddsrelay?.keyConfigured ? "API key configured" : "not configured"}</span><small>Both feeds are checked independently. Available prices are combined and the best price is selected for each outcome.</small>{feedStatus.oddspapi?.error && <small>OddsPapi: {feedStatus.oddspapi.error}</small>}{feedStatus.oddsrelay?.errors?.accountCoverage && <small>OddsRelay: {String(feedStatus.oddsrelay.errors.accountCoverage?.message || feedStatus.oddsrelay.errors.accountCoverage)}</small>}</>}</div>}
+     {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b>{endpoint === "/api/admin/super" ? <><span>OddsPapi: {feedStatus.keyConfigured ? (feedStatus.active ? "active" : "no active bookmaker") : "key missing"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span>{feedStatus.error && <small>{feedStatus.error}</small>}<small>Highlightly Premium supplies fixtures and match statistics; OddsPapi supplies bookmaker prices.</small></> : <><span>OddsPapi: {feedStatus.oddspapi?.active ? "active" : feedStatus.oddspapi?.keyConfigured ? "no active bookmaker" : "not configured"}</span><span>OddsRelay: not used by SPORT value scanner</span><small>OddsPapi supplies bookmaker prices. Prices are matched to each fixture and the best returned price is selected for each outcome.</small>{feedStatus.oddspapi?.error && <small>OddsPapi: {feedStatus.oddspapi.error}</small>}{feedStatus.oddsrelay?.errors?.accountCoverage && <small>OddsRelay: {String(feedStatus.oddsrelay.errors.accountCoverage?.message || feedStatus.oddsrelay.errors.accountCoverage)}</small>}</>}</div>}
     {scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures · Today: {dayCounts.today} · Tomorrow: {dayCounts.tomorrow}</small>}
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && <div className="stack" style={{fontSize:13}}>
