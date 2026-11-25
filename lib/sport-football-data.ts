@@ -18,15 +18,26 @@ async function api(path: string, ttl = TTL): Promise<any> {
   const key = "football-data:" + path;
   const { data: hit } = await sb().from("sport_cache").select("data,at").eq("key", key).maybeSingle();
   if (hit && Date.now() - Date.parse(hit.at) < ttl) return hit.data;
-  const r = await fetch(BASE + path, {
-    headers: { "X-Auth-Token": token, "X-Unfold-Goals": "true" },
-    cache: "no-store",
-  });
-  const body = await r.json().catch(() => ({}));
+  let r: Response;
+  let body: any = {};
+  try {
+    // Do not let a stalled upstream request consume Vercel's full 60-second
+    // function budget. Prefer the last cached response when the provider stalls.
+    r = await fetch(BASE + path, {
+      headers: { "X-Auth-Token": token, "X-Unfold-Goals": "true" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(12_000),
+    });
+    body = await r.json().catch(() => ({}));
+  } catch (error) {
+    if (hit?.data) return hit.data;
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error("Football data request timed out or failed: " + reason.slice(0, 140));
+  }
   if (!r.ok) {
-    if (hit) return hit.data;
+    if (hit?.data) return hit.data;
     const message = body?.message || body?.error || r.statusText || "Unknown provider error";
-    throw new Error("Football data: " + String(message).slice(0, 180));
+    throw new Error("Football data (" + r.status + "): " + String(message).slice(0, 180));
   }
   await sb().from("sport_cache").upsert({ key, data: body, at: new Date().toISOString() });
   return body;
