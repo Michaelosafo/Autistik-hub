@@ -106,9 +106,10 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
   const matched = relevant.map((f: any) => {
     const oddsFixture: any = byId.get(String(f.fixtureId));
     if (!oddsFixture?.bookmakerOdds) return null;
-    const bookmakers = Object.entries(oddsFixture.bookmakerOdds).map(([slug, book]: [string, any]) => ({
+    const bookmakers = Object.entries(oddsFixture.bookmakerOdds).filter(([, book]: [string, any]) => book?.bookmakerIsActive !== false && book?.suspended !== true).map(([slug, book]: [string, any]) => ({
       key: slug, title: String(book?.bookmakerName || slug),
       markets: Object.entries(book?.markets || {}).flatMap(([marketId, marketData]: [string, any]) => {
+        if (marketData?.marketActive === false) return [];
         const meta = markets.get(String(marketId));
         const marketType = norm(String(meta?.marketType || "")).replace(/\s/g, "");
         const marketTitle = norm(String(meta?.marketName || "")).replace(/\s/g, "");
@@ -124,8 +125,10 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
             const raw = outcomeName(market, String(outcomeId), player, String(f.participant1Name), String(f.participant2Name));
             const playerName = String(player?.playerName || player?.name || player?.handicap || "");
             const line = String(player?.handicap ?? player?.line ?? "");
+            const outcomeIdLabel = String(player?.bookmakerOutcomeId || "");
+            const totalFromId = outcomeIdLabel.match(/(\\d+(?:\\.\\d+)?)\\s*\\/\\s*(over|under)/i);
             const name = kind === "btts" ? (/^(yes|no)$/i.test(raw) ? raw : /^(yes|no)$/i.test(playerName) ? playerName : raw)
-              : kind === "totals" ? (/^(over|under)\\s/i.test(raw) ? raw : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
+              : kind === "totals" ? (/^(over|under)\\s/i.test(raw) ? raw : totalFromId ? totalFromId[2] + " " + totalFromId[1] : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
               : kind === "other" && (!raw || raw === String(player?.bookmakerOutcomeId || "")) ? (playerName || raw) : raw;
             return { name, price: Number(player?.price) };
           }).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
