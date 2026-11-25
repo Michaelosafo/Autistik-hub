@@ -2,6 +2,7 @@ import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-api-football-data";
 import { getCombinedMatchOdds } from "@/lib/combined-odds";
+import { getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,7 +15,7 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: superReady() });
-      case "oddsStatus": return json({ oddsPapiKeyConfigured: !!process.env.ODDSPAPI_API_KEY, providers: ["OddsPapi", "OddsRelay"] });
+      case "oddsStatus": return json({ ...(await getGhanaOddsRelayStatus()), oddsPapiKeyConfigured: !!process.env.ODDSPAPI_API_KEY, providers: ["OddsPapi", "OddsRelay"] });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "valueScan": {
@@ -56,8 +57,6 @@ export async function POST(req: Request) {
           for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
             if (/exchange/i.test(String(book.title || book.key || ""))) continue;
             for (const market of book.markets || []) {
-              // Super value scans are deliberately restricted to 1X2 and double chance.
-              if (!["h2h", "double_chance", "btts", "totals"].includes(String(market.key))) continue;
               if (!market.key || !Array.isArray(market.outcomes)) continue;
               const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
               if (valid.length < 2) continue;
@@ -92,7 +91,7 @@ export async function POST(req: Request) {
                 const price = Number(outcome.price);
                 const implied = 100 / price;
                 const noVig = implied / overround * 100;
-                const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : "Goals · Over/Under";
+                const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : market.key === "totals" ? "Goals · Over/Under" : String(market.key).replace(/^oddspapi_/, "Market ").replace(/[_-]+/g, " ").replace(/\\b\\w/g, (c: string) => c.toUpperCase());
                 if (!modelPick || !(Number(modelPick.p) > 0)) {
                   mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
                   continue;
