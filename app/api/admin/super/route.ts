@@ -34,7 +34,7 @@ export async function POST(req: Request) {
             for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
               if (/exchange/i.test(String(book.title || book.key || ""))) continue;
               for (const market of book.markets || []) {
-                if (!["h2h", "totals", "btts"].includes(market.key) || !Array.isArray(market.outcomes)) continue;
+                if (!market.key || !Array.isArray(market.outcomes)) continue;
                 const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
                 if (valid.length < 2) continue;
                 const overround = valid.reduce((sum: number, o: any) => sum + 100 / Number(o.price), 0);
@@ -52,18 +52,19 @@ export async function POST(req: Request) {
                     if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
                   }
                   const modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
-                  if (!modelPick || !(Number(modelPick.p) > 0)) continue;
                   const price = Number(outcome.price);
                   const implied = 100 / price;
                   const noVig = implied / overround * 100;
+                  const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "totals" ? "Goals · Over/Under" : market.key === "btts" ? "Both teams to score" : String(market.key).replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
+                  if (!modelPick || !(Number(modelPick.p) > 0)) {
+                    mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
+                    continue;
+                  }
                   const probability = Number(modelPick.p);
                   const fairOdds = 100 / probability;
                   const ev = (probability / 100) * price * 100 - 100;
                   const edge = probability - noVig;
-                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away,
-                    selection: label, market: market.key === "h2h" ? "1X2 · Match result" : market.key === "totals" ? "Goals · Over/Under" : "Both teams to score",
-                    probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker",
-                    implied, noVig, edge, ev, value: ev > 0 });
+                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true });
                 }
               }
             }
