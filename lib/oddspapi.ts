@@ -65,7 +65,7 @@ async function cachedGet(path: string, ttl: number) {
       let response: Response | null = null;
       let body: any = {};
       for (let attempt = 0; attempt < 2; attempt++) {
-        response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+        response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12000) });
         body = await response.json().catch(() => ({}));
         endpointLastRequest.set(endpoint, Date.now());
         if (response.ok) break;
