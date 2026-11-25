@@ -443,7 +443,7 @@ export default function SportBoard() {
             {oddsValueRows.length === 0 ? <div className="notice warn">No usable bookmaker 1X2 prices were returned for comparison.</div> : <>
               {oddsValueRows.map((x: any) => <div key={x.selection} className="sb-top-r">
                 <span className="sb-name">{x.selection}</span><b>Model {x.probability.toFixed(1)}%</b>
-                <small className="muted">Fair {x.fairOdds.toFixed(2)} · book {x.odds == null ? "—" : x.odds.toFixed(2)} · raw implied {x.implied == null ? "—" : x.implied.toFixed(1) + "%"} · no-vig {x.noVigProbability == null ? "—" : x.noVigProbability.toFixed(1) + "%"}</small>
+                <small className="muted">Fair {x.fairOdds == null ? "—" : x.fairOdds.toFixed(2)} · book {x.odds == null ? "—" : x.odds.toFixed(2)} · raw implied {x.implied == null ? "—" : x.implied.toFixed(1) + "%"} · no-vig {x.noVigProbability == null ? "—" : x.noVigProbability.toFixed(1) + "%"}</small>
                 <small className={x.ev == null ? "muted" : x.ev >= 3 ? "sb-ok" : x.ev > 0 ? "sb-g D" : "sb-no"}>{x.ev == null ? "No bookmaker price" : "EV " + (x.ev >= 0 ? "+" : "") + x.ev.toFixed(1) + "%"}</small>
               </div>)}
               {oddsValueRows.some((x: any) => x.disagreement) && <div className="notice warn"><b>Model/market disagreement detected.</b> A gap of 10 percentage points or more is flagged for fixture, team-strength and lineup verification. It is not automatically treated as a genuine value bet.</div>}
