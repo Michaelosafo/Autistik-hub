@@ -418,7 +418,8 @@ export default function SportBoard() {
 
             )}
 
-      <section className="card stack">\n        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
+      <section className="card stack">
+        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
         <small className="muted">Bookmaker prices are compared with this board's model probabilities. Value calculations use the best bookmaker back price for each 1X2 outcome, not exchange lay prices.</small>
         <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching Ghana bookmaker odds…" : "Fetch Ghana bookmaker odds"}</button>
         {oddsError && <div className="notice warn">{oddsError}</div>}
@@ -450,7 +451,8 @@ export default function SportBoard() {
               {bestOddsValue ? <div className="notice"><b>Top expected-value bet:</b> {bestOddsValue.selection} · model {bestOddsValue.probability.toFixed(1)}% · fair odds {bestOddsValue.fairOdds.toFixed(2)} · book {bestOddsValue.odds.toFixed(2)} at {bestOddsValue.bookmaker} · implied {bestOddsValue.implied.toFixed(1)}% · edge +{bestOddsValue.edge.toFixed(1)}pp · EV +{bestOddsValue.ev.toFixed(1)}%.<small className="muted" style={{ display: "block" }}>Ranked by highest expected return, not by probability alone.</small></div> : <div className="notice warn"><b>No value bet found.</b> None of the bookmaker prices beat the model's fair price.</div>}
             </>}
           </div>}
-        </>}\n      </section>
+        </>}
+      </section>
 
       {m && showFullAnalysis && (
         <>
