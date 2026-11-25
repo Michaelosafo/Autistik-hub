@@ -13,21 +13,9 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   const day = matchDate ? new Date(matchDate + "T00:00:00.000Z") : new Date();
   if (Number.isNaN(day.getTime())) throw new Error("Invalid match date.");
 
-  // Ghana is an international region: use raw, never standard.
-  let marketKeys = ["h2h", "h2h_3way", "totals", "over_under", "btts", "draw_no_bet", "double_chance", "handicap", "asian_handicap", "correct_score", "half_time"];
-  try {
-    const coverageResponse = await fetch("https://api.oddsrelay.io/v2/coverage", { cache: "no-store" });
-    if (coverageResponse.ok) {
-      const coverage: any = await coverageResponse.json();
-      const rawMarkets = coverage?.markets?.raw || coverage?.data?.markets?.raw || [];
-      const discovered = Array.isArray(rawMarkets)
-        ? rawMarkets.map((m: any) => typeof m === "string" ? m : String(m?.key || m?.name || "")).filter(Boolean)
-        : [];
-      if (discovered.length) marketKeys = [...new Set([...marketKeys, ...discovered])].slice(0, 20);
-    }
-  } catch {
-    // Continue with common football markets if public coverage discovery fails.
-  }
+  // Ghana's raw board returns the bookmaker markets available for each event.
+  // Do not send a hard-coded market list: this can exclude provider-specific markets
+  // or trigger market_not_in_plan for accounts with narrower market scope.
 
   const from = new Date(day.getTime() - 6 * 3600_000).toISOString();
   const to = new Date(day.getTime() + 36 * 3600_000).toISOString();
@@ -37,7 +25,6 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     const url = new URL("https://api.oddsrelay.io/v2/odds/raw");
     url.searchParams.set("region", "gh");
     url.searchParams.set("sports", "soccer");
-    url.searchParams.set("markets", marketKeys.join(","));
     url.searchParams.set("commenceTimeFrom", from);
     url.searchParams.set("commenceTimeTo", to);
     if (cursor) url.searchParams.set("cursor", cursor);
