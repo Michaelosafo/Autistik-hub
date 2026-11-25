@@ -29,8 +29,7 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     const url = new URL("https://api.oddsrelay.io/v2/odds/raw");
     url.searchParams.set("region", "gh");
     url.searchParams.set("sports", "soccer");
-    // Keep the request limited to match result and double-chance markets.
-    url.searchParams.set("markets", "h2h,double_chance");
+    // Request all markets enabled for this account; unsupported markets remain unlabelled as value unless modelled.
     url.searchParams.set("commenceTimeFrom", from);
     url.searchParams.set("commenceTimeTo", to);
     if (cursor) url.searchParams.set("cursor", cursor);
