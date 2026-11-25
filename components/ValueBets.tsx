@@ -8,6 +8,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [progress,setProgress]=useState("");
   const [error,setError]=useState("");
   const [scanned,setScanned]=useState(0);
+  const [diagnostics,setDiagnostics]=useState<any[]>([]);
   async function post(action:string, body:any={}) {
     const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
     const d=await r.json().catch(()=>({}));
@@ -15,7 +16,7 @@ export default function ValueBets({ endpoint }: Props) {
     return d;
   }
   async function scan() {
-    setBusy(true); setError(""); setRows([]); setScanned(0);
+    setBusy(true); setError(""); setRows([]); setScanned(0); setDiagnostics([]);
     try {
       const {matches=[]}=await post("todayMatches");
       const upcoming=matches.filter((f:any)=>f?.home?.id && f?.away?.id && f?.date && f.status!=="FINISHED");
@@ -26,11 +27,12 @@ export default function ValueBets({ endpoint }: Props) {
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(d.rows||[]);
+        setDiagnostics(prev=>prev.concat(d.diagnostics||[]));
         setRows([...all].sort((a,b)=>(Number(b.value)-Number(a.value)) || (b.ev-a.ev)));
         setScanned(Math.min(i+batch.length,upcoming.length));
       }
       setProgress("");
-      if(!all.length) setError("Fixtures were analysed, but the odds feed returned no matching prices for 1X2, totals or BTTS. Some Ghana bookmakers may not cover these matches or markets.");
+      if(!all.length) setError("No bookmaker prices matched these fixtures. Check the feed diagnostics below to see whether OddsRelay returned events, bookmakers and market types.");
     } catch(e){setError((e as Error).message);setProgress("");}
     finally{setBusy(false);}
   }
@@ -42,6 +44,10 @@ export default function ValueBets({ endpoint }: Props) {
     {progress && <small className="muted">{progress}</small>}
     {scanned>0 && <small className="muted">Scanned {scanned} fixtures</small>}
     {error && <div className="notice warn">{error}</div>}
+    {diagnostics.length>0 && !rows.length && <div className="stack" style={{fontSize:13}}>
+      <b>Odds feed diagnostics</b>
+      {diagnostics.slice(0,6).map((d,i)=><small key={i} className="muted">{d.fixture}: {d.error || (d.oddsEvents+" events returned · "+d.matchedEvents+" matched · "+(d.bookmakers||[]).length+" bookmakers · markets: "+((d.markets||[]).join(", ")||"none"))}</small>)}
+    </div>}
     {rows.length>0 && <div className="stack">
       <b>Positive value · highest EV first</b>
       {rows.map((x,i)=><div key={x.key} className="sb-top-r hi" style={{display:"flex",flexDirection:"column",alignItems:"stretch",gap:9,padding:14,minWidth:0,overflowWrap:"anywhere",borderLeft:x.value?"5px solid var(--teal)":"5px solid var(--line)"}}>
