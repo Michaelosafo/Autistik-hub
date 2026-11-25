@@ -28,8 +28,8 @@ export async function POST(req: Request) {
           teamIds = await resolveTeamIds(oddsList.flatMap((f: any) => [String(f?.home?.name || ""), String(f?.away?.name || "")]));
         } catch { /* preserve OddsPapi fixtures as odds-only when team lookup is unavailable */ }
         const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
-          .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
-          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+          .replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
+          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
         const keys = new Set(fixtures.map((f: any) => normalize(f.home?.name) + "|" + normalize(f.away?.name) + "|" + String(f.date || "").slice(0, 16)));
         for (const f of oddsList) {
           const homeName = String(f?.home?.name || ""), awayName = String(f?.away?.name || "");
