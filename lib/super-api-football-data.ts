@@ -15,12 +15,16 @@ async function api(path: string, ttl = TTL): Promise<any> {
   if (!key) throw new Error("SUPER_HIGHLIGHTLY_API_KEY is missing in Vercel Production.");
   const cacheKey = "super-highlightly:" + path;
   const { data: hit } = await sb().from("sport_cache").select("data,at").eq("key", cacheKey).maybeSingle();
-  if (hit && Date.now() - Date.parse(hit.at) < ttl) return hit.data;
+  if (hit && Date.now() - Date.parse(hit.at) < ttl) {
+    if (hit.data?._providerError) throw new Error(String(hit.data._providerError));
+    return hit.data;
+  }
   const r = await fetch(BASE + path, { headers: { "x-rapidapi-key": key }, cache: "no-store" });
   const body = await r.json().catch(() => ({}));
   if (!r.ok) {
-    const message = body?.message || body?.error || r.statusText || "Provider error";
-    throw new Error("Highlightly (" + r.status + "): " + String(message).slice(0, 200));
+    const message = "Highlightly (" + r.status + "): " + String(body?.message || body?.error || r.statusText || "Provider error").slice(0, 200);
+    if (r.status === 429) await sb().from("sport_cache").upsert({ key: cacheKey, data: { _providerError: message }, at: new Date().toISOString() });
+    throw new Error(message);
   }
   await sb().from("sport_cache").upsert({ key: cacheKey, data: body, at: new Date().toISOString() });
   return body;
@@ -57,8 +61,8 @@ export async function todayCompetitionMatches() {
   const today = dayInAccra(now);
   const tomorrow = dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000));
   const [todayBody, tomorrowBody] = await Promise.all([
-    api("/matches?date="+today+"&timezone=Africa%2FAccra&limit=100",60_000),
-    api("/matches?date="+tomorrow+"&timezone=Africa%2FAccra&limit=100",60_000)
+    api("/matches?date="+today+"&timezone=Africa%2FAccra&limit=100",10*60_000),
+    api("/matches?date="+tomorrow+"&timezone=Africa%2FAccra&limit=100",10*60_000)
   ]);
   const unique = new Map<string, any>();
   for (const raw of [...rows(todayBody), ...rows(tomorrowBody)]) {
@@ -77,7 +81,7 @@ export async function matchesOnDate(date:string) {
 export async function teamFixtureChoices(teamId:number) {
   const today=new Date().toISOString().slice(0,10);
   const [recentBody,futureBody]=await Promise.all([
-    api("/last-five-games?teamId="+teamId,30*60_000),
+    api("/last-five-games?teamId="+teamId,24*60*60_000),
     api("/matches?date="+today+"&homeTeamId="+teamId+"&limit=100",60_000).catch(()=>({data:[]})),
   ]);
   const recent=rows(recentBody);
@@ -113,10 +117,9 @@ function summarize(teamId:number,games:any[]) {
 }
 export async function analyse(homeId:number,awayId:number,matchDate?:string) {
   if(matchDate&&!dateOK(matchDate))throw new Error("Choose a valid match date.");
-  const [hBody,aBody,h2hBody]=await Promise.all([
-    api("/last-five-games?teamId="+homeId,30*60_000),
-    api("/last-five-games?teamId="+awayId,30*60_000),
-    api("/head-2-head?teamIdOne="+homeId+"&teamIdTwo="+awayId,6*3600_000).catch(()=>[])
+  const [hBody,aBody]=await Promise.all([
+    api("/last-five-games?teamId="+homeId,24*60*60_000),
+    api("/last-five-games?teamId="+awayId,24*60*60_000)
   ]);
   const hGames=rows(hBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
   const aGames=rows(aBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
@@ -129,10 +132,7 @@ export async function analyse(homeId:number,awayId:number,matchDate?:string) {
   const lh=Math.max(.2,Math.min(4.5,(hHome+aCon)/2));
   const la=Math.max(.15,Math.min(4,(aAway+hCon)/2));
   const m=model(lh,la);
-  const h2h=rows(h2hBody).filter((g:any)=>!matchDate||Date.parse(g.date)<Date.parse(matchDate+"T00:00:00Z")).slice(0,10).map((g:any)=>{
-    const s=String(g.state?.score?.current||"");
-    return {date:g.date,home:g.homeTeam?.name,away:g.awayTeam?.name,score:s.replace(/\\s/g,""),comp:g.league?.name||""};
-  });
+  const h2h:any[]=[]; // Skip the extra H2H request to conserve daily Highlightly quota.
   const fav=m.home>=m.away?{side:"home",p:m.home}:{side:"away",p:m.away};
   const verdict=[
     fav.p>=60?"Clear favourite: "+fav.side+" win ("+fav.p+"%).":fav.p>=45?"Leaning "+fav.side+" ("+fav.p+"%), but not safe.":"Close game: home "+m.home+"% / draw "+m.draw+"% / away "+m.away+"%.",
@@ -141,10 +141,10 @@ export async function analyse(homeId:number,awayId:number,matchDate?:string) {
     m.btts>=58?"Both teams to score: yes ("+m.btts+"%).":m.btts<=42?"Both teams to score: no ("+(100-m.btts).toFixed(1)+"%).":"Both teams to score: "+m.btts+"%.",
     "Likeliest score: "+m.scores[0].score+" ("+m.scores[0].p+"%)."
   ];
-  const actualBody=matchDate?await api("/matches?date="+matchDate+"&homeTeamId="+homeId+"&awayTeamId="+awayId+"&limit=100",5*60_000).catch(()=>({data:[]})):[];
+  const historical=!!matchDate&&Date.parse(matchDate+"T00:00:00Z")<Date.now();
+  const actualBody=historical&&matchDate?await api("/matches?date="+matchDate+"&homeTeamId="+homeId+"&awayTeamId="+awayId+"&limit=100",24*60*60_000).catch(()=>({data:[]})):[];
   const actualMatch=rows(actualBody).find((x:any)=>x.homeTeam?.id===homeId&&x.awayTeam?.id===awayId);
   const actualScore=actualMatch?String(actualMatch.state?.score?.current||"").split("-").map((x:string)=>Number(x.trim())):[];
-  const historical=!!matchDate&&Date.parse(matchDate+"T00:00:00Z")<Date.now();
   return {
     leagues:{home:{id:0,name:hGames[0]?.league?.name||"Football"},away:{id:0,name:aGames[0]?.league?.name||"Football"}},
     averages:{home:{},away:{}},teams:{home:h,away:a},
