@@ -1,33 +1,11 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-api-football-data";
-import { getGhanaMatchOdds, getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
-import { getOddsPapiMatchOdds } from "@/lib/oddspapi";
+import { getCombinedMatchOdds } from "@/lib/combined-odds";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-async function getSuperMatchOdds(home: string, away: string, date: string) {
-  let primaryError: string | null = null;
-  try {
-    const primary = await getOddsPapiMatchOdds(home, away, date);
-    if (primary.matched?.length) return primary;
-    try {
-      const fallback = await getGhanaMatchOdds(home, away, date);
-      return { ...fallback, provider: "OddsRelay fallback", primaryDiagnostics: primary.diagnostics };
-    } catch (fallbackError) {
-      return { ...primary, provider: "OddsPapi", fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) };
-    }
-  } catch (error) {
-    primaryError = error instanceof Error ? error.message : String(error);
-  }
-  try {
-    const fallback = await getGhanaMatchOdds(home, away, date);
-    return { ...fallback, provider: "OddsRelay fallback", primaryError };
-  } catch (fallbackError) {
-    throw new Error("OddsPapi: " + primaryError + " | OddsRelay: " + (fallbackError instanceof Error ? fallbackError.message : String(fallbackError)));
-  }
-}
 
 /** Sport board (owner only). POST { action: "ready" | "search" | "analyse" | "history" | "result" }. */
 export async function POST(req: Request) {
@@ -51,7 +29,7 @@ export async function POST(req: Request) {
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
             analyse(homeId, awayId, date),
-            getSuperMatchOdds(home, away, date)
+            getCombinedMatchOdds(home, away, date)
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
           const odds = oddsResult.status === "fulfilled" ? oddsResult.value : null;
@@ -78,7 +56,7 @@ export async function POST(req: Request) {
             if (/exchange/i.test(String(book.title || book.key || ""))) continue;
             for (const market of book.markets || []) {
               // Super value scans are deliberately restricted to 1X2 and double chance.
-              if (!["h2h", "double_chance"].includes(String(market.key))) continue;
+              if (!["h2h", "double_chance", "btts", "totals"].includes(String(market.key))) continue;
               if (!market.key || !Array.isArray(market.outcomes)) continue;
               const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
               if (valid.length < 2) continue;
@@ -92,9 +70,14 @@ export async function POST(req: Request) {
                   else if (["draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
                 } else if (market.key === "double_chance") {
                   const pick = norm(label).replace(/\s/g, "");
-                  if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Double chance 1X";
-                  else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Double chance X2";
-                  else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Double chance 12";
+                  if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Home or draw (1X)";
+                  else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Away or draw (X2)";
+                  else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Home or away (12)";
+                } else if (market.key === "btts") {
+                  modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
+                } else if (market.key === "totals") {
+                  const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
+                  if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
                 }
                 let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
                 if (analysis?.model && market.key === "double_chance") {
@@ -141,7 +124,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getSuperMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString().slice(0,10)));
+        return json(await getCombinedMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString().slice(0,10)));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
