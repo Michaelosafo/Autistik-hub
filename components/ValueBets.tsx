@@ -32,7 +32,7 @@ export default function ValueBets({ endpoint }: Props) {
         setScanned(Math.min(i+batch.length,upcoming.length));
       }
       setProgress("");
-      if(!all.length) setError("No bookmaker prices matched these fixtures. Check the feed diagnostics below to see whether OddsRelay returned events, bookmakers and market types.");
+      if(!all.length) setError("No bookmaker prices matched these fixtures. Open the feed diagnostics below to see whether the standard OddsRelay board returned events, bookmakers and markets.");
     } catch(e){setError((e as Error).message);setProgress("");}
     finally{setBusy(false);}
   }
@@ -69,6 +69,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-    <small className="muted">Loads all soccer market options returned by OddsRelay for Ghana. Markets without a supported Autistik probability are displayed as bookmaker options, not labelled as value.</small>
+    <small className="muted">Uses OddsRelay's standard Ghana bookmaker board (the raw feed is beta-gated). Shows every returned market outcome; fair odds and value are calculated only where this board has a matching Autistik probability.</small>
   </section>;
 }
