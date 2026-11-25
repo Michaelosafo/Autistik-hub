@@ -53,7 +53,7 @@ export async function POST(req: Request) {
                     else if (norm(label) === norm(away)) modelName = "Away win (2)";
                     else if (["draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
                   } else if (market.key === "double_chance") {
-                    const pick = norm(label).replace(/\\s/g, "");
+                    const pick = norm(label).replace(/\s/g, "");
                     if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Home or draw (1X)";
                     else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Away or draw (X2)";
                     else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Home or away (12)";
@@ -66,7 +66,7 @@ export async function POST(req: Request) {
                   let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
                   if (market.key === "double_chance") {
                     const p = analysis?.model || {};
-                    const pick = norm(label).replace(/\\s/g, "");
+                    const pick = norm(label).replace(/\s/g, "");
                     const probability = ["1x", "homedraw", "homeordraw"].includes(pick) ? Number(p.home) + Number(p.draw)
                       : ["x2", "drawaway", "draworaway"].includes(pick) ? Number(p.away) + Number(p.draw)
                       : ["12", "homeaway", "homeoraway"].includes(pick) ? Number(p.home) + Number(p.away) : 0;
