@@ -231,9 +231,9 @@ export default function SportBoard() {
   const positiveOddsValues = rankedOddsValueRows.filter((x: any) => x.ev > 0);
   if (ghanaOdds && oddsValueRows.length === 0 && m) {
     oddsValueRows.push(
-      { selection: home?.name || "Home", probability: m.home, fairOdds: m.home > 0 ? 100 / m.home : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
-      { selection: "Draw", probability: m.draw, fairOdds: m.draw > 0 ? 100 / m.draw : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
-      { selection: away?.name || "Away", probability: m.away, fairOdds: m.away > 0 ? 100 / m.away : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false }
+      { selection: home?.name || "Home", probability: m.home, fairOdds: m.home > 0 ? 100 / m.home : 0, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
+      { selection: "Draw", probability: m.draw, fairOdds: m.draw > 0 ? 100 / m.draw : 0, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
+      { selection: away?.name || "Away", probability: m.away, fairOdds: m.away > 0 ? 100 / m.away : 0, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false }
     );
   }
   const bestOddsValue = positiveOddsValues[0];
