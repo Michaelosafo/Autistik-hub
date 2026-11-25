@@ -146,6 +146,47 @@ export async function getOddsPapiStatus() {
   };
 }
 
+export async function getOddsPapiUpcomingFixtures() {
+  const key = process.env.ODDSPAPI_API_KEY;
+  if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
+  const account = await cachedGet("/account", 60 * 60_000);
+  const subscriptions = rows(account?.subscriptions).filter((s: any) => s?.is_active !== false);
+  const bookmakerSlugs = [...new Set(subscriptions.flatMap((s: any) =>
+    Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
+  ))].slice(0, 3);
+  if (!bookmakerSlugs.length) throw new Error("OddsPapi account has no active bookmaker subscription.");
+  const now = new Date();
+  const dayInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(d);
+  const days = [dayInAccra(now), dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000))];
+  const fixtures: any[] = [];
+  for (const day of days) {
+    const from = day + "T00:00:00Z";
+    const end = new Date(new Date(from).getTime() + 24 * 60 * 60_000 - 1).toISOString();
+    const path = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
+      "&to=" + encodeURIComponent(end) + "&statusId=0&hasOdds=true&bookmakers=" +
+      encodeURIComponent(bookmakerSlugs.join(","));
+    fixtures.push(...rows(await cachedGet(path, 3 * 60_000)));
+  }
+  const unique = new Map<string, any>();
+  for (const f of fixtures) {
+    const date = String(f?.startTime || "");
+    if (!f?.fixtureId || !f?.participant1Name || !f?.participant2Name || !date || Date.parse(date) < now.getTime()) continue;
+    unique.set(String(f.fixtureId), {
+      id: "oddspapi:" + String(f.fixtureId),
+      date,
+      status: "SCHEDULED",
+      competition: String(f.tournamentName || f.categoryName || "Football"),
+      home: { id: 0, name: String(f.participant1Name), logo: "" },
+      away: { id: 0, name: String(f.participant2Name), logo: "" },
+      score: null,
+      oddsFixtureId: String(f.fixtureId)
+    });
+  }
+  return [...unique.values()].sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date)).slice(0, 40);
+}
+
 export async function getOddsPapiMatchOdds(home: string, away: string, matchDate?: string) {
   const key = process.env.ODDSPAPI_API_KEY;
   if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
