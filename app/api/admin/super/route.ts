@@ -1,56 +1,10 @@
 import { json } from "@/lib/ai";
-import { getOddsPapiMatchOdds, getOddsPapiStatus, getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
+import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-async function matchesWithOddsPapiFixtures() {
-  const [base, papiResult] = await Promise.allSettled([
-    todayCompetitionMatches(),
-    getOddsPapiUpcomingFixtures()
-  ]);
-  if (base.status === "rejected") throw base.reason;
-  const papi = papiResult.status === "fulfilled" ? papiResult.value : [];
-  const norm = (value: string) => {
-    const raw = String(value || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-      .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-    const aliases: Record<string, string> = {
-      "ca mineiro": "atletico mineiro", "atletico mg": "atletico mineiro",
-      "sc corinthians paulista": "corinthians", "corinthians paulista": "corinthians",
-      "manchester united": "man utd", "manchester city": "man city",
-      "paris saint germain": "psg", "paris sg": "psg"
-    };
-    return aliases[raw] || raw;
-  };
-  const merged = new Map<string, any>();
-  for (const f of base) merged.set(norm(f.home?.name) + "|" + norm(f.away?.name) + "|" + String(f.date || "").slice(0, 10), f);
-  const extras = papi.slice(0, 30);
-  const names = [...new Set(extras.flatMap((f: any) => [String(f.home.name), String(f.away.name)]))];
-  const resolved = new Map<string, any>();
-  let cursor = 0;
-  const workers = Array.from({ length: 4 }, async () => {
-    while (cursor < names.length) {
-      const name = names[cursor++];
-      try {
-        const candidates = await searchTeams(name);
-        const target = norm(name);
-        const exact = candidates.find((t: any) => norm(t.name) === target);
-        if (exact) resolved.set(name, exact);
-      } catch {}
-    }
-  });
-  await Promise.all(workers);
-  for (const f of extras) {
-    const h = resolved.get(f.home.name), a = resolved.get(f.away.name);
-    if (!h?.id || !a?.id || h.id === a.id) continue;
-    const key = norm(f.home.name) + "|" + norm(f.away.name) + "|" + String(f.date || "").slice(0, 10);
-    if (merged.has(key)) continue;
-    merged.set(key, { ...f, home: { ...f.home, id: h.id, logo: h.logo || "" }, away: { ...f.away, id: a.id, logo: a.logo || "" } });
-  }
-  return [...merged.values()].sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
-}
 
 
 
@@ -63,7 +17,7 @@ export async function POST(req: Request) {
       case "ready": return json({ ready: superReady() });
       case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": return json({ matches: await matchesWithOddsPapiFixtures() });
+      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [] }); }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
         const rows: any[] = [];
