@@ -143,6 +143,91 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   };
 }
 
+let standardBoardCache: { at: number; day: string; events: any[] } | null = null;
+
+export async function getGhanaStandardMatchOdds(home: string, away: string, matchDate?: string, allFixtures = false) {
+  const key = process.env.ODDSRELAY_API_KEY || process.env.ODDSRELAY_KEY;
+  if (!key) throw new Error("OddsRelay API key is missing.");
+  const day = matchDate ? new Date(matchDate + "T00:00:00.000Z") : new Date();
+  if (Number.isNaN(day.getTime())) throw new Error("Invalid match date.");
+  const dayKey = day.toISOString().slice(0, 10);
+  let rawEvents: any[] = [];
+  if (standardBoardCache?.day === dayKey && Date.now() - standardBoardCache.at < 30_000) {
+    rawEvents = standardBoardCache.events;
+  } else {
+    const url = new URL("https://api.oddsrelay.io/v2/odds/standard");
+    url.searchParams.set("region", "gh");
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + key, "Accept-Encoding": "gzip" },
+      cache: "no-store"
+    });
+    const body: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const code = body?.error?.code || response.status;
+      const message = body?.error?.message || response.statusText || "OddsRelay standard board failed";
+      throw new Error("OddsRelay standard Ghana (" + String(code) + "): " + String(message).slice(0, 180));
+    }
+    rawEvents = Array.isArray(body?.data) ? body.data : [];
+    standardBoardCache = { day: dayKey, at: Date.now(), events: rawEvents };
+  }
+
+  const normName = (s: string) => String(s || "").toLowerCase().normalize("NFKD")
+    .replace(/[’']/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const canonical = (s: string) => {
+    const n = normName(s);
+    const aliases: Record<string, string> = {
+      "ca mineiro": "atletico mineiro", "atletico mg": "atletico mineiro",
+      "sc corinthians paulista": "corinthians", "corinthians paulista": "corinthians",
+      "sao paulo fc": "sao paulo", "palmeiras sp": "palmeiras",
+      "flamengo rj": "flamengo", "vasco da gama": "vasco"
+    };
+    return aliases[n] || n;
+  };
+  const matches = (a: string, b: string) => {
+    const x = canonical(a), y = canonical(b);
+    return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
+  };
+  const events = rawEvents.filter((e: any) => String(e.sport_key || "").toLowerCase().startsWith("soccer_") || !e.sport_key)
+    .map((event: any) => {
+      const books = new Map<string, any>();
+      for (const market of event.markets || []) {
+        for (const outcome of market.outcomes || []) {
+          for (const offer of outcome.back || []) {
+            const slug = String(offer.bookmaker || "");
+            const price = Number(offer.price);
+            if (!slug || !Number.isFinite(price) || price <= 1) continue;
+            if (!books.has(slug)) books.set(slug, { key: slug, title: slug.replace(/[_-]+/g, " "), markets: new Map() });
+            const book = books.get(slug);
+            if (!book.markets.has(String(market.key))) book.markets.set(String(market.key), { key: String(market.key), outcomes: [] });
+            const marketRow = book.markets.get(String(market.key));
+            const prior = marketRow.outcomes.find((x: any) => x.name === String(outcome.name || ""));
+            if (!prior) marketRow.outcomes.push({ name: String(outcome.name || ""), price });
+            else if (price > prior.price) prior.price = price;
+          }
+        }
+      }
+      return {
+        id: String(event.event_id || event.id || ""),
+        sport_title: event.sport_title,
+        commence_time: event.commence_time,
+        home_team: String(event.home_team || ""),
+        away_team: String(event.away_team || ""),
+        bookmakers: [...books.values()].map((b: any) => ({ ...b, markets: [...b.markets.values()] }))
+      };
+    });
+  const matched = allFixtures ? events : events.filter((e: any) => matches(e.home_team, home) && matches(e.away_team, away));
+  return {
+    region: "gh", product: "standard", count: events.length, matched: matched.slice(0, allFixtures ? 250 : 5),
+    availableBookmakers: [...new Set(events.flatMap((e: any) => e.bookmakers.map((b: any) => b.title)))].sort(),
+    diagnostics: {
+      eventsReturned: events.length, matchingEvents: matched.length,
+      requestedHome: home, requestedAway: away,
+      sampleEvents: events.slice(0, 8).map((e: any) => ({ home: e.home_team, away: e.away_team }))
+    }
+  };
+}
+
 export async function getGhanaOddsRelayStatus() {
   const key = process.env.ODDSRELAY_API_KEY || process.env.ODDSRELAY_KEY;
   const authHeaders: Record<string, string> = key ? { Authorization: "Bearer " + key } : {};
