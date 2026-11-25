@@ -51,7 +51,7 @@ export async function POST(req: Request) {
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
             analyse(homeId, awayId, date),
-            getGhanaMatchOdds(home, away, date)
+            getSuperMatchOdds(home, away, date)
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
           const odds = oddsResult.status === "fulfilled" ? oddsResult.value : null;
