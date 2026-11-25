@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
-import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
+import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
+import { getOddsPapiMatchOdds, getOddsPapiStatus, getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,7 +16,42 @@ export async function POST(req: Request) {
       case "ready": return json({ ready: sportReady() });
       case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [] }); }
+      case "todayMatches": {
+        const [footballDataMatches, oddsPapiFixtures] = await Promise.all([
+          todayCompetitionMatches(),
+          getOddsPapiUpcomingFixtures().catch(() => [])
+        ]);
+        const fixtures = Array.isArray(footballDataMatches) ? [...footballDataMatches] : [];
+        const oddsList = Array.isArray(oddsPapiFixtures) ? oddsPapiFixtures : [];
+        let teamIds: Record<string, number> = {};
+        try {
+          teamIds = await resolveTeamIds(oddsList.flatMap((f: any) => [String(f?.home?.name || ""), String(f?.away?.name || "")]));
+        } catch { /* preserve OddsPapi fixtures as odds-only when team lookup is unavailable */ }
+        const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
+          .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
+          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+        const keys = new Set(fixtures.map((f: any) => normalize(f.home?.name) + "|" + normalize(f.away?.name) + "|" + String(f.date || "").slice(0, 16)));
+        for (const f of oddsList) {
+          const homeName = String(f?.home?.name || ""), awayName = String(f?.away?.name || "");
+          const date = String(f?.date || "");
+          const key = normalize(homeName) + "|" + normalize(awayName) + "|" + date.slice(0, 16);
+          if (!homeName || !awayName || !date || keys.has(key)) continue;
+          fixtures.push({
+            id: f.id, date, status: f.status || "SCHEDULED",
+            competition: f.competition || "Football (OddsPapi)",
+            home: { id: teamIds[normalize(homeName)] || 0, name: homeName, logo: "" },
+            away: { id: teamIds[normalize(awayName)] || 0, name: awayName, logo: "" },
+            score: null, oddsSource: "OddsPapi"
+          });
+          keys.add(key);
+        }
+        fixtures.sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
+        return json({
+          matches: fixtures,
+          fixtureSources: { footballData: Array.isArray(footballDataMatches) ? footballDataMatches.length : 0, oddsPapiWithOdds: oddsList.length, merged: fixtures.length },
+          note: "OddsPapi adds upcoming fixtures with subscribed-bookmaker prices; fixtures without football-data team IDs can show odds-only until model stats are available."
+        });
+      }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
         const rows: any[] = [];
@@ -24,11 +59,13 @@ export async function POST(req: Request) {
         for (const f of fixtures) {
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
-          if (!homeId || !awayId || homeId === awayId || !home || !away || !f?.date) continue;
+          if (!home || !away || !f?.date) continue;
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysisResult, oddsResult] = await Promise.allSettled([
-              analyse(homeId, awayId, date),
+              homeId > 0 && awayId > 0 && homeId !== awayId
+                ? analyse(homeId, awayId, date)
+                : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
               getOddsPapiMatchOdds(home, away, date)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
