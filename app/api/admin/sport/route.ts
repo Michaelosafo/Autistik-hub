@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
-import { getGhanaMatchOdds } from "@/lib/oddsrelay";
+import { getGhanaMatchOdds, getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,6 +13,7 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
+      case "oddsStatus": return json(await getGhanaOddsRelayStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "valueScan": {
