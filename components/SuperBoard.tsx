@@ -118,7 +118,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
-      if (!(d.matches || []).length) setDateMatchesError("SportMonks returned no completed fixtures with verified full-time scores for this date.");
+      if (!(d.matches || []).length) setDateMatchesError("Highlightly returned no completed fixtures with verified full-time scores for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -298,10 +298,10 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SUPER</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. Super uses its own SportMonks data feed to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. Super uses your Highlightly Premium football data feed to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       <ValueBets endpoint="/api/admin/super" />
-      {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel Production, then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>SUPER_HIGHLIGHTLY_API_KEY</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
         <b>Today's matches · all subscribed leagues</b>
