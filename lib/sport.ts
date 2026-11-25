@@ -147,7 +147,11 @@ export function model(lh: number, la: number) {
     ["Home or draw & under 3.5", sum((h, a) => h >= a && h + a <= 3)], ["Away or draw & under 3.5", sum((h, a) => a >= h && h + a <= 3)],
     ["Home win & both score", sum((h, a) => h > a && a > 0)], ["Away win & both score", sum((h, a) => a > h && h > 0)],
     ["Home -1.5 handicap (win by 2+)", sum((h, a) => h - a >= 2)], ["Away -1.5 handicap (win by 2+)", sum((h, a) => a - h >= 2)],
+    ["Home -2.5 handicap (win by 3+)", sum((h, a) => h - a >= 3)], ["Away -2.5 handicap (win by 3+)", sum((h, a) => a - h >= 3)],
+    ["Home -3.5 handicap (win by 4+)", sum((h, a) => h - a >= 4)], ["Away -3.5 handicap (win by 4+)", sum((h, a) => a - h >= 4)],
     ["Home +1.5 handicap (lose by 1 at most)", sum((h, a) => a - h <= 1)], ["Away +1.5 handicap (lose by 1 at most)", sum((h, a) => h - a <= 1)],
+    ["Home +2.5 handicap (lose by 2 at most)", sum((h, a) => a - h <= 2)], ["Away +2.5 handicap (lose by 2 at most)", sum((h, a) => h - a <= 2)],
+    ["Home +3.5 handicap (lose by 3 at most)", sum((h, a) => a - h <= 3)], ["Away +3.5 handicap (lose by 3 at most)", sum((h, a) => h - a <= 3)],
     ["Total goals 1-3", sum((h, a) => h + a >= 1 && h + a <= 3)], ["Total goals 2-4", sum((h, a) => h + a >= 2 && h + a <= 4)],
   ];
   const ranked = markets
