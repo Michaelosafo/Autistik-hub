@@ -23,7 +23,7 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
       const coverage: any = await coverageResponse.json();
       const rawMarkets = coverage?.markets?.raw || coverage?.data?.markets?.raw || [];
       const discovered = Array.isArray(rawMarkets) ? rawMarkets.map((m: any) => typeof m === "string" ? m : String(m?.key || m?.name || "")).filter(Boolean) : [];
-      if (discovered.length) marketKeys = [...new Set(discovered)].slice(0, 20);
+      if (discovered.length) marketKeys = [...new Set(["h2h", "totals", "btts", ...discovered])].slice(0, 20);
     }
   } catch {
     // Fall back to the core markets if discovery is unavailable.
