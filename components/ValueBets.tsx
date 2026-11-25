@@ -9,11 +9,19 @@ export default function ValueBets({ endpoint }: Props) {
   const [error,setError]=useState("");
   const [scanned,setScanned]=useState(0);
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
+  const [feedStatus,setFeedStatus]=useState<any>(null);
+  const [checkingFeed,setCheckingFeed]=useState(false);
   async function post(action:string, body:any={}) {
     const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
     const d=await r.json().catch(()=>({}));
     if(!r.ok || d.error) throw new Error(d.error || "Request failed");
     return d;
+  }
+  async function checkFeed() {
+    setCheckingFeed(true);
+    try { setFeedStatus(await post("oddsStatus")); }
+    catch(e) { setFeedStatus({ error: (e as Error).message }); }
+    finally { setCheckingFeed(false); }
   }
   async function scan() {
     setBusy(true); setError(""); setRows([]); setScanned(0); setDiagnostics([]);
@@ -39,9 +47,10 @@ export default function ValueBets({ endpoint }: Props) {
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
       <div><b>📈 Value bets · all today's fixtures</b><small className="muted" style={{display:"block"}}>Scans each fixture using this board's own model and compares the available bookmaker markets.</small></div>
-      <button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button>
+      <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check Ghana feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
+    {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>OddsRelay Ghana feed status</b><span>Server key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>Ghana region: {feedStatus.ghRegion ? "listed for this key" : "not confirmed in key regions"}</span><span>Raw market keys: {Array.isArray(feedStatus.rawMarkets) ? feedStatus.rawMarkets.join(", ") || "none returned" : "not returned"}</span><span>Bookmaker coverage: {Array.isArray(feedStatus.bookmakers) ? feedStatus.bookmakers.map((b:any)=>b.name || b.title || b.key).join(", ") || "not returned" : "see coverage response"}</span>{feedStatus.errors?.regions && <small>Regions error: {JSON.stringify(feedStatus.errors.regions)}</small>}{feedStatus.errors?.coverage && <small>Coverage error: {JSON.stringify(feedStatus.errors.coverage)}</small>}{feedStatus.errors?.usage && <small>Usage: {JSON.stringify(feedStatus.errors.usage)}</small>}{feedStatus.error && <small>{feedStatus.error}</small>}</div>}
     {scanned>0 && <small className="muted">Scanned {scanned} fixtures</small>}
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && !rows.length && <div className="stack" style={{fontSize:13}}>
@@ -69,6 +78,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-    <small className="muted">Uses OddsRelay's standard Ghana bookmaker board (the raw feed is beta-gated). Shows every returned market outcome; fair odds and value are calculated only where this board has a matching Autistik probability.</small>
+    <small className="muted">Uses OddsRelay's Ghana raw bookmaker board. Shows available bookmaker market outcomes; fair odds and value are calculated only where Autistik has a matching probability. Ghana has no exchange coverage on this feed.</small>
   </section>;
 }
