@@ -220,6 +220,13 @@ export default function SportBoard() {
         implied: best.rawImplied, noVigProbability: best.noVigProbability, edge, ev: ev * 100, disagreement: Math.abs(edge) >= 10 };
     });
   }).filter(Boolean);
+  if (ghanaOdds && oddsValueRows.length === 0 && m) {
+    oddsValueRows.push(
+      { selection: home?.name || "Home", probability: m.home, fairOdds: m.home > 0 ? 100 / m.home : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
+      { selection: "Draw", probability: m.draw, fairOdds: m.draw > 0 ? 100 / m.draw : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
+      { selection: away?.name || "Away", probability: m.away, fairOdds: m.away > 0 ? 100 / m.away : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false }
+    );
+  }
   const bestOddsValue = oddsValueRows.filter((x: any) => x.ev != null && x.ev >= 3).sort((a: any, b: any) => b.probability - a.probability)[0];
   const highestOddsEV = oddsValueRows.filter((x: any) => x.ev != null && x.ev > 0).sort((a: any, b: any) => b.ev - a.ev)[0];
   async function saveOdds() {
@@ -366,13 +373,13 @@ export default function SportBoard() {
               </div>)}
             </div>)
           }
-          {m && ghanaOdds.matched.length > 0 && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+          {m && ghanaOdds && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <b>Model vs bookmaker · value check</b>
             <small className="muted">Raw implied probability = 1 ÷ odds. No-vig probability removes the bookmaker's overround across all three outcomes. EV = model probability × decimal odds − 1; large model/market gaps are flagged for verification.</small>
             {oddsValueRows.length === 0 ? <div className="notice warn">No usable bookmaker 1X2 prices were returned for comparison.</div> : <>
               {oddsValueRows.map((x: any) => <div key={x.selection} className="sb-top-r">
                 <span className="sb-name">{x.selection}</span><b>Model {x.probability.toFixed(1)}%</b>
-                <small className="muted">Fair {x.fairOdds.toFixed(2)} · book {x.odds == null ? "—" : x.odds.toFixed(2)} · raw implied {x.implied == null ? "—" : x.implied.toFixed(1) + "%"} · no-vig {x.noVigProbability == null ? "—" : x.noVigProbability.toFixed(1) + "%"}</small>
+                <small className="muted">Fair {x.(x.fairOdds == null ? "—" : x.fairOdds.toFixed(2))} · book {x.odds == null ? "—" : x.odds.toFixed(2)} · raw implied {x.implied == null ? "—" : x.implied.toFixed(1) + "%"} · no-vig {x.noVigProbability == null ? "—" : x.noVigProbability.toFixed(1) + "%"}</small>
                 <small className={x.ev == null ? "muted" : x.ev >= 3 ? "sb-ok" : x.ev > 0 ? "sb-g D" : "sb-no"}>{x.ev == null ? "No bookmaker price" : "EV " + (x.ev >= 0 ? "+" : "") + x.ev.toFixed(1) + "%"}</small>
               </div>)}
               {oddsValueRows.some((x: any) => x.disagreement) && <div className="notice warn"><b>Model/market disagreement detected.</b> A gap of 10 percentage points or more is flagged for fixture, team-strength and lineup verification. It is not automatically treated as a genuine value bet.</div>}
