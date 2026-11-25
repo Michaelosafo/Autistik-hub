@@ -14,7 +14,21 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     : "https://api.oddsrelay.io/v2/odds/raw");
   url.searchParams.set("region", "gh");
   url.searchParams.set("sports", "soccer");
-  url.searchParams.set("markets", "h2h,totals,btts");
+  // Discover all soccer market keys currently exposed for Ghana (free coverage route).
+  // OddsRelay accepts at most 20 market keys per raw request.
+  let marketKeys = ["h2h", "totals", "btts"];
+  try {
+    const coverageResponse = await fetch("https://api.oddsrelay.io/v2/coverage?region=gh", { cache: "no-store" });
+    if (coverageResponse.ok) {
+      const coverage: any = await coverageResponse.json();
+      const rawMarkets = coverage?.markets?.raw || coverage?.data?.markets?.raw || [];
+      const discovered = Array.isArray(rawMarkets) ? rawMarkets.map((m: any) => typeof m === "string" ? m : String(m?.key || m?.name || "")).filter(Boolean) : [];
+      if (discovered.length) marketKeys = [...new Set(discovered)].slice(0, 20);
+    }
+  } catch {
+    // Fall back to the core markets if discovery is unavailable.
+  }
+  url.searchParams.set("markets", marketKeys.join(","));
   if (isHistorical) {
     // Historical raw feed is a point-in-time snapshot; live raw feed cannot return past fixtures.
     // Use a pre-kickoff midday UTC snapshot for the selected match date.
