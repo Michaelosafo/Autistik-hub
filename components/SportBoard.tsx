@@ -218,6 +218,14 @@ export default function SportBoard() {
   const positiveOddsValues = rankedOddsValueRows.filter((x: any) => x.ev > 0);
   const bestOddsValue = positiveOddsValues[0];
   const highestOddsEV = bestOddsValue;
+  // Alternative-market shortlist: probability estimates only. A market is not labelled
+  // value until a real bookmaker price for that exact line is available.
+  const recommendedMarketRows = (m?.markets || [])
+    .filter((x: any) => /handicap|goals|both teams score|team over|team under|double chance|home or draw|away or draw/i.test(String(x.name)))
+    .filter((x: any) => Number(x.p) >= 55 && Number(x.p) <= 90)
+    .sort((a: any, b: any) => Number(b.p) - Number(a.p))
+    .slice(0, 5);
+  const crossLeagueEstimate = !!res?.leagues?.home?.id && !!res?.leagues?.away?.id && res.leagues.home.id !== res.leagues.away.id;
   async function saveOdds() {
     const selections = pricedMarkets.filter((o: any) => o.odds != null).map((o: any) => ({
       name: o.name, probability: o.p, fairOdds: o.fair, bookmakerOdds: o.odds,
@@ -302,6 +310,15 @@ export default function SportBoard() {
         )}
         {ghanaOdds && positiveOddsValues.length === 0 && <div className="notice warn">No positive-value 1X2 bet at the available prices. The board will not force a pick.</div>}
         {ghanaOdds && <small className="muted">Odds feed updated: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "time not supplied"} · {ghanaOdds.historical ? "Historical snapshot" : "Live prices"}</small>}
+      </section>}
+      {m && <section className="card stack">
+        <b>🎯 Alternative market recommendations</b>
+        <small className="muted">The model checks handicap, goal totals, team goals, double chance and BTTS—not only 1X2. These are probability-based leans, not confirmed value bets; only call a selection value after checking its live bookmaker price.</small>
+        {crossLeagueEstimate && <div className="notice warn"><b>Cross-league matchup:</b> {res.leagues.home.name} vs {res.leagues.away.name}. The current team-strength model uses each club's domestic-league baselines, so treat its probabilities as lower-confidence and require independent market confirmation.</div>}
+        {recommendedMarketRows.length ? recommendedMarketRows.map((x: any, i: number) => <div key={x.name} className="sb-top-r">
+          <span className="sb-rank">#{i + 1}</span><span className="sb-name"><b>{x.name}</b><small className="muted" style={{ display: "block" }}>Model lean · fair odds {x.fair?.toFixed?.(2) ?? "—"}</small></span>
+          <b>{Number(x.p).toFixed(1)}%</b><small className="muted">Estimated probability</small>
+        </div>) : <small className="muted">No alternative market currently clears the 55% probability display threshold.</small>}
       </section>}
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
