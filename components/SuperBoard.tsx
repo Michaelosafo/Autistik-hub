@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import ValueBets from "@/components/ValueBets";
 
 /**
  * Super board (owner only): pick the home and the away team, and it compares both (home record for the home side,
@@ -299,6 +300,7 @@ export default function SportBoard() {
         <h1>⚽ Super board</h1>
         <p className="muted">Pick the home team and the away team. Super uses its own Highlightly data feed to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
+      <ValueBets endpoint="/api/admin/super" />
       {ready === false && <div className="notice warn">Add <code>SUPER_HIGHLIGHTLY_API_KEY</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
