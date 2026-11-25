@@ -10,4 +10,20 @@ $$;
 revoke all on function public.release_keeper_lease(integer) from public, anon, authenticated;
 grant execute on function public.release_keeper_lease(integer) to service_role;
 create extension if not exists pg_cron;
-select cron.schedule('autistik-release', '*/5 * * * *', $$ select net.http_get('https://autistik.io/api/lockers/cron') $$);
+create extension if not exists pg_net;
+
+-- Replace the old schedule so the x-cron-key header matches lib/cron-auth.ts.
+select cron.unschedule(jobid) from cron.job where jobname = 'autistik-release';
+select cron.schedule(
+  'autistik-release',
+  '*/5 * * * *',
+  $$
+    select net.http_get(
+      url := 'https://autistik.io/api/lockers/cron',
+      headers := jsonb_build_object(
+        'x-cron-key',
+        (select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret' limit 1)
+      )
+    );
+  $$
+);
