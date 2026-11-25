@@ -40,13 +40,13 @@ export default function ValueBets({ endpoint }: Props) {
         setScanned(Math.min(i+batch.length,upcoming.length));
       }
       setProgress("");
-      if(!all.length) setError("No bookmaker prices matched these fixtures. Open the feed diagnostics below to see whether the standard OddsRelay board returned events, bookmakers and markets.");
+      if(!all.length) setError("No Ghana bookmaker prices matched these fixtures for 1X2 or double chance. Check the diagnostics below for the filtered raw-feed response and token balance.");
     } catch(e){setError((e as Error).message);setProgress("");}
     finally{setBusy(false);}
   }
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 Value bets · all today's fixtures</b><small className="muted" style={{display:"block"}}>Scans each fixture using this board's own model and compares the available bookmaker markets.</small></div>
+      <div><b>📈 Value bets · all today's fixtures</b><small className="muted" style={{display:"block"}}>Scans today's fixtures for match result (home win, draw, away win) and double chance only, using one filtered Ghana odds request to reduce token use.</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check Ghana feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
@@ -78,6 +78,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-    <small className="muted">Uses OddsRelay's Ghana raw bookmaker board. Shows available bookmaker market outcomes; fair odds and value are calculated only where Autistik has a matching probability. Ghana has no exchange coverage on this feed.</small>
+    <small className="muted">Checks only 1X2 (home win, draw, away win) and double-chance prices. Autistik calculates fair odds, model probability and expected value for each supported selection. The scan quotes token cost before spending and reuses one daily odds board across fixtures.</small>
   </section>;
 }
