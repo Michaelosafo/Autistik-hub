@@ -10,6 +10,20 @@ const sb = () => supabaseService();
 const rows = (v: any): any[] => Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : v?.fixtureId ? [v] : [];
 
 const inflight = new Map<string, Promise<any>>();
+const endpointLastRequest = new Map<string, number>();
+const endpointQueues = new Map<string, Promise<void>>();
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function errorMessage(body: any, fallback: string) {
+  const error = body?.error;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const parts = [error.code, error.message, error.details].filter(Boolean);
+    if (parts.length) return parts.join(" — ");
+  }
+  return String(body?.message || body?.detail || fallback);
+}
+
 async function cachedGet(path: string, ttl: number) {
   const cacheKey = "super-oddspapi:" + path;
   const pending = inflight.get(cacheKey);
@@ -21,19 +35,47 @@ async function cachedGet(path: string, ttl: number) {
     if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
     const url = new URL(BASE + path);
     url.searchParams.set("apiKey", key);
-    const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const message = body?.message || body?.error || body?.detail || response.statusText || "OddsPapi request failed";
-      throw new Error("OddsPapi (" + response.status + "): " + String(message).slice(0, 200));
+
+    // OddsPapi applies cooldowns per endpoint, not per URL. Serialize calls
+    // across different query strings so multiple bookmakers don't trigger 429s.
+    const endpoint = url.pathname;
+    const cooldown = endpoint.endsWith("/fixtures") ? 2100 :
+      endpoint.endsWith("/odds-by-tournaments") ? 1100 : 1100;
+    const previous = endpointQueues.get(endpoint) || Promise.resolve();
+    let release!: () => void;
+    const turn = new Promise<void>(resolve => { release = resolve; });
+    const queued = previous.then(() => turn);
+    endpointQueues.set(endpoint, queued);
+    await previous;
+    try {
+      const wait = cooldown - (Date.now() - (endpointLastRequest.get(endpoint) || 0));
+      if (wait > 0) await sleep(wait);
+      let response: Response | null = null;
+      let body: any = {};
+      for (let attempt = 0; attempt < 2; attempt++) {
+        response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+        body = await response.json().catch(() => ({}));
+        endpointLastRequest.set(endpoint, Date.now());
+        if (response.ok) break;
+        const code = String(body?.error?.code || body?.code || "");
+        const retryMs = Number(body?.error?.retryMs ?? body?.retryMs ?? 0);
+        if (response.status === 429 && code === "RATE_LIMITED" && attempt === 0 && retryMs > 0) {
+          await sleep(Math.min(retryMs + 150, 5000));
+          continue;
+        }
+        const message = errorMessage(body, response.statusText || "OddsPapi request failed");
+        throw new Error("OddsPapi (" + response.status + ", " + (code || "API_ERROR") + "): " + message);
+      }
+      if (!response?.ok) throw new Error("OddsPapi request failed after rate-limit retry.");
+      await sb().from("sport_cache").upsert({ key: cacheKey, data: body, at: new Date().toISOString() });
+      return body;
+    } finally {
+      release();
     }
-    await sb().from("sport_cache").upsert({ key: cacheKey, data: body, at: new Date().toISOString() });
-    return body;
   })();
   inflight.set(cacheKey, task);
   try { return await task; } finally { inflight.delete(cacheKey); }
 }
-
 const norm = (s: string) => String(s || "").toLowerCase().normalize("NFKD")
   .replace(/[\u0300-\u036f]/g, "").replace(/[’']/g, "")
   .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
@@ -133,16 +175,15 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
      nameMatches(String(f.participant2Name || f.participant2ShortName || ""), away)));
   const tournamentIds = [...new Set(relevant.map((f: any) => String(f.tournamentId)))];
   const oddsFixtures: any[] = [];
-  // The provider's tournament endpoint has a small tournament batch limit.
+  // One request per tournament batch returns every bookmaker included in the
+  // account's plan. Avoid three back-to-back calls per batch, which used to
+  // trip OddsPapi's endpoint cooldown and produce HTTP 429 errors.
   for (let i = 0; i < tournamentIds.length; i += 3) {
     const chunk = tournamentIds.slice(i, i + 3);
-    for (const bookmaker of bookmakerSlugs) {
-      const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
-        "&bookmaker=" + encodeURIComponent(bookmaker) +
-        "&language=en&oddsFormat=decimal&verbosity=3";
-      const result = await cachedGet(path, 3 * 60_000);
-      oddsFixtures.push(...rows(result));
-    }
+    const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
+      "&language=en&oddsFormat=decimal&verbosity=3";
+    const result = await cachedGet(path, 3 * 60_000);
+    oddsFixtures.push(...rows(result));
   }
   const markets = await getMarketMap();
   const byId = new Map(oddsFixtures.map((f: any) => [String(f.fixtureId), f]));
