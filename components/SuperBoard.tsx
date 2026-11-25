@@ -118,7 +118,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
-      if (!(d.matches || []).length) setDateMatchesError("API-Football returned no completed fixtures with verified full-time scores for this date.");
+      if (!(d.matches || []).length) setDateMatchesError("SportMonks returned no completed fixtures with verified full-time scores for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -298,18 +298,18 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SUPER</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. Super uses its own Highlightly data feed to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. Super uses its own SportMonks data feed to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       <ValueBets endpoint="/api/admin/super" />
-      {ready === false && <div className="notice warn">Add <code>SUPER_HIGHLIGHTLY_API_KEY</code> in Vercel Production, then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
         <b>Today's matches · all subscribed leagues</b>
-        <small className="muted">Fixtures returned by your separate Highlightly feed across its available competitions. Select any match to load its prediction and automatic Ghana bookmaker comparison.</small>
+        <small className="muted">Fixtures returned by your SportMonks feed across its available competitions. Select any match to load its prediction and automatic Ghana bookmaker comparison.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
-        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No fixtures returned for today. Check the leagues included in your API-Football feed.</small>}
+        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No fixtures returned for today. Check the leagues included in your SportMonks subscription.</small>}
         <div className="stack" style={{ gap: 0, marginTop: 8 }}>
           {todayMatches.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
             style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
@@ -331,12 +331,12 @@ export default function SportBoard() {
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
         <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
           <b>Past matches by date</b>
-          <small className="muted">Search all competitions and fixtures available to your API-Football feed for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
+          <small className="muted">Search all competitions and fixtures available to your SportMonks subscription for this date. Every returned completed match is listed with its verified score; select a match to load its historical analysis.</small>
           <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesError(""); setRes(null); }} /></label>
           <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || !ready} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search all available matches"}</button>
           {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
           {dateMatches.length > 0 && <div className="stack" style={{ gap: 0 }}>
-            <b>{dateMatches.length} completed {dateMatches.length === 1 ? "match" : "matches"} returned by the API</b><small className="muted">All competitions available in your API feed are included. Tap any fixture to open its historical predictions and full analysis.</small>
+            <b>{dateMatches.length} completed {dateMatches.length === 1 ? "match" : "matches"} returned by the API</b><small className="muted">All competitions available in your SportMonks feed are included. Tap any fixture to open its historical predictions and full analysis.</small>
             {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <b>{f.home.name} vs {f.away.name}</b>
