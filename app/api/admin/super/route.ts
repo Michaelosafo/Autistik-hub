@@ -1,8 +1,7 @@
 import { json } from "@/lib/ai";
 import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
 import { adminState } from "@/lib/admin";
-import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-api-football-data";
-import { analyse as analyseSportMonks, todayCompetitionMatches as sportMonksTodayMatches } from "@/lib/super-sportmonks-data";
+import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -15,21 +14,10 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: superReady() || !!process.env.SPORTMONKS_API_TOKEN });
+      case "ready": return json({ ready: superReady() });
       case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": {
-        try {
-          const matches = await todayCompetitionMatches();
-          return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "Highlightly" });
-        } catch (highlightlyError) {
-          const message = highlightlyError instanceof Error ? highlightlyError.message : String(highlightlyError);
-          if (!/429|daily request limits|rate.?limit|quota/i.test(message)) throw highlightlyError;
-          if (!process.env.SPORTMONKS_API_TOKEN) throw new Error(message + " SportMonks fallback is not configured.");
-          const matches = await sportMonksTodayMatches();
-          return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "SportMonks fallback", fixtureFallback: message });
-        }
-      }
+      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "SportMonks" }); }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
         const rows: any[] = [];
@@ -42,7 +30,7 @@ export async function POST(req: Request) {
           // Keep the odds feed independent from team-history coverage. A missing
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
-            (f?.provider === "sportmonks" ? analyseSportMonks(homeId, awayId, date) : analyse(homeId, awayId, date)),
+            analyse(homeId, awayId, date),
             getOddsPapiMatchOdds(home, away, date)
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
