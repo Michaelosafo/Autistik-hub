@@ -1,6 +1,6 @@
-/** Server-side OddsRelay Ghana football odds. Use the standard matched feed:
- * the raw feed is beta-gated and may return 503 raw_not_enabled for ordinary keys.
- * Normalize standard back offers into the per-bookmaker shape consumed by valueScan.
+/** Ghana football odds from OddsRelay's raw feed.
+ * The standard matched board is UK & Ireland only; international regions,
+ * including Ghana, must use /v2/odds/raw.
  */
 export type OddsEvent = {
   id: string; sport_title?: string; commence_time: string; home_team: string; away_team: string;
@@ -12,77 +12,76 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   if (!key) throw new Error("OddsRelay API key is missing. Set ODDSRELAY_API_KEY (or ODDSRELAY_KEY) in Vercel.");
   const day = matchDate ? new Date(matchDate + "T00:00:00.000Z") : new Date();
   if (Number.isNaN(day.getTime())) throw new Error("Invalid match date.");
-  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00.000Z");
-  const isHistorical = day.getTime() < today.getTime();
-  const url = new URL(isHistorical
-    ? "https://api.oddsrelay.io/v2/historical/odds/standard"
-    : "https://api.oddsrelay.io/v2/odds/standard");
-  // OddsRelay reports that Ghana (gh) does not serve the standard product.
-  // Query the global standard soccer board instead; only returned bookmaker offers are shown.
-  url.searchParams.set("sports", "soccer");
 
-  // Discover the market keys supported by the standard board (not raw, which is beta-gated).
-  let marketKeys = ["h2h", "totals", "btts"];
+  // Ghana is an international region: use raw, never standard.
+  let marketKeys = ["h2h", "h2h_3way", "totals", "over_under", "btts", "draw_no_bet", "double_chance", "handicap", "asian_handicap", "correct_score", "half_time"];
   try {
     const coverageResponse = await fetch("https://api.oddsrelay.io/v2/coverage", { cache: "no-store" });
     if (coverageResponse.ok) {
       const coverage: any = await coverageResponse.json();
-      const rawMarkets = coverage?.markets?.standard || coverage?.data?.markets?.standard || [];
+      const rawMarkets = coverage?.markets?.raw || coverage?.data?.markets?.raw || [];
       const discovered = Array.isArray(rawMarkets)
         ? rawMarkets.map((m: any) => typeof m === "string" ? m : String(m?.key || m?.name || "")).filter(Boolean)
         : [];
       if (discovered.length) marketKeys = [...new Set([...marketKeys, ...discovered])].slice(0, 20);
     }
   } catch {
-    // Keep core markets when public discovery is temporarily unavailable.
-  }
-  url.searchParams.set("markets", marketKeys.join(","));
-  if (isHistorical) {
-    url.searchParams.set("date", matchDate + "T12:00:00Z");
-  } else {
-    url.searchParams.set("commenceTimeFrom", new Date(day.getTime() - 6 * 3600_000).toISOString());
-    url.searchParams.set("commenceTimeTo", new Date(day.getTime() + 36 * 3600_000).toISOString());
+    // Continue with common football markets if public coverage discovery fails.
   }
 
-  const response = await fetch(url, {
-    headers: { Authorization: "Bearer " + key, "Accept-Encoding": "gzip" },
-    cache: "no-store"
-  });
-  const body: any = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const code = body?.error?.code || response.status;
-    const message = body?.error?.message || response.statusText || "OddsRelay request failed";
-    throw new Error(`OddsRelay standard (${code}): ${String(message).slice(0, 180)}`);
-  }
-
-  const sourceEvents: any[] = Array.isArray(body?.data) ? body.data : [];
-  const events: OddsEvent[] = sourceEvents.map((event: any) => {
-    const books = new Map<string, any>();
-    for (const market of event.markets || []) for (const outcome of market.outcomes || []) {
-      for (const offer of outcome.back || []) {
-        const bookKey = String(offer.bookmaker || "unknown");
-        if (!books.has(bookKey)) books.set(bookKey, {
-          key: bookKey, title: bookKey.replace(/[_-]+/g, " "),
-          last_update: offer.last_update, markets: []
-        });
-        const book = books.get(bookKey);
-        let bookMarket = book.markets.find((m: any) => m.key === market.key);
-        if (!bookMarket) {
-          bookMarket = { key: market.key, last_update: offer.last_update, outcomes: [] };
-          book.markets.push(bookMarket);
-        }
-        bookMarket.outcomes.push({ name: String(outcome.name || ""), price: Number(offer.price) });
+  const from = new Date(day.getTime() - 6 * 3600_000).toISOString();
+  const to = new Date(day.getTime() + 36 * 3600_000).toISOString();
+  const allEvents = new Map<string, any>();
+  let cursor: string | null = null;
+  for (let page = 0; page < 4; page++) {
+    const url = new URL("https://api.oddsrelay.io/v2/odds/raw");
+    url.searchParams.set("region", "gh");
+    url.searchParams.set("sports", "soccer");
+    url.searchParams.set("markets", marketKeys.join(","));
+    url.searchParams.set("commenceTimeFrom", from);
+    url.searchParams.set("commenceTimeTo", to);
+    if (cursor) url.searchParams.set("cursor", cursor);
+    const response = await fetch(url, {
+      headers: { Authorization: "Bearer " + key, "Accept-Encoding": "gzip" },
+      cache: "no-store"
+    });
+    const body: any = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const code = body?.error?.code || response.status;
+      const message = body?.error?.message || response.statusText || "OddsRelay request failed";
+      if (code === "raw_not_enabled") {
+        throw new Error("OddsRelay raw odds are not enabled for this account. Ghana is not supported by the standard feed. Ask OddsRelay support to enable the raw odds board for your API key.");
       }
+      throw new Error(`OddsRelay Ghana raw (${String(code)}): ${String(message).slice(0, 180)}`);
     }
-    return {
-      id: String(event.event_id || event.id || ""),
-      sport_title: event.sport_title,
-      commence_time: event.commence_time,
-      home_team: String(event.home_team || ""),
-      away_team: String(event.away_team || ""),
-      bookmakers: [...books.values()]
-    };
-  });
+    for (const event of Array.isArray(body?.data) ? body.data : []) {
+      const id = String(event.id || event.event_id || "");
+      if (id) allEvents.set(id, event);
+    }
+    cursor = body?.meta?.next_cursor || null;
+    if (!cursor) break;
+  }
+
+  const events: OddsEvent[] = [...allEvents.values()].map((event: any) => ({
+    id: String(event.id || event.event_id || ""),
+    sport_title: event.sport_title,
+    commence_time: event.commence_time,
+    home_team: String(event.home_team || ""),
+    away_team: String(event.away_team || ""),
+    bookmakers: (event.bookmakers || []).map((book: any) => ({
+      key: String(book.key || book.title || "unknown"),
+      title: String(book.title || book.key || "Bookmaker"),
+      last_update: book.last_update,
+      markets: (book.markets || []).map((market: any) => ({
+        key: String(market.key || ""),
+        last_update: market.last_update,
+        outcomes: (market.outcomes || []).map((outcome: any) => ({
+          name: String(outcome.name || outcome.side || ""),
+          price: Number(outcome.price ?? outcome.back?.[0]?.price)
+        })).filter((o: any) => Number.isFinite(o.price) && o.price > 1)
+      }))
+    }))
+  }));
 
   const norm = (s: string) => s.toLocaleLowerCase().normalize("NFKD")
     .replace(/[’']/g, "")
@@ -107,10 +106,8 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   };
   const matched = events.filter(e => matchesName(e.home_team, home) && matchesName(e.away_team, away));
   return {
-    region: body?.meta?.region || "global",
-    processedAt: body?.meta?.processed_at || null,
-    count: Number(body?.meta?.count ?? events.length),
-    historical: isHistorical,
+    region: "gh", product: "raw", processedAt: null,
+    count: events.length, historical: false,
     matched: matched.slice(0, 5),
     diagnostics: {
       eventsReturned: events.length, matchingEvents: matched.length,
