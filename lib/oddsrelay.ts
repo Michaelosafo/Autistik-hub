@@ -14,7 +14,7 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     : "https://api.oddsrelay.io/v2/odds/raw");
   url.searchParams.set("region", "gh");
   url.searchParams.set("sports", "soccer");
-  url.searchParams.set("markets", "h2h");
+  url.searchParams.set("markets", "h2h,totals,btts");
   if (isHistorical) {
     // Historical raw feed is a point-in-time snapshot; live raw feed cannot return past fixtures.
     // Use a pre-kickoff midday UTC snapshot for the selected match date.
