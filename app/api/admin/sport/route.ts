@@ -1,7 +1,8 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
-import { getGhanaMatchOdds, getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
+import { getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
+import { getCombinedMatchOdds } from "@/lib/combined-odds";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysis, odds] = await Promise.all([
               analyse(homeId, awayId, date),
-              getGhanaMatchOdds(home, away, date)
+              getCombinedMatchOdds(home, away, date)
             ]);
             const modelMarkets = Array.isArray(analysis.model?.markets) ? analysis.model.markets : [];
             scanDiagnostics.push({ fixture: home + ' vs ' + away, oddsEvents: odds.diagnostics?.eventsReturned ?? odds.count ?? 0, matchedEvents: (odds.matched || []).length, bookmakers: odds.availableBookmakers || [], markets: [...new Set((odds.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))] });
@@ -107,7 +108,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getGhanaMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
+        return json(await getCombinedMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
