@@ -207,10 +207,21 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
     throw new Error("OddsPapi account has no active bookmaker subscription. Check GET /v4/account and enable at least one football bookmaker.");
   }
 
-  const fixturePath = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
-    "&to=" + encodeURIComponent(to) + "&statusId=0&hasOdds=true&bookmakers=" + encodeURIComponent(bookmakerSlugs.join(","));
-  const fixtureData = await cachedGet(fixturePath, 5 * 60_000);
-  const fixtureRows = rows(fixtureData);
+  // OddsPapi's fixtures endpoint accepts exactly ONE bookmaker per request.
+  // Query each subscribed bookmaker separately, then merge and deduplicate the
+  // fixture list before requesting tournament odds.
+  const fixtureResults = await Promise.all(bookmakerSlugs.map(async (bookmaker) => {
+    const fixturePath = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
+      "&to=" + encodeURIComponent(to) + "&statusId=0&hasOdds=true&bookmaker=" + encodeURIComponent(bookmaker);
+    return cachedGet(fixturePath, 5 * 60_000);
+  }));
+  const fixtureById = new Map<string, any>();
+  for (const result of fixtureResults) {
+    for (const row of rows(result)) {
+      if (row?.fixtureId) fixtureById.set(String(row.fixtureId), row);
+    }
+  }
+  const fixtureRows = [...fixtureById.values()];
   const relevant = fixtureRows.filter((f: any) => f?.fixtureId && f?.tournamentId &&
     (nameMatches(String(f.participant1Name || f.participant1ShortName || ""), home) &&
      nameMatches(String(f.participant2Name || f.participant2ShortName || ""), away)));
@@ -279,7 +290,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
       eventsReturned: oddsFixtures.length, fixtureEvents: fixtureRows.length,
       matchingFixtures: relevant.length, matchingEvents: matched.length,
       requestedHome: home, requestedAway: away, tournamentCount: tournamentIds.length,
-      bookmakerSlugs,
+      bookmakerSlugsQueriedIndividually: bookmakerSlugs,
       sampleEvents: fixtureRows.slice(0, 8).map((f: any) => ({ home: f.participant1Name, away: f.participant2Name, hasOdds: f.hasOdds }))
     }
   };
