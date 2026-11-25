@@ -8,6 +8,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [progress,setProgress]=useState("");
   const [error,setError]=useState("");
   const [scanned,setScanned]=useState(0);
+  const [dayCounts,setDayCounts]=useState({today:0,tomorrow:0});
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [checkingFeed,setCheckingFeed]=useState(false);
@@ -24,11 +25,15 @@ export default function ValueBets({ endpoint }: Props) {
     finally { setCheckingFeed(false); }
   }
   async function scan() {
-    setBusy(true); setError(""); setRows([]); setScanned(0); setDiagnostics([]);
+    setBusy(true); setError(""); setRows([]); setScanned(0); setDayCounts({today:0,tomorrow:0}); setDiagnostics([]);
     try {
       const {matches=[]}=await post("todayMatches");
       const now=Date.now();
+      const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
+      const today=accraDay(new Date().toISOString());
+      const tomorrow=accraDay(new Date(Date.now()+24*60*60_000).toISOString());
       const upcoming=matches.filter((f:any)=>f?.home?.id && f?.away?.id && f?.date && f.status!=="FINISHED" && Date.parse(f.date)>=now).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+      setDayCounts({today:upcoming.filter((f:any)=>accraDay(f.date)===today).length,tomorrow:upcoming.filter((f:any)=>accraDay(f.date)===tomorrow).length});
       if(!upcoming.length){setError("No upcoming fixtures were returned by this board's football API.");return;}
       let all:any[]=[];
       for(let i=0;i<upcoming.length;i+=20){
@@ -52,7 +57,7 @@ export default function ValueBets({ endpoint }: Props) {
     </div>
     {progress && <small className="muted">{progress}</small>}
      {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b>{endpoint === "/api/admin/super" ? <><span>OddsPapi API key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>OddsPapi bookmaker subscription: {feedStatus.active ? "active" : "not active / not verified"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span><small>SportMonks remains the SUPER match-statistics provider. OddsRelay is not used for SUPER bookmaker prices.</small></> : <><span>OddsPapi key: {feedStatus.oddsPapiKeyConfigured ? "configured" : "missing"}</span><span>OddsRelay key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>Ghana region: {feedStatus.ghRegion ? "included" : "not confirmed"}</span></>}{feedStatus.error && <small>{feedStatus.error}</small>}</div>}
-    {scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures across today and tomorrow</small>}
+    {scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures · Today: {dayCounts.today} · Tomorrow: {dayCounts.tomorrow}</small>}
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && <div className="stack" style={{fontSize:13}}>
       <b>Odds feed diagnostics</b>
