@@ -35,7 +35,7 @@ const scoreParts = (m:any) => String(m?.state?.score?.current || "").split("-").
 const fixture = (m:any) => {
   const [hg,ag]=scoreParts(m);
   return {
-    id:m.id, date:m.date, status:finished(m)?"FINISHED":m?.state?.description||"SCHEDULED",
+    id:m.id, provider:"highlightly", date:m.date, status:finished(m)?"FINISHED":m?.state?.description||"SCHEDULED",
     competition:m?.league?.name||"Football",
     home:{id:m?.homeTeam?.id,name:m?.homeTeam?.name,logo:m?.homeTeam?.logo||""},
     away:{id:m?.awayTeam?.id,name:m?.awayTeam?.name,logo:m?.awayTeam?.logo||""},
