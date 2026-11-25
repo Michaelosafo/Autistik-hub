@@ -49,23 +49,24 @@ type Match = any;
 
 /** Today's fixtures across every competition code enabled in this football-data feed (UTC). */
 export async function todayCompetitionMatches() {
-  const today = new Date().toISOString().slice(0, 10);
-  // Query each supported competition endpoint: this is more reliable on limited
-  // football-data plans than a combined competitions filter.
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const tomorrowDate = new Date(now.getTime() + 86400_000);
+  const tomorrow = tomorrowDate.toISOString().slice(0, 10);
+  // Fetch today's and tomorrow's fixtures across every enabled competition.
   const results = await Promise.all(COMPETITIONS.map(async (code) => {
     try {
-      const data = await api("/competitions/" + code + "/matches?dateFrom=" + today + "&dateTo=" + today, 2 * 60_000);
+      const data = await api("/competitions/" + code + "/matches?dateFrom=" + today + "&dateTo=" + tomorrow, 2 * 60_000);
       return data?.matches || [];
     } catch {
-      // Some codes may not be enabled on the account's subscription; retain all
-      // successful competitions and surface no fabricated fixtures.
       return [];
     }
   }));
   const unique = new Map<number, Match>();
   for (const m of results.flat()) {
     if (m?.id && m.homeTeam?.id && m.awayTeam?.id && m.utcDate &&
-      ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status)) unique.set(Number(m.id), m);
+      ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED"].includes(m.status) &&
+      Date.parse(m.utcDate) >= now.getTime()) unique.set(Number(m.id), m);
   }
   return [...unique.values()]
     .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
@@ -74,7 +75,7 @@ export async function todayCompetitionMatches() {
       competition: m.competition?.name || m.competition?.code || "Football",
       home: { id: m.homeTeam.id, name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
       away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
-      score: finished(m) ? { home: m.score.fullTime.home, away: m.score.fullTime.away } : null,
+      score: null,
     }));
 }
 
