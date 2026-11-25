@@ -270,9 +270,9 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
       else if (["draw", "the draw", "tie", "x"].includes(n)) label = "Draw";
     } else if (key === "double_chance") {
       const n = norm(rawLabel).replace(/\s/g, "");
-      if (["1x", "homedraw", "homeordraw"].includes(n)) label = "1X";
-      else if (["x2", "drawaway", "draworaway"].includes(n)) label = "X2";
-      else if (["12", "homeaway", "homeoraway"].includes(n)) label = "12";
+      if (["1x", "homedraw", "homeordraw", "home draw"].includes(n)) label = "1X";
+      else if (["x2", "drawaway", "draworaway", "draw away"].includes(n)) label = "X2";
+      else if (["12", "homeaway", "homeoraway", "home away"].includes(n)) label = "12";
     } else if (key === "btts") {
       const n = norm(rawLabel);
       if (/^(yes|no)$/.test(n)) label = n === "yes" ? "Yes" : "No";
