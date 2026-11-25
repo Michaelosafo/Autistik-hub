@@ -100,7 +100,7 @@ export default function SportBoard() {
   const [oddsBusy, setOddsBusy] = useState(false);
   const [oddsError, setOddsError] = useState("");
   const [todayMatches, setTodayMatches] = useState<any[]>([]);
-  const [todayCompetition, setTodayCompetition] = useState<"UEFA Champions League" | "Championship">("UEFA Champions League");
+  const [todayCompetition, setTodayCompetition] = useState<"ALL" | "UEFA Champions League" | "Championship">("ALL");
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
   const [dateMatches, setDateMatches] = useState<any[]>([]);
@@ -270,6 +270,8 @@ export default function SportBoard() {
     ["Last 5: keeper saves", v(H.last5.avg.saves), v(A.last5.avg.saves)],
   ] : [];
 
+  const visibleTodayMatches = todayCompetition === "ALL" ? todayMatches : todayMatches.filter((f: any) => f.competition === todayCompetition);
+
   return (
     <div className="sb stack">
       <style>{`
@@ -338,20 +340,20 @@ export default function SportBoard() {
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
       <section className="card stack">
-        <b>Today's matches · Championship & Champions League</b>
+        <b>Today's matches · all available competitions</b>
         <small className="muted">Select any fixture to load its prediction shortlist automatically.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
         {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 8 }}>
           {(["UEFA Champions League", "Championship"] as const).map((competition) => {
             const count = todayMatches.filter((f: any) => f.competition === competition).length;
             const active = todayCompetition === competition;
             return <button key={competition} type="button" onClick={() => setTodayCompetition(competition)}
               aria-pressed={active}
               style={{ padding: "12px 8px", borderRadius: 12, border: active ? "2px solid var(--accent, #eab308)" : "1px solid var(--line)", background: active ? "var(--surface-2, #f1eef9)" : "transparent", color: "inherit", fontWeight: active ? 700 : 500 }}>
-              {competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
+              {competition === "ALL" ? "All matches" : competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
               <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>{count} matches</small>
             </button>;
           })}
