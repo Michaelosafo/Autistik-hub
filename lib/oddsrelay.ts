@@ -107,3 +107,39 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     availableBookmakers: [...new Set(events.flatMap(e => e.bookmakers.map(b => b.title)))].sort()
   };
 }
+
+export async function getGhanaOddsRelayStatus() {
+  const key = process.env.ODDSRELAY_API_KEY || process.env.ODDSRELAY_KEY;
+  const headers: Record<string, string> = key ? { Authorization: "Bearer " + key } : {};
+  const get = async (path: string) => {
+    const response = await fetch("https://api.oddsrelay.io" + path, { headers, cache: "no-store" });
+    const body: any = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, status: response.status, error: body?.error || body };
+    return { ok: true, data: body };
+  };
+  const [regions, coverage, usage] = await Promise.all([
+    get("/v2/regions"),
+    get("/v2/coverage?region=gh"),
+    key ? get("/v2/usage") : Promise.resolve({ ok: false, status: 0, error: "No OddsRelay server key configured" })
+  ]);
+  const regionData: any = regions.ok ? regions.data : null;
+  const coverageData: any = coverage.ok ? coverage.data : null;
+  const regionList = Array.isArray(regionData?.data) ? regionData.data : Array.isArray(regionData?.regions) ? regionData.regions : [];
+  const gh = regionList.find((r: any) => String(r.code || r.region || r.key).toLowerCase() === "gh");
+  const rawMarkets = coverageData?.markets?.raw || coverageData?.data?.markets?.raw || [];
+  const bookmakers = coverageData?.bookmakers || coverageData?.data?.bookmakers || [];
+  return {
+    keyConfigured: Boolean(key),
+    regions: regions.ok ? regionList : null,
+    ghRegion: gh || null,
+    rawMarkets,
+    bookmakers,
+    coverage: coverageData,
+    usage: usage.ok ? usage.data : usage.error,
+    errors: {
+      regions: regions.ok ? null : regions.error,
+      coverage: coverage.ok ? null : coverage.error,
+      usage: usage.ok ? null : usage.error
+    }
+  };
+}
