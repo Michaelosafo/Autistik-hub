@@ -231,6 +231,99 @@ export async function analyse(homeId: number, awayId: number, matchDate?: string
     actual: actualMatch && isFinished(actualMatch) && actualScore ? { date: actualMatch.starting_at, status: "FINISHED", homeGoals: actualScore.home, awayGoals: actualScore.away, competition: actualMatch?.league?.name || "Football" } : null
   };
 }
+
+/**
+ * Fetch and normalize SportMonks pre-match odds for one fixture.
+ * The adapter intentionally returns the same event/bookmaker/market/outcome
+ * shape used by the value scanner, but no longer calls OddsPapi or OddsRelay.
+ */
+export async function getSuperMatchOdds(fixtureId: number, home: string, away: string, matchDate?: string) {
+  if (!Number.isInteger(fixtureId) || fixtureId <= 0) throw new Error("Missing SportMonks fixture ID for odds lookup.");
+  if (matchDate && !validDate(matchDate)) throw new Error("Choose a valid match date for odds.");
+  const body = await api("/odds/pre-match/fixtures/" + fixtureId + "?include=market;bookmaker;fixture", 60_000);
+  const odds = rows(body);
+  const norm = (v: any) => String(v || "").toLowerCase().normalize("NFKD")
+    .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim().replace(/\\s+/g, " ");
+  const books = new Map<string, any>();
+  for (const odd of odds) {
+    const price = Number(odd?.value ?? odd?.odds);
+    if (!Number.isFinite(price) || price <= 1) continue;
+    const market = odd?.market || {};
+    const marketName = String(market?.developer_name || market?.name || odd?.market_description || odd?.market_name || "");
+    const marketKey = norm(marketName).replace(/\\s/g, "");
+    let key = "sportmonks_" + String(odd?.market_id ?? market?.id ?? "other");
+    let title = marketName || "Other market";
+    if (/double.?chance/.test(marketKey)) { key = "double_chance"; title = "Double chance"; }
+    else if (/bothteamstoscore|btts/.test(marketKey)) { key = "btts"; title = "Both teams to score"; }
+    else if (/over.?under|totalgoals|goalsoverunder|total.*goals/.test(marketKey)) { key = "totals"; title = "Goals · Over/Under"; }
+    else if (/fulltimeresult|matchresult|1x2|winner/.test(marketKey)) { key = "h2h"; title = "1X2 · Match result"; }
+    const bookmaker = odd?.bookmaker || {};
+    const bookId = String(odd?.bookmaker_id ?? bookmaker?.id ?? "unknown");
+    const bookTitle = String(bookmaker?.name || odd?.bookmaker_name || ("Bookmaker " + bookId));
+    const rawLabel = String(odd?.label || odd?.name || odd?.outcome?.name || odd?.value_label || "");
+    const line = odd?.total ?? odd?.handicap ?? odd?.line ?? odd?.special ?? null;
+    let label = rawLabel;
+    if (key === "h2h") {
+      const n = norm(rawLabel);
+      if (["home", "1", norm(home)].includes(n)) label = home;
+      else if (["away", "2", norm(away)].includes(n)) label = away;
+      else if (["draw", "the draw", "tie", "x"].includes(n)) label = "Draw";
+    } else if (key === "double_chance") {
+      const n = norm(rawLabel).replace(/\\s/g, "");
+      if (["1x", "homedraw", "homeordraw"].includes(n)) label = "1X";
+      else if (["x2", "drawaway", "draworaway"].includes(n)) label = "X2";
+      else if (["12", "homeaway", "homeoraway"].includes(n)) label = "12";
+    } else if (key === "btts") {
+      const n = norm(rawLabel);
+      if (/^(yes|no)$/.test(n)) label = n === "yes" ? "Yes" : "No";
+    } else if (key === "totals") {
+      const n = norm(rawLabel);
+      const side = /under/.test(n) ? "Under" : /over/.test(n) ? "Over" : "";
+      const foundLine = rawLabel.match(/\\d+(?:\\.\\d+)?/) || (line != null ? [String(line)] : null);
+      if (side && foundLine) label = side + " " + foundLine[0];
+      else if (!side && line != null) label = rawLabel + " " + String(line);
+    }
+    if (!label) label = rawLabel || String(odd?.id || "Selection");
+    if (!books.has(bookId)) books.set(bookId, { key: "sportmonks:" + bookId, title: bookTitle, markets: new Map() });
+    const book = books.get(bookId);
+    const marketBucket = key + "|" + title;
+    if (!book.markets.has(marketBucket)) book.markets.set(marketBucket, { key, title, outcomes: [] });
+    const marketRow = book.markets.get(marketBucket);
+    const previous = marketRow.outcomes.find((o: any) => norm(o.name) === norm(label));
+    if (!previous) marketRow.outcomes.push({ name: label, price });
+    else if (price > previous.price) previous.price = price;
+  }
+  const bookmakers = [...books.values()].map((b: any) => ({
+    key: b.key, title: b.title,
+    markets: [...b.markets.values()].map((m: any) => ({ key: m.key, title: m.title, outcomes: m.outcomes }))
+  })).filter((b: any) => b.markets.length);
+  const matched = bookmakers.length ? [{
+    id: String(fixtureId), home_team: home, away_team: away,
+    commence_time: matchDate ? matchDate + "T00:00:00.000Z" : "",
+    bookmakers
+  }] : [];
+  return {
+    region: "sportmonks", product: "SportMonks pre-match odds", count: odds.length,
+    matched, availableBookmakers: bookmakers.map((b: any) => b.title).sort(),
+    diagnostics: {
+      eventsReturned: odds.length, matchingEvents: matched.length,
+      requestedHome: home, requestedAway: away,
+      providers: { sportmonks: { ok: true, odds: odds.length, bookmakers: bookmakers.length } },
+      markets: [...new Set(bookmakers.flatMap((b: any) => b.markets.map((m: any) => m.key)))],
+      sampleEvents: [{ home, away }]
+    }
+  };
+}
+
+export async function superOddsStatus() {
+  return {
+    keyConfigured: !!process.env.SPORTMONKS_API_TOKEN,
+    provider: "SportMonks",
+    oddsEndpoint: "pre-match odds by fixture",
+    legacyProvidersRemoved: true
+  };
+}
+
 export async function savePrediction(row: Record<string, unknown>) {
   const note = (() => { try { return JSON.parse(String(row.note || "{}")); } catch { return {}; } })();
   const { data, error } = await sb().from("sport_predictions").insert({ ...row, note: JSON.stringify({ ...note, provider: "super-sportmonks" }) }).select("id").single();
