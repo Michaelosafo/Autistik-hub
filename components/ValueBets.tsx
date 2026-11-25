@@ -29,6 +29,7 @@ export default function ValueBets({ endpoint }: Props) {
     try {
       const matchData=await post("todayMatches");
       const matches=Array.isArray(matchData?.matches)?matchData.matches:[];
+      if(matchData?.fixtureFallback) setDiagnostics([{fixture:"Fixture provider fallback",error:"Highlightly quota reached; using SportMonks for fixtures and analysis."}]);
       if(matchData?.fixtureDiagnostics?.oddsPapiError) {
         setDiagnostics([{fixture:"OddsPapi fixture feed",error:matchData.fixtureDiagnostics.oddsPapiError}]);
       } else if(matchData?.fixtureDiagnostics) {
@@ -61,7 +62,7 @@ export default function ValueBets({ endpoint }: Props) {
   }
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses Highlightly Premium for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Combines OddsPapi + OddsRelay prices, compares the best available bookmaker odds with SPORT model probabilities, and ranks positive expected value across today's and tomorrow's fixtures."}</small></div>
+       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses Highlightly Premium first, SportMonks as a quota fallback, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Combines OddsPapi + OddsRelay prices, compares the best available bookmaker odds with SPORT model probabilities, and ranks positive expected value across today's and tomorrow's fixtures."}</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
@@ -93,6 +94,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-     <small className="muted">{endpoint === "/api/admin/super" ? "Uses Highlightly Premium match statistics and OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Combines OddsPapi and OddsRelay, removes duplicate selections, and keeps the best bookmaker price from either provider. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
+     <small className="muted">{endpoint === "/api/admin/super" ? "Uses Highlightly Premium match statistics (SportMonks fallback if Highlightly quota is exhausted) and OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Combines OddsPapi and OddsRelay, removes duplicate selections, and keeps the best bookmaker price from either provider. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
   </section>;
 }
