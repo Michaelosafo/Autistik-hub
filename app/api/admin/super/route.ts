@@ -2,9 +2,32 @@ import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-api-football-data";
 import { getGhanaMatchOdds, getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
+import { getOddsPapiMatchOdds } from "@/lib/oddspapi";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+async function getSuperMatchOdds(home: string, away: string, date: string) {
+  let primaryError: string | null = null;
+  try {
+    const primary = await getOddsPapiMatchOdds(home, away, date);
+    if (primary.matched?.length) return primary;
+    try {
+      const fallback = await getSuperMatchOdds(home, away, date);
+      return { ...fallback, provider: "OddsRelay fallback", primaryDiagnostics: primary.diagnostics };
+    } catch (fallbackError) {
+      return { ...primary, provider: "OddsPapi", fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) };
+    }
+  } catch (error) {
+    primaryError = error instanceof Error ? error.message : String(error);
+  }
+  try {
+    const fallback = await getGhanaMatchOdds(home, away, date);
+    return { ...fallback, provider: "OddsRelay fallback", primaryError };
+  } catch (fallbackError) {
+    throw new Error("OddsPapi: " + primaryError + " | OddsRelay: " + (fallbackError instanceof Error ? fallbackError.message : String(fallbackError)));
+  }
+}
 
 /** Sport board (owner only). POST { action: "ready" | "search" | "analyse" | "history" | "result" }. */
 export async function POST(req: Request) {
@@ -118,7 +141,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getGhanaMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
+        return json(await getSuperMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString().slice(0,10)));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
