@@ -315,6 +315,19 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
   };
 }
 
+export async function getSuperMatchOddsForTeams(home: string, away: string, matchDate: string) {
+  if (!validDate(matchDate)) throw new Error("Choose a valid match date for odds lookup.");
+  const clean = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const h = clean(home), a = clean(away);
+  const candidates = await fixturesByDate(matchDate);
+  const match = candidates.find((f: any) => {
+    const p = participants(f);
+    return clean(String(p.home?.name || "")) === h && clean(String(p.away?.name || "")) === a;
+  });
+  if (!match?.id) throw new Error("SportMonks could not find this exact fixture on " + matchDate + ". No bookmaker odds were invented.");
+  return getSuperMatchOdds(Number(match.id), home, away, matchDate);
+}
+
 export async function superOddsStatus() {
   return {
     keyConfigured: !!process.env.SPORTMONKS_API_TOKEN,
