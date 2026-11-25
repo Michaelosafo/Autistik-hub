@@ -157,6 +157,18 @@ export async function getGhanaStandardMatchOdds(home: string, away: string, matc
   } else {
     const url = new URL("https://api.oddsrelay.io/v2/odds/standard");
     url.searchParams.set("region", "gh");
+    url.searchParams.set("sports", "soccer");
+    const quoteUrl = new URL(url.toString());
+    quoteUrl.searchParams.set("quote", "true");
+    const quoteResponse = await fetch(quoteUrl, {
+      headers: { Authorization: "Bearer " + key },
+      cache: "no-store"
+    });
+    const quote: any = await quoteResponse.json().catch(() => ({}));
+    if (!quoteResponse.ok) throw new Error("OddsRelay standard quote failed: " + String(quote?.error?.message || quoteResponse.status));
+    if (Number.isFinite(Number(quote.cost)) && Number.isFinite(Number(quote.remaining)) && Number(quote.cost) > Number(quote.remaining)) {
+      throw new Error("OddsRelay standard Ghana soccer board costs " + quote.cost + " tokens, but only " + quote.remaining + " remain. No tokens were spent.");
+    }
     const response = await fetch(url, {
       headers: { Authorization: "Bearer " + key, "Accept-Encoding": "gzip" },
       cache: "no-store"
