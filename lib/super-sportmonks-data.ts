@@ -158,19 +158,22 @@ export async function searchTeams(q: string) {
   }));
 }
 export async function todayCompetitionMatches() {
-  // Value Bets scans today and tomorrow, so it never goes empty just because
-  // today's slate has finished or has no remaining fixtures.
+  // Always query both calendar days in Ghana time on every scan.
   const now = new Date();
-  const today = datePart(now);
-  const tomorrow = datePart(new Date(now.getTime() + 86400_000));
+  const dayInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(d);
+  const today = dayInAccra(now);
+  const tomorrow = dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000));
   const [todayRows, tomorrowRows] = await Promise.all([
     fixturesByDate(today), fixturesByDate(tomorrow)
   ]);
   const unique = new Map<string, any>();
   for (const raw of [...todayRows, ...tomorrowRows]) {
     const row = fixture(raw);
+    const kickoff = Date.parse(row.date);
     if (row.home.id && row.away.id && row.date &&
-      row.status !== "FINISHED" && Date.parse(row.date) >= now.getTime()) {
+      row.status === "SCHEDULED" && Number.isFinite(kickoff) && kickoff >= now.getTime()) {
       unique.set(String(row.id), row);
     }
   }
