@@ -357,7 +357,7 @@ export default function SportBoard() {
             )}
 
       <section className="card stack">\n        <b>🇬🇭 Bookmaker odds · SportMonks</b>
-        <small className="muted">Bookmaker prices are compared with this board's model probabilities. Value calculations use the best bookmaker back price for each 1X2 outcome, not exchange lay prices.</small>
+        <small className="muted">All bookmaker markets returned by SportMonks are displayed below, including 1X2, double chance, totals and BTTS where supplied. The value check below separately compares supported 1X2 outcomes with the model.</small>
         <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching SportMonks bookmaker odds…" : "Fetch bookmaker odds"}</button>
         {oddsError && <div className="notice warn">{oddsError}</div>}
         {ghanaOdds && <>
@@ -368,8 +368,11 @@ export default function SportBoard() {
               <small className="muted">{event.sport_title || "Football"} · Kick-off {new Date(event.commence_time).toLocaleString()}</small>
               {(event.bookmakers || []).map((book: any) => <div key={book.key} className="stack" style={{ gap: 3 }}>
                 <b>{book.title || book.key}</b>
-                {(book.markets || []).filter((market: any) => market.key === "h2h").map((market: any) => <div key={market.key} className="sb-scores">
-                  {(market.outcomes || []).map((outcome: any) => <span key={outcome.name}>{outcome.name}: <b>{Number(outcome.price).toFixed(2)}</b></span>)}
+                {(book.markets || []).map((market: any) => <div key={market.key + (market.title || "")} className="stack" style={{ gap: 4 }}>
+                  <small className="muted">{market.title || (market.key === "h2h" ? "Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : market.key === "totals" ? "Goals · Over/Under" : "Other market")}</small>
+                  <div className="sb-scores">
+                    {(market.outcomes || []).map((outcome: any, i: number) => <span key={outcome.name + ":" + i}>{outcome.name}: <b>{Number(outcome.price).toFixed(2)}</b></span>)}
+                  </div>
                 </div>)}
                 <small className="muted">Last updated: {book.last_update ? new Date(book.last_update).toLocaleString() : "not supplied"}</small>
               </div>)}
