@@ -1,6 +1,7 @@
 import { json } from "@/lib/ai";
+import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
 import { adminState } from "@/lib/admin";
-import { analyse, getSuperMatchOdds, getSuperMatchOddsForTeams, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, superOddsStatus, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
+import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: superReady() });
-      case "oddsStatus": return json(await superOddsStatus());
+      case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "valueScan": {
@@ -29,7 +30,7 @@ export async function POST(req: Request) {
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
             analyse(homeId, awayId, date),
-            getSuperMatchOdds(homeId, home, away, date)
+            getOddsPapiMatchOdds(home, away, date)
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
           const odds = oddsResult.status === "fulfilled" ? oddsResult.value : null;
@@ -125,7 +126,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getSuperMatchOddsForTeams(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString().slice(0,10)));
+        return json(await getOddsPapiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString().slice(0,10)));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
