@@ -48,8 +48,8 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   }
   const events: OddsEvent[] = Array.isArray(body?.data) ? body.data : [];
   const norm = (s: string) => s.toLocaleLowerCase().normalize("NFKD")
-    .replace(/\\b(football club|fc|afc)\\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/\b(football club|fc|afc)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   const aliases = (s: string) => {
     const n = norm(s);
     if (n.includes("tottenham")) return ["tottenham", "tottenham hotspur", "spurs"];
@@ -71,6 +71,7 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     count: Number(body?.meta?.count ?? events.length),
     historical: isHistorical,
     matched: matched.slice(0, 5),
+    diagnostics: { eventsReturned: events.length, matchingEvents: matched.length, requestedHome: home, requestedAway: away, sampleEvents: events.slice(0, 8).map(e => ({ home: e.home_team, away: e.away_team, markets: (e.bookmakers || []).flatMap(b => (b.markets || []).map(m => m.key)) })) },
     availableBookmakers: [...new Set(events.flatMap(e => (e.bookmakers || []).map(b => b.title || b.key)))].sort(),
   };
 }
