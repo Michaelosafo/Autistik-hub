@@ -92,7 +92,7 @@ export async function POST(req: Request) {
                 const price = Number(outcome.price);
                 const implied = 100 / price;
                 const noVig = implied / overround * 100;
-                const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : market.key === "totals" ? "Goals · Over/Under" : String(market.key).replace(/^oddspapi_/, "Market ").replace(/[_-]+/g, " ").replace(/\\b\\w/g, (c: string) => c.toUpperCase());
+                const marketTitle = market.title || (market.key === "h2h" ? "1X2 · Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : market.key === "totals" ? "Goals · Over/Under" : String(market.key).replace(/^sportmonks_/, "Market ").replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
                 if (!modelPick || !(Number(modelPick.p) > 0)) {
                   mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
                   continue;
