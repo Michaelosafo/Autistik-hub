@@ -32,7 +32,7 @@ export default function ValueBets({ endpoint }: Props) {
       if(matchData?.fixtureDiagnostics?.oddsPapiError) {
         setDiagnostics([{fixture:"OddsPapi fixture feed",error:matchData.fixtureDiagnostics.oddsPapiError}]);
       } else if(matchData?.fixtureDiagnostics) {
-        setDiagnostics([{fixture:"Fixture sources",oddsEvents:matchData.fixtureDiagnostics.oddsPapiFixtures,matchedEvents:matchData.fixtureDiagnostics.oddsPapiFixtures,bookmakers:[],markets:[]}]);
+        setDiagnostics([{fixture:"Fixture candidates",fixtureCount:matchData.fixtureDiagnostics.oddsPapiFixtures,source:"OddsPapi"}]);
       }
       const now=Date.now();
       const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
@@ -45,8 +45,8 @@ export default function ValueBets({ endpoint }: Props) {
       // Keep each server request small: match analysis and odds lookups are
       // several upstream calls per fixture and a 20-match request exceeded
       // Vercel's 60-second function limit.
-      for(let i=0;i<upcoming.length;i+=2){
-        const batch=upcoming.slice(i,i+2);
+      for(let i=0;i<upcoming.length;i+=1){
+        const batch=upcoming.slice(i,i+1);
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(Array.isArray(d?.rows)?d.rows:[]);
@@ -61,16 +61,16 @@ export default function ValueBets({ endpoint }: Props) {
   }
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for match statistics and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Uses OddsPapi bookmaker prices, compares them with SPORT model probabilities, and ranks positive expected value across today's and tomorrow's fixtures."}</small></div>
+       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for match statistics and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Combines OddsPapi + OddsRelay prices, compares the best available bookmaker odds with SPORT model probabilities, and ranks positive expected value across today's and tomorrow's fixtures."}</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
-     {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b><><span>OddsPapi API key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>OddsPapi bookmaker subscription: {feedStatus.active ? "active" : "not active / not verified"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span><small>{endpoint === "/api/admin/super" ? "SportMonks supplies SUPER match statistics; OddsPapi supplies bookmaker prices." : "OddsPapi supplies SPORT bookmaker prices. OddsRelay is not used for this value scan."}</small></>{feedStatus.error && <small>{feedStatus.error}</small>}</div>}
+     {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b><><span>OddsPapi API key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>OddsPapi bookmaker subscription: {feedStatus.active ? "active" : "not active / not verified"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span><small>{endpoint === "/api/admin/super" ? "SportMonks supplies SUPER match statistics; OddsPapi supplies bookmaker prices." : "SPORT combines OddsPapi and OddsRelay bookmaker prices and selects the best available price for each outcome."}</small></>{feedStatus.error && <small>{feedStatus.error}</small>}</div>}
     {scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures · Today: {dayCounts.today} · Tomorrow: {dayCounts.tomorrow}</small>}
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && <div className="stack" style={{fontSize:13}}>
       <b>Odds feed diagnostics</b>
-      {diagnostics.slice(0,6).map((d,i)=><small key={i} className="muted">{d.fixture}: {d.oddsError || d.error || ((d.oddsEvents ?? d.eventsReturned ?? 0)+" events returned · "+(d.matchedEvents ?? d.matched ?? 0)+" matched · "+(d.bookmakers||[]).length+" bookmakers · markets: "+((d.markets||[]).join(", ")||"none"))}{d.analysisError ? " · model: "+d.analysisError : ""}{d.feedExamples?.length ? " · feed examples: "+d.feedExamples.join("; ") : ""}{d.providers?.oddspapi ? " · OddsPapi: "+(d.providers.oddspapi.ok ? "OK ("+(d.providers.oddspapi.matched ?? 0)+" matched fixtures)" : "ERROR "+(d.providers.oddspapi.error || "")) : ""}</small>)}
+      {diagnostics.slice(0,6).map((d,i)=><small key={i} className="muted">{d.fixture}: {d.fixtureCount != null ? d.fixtureCount+" odds-enabled fixture candidates from "+d.source : d.oddsError || d.error || ((d.oddsEvents ?? d.eventsReturned ?? 0)+" events returned · "+(d.matchedEvents ?? d.matched ?? 0)+" matched · "+(d.bookmakers||[]).length+" bookmakers · markets: "+((d.markets||[]).join(", ")||"none"))}{d.analysisError ? " · model: "+d.analysisError : ""}{d.feedExamples?.length ? " · feed examples: "+d.feedExamples.join("; ") : ""}{d.providers?.oddspapi ? " · OddsPapi: "+(d.providers.oddspapi.ok ? "OK ("+(d.providers.oddspapi.matched ?? 0)+" matched fixtures)" : "ERROR "+(d.providers.oddspapi.error || "")) : ""}</small>)}
     </div>}
     {rows.length>0 && <div className="stack">
       <b>Positive value · highest EV first</b>
@@ -93,6 +93,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Uses OddsPapi bookmaker prices, removes duplicate selections, and keeps the best bookmaker price. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
+     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Combines OddsPapi and OddsRelay, removes duplicate selections, and keeps the best bookmaker price from either provider. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
   </section>;
 }
