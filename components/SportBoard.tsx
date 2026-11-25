@@ -208,13 +208,18 @@ export default function SportBoard() {
     ];
     return selections.map((selection: any) => {
       const best = offers.filter((o: any) => selection.matches(o.name)).sort((a: any, b: any) => b.price - a.price)[0];
-      if (!best || !Number.isFinite(selection.p)) return null;
+      if (!Number.isFinite(selection.p)) return null;
+      if (!best) return { selection: selection.name, probability: selection.p, fairOdds: 100 / selection.p, odds: null, bookmaker: "No bookmaker price returned", implied: null, edge: null, ev: null };
       const implied = 100 / best.price;
       const ev = (selection.p / 100) * best.price - 1;
       return { selection: selection.name, probability: selection.p, fairOdds: 100 / selection.p, odds: best.price, bookmaker: best.bookmaker, implied, edge: selection.p - implied, ev: ev * 100 };
     }).filter(Boolean);
   });
-  const rankedOddsValueRows = [...oddsValueRows].sort((a: any, b: any) => b.ev - a.ev);
+  const rankedOddsValueRows = [...oddsValueRows].sort((a: any, b: any) => {
+    if (a.ev == null) return 1;
+    if (b.ev == null) return -1;
+    return b.ev - a.ev;
+  });
   const positiveOddsValues = rankedOddsValueRows.filter((x: any) => x.ev > 0);
   const bestOddsValue = positiveOddsValues[0];
   const highestOddsEV = bestOddsValue;
@@ -303,10 +308,10 @@ export default function SportBoard() {
         {oddsError && <div className="notice warn">Odds feed: {oddsError}</div>}
         {!oddsBusy && !ghanaOdds && !oddsError && <small className="muted">Waiting for bookmaker prices…</small>}
         {ghanaOdds && rankedOddsValueRows.length > 0 && rankedOddsValueRows.map((x: any, i: number) =>
-          <div key={x.selection} className={"sb-top-r " + (x.ev > 0 ? "hi" : "lo")}>
+          <div key={x.selection} className={"sb-top-r " + (x.ev == null ? "" : x.ev > 0 ? "hi" : "lo")}>
             <span className="sb-rank">#{i + 1}</span><span className="sb-name"><b>{x.selection}</b><small className="muted" style={{ display: "block" }}>{x.bookmaker}</small></span>
-            <b>EV {x.ev >= 0 ? "+" : ""}{x.ev.toFixed(1)}%</b>
-            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {x.fairOdds.toFixed(2)} · bookmaker odds {x.odds.toFixed(2)} · market implied {x.implied.toFixed(1)}% · edge {x.edge >= 0 ? "+" : ""}{x.edge.toFixed(1)}pp</small>
+            <b>{x.ev == null ? "Price unavailable" : `EV ${x.ev >= 0 ? "+" : ""}${x.ev.toFixed(1)}%`}</b>
+            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {x.fairOdds.toFixed(2)} · {x.odds == null ? "No bookmaker price to compare" : `bookmaker odds ${x.odds.toFixed(2)} · market implied ${x.implied.toFixed(1)}% · edge ${x.edge >= 0 ? "+" : ""}${x.edge.toFixed(1)}pp`}</small>
           </div>
         )}
         {ghanaOdds && rankedOddsValueRows.length === 0 && <div className="notice warn">No usable 1X2 prices were returned for this fixture.</div>}
