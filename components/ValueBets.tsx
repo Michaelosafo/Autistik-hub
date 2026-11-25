@@ -47,7 +47,7 @@ export default function ValueBets({ endpoint }: Props) {
   }
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-       <div><b>📈 Value bets · all today's fixtures</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Scans today's and tomorrow's upcoming fixtures using SportMonks bookmaker odds for every returned market, including match result, double chance, goals and BTTS. Ranks model-supported positive expected value." : "Uses the configured SPORT bookmaker feeds and ranks model-supported positive expected value."}</small></div>
+       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Scans today's and tomorrow's upcoming fixtures using SportMonks bookmaker odds for every returned market, including match result, double chance, goals and BTTS. Ranks model-supported positive expected value." : "Scans today's and tomorrow's upcoming fixtures using the SPORT odds feeds and ranks model-supported positive expected value."}</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
