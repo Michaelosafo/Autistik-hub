@@ -121,12 +121,15 @@ export default function SportBoard() {
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
-  async function loadGhanaOdds() {
-    if (!home || !away) return;
+  async function fetchGhanaOddsFor(h: Team, a: Team, date: string) {
     setOddsBusy(true); setOddsError(""); setGhanaOdds(null);
-    try { setGhanaOdds(await api("odds", { homeName: home.name, awayName: away.name, matchDate })); }
+    try { setGhanaOdds(await api("odds", { homeName: h.name, awayName: a.name, matchDate: date })); }
     catch (e) { setOddsError((e as Error).message); }
     finally { setOddsBusy(false); }
+  }
+  async function loadGhanaOdds() {
+    if (!home || !away) return;
+    await fetchGhanaOddsFor(home, away, matchDate);
   }
   async function loadTeamFixtures(t: Team) {
     setFixturesBusy(true); setFixturesError(""); setTeamFixtures([]);
@@ -148,7 +151,7 @@ export default function SportBoard() {
     const date = new Date(f.date).toISOString().slice(0, 10);
     setHome(h); setAway(a); setMatchDate(date); setRes(null); setErr("");
     setBusy(true);
-    try { setRes(await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name })); setQuickPicksOpen(true); loadHist(); }
+    try { setRes(await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name })); setQuickPicksOpen(true); loadHist(); void fetchGhanaOddsFor(h, a, date); }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -158,7 +161,7 @@ export default function SportBoard() {
   async function run() {
     if (!home || !away) return;
     setBusy(true); setErr(""); setRes(null);
-    try { setRes(await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name })); setQuickPicksOpen(true); loadHist(); }
+    try { setRes(await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name })); setQuickPicksOpen(true); loadHist(); void fetchGhanaOddsFor(home, away, matchDate); }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   }
@@ -293,7 +296,7 @@ export default function SportBoard() {
 
       <section className="card stack">
         <b>Today's matches · all subscribed leagues</b>
-        <small className="muted">Fixtures returned by your API-Football feed. Select any match to load its prediction shortlist.</small>
+        <small className="muted">Fixtures returned by your separate Highlightly feed across its available competitions. Select any match to load its prediction and automatic Ghana bookmaker comparison.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
