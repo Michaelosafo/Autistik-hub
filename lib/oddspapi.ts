@@ -7,7 +7,7 @@ import { supabaseService } from "@/lib/supabase/server";
 
 const BASE = "https://api.oddspapi.io/v4";
 const sb = () => supabaseService();
-const rows = (v: any): any[] => Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : [];
+const rows = (v: any): any[] => Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : v?.fixtureId ? [v] : [];
 
 async function cachedGet(path: string, ttl: number) {
   const cacheKey = "super-oddspapi:" + path;
