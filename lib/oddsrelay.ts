@@ -106,9 +106,25 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     for (const [pattern, value] of substitutions) if (pattern.test(n)) variants.push(n.replace(pattern, value));
     return [...new Set(variants.filter(Boolean))];
   };
+  const canonicalTeam = (value: string) => {
+    const n = norm(value);
+    const aliases: Record<string, string> = {
+      "ca mineiro": "atletico mineiro", "atletico mg": "atletico mineiro",
+      "atletico mineiro mg": "atletico mineiro",
+      "sc corinthians paulista": "corinthians", "corinthians paulista": "corinthians",
+      "sao paulo fc": "sao paulo", "palmeiras sp": "palmeiras",
+      "flamengo rj": "flamengo", "vasco da gama": "vasco",
+      "manchester united": "man utd", "manchester city": "man city",
+      "paris saint germain": "psg", "paris sg": "psg",
+      "atletico madrid": "atletico", "inter milan": "inter",
+      "borussia dortmund": "dortmund", "bayern munich": "bayern"
+    };
+    return aliases[n] || n;
+  };
   const matchesName = (source: string, requested: string) => {
-    const src = norm(source);
-    return aliases(requested).some(a => src === a || src.includes(a) || a.includes(src));
+    const src = canonicalTeam(source);
+    const req = canonicalTeam(requested);
+    return !!src && !!req && (src === req || src.includes(req) || req.includes(src));
   };
   const matched = allFixtures ? events : events.filter(e => matchesName(e.home_team, home) && matchesName(e.away_team, away));
   return {
