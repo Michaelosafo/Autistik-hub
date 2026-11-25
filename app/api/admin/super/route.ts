@@ -38,9 +38,12 @@ export async function POST(req: Request) {
           const diagnostic: any = {
             fixture: home + " vs " + away,
             oddsEvents: odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0,
+            eventsReturned: odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0,
             matchedEvents: (odds?.matched || []).length,
+            matched: (odds?.matched || []).length,
             bookmakers: odds?.availableBookmakers || [],
             markets: [...new Set((odds?.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))],
+            providers: odds?.diagnostics?.providers || null,
             analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null,
             oddsError: oddsResult.status === "rejected" ? (oddsResult.reason instanceof Error ? oddsResult.reason.message : String(oddsResult.reason)) : null
           };
