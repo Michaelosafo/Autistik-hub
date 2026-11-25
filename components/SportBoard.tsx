@@ -229,6 +229,13 @@ export default function SportBoard() {
     return b.ev - a.ev;
   });
   const positiveOddsValues = rankedOddsValueRows.filter((x: any) => x.ev > 0);
+  if (ghanaOdds && oddsValueRows.length === 0 && m) {
+    oddsValueRows.push(
+      { selection: home?.name || "Home", probability: m.home, fairOdds: m.home > 0 ? 100 / m.home : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
+      { selection: "Draw", probability: m.draw, fairOdds: m.draw > 0 ? 100 / m.draw : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false },
+      { selection: away?.name || "Away", probability: m.away, fairOdds: m.away > 0 ? 100 / m.away : null, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false }
+    );
+  }
   const bestOddsValue = positiveOddsValues[0];
   const highestOddsEV = bestOddsValue;
   // Alternative-market shortlist: probability estimates only. A market is not labelled
@@ -321,7 +328,7 @@ export default function SportBoard() {
           <div key={x.selection} className={"sb-top-r " + (x.ev == null ? "" : x.ev > 0 ? "hi" : "lo")}>
             <span className="sb-rank">#{i + 1}</span><span className="sb-name"><b>{x.selection}</b><small className="muted" style={{ display: "block" }}>{x.bookmaker}</small></span>
             <b>{x.ev == null ? "Price unavailable" : `EV ${x.ev >= 0 ? "+" : ""}${x.ev.toFixed(1)}%`}</b>
-            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {x.fairOdds.toFixed(2)} · {x.odds == null ? "No bookmaker price to compare" : `bookmaker odds ${x.odds.toFixed(2)} · market implied ${x.implied.toFixed(1)}% · edge ${x.edge >= 0 ? "+" : ""}${x.edge.toFixed(1)}pp`}</small>
+            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {x.(x.fairOdds == null ? "—" : x.fairOdds.toFixed(2))} · {x.odds == null ? "No bookmaker price to compare" : `bookmaker odds ${x.odds.toFixed(2)} · market implied ${x.implied.toFixed(1)}% · edge ${x.edge >= 0 ? "+" : ""}${x.edge.toFixed(1)}pp`}</small>
           </div>
         )}
         {ghanaOdds && rankedOddsValueRows.length === 0 && <div className="notice warn">No usable 1X2 prices were returned for this fixture.</div>}
@@ -430,7 +437,7 @@ export default function SportBoard() {
               </div>)}
             </div>)
           }
-          {m && ghanaOdds.matched.length > 0 && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+          {m && ghanaOdds && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <b>Model vs bookmaker · value check</b>
             <small className="muted">Raw implied probability = 1 ÷ odds. No-vig probability removes the bookmaker's overround across all three outcomes. EV = model probability × decimal odds − 1; large model/market gaps are flagged for verification.</small>
             {oddsValueRows.length === 0 ? <div className="notice warn">No usable bookmaker 1X2 prices were returned for comparison.</div> : <>
