@@ -93,8 +93,8 @@ export async function resolveTeamIds(names: string[]) {
   const data = await api("/teams?limit=500", 7 * 24 * 3600_000);
   const teams = Array.isArray(data?.teams) ? data.teams : [];
   const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   const result: Record<string, number> = {};
   for (const name of names) {
     const target = normalize(name);
