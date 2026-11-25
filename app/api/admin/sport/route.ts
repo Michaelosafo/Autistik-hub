@@ -17,12 +17,14 @@ export async function POST(req: Request) {
       case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": {
-        const [footballDataMatches, oddsPapiFixtures] = await Promise.all([
+        const [footballDataMatches, oddsPapiResult] = await Promise.all([
           todayCompetitionMatches(),
-          getOddsPapiUpcomingFixtures().catch(() => [])
+          getOddsPapiUpcomingFixtures()
+            .then((fixtures: any[]) => ({ fixtures, error: null }))
+            .catch((error: any) => ({ fixtures: [], error: error instanceof Error ? error.message : String(error) }))
         ]);
         const fixtures = Array.isArray(footballDataMatches) ? [...footballDataMatches] : [];
-        const oddsList = Array.isArray(oddsPapiFixtures) ? oddsPapiFixtures : [];
+        const oddsList = Array.isArray(oddsPapiResult.fixtures) ? oddsPapiResult.fixtures : [];
         let teamIds: Record<string, number> = {};
         try {
           teamIds = await resolveTeamIds(oddsList.flatMap((f: any) => [String(f?.home?.name || ""), String(f?.away?.name || "")]));
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
         return json({
           matches: fixtures,
           fixtureSources: { footballData: Array.isArray(footballDataMatches) ? footballDataMatches.length : 0, oddsPapiWithOdds: oddsList.length, merged: fixtures.length },
-          note: "OddsPapi adds upcoming fixtures with subscribed-bookmaker prices; fixtures without football-data team IDs can show odds-only until model stats are available."
+          note: "OddsPapi adds upcoming fixtures with subscribed-bookmaker prices; fixtures without football-data team IDs can show odds-only until model stats are available.", fixtureDiagnostics: { oddsPapiError: oddsPapiResult.error, footballDataFixtures: Array.isArray(footballDataMatches) ? footballDataMatches.length : 0, oddsPapiFixtures: oddsList.length }
         });
       }
       case "valueScan": {
