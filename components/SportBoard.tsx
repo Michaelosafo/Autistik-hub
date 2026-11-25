@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import ValueBets from "@/components/ValueBets";
 
 /**
  * Sport board (owner only): pick the home and the away team, and it compares both (home record for the home side,
@@ -318,6 +319,7 @@ export default function SportBoard() {
         <h1>⚽ Sport board</h1>
         <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
+      <ValueBets endpoint="/api/admin/sport" />
       {m && <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
         <b>🏆 Value bets · ranked first by expected value</b>
         <small className="muted">All three 1X2 outcomes (home, draw and away) are shown, ranked by expected value. Model fair odds = 1 ÷ model probability. Bookmaker decimal odds are not a percentage: odds 29.00 imply a market probability of 3.45%. EV = (model probability × bookmaker odds − 1) × 100. Positive EV is an estimate, not a guarantee.</small>
