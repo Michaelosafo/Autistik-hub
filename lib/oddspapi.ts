@@ -119,7 +119,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
     const chunk = tournamentIds.slice(i, i + 3);
     for (const bookmaker of bookmakerSlugs) {
       const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
-        "&bookmakers=" + encodeURIComponent(bookmaker) +
+        "&bookmaker=" + encodeURIComponent(bookmaker) +
         "&language=en&oddsFormat=decimal&verbosity=3";
       const result = await cachedGet(path, 3 * 60_000);
       oddsFixtures.push(...rows(result));
