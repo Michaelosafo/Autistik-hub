@@ -29,6 +29,11 @@ export default function ValueBets({ endpoint }: Props) {
     try {
       const matchData=await post("todayMatches");
       const matches=Array.isArray(matchData?.matches)?matchData.matches:[];
+      if(matchData?.fixtureDiagnostics?.oddsPapiError) {
+        setDiagnostics([{fixture:"OddsPapi fixture feed",error:matchData.fixtureDiagnostics.oddsPapiError}]);
+      } else if(matchData?.fixtureDiagnostics) {
+        setDiagnostics([{fixture:"Fixture sources",oddsEvents:matchData.fixtureDiagnostics.oddsPapiFixtures,matchedEvents:matchData.fixtureDiagnostics.oddsPapiFixtures,bookmakers:[],markets:[]}]);
+      }
       const now=Date.now();
       const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
       const today=accraDay(new Date().toISOString());
