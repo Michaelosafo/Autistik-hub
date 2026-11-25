@@ -48,9 +48,26 @@ export async function searchTeams(q:string) {
   }));
 }
 export async function todayCompetitionMatches() {
-  const today=new Date().toISOString().slice(0,10);
-  const body=await api("/matches?date="+today+"&timezone=Etc%2FUTC&limit=100",60_000);
-  return rows(body).map(fixture).filter((x:any)=>x.home.id&&x.away.id).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+  // Scan both calendar days in Ghana time so Europa League and Conference League
+  // fixtures tomorrow are included without waiting for the date to roll over.
+  const now = new Date();
+  const dayInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(d);
+  const today = dayInAccra(now);
+  const tomorrow = dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000));
+  const [todayBody, tomorrowBody] = await Promise.all([
+    api("/matches?date="+today+"&timezone=Africa%2FAccra&limit=100",60_000),
+    api("/matches?date="+tomorrow+"&timezone=Africa%2FAccra&limit=100",60_000)
+  ]);
+  const unique = new Map<string, any>();
+  for (const raw of [...rows(todayBody), ...rows(tomorrowBody)]) {
+    const item = fixture(raw);
+    const kickoff = Date.parse(item.date);
+    if (item.home.id && item.away.id && item.date && item.status !== "FINISHED" &&
+      Number.isFinite(kickoff) && kickoff >= now.getTime()) unique.set(String(item.id), item);
+  }
+  return [...unique.values()].sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
 }
 export async function matchesOnDate(date:string) {
   if(!dateOK(date))throw new Error("Choose a valid match date.");
