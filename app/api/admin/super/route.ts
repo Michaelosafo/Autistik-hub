@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
 import { adminState } from "@/lib/admin";
-import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
+import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-api-football-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
