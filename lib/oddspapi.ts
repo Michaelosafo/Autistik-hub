@@ -183,7 +183,7 @@ export async function getOddsPapiUpcomingFixtures() {
       const from = day + "T00:00:00Z";
       const end = new Date(new Date(from).getTime() + 24 * 60 * 60_000 - 1).toISOString();
       const path = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
-        "&to=" + encodeURIComponent(end) + "&statusId=0&hasOdds=true&bookmaker=" + encodeURIComponent(bookmaker);
+        "&to=" + encodeURIComponent(end) + "&statusId=0&hasOdds=true&bookmakers=" + encodeURIComponent(bookmaker);
       const result = await cachedGet(path, 3 * 60_000);
       for (const fixture of rows(result)) {
         if (fixture?.fixtureId) fixtureById.set(String(fixture.fixtureId), fixture);
@@ -234,7 +234,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
   // fixture list before requesting tournament odds.
   const fixtureResults = await Promise.all(bookmakerSlugs.map(async (bookmaker) => {
     const fixturePath = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
-      "&to=" + encodeURIComponent(to) + "&statusId=0&hasOdds=true&bookmaker=" + encodeURIComponent(bookmaker);
+      "&to=" + encodeURIComponent(to) + "&statusId=0&hasOdds=true&bookmakers=" + encodeURIComponent(bookmaker);
     return cachedGet(fixturePath, 5 * 60_000);
   }));
   const fixtureById = new Map<string, any>();
@@ -256,7 +256,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
     for (let i = 0; i < tournamentIds.length; i += 3) {
       const chunk = tournamentIds.slice(i, i + 3);
       const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
-        "&bookmaker=" + encodeURIComponent(bookmaker) +
+        "&bookmakers=" + encodeURIComponent(bookmaker) +
         "&language=en&oddsFormat=decimal&verbosity=3";
       const result = await cachedGet(path, 3 * 60_000);
       for (const item of rows(result)) {
