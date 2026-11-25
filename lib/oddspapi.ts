@@ -93,69 +93,90 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
   const date = day.toISOString().slice(0, 10);
   const from = date + "T00:00:00Z";
   const to = new Date(day.getTime() + 24 * 3600_000 - 1).toISOString();
-  const fixtureData = await cachedGet("/fixtures?sportId=10&from=" + encodeURIComponent(from) +
-    "&to=" + encodeURIComponent(to) + "&statusId=0&hasOdds=true", 5 * 60_000);
+
+  // OddsPapi exposes the bookmaker slugs included in the active subscription.
+  // The tournament odds endpoint expects the subscribed bookmaker filter.
+  const account = await cachedGet("/account", 60 * 60_000);
+  const subscriptions = rows(account?.subscriptions).filter((s: any) => s?.is_active !== false);
+  const bookmakerSlugs = [...new Set(subscriptions.flatMap((s: any) =>
+    Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
+  ))].slice(0, 3);
+  if (!bookmakerSlugs.length) {
+    throw new Error("OddsPapi account has no active bookmaker subscription. Check GET /v4/account and enable at least one football bookmaker.");
+  }
+
+  const fixturePath = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
+    "&to=" + encodeURIComponent(to) + "&statusId=0&hasOdds=true&bookmakers=" + encodeURIComponent(bookmakerSlugs.join(","));
+  const fixtureData = await cachedGet(fixturePath, 5 * 60_000);
   const fixtureRows = rows(fixtureData);
   const relevant = fixtureRows.filter((f: any) => f?.fixtureId && f?.tournamentId &&
     (nameMatches(String(f.participant1Name || f.participant1ShortName || ""), home) &&
      nameMatches(String(f.participant2Name || f.participant2ShortName || ""), away)));
-  const tournamentIds = [...new Set(fixtureRows.filter((f: any) => f?.hasOdds && f?.tournamentId)
-    .map((f: any) => String(f.tournamentId)))];
-  let oddsFixtures: any[] = [];
-  if (tournamentIds.length) {
-    const oddsData = await cachedGet("/odds-by-tournaments?tournamentIds=" + encodeURIComponent(tournamentIds.join(",")) +
-      "&language=en&oddsFormat=decimal&verbosity=3", 3 * 60_000);
-    oddsFixtures = rows(oddsData);
+  const tournamentIds = [...new Set(relevant.map((f: any) => String(f.tournamentId)))];
+  const oddsFixtures: any[] = [];
+  // The provider's tournament endpoint has a small tournament batch limit.
+  for (let i = 0; i < tournamentIds.length; i += 3) {
+    const chunk = tournamentIds.slice(i, i + 3);
+    for (const bookmaker of bookmakerSlugs) {
+      const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
+        "&bookmakers=" + encodeURIComponent(bookmaker) +
+        "&language=en&oddsFormat=decimal&verbosity=3";
+      const result = await cachedGet(path, 3 * 60_000);
+      oddsFixtures.push(...rows(result));
+    }
   }
   const markets = await getMarketMap();
   const byId = new Map(oddsFixtures.map((f: any) => [String(f.fixtureId), f]));
   const matched = relevant.map((f: any) => {
     const oddsFixture: any = byId.get(String(f.fixtureId));
     if (!oddsFixture?.bookmakerOdds) return null;
-    const bookmakers = Object.entries(oddsFixture.bookmakerOdds).filter(([, book]: [string, any]) => book?.bookmakerIsActive !== false && book?.suspended !== true).map(([slug, book]: [string, any]) => ({
-      key: slug, title: String(book?.bookmakerName || slug),
-      markets: Object.entries(book?.markets || {}).flatMap(([marketId, marketData]: [string, any]) => {
-        if (marketData?.marketActive === false) return [];
-        const meta = markets.get(String(marketId));
-        const marketType = norm(String(meta?.marketType || "")).replace(/\s/g, "");
-        const marketTitle = norm(String(meta?.marketName || "")).replace(/\s/g, "");
-        const isH2h = marketType === "1x2" || marketTitle.includes("fulltimeresult") || marketTitle === "matchresult";
-        const isDouble = marketType.includes("doublechance") || marketTitle.includes("doublechance");
-        const isBtts = marketType.includes("btts") || marketTitle.includes("bothteamstoscore");
-        const isTotals = marketType.includes("total") || marketType.includes("overunder") || marketTitle.includes("totalgoals") || marketTitle.includes("overunder");
-        const kind = isH2h ? "h2h" : isDouble ? "double_chance" : isBtts ? "btts" : isTotals ? "totals" : "other";
-        const normalizedKey = kind === "other" ? "oddspapi_" + String(marketId) : kind;
-        const market: any = { ...(meta || {}), __kind: kind };
-        const outcomes = Object.entries(marketData?.outcomes || {}).flatMap(([outcomeId, outcomeData]: [string, any]) =>
-          Object.values(outcomeData?.players || {}).map((player: any) => {
-            const raw = outcomeName(market, String(outcomeId), player, String(f.participant1Name), String(f.participant2Name));
-            const playerName = String(player?.playerName || player?.name || player?.handicap || "");
-            const line = String(player?.handicap ?? player?.line ?? "");
-            const outcomeIdLabel = String(player?.bookmakerOutcomeId || "");
-            const totalFromId = outcomeIdLabel.match(/(\d+(?:\.\d+)?)\s*\/\s*(over|under)/i);
-            const name = kind === "btts" ? (/^(yes|no)$/i.test(raw) ? raw : /^(yes|no)$/i.test(playerName) ? playerName : raw)
-              : kind === "totals" ? (/^(over|under)\s/i.test(raw) ? raw : totalFromId ? totalFromId[2] + " " + totalFromId[1] : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
-              : kind === "other" && (!raw || raw === String(player?.bookmakerOutcomeId || "")) ? (playerName || raw) : raw;
-            return { name, price: Number(player?.price) };
-          }).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
-        );
-        return outcomes.length ? [{ key: normalizedKey, outcomes }] : [];
-      })
-    })).filter((b: any) => b.markets.length);
+    const bookmakers = Object.entries(oddsFixture.bookmakerOdds)
+      .filter(([, book]: [string, any]) => book?.bookmakerIsActive !== false && book?.suspended !== true)
+      .map(([slug, book]: [string, any]) => ({
+        key: slug, title: String(book?.bookmakerName || slug),
+        markets: Object.entries(book?.markets || {}).flatMap(([marketId, marketData]: [string, any]) => {
+          if (marketData?.marketActive === false) return [];
+          const meta = markets.get(String(marketId));
+          const marketType = norm(String(meta?.marketType || "")).replace(/\s/g, "");
+          const marketTitle = norm(String(meta?.marketName || "")).replace(/\s/g, "");
+          const isH2h = marketType === "1x2" || marketTitle.includes("fulltimeresult") || marketTitle === "matchresult";
+          const isDouble = marketType.includes("doublechance") || marketTitle.includes("doublechance");
+          const isBtts = marketType.includes("btts") || marketTitle.includes("bothteamstoscore");
+          const isTotals = marketType.includes("total") || marketType.includes("overunder") || marketTitle.includes("totalgoals") || marketTitle.includes("overunder");
+          const kind = isH2h ? "h2h" : isDouble ? "double_chance" : isBtts ? "btts" : isTotals ? "totals" : "other";
+          const normalizedKey = kind === "other" ? "oddspapi_" + String(marketId) : kind;
+          const market: any = { ...(meta || {}), __kind: kind };
+          const outcomes = Object.entries(marketData?.outcomes || {}).flatMap(([outcomeId, outcomeData]: [string, any]) =>
+            Object.values(outcomeData?.players || {}).map((player: any) => {
+              const raw = outcomeName(market, String(outcomeId), player, String(f.participant1Name), String(f.participant2Name));
+              const playerName = String(player?.playerName || player?.name || player?.handicap || "");
+              const line = String(player?.handicap ?? player?.line ?? "");
+              const outcomeIdLabel = String(player?.bookmakerOutcomeId || "");
+              const totalFromId = outcomeIdLabel.match(/(\d+(?:\.\d+)?)\s*\/\s*(over|under)/i);
+              const name = kind === "btts" ? (/^(yes|no)$/i.test(raw) ? raw : /^(yes|no)$/i.test(playerName) ? playerName : raw)
+                : kind === "totals" ? (/^(over|under)\s/i.test(raw) ? raw : totalFromId ? totalFromId[2] + " " + totalFromId[1] : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
+                : kind === "other" && (!raw || raw === outcomeIdLabel) ? (playerName || raw) : raw;
+              return { name, price: Number(player?.price) };
+            }).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
+          );
+          return outcomes.length ? [{ key: normalizedKey, outcomes }] : [];
+        })
+      })).filter((b: any) => b.markets.length);
     return {
       id: String(f.fixtureId), home_team: String(f.participant1Name || f.participant1ShortName),
       away_team: String(f.participant2Name || f.participant2ShortName), commence_time: f.startTime,
       bookmakers
     };
   }).filter(Boolean);
-  const events = oddsFixtures.length;
   return {
-    region: "global", product: "oddspapi", count: events, matched,
+    region: "global", product: "oddspapi", count: oddsFixtures.length, matched,
     availableBookmakers: [...new Set(matched.flatMap((e: any) => e.bookmakers.map((b: any) => b.title)))].sort(),
     diagnostics: {
-      eventsReturned: events, matchingEvents: matched.length,
+      eventsReturned: oddsFixtures.length, fixtureEvents: fixtureRows.length,
+      matchingFixtures: relevant.length, matchingEvents: matched.length,
       requestedHome: home, requestedAway: away, tournamentCount: tournamentIds.length,
-      sampleEvents: fixtureRows.slice(0, 8).map((f: any) => ({ home: f.participant1Name, away: f.participant2Name }))
+      bookmakerSlugs,
+      sampleEvents: fixtureRows.slice(0, 8).map((f: any) => ({ home: f.participant1Name, away: f.participant2Name, hasOdds: f.hasOdds }))
     }
   };
 }
