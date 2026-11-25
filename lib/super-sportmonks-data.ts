@@ -158,9 +158,23 @@ export async function searchTeams(q: string) {
   }));
 }
 export async function todayCompetitionMatches() {
-  const today = datePart(new Date());
-  const body = await fixturesByDate(today);
-  return body.map(fixture).filter((x: any) => x.home.id && x.away.id).sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
+  // Value Bets scans today and tomorrow, so it never goes empty just because
+  // today's slate has finished or has no remaining fixtures.
+  const now = new Date();
+  const today = datePart(now);
+  const tomorrow = datePart(new Date(now.getTime() + 86400_000));
+  const [todayRows, tomorrowRows] = await Promise.all([
+    fixturesByDate(today), fixturesByDate(tomorrow)
+  ]);
+  const unique = new Map<string, any>();
+  for (const raw of [...todayRows, ...tomorrowRows]) {
+    const row = fixture(raw);
+    if (row.home.id && row.away.id && row.date &&
+      row.status !== "FINISHED" && Date.parse(row.date) >= now.getTime()) {
+      unique.set(String(row.id), row);
+    }
+  }
+  return [...unique.values()].sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
 }
 export async function matchesOnDate(date: string) {
   if (!validDate(date)) throw new Error("Choose a valid match date.");
