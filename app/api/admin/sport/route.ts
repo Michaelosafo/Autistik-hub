@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
-import { getOddsPapiStatus, getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
+import { getOddsPapiStatus, getOddsPapiUpcomingFixtures, getOddsPapiMatchOdds } from "@/lib/oddspapi";
 import { getCombinedMatchOdds } from "@/lib/combined-odds";
 import { getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis")
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              getCombinedMatchOdds(home, away, date)
+              getOddsPapiMatchOdds(home, away, date)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
@@ -112,7 +112,7 @@ export async function POST(req: Request) {
               matched: matchedEvents.length,
               bookmakers: availableBookmakers,
               markets: marketsFound,
-              providers: odds.diagnostics?.providers || null,
+              providers: odds.diagnostics?.providers || { oddspapi: { ok: true, matched: matchedEvents.length } },
               feedExamples: sampleEvents.slice(0, 4).map((e: any) => String(e?.home || "") + " vs " + String(e?.away || "")),
               analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null
             });
@@ -192,7 +192,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getCombinedMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
+        return json(await getOddsPapiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
