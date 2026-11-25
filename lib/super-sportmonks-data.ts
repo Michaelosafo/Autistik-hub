@@ -243,14 +243,14 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
   const body = await api("/odds/pre-match/fixtures/" + fixtureId + "?include=market;bookmaker;fixture", 60_000);
   const odds = rows(body);
   const norm = (v: any) => String(v || "").toLowerCase().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
   const books = new Map<string, any>();
   for (const odd of odds) {
     const price = Number(odd?.value ?? odd?.odds);
     if (!Number.isFinite(price) || price <= 1) continue;
     const market = odd?.market || {};
     const marketName = String(market?.developer_name || market?.name || odd?.market_description || odd?.market_name || "");
-    const marketKey = norm(marketName).replace(/\\s/g, "");
+    const marketKey = norm(marketName).replace(/\s/g, "");
     let key = "sportmonks_" + String(odd?.market_id ?? market?.id ?? "other");
     let title = marketName || "Other market";
     if (/double.?chance/.test(marketKey)) { key = "double_chance"; title = "Double chance"; }
@@ -269,7 +269,7 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
       else if (["away", "2", norm(away)].includes(n)) label = away;
       else if (["draw", "the draw", "tie", "x"].includes(n)) label = "Draw";
     } else if (key === "double_chance") {
-      const n = norm(rawLabel).replace(/\\s/g, "");
+      const n = norm(rawLabel).replace(/\s/g, "");
       if (["1x", "homedraw", "homeordraw"].includes(n)) label = "1X";
       else if (["x2", "drawaway", "draworaway"].includes(n)) label = "X2";
       else if (["12", "homeaway", "homeoraway"].includes(n)) label = "12";
@@ -279,7 +279,7 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
     } else if (key === "totals") {
       const n = norm(rawLabel);
       const side = /under/.test(n) ? "Under" : /over/.test(n) ? "Over" : "";
-      const foundLine = rawLabel.match(/\\d+(?:\\.\\d+)?/) || (line != null ? [String(line)] : null);
+      const foundLine = rawLabel.match(/\d+(?:\.\d+)?/) || (line != null ? [String(line)] : null);
       if (side && foundLine) label = side + " " + foundLine[0];
       else if (!side && line != null) label = rawLabel + " " + String(line);
     }
@@ -317,7 +317,7 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
 
 export async function getSuperMatchOddsForTeams(home: string, away: string, matchDate: string) {
   if (!validDate(matchDate)) throw new Error("Choose a valid match date for odds lookup.");
-  const clean = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const clean = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   const h = clean(home), a = clean(away);
   const candidates = await fixturesByDate(matchDate);
   const match = candidates.find((f: any) => {
