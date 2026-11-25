@@ -328,7 +328,7 @@ export default function SportBoard() {
           <div key={x.selection} className={"sb-top-r " + (x.ev == null ? "" : x.ev > 0 ? "hi" : "lo")}>
             <span className="sb-rank">#{i + 1}</span><span className="sb-name"><b>{x.selection}</b><small className="muted" style={{ display: "block" }}>{x.bookmaker}</small></span>
             <b>{x.ev == null ? "Price unavailable" : `EV ${x.ev >= 0 ? "+" : ""}${x.ev.toFixed(1)}%`}</b>
-            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {x.(x.fairOdds == null ? "—" : x.fairOdds.toFixed(2))} · {x.odds == null ? "No bookmaker price to compare" : `bookmaker odds ${x.odds.toFixed(2)} · market implied ${x.implied.toFixed(1)}% · edge ${x.edge >= 0 ? "+" : ""}${x.edge.toFixed(1)}pp`}</small>
+            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {(x.fairOdds == null ? "—" : x.fairOdds.toFixed(2))} · {x.odds == null ? "No bookmaker price to compare" : `bookmaker odds ${x.odds.toFixed(2)} · market implied ${x.implied.toFixed(1)}% · edge ${x.edge >= 0 ? "+" : ""}${x.edge.toFixed(1)}pp`}</small>
           </div>
         )}
         {ghanaOdds && rankedOddsValueRows.length === 0 && <div className="notice warn">No usable 1X2 prices were returned for this fixture.</div>}
@@ -354,26 +354,26 @@ export default function SportBoard() {
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
         {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 8 }}>
-          {(["UEFA Champions League", "Championship"] as const).map((competition) => {
-            const count = todayMatches.filter((f: any) => f.competition === competition).length;
+          {(["ALL", "UEFA Champions League", "Championship"] as const).map((competition) => {
+            const count = competition === "ALL" ? todayMatches.length : todayMatches.filter((f: any) => f.competition === competition).length;
             const active = todayCompetition === competition;
             return <button key={competition} type="button" onClick={() => setTodayCompetition(competition)}
               aria-pressed={active}
               style={{ padding: "12px 8px", borderRadius: 12, border: active ? "2px solid var(--accent, #eab308)" : "1px solid var(--line)", background: active ? "var(--surface-2, #f1eef9)" : "transparent", color: "inherit", fontWeight: active ? 700 : 500 }}>
-              {competition === "ALL" ? "All matches" : competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
+              {competition === "ALL" ? "🌍 All competitions" : competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
               <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>{count} matches</small>
             </button>;
           })}
         </div>
         <div className="stack" style={{ gap: 0, marginTop: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 8px", borderBottom: "1px solid var(--line)" }}>
-            <span style={{ fontSize: 24 }}>{todayCompetition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
-            <b>{todayCompetition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
-            <span className="muted" style={{ marginLeft: "auto" }}>{todayMatches.filter((f: any) => f.competition === todayCompetition).length}</span>
+            <span style={{ fontSize: 24 }}>{todayCompetition === "ALL" ? "🌍" : todayCompetition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
+            <b>{todayCompetition === "ALL" ? "All available competitions" : todayCompetition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
+            <span className="muted" style={{ marginLeft: "auto" }}>{visibleTodayMatches.length}</span>
           </div>
-          {todayMatches.filter((f: any) => f.competition === todayCompetition).length === 0
-            ? <small className="muted" style={{ padding: 12 }}>No {todayCompetition === "UEFA Champions League" ? "Champions League" : "Championship"} fixtures found for today.</small>
-            : todayMatches.filter((f: any) => f.competition === todayCompetition).map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
+          {visibleTodayMatches.length === 0
+            ? <small className="muted" style={{ padding: 12 }}>No fixtures found for this selection today.</small>
+            : visibleTodayMatches.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
               style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
               <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", whiteSpace: "pre-line" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? `\\n${f.score.home}–${f.score.away}` : ""}</span>
               <span style={{ display: "grid", gap: 5 }}>
