@@ -8,6 +8,20 @@ import { getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+async function withTimeout<T>(task: Promise<T>, label: string, timeoutMs = 20000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label + " timed out after " + timeoutMs + "ms")), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 
 /** Sport board (owner only). POST { action: "ready" | "search" | "analyse" | "history" | "result" }. */
 export async function POST(req: Request) {
@@ -74,7 +88,7 @@ export async function POST(req: Request) {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysisResult, oddsResult] = await Promise.allSettled([
               homeId > 0 && awayId > 0 && homeId !== awayId
-                ? analyse(homeId, awayId, date)
+                ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis")
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
               getCombinedMatchOdds(home, away, date)
             ]);
