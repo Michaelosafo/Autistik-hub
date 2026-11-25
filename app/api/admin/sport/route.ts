@@ -1,7 +1,9 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
-import { getOddsPapiMatchOdds, getOddsPapiStatus, getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
+import { getOddsPapiStatus, getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
+import { getCombinedMatchOdds } from "@/lib/combined-odds";
+import { getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,7 +16,13 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
-      case "oddsStatus": return json(await getOddsPapiStatus());
+      case "oddsStatus": {
+        const [papi, relay] = await Promise.allSettled([getOddsPapiStatus(), getGhanaOddsRelayStatus()]);
+        return json({
+          oddspapi: papi.status === "fulfilled" ? papi.value : { keyConfigured: false, active: false, error: String(papi.reason?.message || papi.reason) },
+          oddsrelay: relay.status === "fulfilled" ? relay.value : { keyConfigured: false, active: false, error: String(relay.reason?.message || relay.reason) }
+        });
+      }
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": {
         const [footballDataMatches, oddsPapiResult] = await Promise.all([
@@ -68,7 +76,7 @@ export async function POST(req: Request) {
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? analyse(homeId, awayId, date)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              getOddsPapiMatchOdds(home, away, date)
+              getCombinedMatchOdds(home, away, date)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
@@ -170,7 +178,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getOddsPapiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
+        return json(await getCombinedMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
