@@ -43,11 +43,10 @@ export default function ValueBets({ endpoint }: Props) {
       setDayCounts({today:upcoming.filter((f:any)=>accraDay(f.date)===today).length,tomorrow:upcoming.filter((f:any)=>accraDay(f.date)===tomorrow).length});
       if(!upcoming.length){setError("No upcoming fixtures were returned by this board's football API.");return;}
       let all:any[]=[];
-      // Keep each server request small: match analysis and odds lookups are
-      // several upstream calls per fixture and a 20-match request exceeded
-      // Vercel's 60-second function limit.
-      for(let i=0;i<upcoming.length;i+=3){
-        const batch=upcoming.slice(i,i+3);
+      // Keep each server request to one fixture. OddsPapi applies endpoint cooldowns,
+      // so concurrent fixture lookups can queue and exceed Vercel's function limit.
+      for(let i=0;i<upcoming.length;i+=1){
+        const batch=upcoming.slice(i,i+1);
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(Array.isArray(d?.rows)?d.rows:[]);
