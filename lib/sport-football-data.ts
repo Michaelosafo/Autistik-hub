@@ -49,23 +49,21 @@ type Match = any;
 
 /** Today's fixtures across every competition code enabled in this football-data feed (UTC). */
 export async function todayCompetitionMatches() {
+  // Use one account-level date-range request rather than firing one request per
+  // competition. The old 12-request Promise.all regularly hit the free API's
+  // rate limit and silently dropped tomorrow's fixtures.
   const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const tomorrowDate = new Date(now.getTime() + 86400_000);
-  const tomorrow = tomorrowDate.toISOString().slice(0, 10);
-  // Fetch today's and tomorrow's fixtures across every enabled competition.
-  const results = await Promise.all(COMPETITIONS.map(async (code) => {
-    try {
-      const data = await api("/competitions/" + code + "/matches?dateFrom=" + today + "&dateTo=" + tomorrow, 2 * 60_000);
-      return data?.matches || [];
-    } catch {
-      return [];
-    }
-  }));
+  const dayInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(d);
+  const today = dayInAccra(now);
+  const tomorrow = dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000));
+  const data = await api("/matches?dateFrom=" + today + "&dateTo=" + tomorrow + "&limit=500", 60_000);
+  const matches = Array.isArray(data?.matches) ? data.matches : [];
   const unique = new Map<number, Match>();
-  for (const m of results.flat()) {
+  for (const m of matches) {
     if (m?.id && m.homeTeam?.id && m.awayTeam?.id && m.utcDate &&
-      ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED"].includes(m.status) &&
+      ["SCHEDULED", "TIMED"].includes(m.status) &&
       Date.parse(m.utcDate) >= now.getTime()) unique.set(Number(m.id), m);
   }
   return [...unique.values()]
