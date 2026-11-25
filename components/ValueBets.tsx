@@ -36,21 +36,21 @@ export default function ValueBets({ endpoint }: Props) {
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(d.rows||[]);
         setDiagnostics(prev=>prev.concat(d.diagnostics||[]));
-        setRows([...all].sort((a,b)=>(Number(b.value)-Number(a.value)) || (b.ev-a.ev)));
+        setRows([...all].sort((a,b)=>(Number(b.value)-Number(a.value)) || ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity))));
         setScanned(Math.min(i+batch.length,upcoming.length));
       }
       setProgress("");
-      if(!all.length) setError("No Ghana bookmaker prices matched these fixtures for 1X2 or double chance. Check the diagnostics below for the filtered raw-feed response and token balance.");
+      if(!all.length) setError("No bookmaker prices matched these fixtures from either odds provider. Check the provider diagnostics below.");
     } catch(e){setError((e as Error).message);setProgress("");}
     finally{setBusy(false);}
   }
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 Value bets · all today's fixtures</b><small className="muted" style={{display:"block"}}>Scans today's fixtures for match result (home win, draw, away win) and double chance only, using one filtered Ghana odds request to reduce token use.</small></div>
+      <div><b>📈 Value bets · all today's fixtures</b><small className="muted" style={{display:"block"}}>Combines OddsPapi and OddsRelay bookmaker prices, checks available match-result, double-chance, goals and BTTS markets, and ranks model-supported positive expected value across today's fixtures.</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check Ghana feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
-    {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>OddsRelay Ghana feed status</b><span>Server key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>Ghana region: {feedStatus.ghRegion ? "included in this API key" : "not confirmed in this API key"}</span><span>Raw markets listed by OddsRelay: {Array.isArray(feedStatus.rawMarkets) ? feedStatus.rawMarkets.length : 0}</span><small>{Array.isArray(feedStatus.rawMarkets) ? feedStatus.rawMarkets.map((m:any)=>typeof m==="string"?m:m.key||m.name).join(", ") : "No public market catalogue returned"}</small><span>Public Ghana bookmaker count: {feedStatus.publicBookmakerCount ?? "unknown"}</span><small>Account-specific soccer coverage: {JSON.stringify(feedStatus.accountSoccerBookmakers).slice(0,1200)}</small>{feedStatus.regionError && <small>Regions error: {JSON.stringify(feedStatus.regionError)}</small>}{feedStatus.errors?.publicCoverage && <small>Public coverage error: {JSON.stringify(feedStatus.errors.publicCoverage)}</small>}{feedStatus.errors?.accountCoverage && <small>Account coverage error: {JSON.stringify(feedStatus.errors.accountCoverage)}</small>}{feedStatus.errors?.usage && <small>Usage: {JSON.stringify(feedStatus.errors.usage)}</small>}{feedStatus.error && <small>{feedStatus.error}</small>}</div>}
+    {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>Combined odds-provider status</b><span>OddsPapi key: {feedStatus.oddsPapiKeyConfigured ? "configured" : "missing"}</span><span>Server key: {feedStatus.keyConfigured ? "configured" : "missing"}</span><span>Ghana region: {feedStatus.ghRegion ? "included in this API key" : "not confirmed in this API key"}</span><span>Raw markets listed by OddsRelay: {Array.isArray(feedStatus.rawMarkets) ? feedStatus.rawMarkets.length : 0}</span><small>{Array.isArray(feedStatus.rawMarkets) ? feedStatus.rawMarkets.map((m:any)=>typeof m==="string"?m:m.key||m.name).join(", ") : "No public market catalogue returned"}</small><span>Public Ghana bookmaker count: {feedStatus.publicBookmakerCount ?? "unknown"}</span><small>Account-specific soccer coverage: {JSON.stringify(feedStatus.accountSoccerBookmakers).slice(0,1200)}</small>{feedStatus.regionError && <small>Regions error: {JSON.stringify(feedStatus.regionError)}</small>}{feedStatus.errors?.publicCoverage && <small>Public coverage error: {JSON.stringify(feedStatus.errors.publicCoverage)}</small>}{feedStatus.errors?.accountCoverage && <small>Account coverage error: {JSON.stringify(feedStatus.errors.accountCoverage)}</small>}{feedStatus.errors?.usage && <small>Usage: {JSON.stringify(feedStatus.errors.usage)}</small>}{feedStatus.error && <small>{feedStatus.error}</small>}</div>}
     {scanned>0 && <small className="muted">Scanned {scanned} fixtures</small>}
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && !rows.length && <div className="stack" style={{fontSize:13}}>
@@ -78,6 +78,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-    <small className="muted">Checks only 1X2 (home win, draw, away win) and double-chance prices. Autistik calculates fair odds, model probability and expected value for each supported selection. The scan quotes token cost before spending and reuses one daily odds board across fixtures.</small>
+    <small className="muted">Combines available OddsPapi and OddsRelay prices, removes duplicate selections, and keeps the best bookmaker price. Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
   </section>;
 }
