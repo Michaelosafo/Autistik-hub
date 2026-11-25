@@ -97,7 +97,8 @@ export async function POST(req: Request) {
             }
             rows.push(...bestBySelection.values());
           } catch (error) {
-            scanDiagnostics.push({ fixture: home + ' vs ' + away, error: error instanceof Error ? error.message : String(error) });
+            const message = error instanceof Error ? error.message : String(error);
+            scanDiagnostics.push({ fixture: home + ' vs ' + away, error: message, oddsError: message, oddsEvents: null, matchedEvents: null, providers: null });
           }
         }
         return json({ rows, diagnostics: scanDiagnostics });
