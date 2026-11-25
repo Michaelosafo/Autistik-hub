@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = { endpoint: "/api/admin/sport" | "/api/admin/super" };
 export default function ValueBets({ endpoint }: Props) {
@@ -12,6 +12,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [checkingFeed,setCheckingFeed]=useState(false);
+  const autoStarted=useRef(false);
   async function post(action:string, body:any={}) {
     const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
     const d=await r.json().catch(()=>({}));
@@ -59,9 +60,17 @@ export default function ValueBets({ endpoint }: Props) {
     } catch(e){setError((e as Error).message);setProgress("");}
     finally{setBusy(false);}
   }
+  useEffect(() => {
+    // SPORT automatically discovers and scans today + tomorrow when the board opens.
+    // Keep SUPER manual/independent; this auto-run is only for the SPORT board.
+    if (endpoint === "/api/admin/sport" && !autoStarted.current) {
+      autoStarted.current = true;
+      void scan();
+    }
+  }, [endpoint]);
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Combines OddsPapi + OddsRelay prices, compares the best available bookmaker odds with SPORT model probabilities, and ranks positive expected value across today's and tomorrow's fixtures."}</small></div>
+       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Automatically discovers today's and tomorrow's fixtures from the football API, checks OddsPapi bookmaker prices, compares them with SPORT model probabilities, and ranks positive expected value."}</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Scanning…":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
@@ -93,6 +102,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Combines OddsPapi and OddsRelay, removes duplicate selections, and keeps the best bookmaker price from either provider. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
+     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Uses OddsPapi bookmaker prices, removes duplicate selections, and keeps the best returned price. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
   </section>;
 }
