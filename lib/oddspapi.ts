@@ -126,9 +126,9 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
             const playerName = String(player?.playerName || player?.name || player?.handicap || "");
             const line = String(player?.handicap ?? player?.line ?? "");
             const outcomeIdLabel = String(player?.bookmakerOutcomeId || "");
-            const totalFromId = outcomeIdLabel.match(/(\\d+(?:\\.\\d+)?)\\s*\\/\\s*(over|under)/i);
+            const totalFromId = outcomeIdLabel.match(/(\d+(?:\.\d+)?)\s*\/\s*(over|under)/i);
             const name = kind === "btts" ? (/^(yes|no)$/i.test(raw) ? raw : /^(yes|no)$/i.test(playerName) ? playerName : raw)
-              : kind === "totals" ? (/^(over|under)\\s/i.test(raw) ? raw : totalFromId ? totalFromId[2] + " " + totalFromId[1] : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
+              : kind === "totals" ? (/^(over|under)\s/i.test(raw) ? raw : totalFromId ? totalFromId[2] + " " + totalFromId[1] : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
               : kind === "other" && (!raw || raw === String(player?.bookmakerOutcomeId || "")) ? (playerName || raw) : raw;
             return { name, price: Number(player?.price) };
           }).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
