@@ -47,23 +47,31 @@ export async function searchTeams(q: string) {
 
 type Match = any;
 
-/** Today's EFL Championship and UEFA Champions League fixtures only (Ghana uses UTC). */
+/** Today's fixtures across every competition code enabled in this football-data feed (UTC). */
 export async function todayCompetitionMatches() {
-  // Use competition-specific endpoints; the combined /matches competition filter can
-  // return an empty collection on some provider plans even when a competition has games.
   const today = new Date().toISOString().slice(0, 10);
-  const codes = [{ code: "ELC", label: "Championship" }, { code: "CL", label: "UEFA Champions League" }];
-  const results = await Promise.all(codes.map(async ({ code, label }) => {
-    const data = await api("/competitions/" + code + "/matches?dateFrom=" + today + "&dateTo=" + today, 2 * 60_000);
-    return (data?.matches || []).map((m: any) => ({ ...m, competition: { ...(m.competition || {}), name: label } }));
+  // Query each supported competition endpoint: this is more reliable on limited
+  // football-data plans than a combined competitions filter.
+  const results = await Promise.all(COMPETITIONS.map(async (code) => {
+    try {
+      const data = await api("/competitions/" + code + "/matches?dateFrom=" + today + "&dateTo=" + today, 2 * 60_000);
+      return data?.matches || [];
+    } catch {
+      // Some codes may not be enabled on the account's subscription; retain all
+      // successful competitions and surface no fabricated fixtures.
+      return [];
+    }
   }));
-  return results.flat()
-    .filter((m: any) => m.homeTeam?.id && m.awayTeam?.id && m.utcDate)
-    .filter((m: any) => ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status))
+  const unique = new Map<number, Match>();
+  for (const m of results.flat()) {
+    if (m?.id && m.homeTeam?.id && m.awayTeam?.id && m.utcDate &&
+      ["SCHEDULED", "TIMED", "IN_PLAY", "PAUSED", "FINISHED"].includes(m.status)) unique.set(Number(m.id), m);
+  }
+  return [...unique.values()]
     .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
     .map((m: any) => ({
       id: m.id, date: m.utcDate, status: m.status,
-      competition: m.competition?.name || "",
+      competition: m.competition?.name || m.competition?.code || "Football",
       home: { id: m.homeTeam.id, name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
       away: { id: m.awayTeam.id, name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
       score: finished(m) ? { home: m.score.fullTime.home, away: m.score.fullTime.away } : null,
