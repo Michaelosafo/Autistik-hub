@@ -430,13 +430,14 @@ export default function SportBoard() {
           }
           {m && ghanaOdds.matched.length > 0 && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
             <b>Model vs bookmaker · value check</b>
-            <small className="muted">EV = model probability × decimal odds − 1. A positive result means the offered price is above the model's fair price; it is not a guarantee.</small>
+            <small className="muted">Raw implied probability = 1 ÷ odds. No-vig probability removes the bookmaker's overround across all three outcomes. EV = model probability × decimal odds − 1; large model/market gaps are flagged for verification.</small>
             {oddsValueRows.length === 0 ? <div className="notice warn">No usable bookmaker 1X2 prices were returned for comparison.</div> : <>
               {oddsValueRows.map((x: any) => <div key={x.selection} className="sb-top-r">
-                <span className="sb-name">{x.selection}</span><b>{x.probability.toFixed(1)}%</b>
-                <small className="muted">Best {x.odds.toFixed(2)} · {x.bookmaker}</small>
-                <small className={x.ev >= 3 ? "sb-ok" : x.ev > 0 ? "sb-g D" : "sb-no"}>EV {x.ev >= 0 ? "+" : ""}{x.ev.toFixed(1)}%</small>
+                <span className="sb-name">{x.selection}</span><b>Model {x.probability.toFixed(1)}%</b>
+                <small className="muted">Fair {x.fairOdds.toFixed(2)} · book {x.odds == null ? "—" : x.odds.toFixed(2)} · raw implied {x.implied == null ? "—" : x.implied.toFixed(1) + "%"} · no-vig {x.noVigProbability == null ? "—" : x.noVigProbability.toFixed(1) + "%"}</small>
+                <small className={x.ev == null ? "muted" : x.ev >= 3 ? "sb-ok" : x.ev > 0 ? "sb-g D" : "sb-no"}>{x.ev == null ? "No bookmaker price" : "EV " + (x.ev >= 0 ? "+" : "") + x.ev.toFixed(1) + "%"}</small>
               </div>)}
+              {oddsValueRows.some((x: any) => x.disagreement) && <div className="notice warn"><b>Model/market disagreement detected.</b> A gap of 10 percentage points or more is flagged for fixture, team-strength and lineup verification. It is not automatically treated as a genuine value bet.</div>}
               {bestOddsValue ? <div className="notice"><b>Top expected-value bet:</b> {bestOddsValue.selection} · model {bestOddsValue.probability.toFixed(1)}% · fair odds {bestOddsValue.fairOdds.toFixed(2)} · book {bestOddsValue.odds.toFixed(2)} at {bestOddsValue.bookmaker} · implied {bestOddsValue.implied.toFixed(1)}% · edge +{bestOddsValue.edge.toFixed(1)}pp · EV +{bestOddsValue.ev.toFixed(1)}%.<small className="muted" style={{ display: "block" }}>Ranked by highest expected return, not by probability alone.</small></div> : <div className="notice warn"><b>No value bet found.</b> None of the bookmaker prices beat the model's fair price.</div>}
             </>}
           </div>}
