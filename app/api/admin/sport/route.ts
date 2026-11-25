@@ -82,7 +82,7 @@ export async function POST(req: Request) {
         await Promise.all(fixtures.map(async (f: any) => {
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
-          if (!home || !away || !f?.date) continue;
+          if (!home || !away || !f?.date) return;
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysisResult, oddsResult] = await Promise.allSettled([
