@@ -13,7 +13,7 @@ async function getSuperMatchOdds(home: string, away: string, date: string) {
     const primary = await getOddsPapiMatchOdds(home, away, date);
     if (primary.matched?.length) return primary;
     try {
-      const fallback = await getSuperMatchOdds(home, away, date);
+      const fallback = await getGhanaMatchOdds(home, away, date);
       return { ...fallback, provider: "OddsRelay fallback", primaryDiagnostics: primary.diagnostics };
     } catch (fallbackError) {
       return { ...primary, provider: "OddsPapi", fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) };
