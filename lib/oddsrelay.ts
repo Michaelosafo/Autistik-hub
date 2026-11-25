@@ -97,6 +97,10 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
       [/\bparis saint germain\b/g, "psg"], [/\bparis sg\b/g, "psg"],
       [/\batletico madrid\b/g, "atletico"], [/\bsporting lisbon\b/g, "sporting"],
       [/\binter milan\b/g, "inter"], [/\bborussia dortmund\b/g, "dortmund"],
+      [/\bca mineiro\b/g, "atletico mineiro"], [/\batletico mg\b/g, "atletico mineiro"],
+      [/\bsc corinthians paulista\b/g, "corinthians"], [/\bcorinthians paulista\b/g, "corinthians"],
+      [/\bsao paulo fc\b/g, "sao paulo"], [/\bpalmeiras sp\b/g, "palmeiras"],
+      [/\bflamengo rj\b/g, "flamengo"], [/\bvasco da gama\b/g, "vasco"],
       [/\bbayern munich\b/g, "bayern"]
     ];
     for (const [pattern, value] of substitutions) if (pattern.test(n)) variants.push(n.replace(pattern, value));
