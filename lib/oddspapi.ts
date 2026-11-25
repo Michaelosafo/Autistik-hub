@@ -166,7 +166,7 @@ export async function getOddsPapiUpcomingFixtures() {
   const bookmakerSlugs = [...new Set(subscriptionRows.flatMap((s: any) =>
     Object.keys(s?.bookmakers && typeof s.bookmakers === "object" ? s.bookmakers : {})
       .filter((slug: string) => s.bookmakers[slug] !== false)
-  ))].slice(0, 3);
+  ))].slice(0, 1);
   if (!bookmakerSlugs.length) throw new Error("OddsPapi account has no active bookmaker subscription.");
 
   const now = new Date();
@@ -224,7 +224,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
   const subscriptions = rows(account?.subscriptions ?? account?.data?.subscriptions ?? account?.data).filter((s: any) => s?.is_active !== false);
   const bookmakerSlugs = [...new Set(subscriptions.flatMap((s: any) =>
     Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
-  ))].slice(0, 3);
+  ))].slice(0, 1);
   if (!bookmakerSlugs.length) {
     throw new Error("OddsPapi account has no active bookmaker subscription. Check GET /v4/account and enable at least one football bookmaker.");
   }
