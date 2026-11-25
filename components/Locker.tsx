@@ -55,7 +55,12 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
     if (!eth) throw new Error("No wallet chosen.");
     const w = createWalletClient({ chain: cfg.viem as any, transport: custom(eth) }) as any;
     const [acc] = await w.requestAddresses();
-    try { await w.switchChain({ id: cfg.viem.id }); } catch (e: any) {\n      const code = e?.code ?? e?.cause?.code;\n      if (code !== 4902 && !/unknown chain/i.test(String(e?.shortMessage || e?.message || ""))) throw e;\n      await w.addChain({ chain: cfg.viem });\n      await w.switchChain({ id: cfg.viem.id });\n    }
+    try { await w.switchChain({ id: cfg.viem.id }); } catch (e: any) {
+      const code = e?.code ?? e?.cause?.code;
+      if (code !== 4902 && !/unknown chain/i.test(String(e?.shortMessage || e?.message || ""))) throw e;
+      await w.addChain({ chain: cfg.viem });
+      await w.switchChain({ id: cfg.viem.id });
+    }
     setAccount(acc);
     return { w, acc: acc as `0x${string}` };
   }
