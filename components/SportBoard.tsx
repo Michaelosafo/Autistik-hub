@@ -346,7 +346,7 @@ export default function SportBoard() {
           <b>{Number(x.p).toFixed(1)}%</b><small className="muted">Estimated probability</small>
         </div>) : <small className="muted">No alternative market currently clears the 55% probability display threshold.</small>}
       </section>}
-      {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
+      {ready === false && <div className="notice warn">The running SPORT deployment is not detecting a non-empty <code>FOOTBALL_DATA_TOKEN</code>. The variable exists in Vercel Production; check that its value is saved correctly and that this deployment has been redeployed.</div>}
 
       <section className="card stack">
         <b>Today's matches · all available competitions</b>
