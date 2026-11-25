@@ -15,7 +15,7 @@ export default function ValueBets({ endpoint }: Props) {
   async function post(action:string, body:any={}) {
     const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
     const d=await r.json().catch(()=>({}));
-    if(!r.ok || d.error) throw new Error(d.error || "Request failed");
+    if(!r.ok || d.error) throw new Error(d.error || (r.status===504 ? "Server timed out (504). This batch was not completed; retrying smaller batches can help." : "Request failed (HTTP "+r.status+")."));
     return d;
   }
   async function checkFeed() {
@@ -36,8 +36,11 @@ export default function ValueBets({ endpoint }: Props) {
       setDayCounts({today:upcoming.filter((f:any)=>accraDay(f.date)===today).length,tomorrow:upcoming.filter((f:any)=>accraDay(f.date)===tomorrow).length});
       if(!upcoming.length){setError("No upcoming fixtures were returned by this board's football API.");return;}
       let all:any[]=[];
-      for(let i=0;i<upcoming.length;i+=20){
-        const batch=upcoming.slice(i,i+20);
+      // Keep each server request small: match analysis and odds lookups are
+      // several upstream calls per fixture and a 20-match request exceeded
+      // Vercel's 60-second function limit.
+      for(let i=0;i<upcoming.length;i+=2){
+        const batch=upcoming.slice(i,i+2);
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(d.rows||[]);
