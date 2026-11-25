@@ -14,7 +14,7 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
-      case "oddsStatus": return json(await getGhanaOddsRelayStatus());
+      case "oddsStatus": return json({ ...(await getGhanaOddsRelayStatus()), oddsPapiKeyConfigured: !!process.env.ODDSPAPI_API_KEY, providers: ["OddsPapi", "OddsRelay"] });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "valueScan": {
@@ -51,9 +51,9 @@ export async function POST(req: Request) {
                     else if (["draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
                   } else if (market.key === "double_chance") {
                     const pick = norm(label).replace(/\\s/g, "");
-                    if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Double chance 1X";
-                    else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Double chance X2";
-                    else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Double chance 12";
+                    if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Home or draw (1X)";
+                    else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Away or draw (X2)";
+                    else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Home or away (12)";
                   } else if (market.key === "btts") {
                     modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
                   } else {
