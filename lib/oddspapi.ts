@@ -85,6 +85,25 @@ async function getMarketMap() {
   return map;
 }
 
+export async function getOddsPapiStatus() {
+  if (!process.env.ODDSPAPI_API_KEY) {
+    return { keyConfigured: false, provider: "OddsPapi", active: false, bookmakers: [], error: "ODDSPAPI_API_KEY is missing in Vercel Production." };
+  }
+  const account = await cachedGet("/account", 60 * 60_000);
+  const subscriptions = rows(account?.subscriptions).filter((s: any) => s?.is_active !== false);
+  const bookmakers = [...new Set(subscriptions.flatMap((s: any) =>
+    Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
+  ))] as string[];
+  return {
+    keyConfigured: true,
+    provider: "OddsPapi",
+    active: bookmakers.length > 0,
+    bookmakers,
+    subscriptionCount: subscriptions.length,
+    error: bookmakers.length ? null : "OddsPapi account has no active bookmaker subscription."
+  };
+}
+
 export async function getOddsPapiMatchOdds(home: string, away: string, matchDate?: string) {
   const key = process.env.ODDSPAPI_API_KEY;
   if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
