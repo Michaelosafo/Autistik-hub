@@ -55,7 +55,7 @@ export default function ValueBets({ endpoint }: Props) {
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && !rows.length && <div className="stack" style={{fontSize:13}}>
       <b>Odds feed diagnostics</b>
-      {diagnostics.slice(0,6).map((d,i)=><small key={i} className="muted">{d.fixture}: {d.error || (d.oddsEvents+" events returned · "+d.matchedEvents+" matched · "+(d.bookmakers||[]).length+" bookmakers · markets: "+((d.markets||[]).join(", ")||"none"))}</small>)}
+      {diagnostics.slice(0,6).map((d,i)=><small key={i} className="muted">{d.fixture}: {d.oddsError || (d.oddsEvents+" events returned · "+d.matchedEvents+" matched · "+(d.bookmakers||[]).length+" bookmakers · markets: "+((d.markets||[]).join(", ")||"none"))}{d.analysisError ? " · model: "+d.analysisError : ""}{d.feedExamples?.length ? " · feed examples: "+d.feedExamples.join("; ") : ""}</small>)}
     </div>}
     {rows.length>0 && <div className="stack">
       <b>Positive value · highest EV first</b>
