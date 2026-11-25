@@ -1,10 +1,31 @@
-import { getGhanaMatchOdds } from "@/lib/oddsrelay";
+import { getGhanaMatchOdds, getGhanaStandardMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiMatchOdds } from "@/lib/oddspapi";
 
 export async function getCombinedMatchOdds(home: string, away: string, date?: string) {
+  const loadOddsRelay = async () => {
+    let raw: any = null;
+    let rawError: string | null = null;
+    try {
+      raw = await getGhanaMatchOdds(home, away, date);
+      if (raw?.matched?.length) return { ...raw, diagnostics: { ...raw.diagnostics, source: "raw" } };
+    } catch (error) {
+      rawError = error instanceof Error ? error.message : String(error);
+    }
+    try {
+      const standard = await getGhanaStandardMatchOdds(home, away, date);
+      if ((standard?.matched?.length || 0) >= (raw?.matched?.length || 0)) {
+        return { ...standard, diagnostics: { ...standard.diagnostics, source: "standard-fallback", rawError } };
+      }
+      return { ...raw, diagnostics: { ...raw.diagnostics, source: "raw", standardFallbackError: null } };
+    } catch (error) {
+      const standardError = error instanceof Error ? error.message : String(error);
+      if (raw) return { ...raw, diagnostics: { ...raw.diagnostics, source: "raw", standardFallbackError: standardError } };
+      throw new Error("OddsRelay raw: " + (rawError || "no matching raw prices") + " | standard fallback: " + standardError);
+    }
+  };
   const [papiResult, relayResult] = await Promise.allSettled([
     getOddsPapiMatchOdds(home, away, date),
-    getGhanaMatchOdds(home, away, date)
+    loadOddsRelay()
   ]);
   const papi = papiResult.status === "fulfilled" ? papiResult.value : null;
   const relay = relayResult.status === "fulfilled" ? relayResult.value : null;
@@ -46,7 +67,7 @@ export async function getCombinedMatchOdds(home: string, away: string, date?: st
       providers: {
         oddspapi: papi ? { ok: true, events: papi.diagnostics?.eventsReturned ?? papi.count ?? 0, matched: papi.matched?.length || 0 } :
           { ok: false, error: String((papiResult as PromiseRejectedResult).reason?.message || (papiResult as PromiseRejectedResult).reason) },
-        oddsrelay: relay ? { ok: true, events: relay.diagnostics?.eventsReturned ?? relay.count ?? 0, matched: relay.matched?.length || 0 } :
+        oddsrelay: relay ? { ok: true, source: relay.diagnostics?.source || relay.product, rawError: relay.diagnostics?.rawError || null, fallbackError: relay.diagnostics?.standardFallbackError || null, events: relay.diagnostics?.eventsReturned ?? relay.count ?? 0, matched: relay.matched?.length || 0 } :
           { ok: false, error: String((relayResult as PromiseRejectedResult).reason?.message || (relayResult as PromiseRejectedResult).reason) }
       },
       markets,
