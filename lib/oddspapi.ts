@@ -114,15 +114,23 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
         const marketTitle = norm(String(meta?.marketName || "")).replace(/\s/g, "");
         const isH2h = marketType === "1x2" || marketTitle.includes("fulltimeresult") || marketTitle === "matchresult";
         const isDouble = marketType.includes("doublechance") || marketTitle.includes("doublechance");
-        if (!isH2h && !isDouble) return [];
-        const market: any = { ...(meta || {}), __kind: isH2h ? "h2h" : "double_chance" };
+        const isBtts = marketType.includes("btts") || marketTitle.includes("bothteamstoscore");
+        const isTotals = marketType.includes("total") || marketType.includes("overunder") || marketTitle.includes("totalgoals") || marketTitle.includes("overunder");
+        if (!isH2h && !isDouble && !isBtts && !isTotals) return [];
+        const kind = isH2h ? "h2h" : isDouble ? "double_chance" : isBtts ? "btts" : "totals";
+        const market: any = { ...(meta || {}), __kind: kind };
         const outcomes = Object.entries(marketData?.outcomes || {}).flatMap(([outcomeId, outcomeData]: [string, any]) =>
-          Object.values(outcomeData?.players || {}).map((player: any) => ({
-            name: outcomeName(market, String(outcomeId), player, String(f.participant1Name), String(f.participant2Name)),
-            price: Number(player?.price)
-          })).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
+          Object.values(outcomeData?.players || {}).map((player: any) => {
+            const raw = outcomeName(market, String(outcomeId), player, String(f.participant1Name), String(f.participant2Name));
+            const playerName = String(player?.playerName || player?.name || player?.handicap || "");
+            const line = String(player?.handicap ?? player?.line ?? "");
+            const name = kind === "btts" ? (/^(yes|no)$/i.test(raw) ? raw : /^(yes|no)$/i.test(playerName) ? playerName : raw)
+              : kind === "totals" ? (/^(over|under)\\s/i.test(raw) ? raw : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
+              : raw;
+            return { name, price: Number(player?.price) };
+          }).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
         );
-        return outcomes.length ? [{ key: isH2h ? "h2h" : "double_chance", outcomes }] : [];
+        return outcomes.length ? [{ key: kind, outcomes }] : [];
       })
     })).filter((b: any) => b.markets.length);
     return {
