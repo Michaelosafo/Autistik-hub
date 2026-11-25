@@ -33,7 +33,7 @@ export default function ValueBets({ endpoint }: Props) {
       const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
       const today=accraDay(new Date().toISOString());
       const tomorrow=accraDay(new Date(Date.now()+24*60*60_000).toISOString());
-      const upcoming=matches.filter((f:any)=>f?.home?.id && f?.away?.id && f?.date && f.status!=="FINISHED" && Date.parse(f.date)>=now).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+      const upcoming=matches.filter((f:any)=>f?.home?.name && f?.away?.name && f?.date && f.status!=="FINISHED" && Date.parse(f.date)>=now).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setDayCounts({today:upcoming.filter((f:any)=>accraDay(f.date)===today).length,tomorrow:upcoming.filter((f:any)=>accraDay(f.date)===tomorrow).length});
       if(!upcoming.length){setError("No upcoming fixtures were returned by this board's football API.");return;}
       let all:any[]=[];
