@@ -92,7 +92,7 @@ export default function ValueBets({ endpoint }: Props) {
   }, [endpoint]);
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Automatically discovers today's and tomorrow's fixtures from the football API, checks OddsPapi bookmaker prices, compares them with SPORT model probabilities, and ranks positive expected value."}</small></div>
+       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Automatically loads today's and tomorrow's fixtures. Tap any match to fetch its OddsPapi bookmaker prices, compare them with SPORT model probabilities, and calculate its value individually."}</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Loading…":endpoint==="/api/admin/sport"?"Refresh matches":"Scan all matches"}</button></div>
     </div>
     {progress && <small className="muted">{progress}</small>}
