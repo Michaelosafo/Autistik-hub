@@ -54,13 +54,13 @@ export default function ValueBets({ endpoint }: Props) {
           <b style={{fontSize:17}}>{x.market.startsWith("1X2") ? (x.selection === "Draw" ? "DRAW" : x.selection === x.home ? "HOME WIN — "+x.home : "AWAY WIN — "+x.away) : x.selection.toUpperCase()}</b>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(135px,1fr))",gap:10}}>
-          <div><small className="muted" style={{display:"block"}}>Autistik fair odds</small><b>{x.fairOdds.toFixed(2)}</b></div>
+          <div><small className="muted" style={{display:"block"}}>Autistik fair odds</small><b>{x.modelSupported ? x.fairOdds.toFixed(2) : "Not calculated"}</b></div>
           <div><small className="muted" style={{display:"block"}}>Bookmaker odds · {x.bookmaker}</small><b>{x.odds.toFixed(2)}</b></div>
-          <div><small className="muted" style={{display:"block"}}>Model win probability</small><b>{x.probability.toFixed(1)}%</b></div>
+          <div><small className="muted" style={{display:"block"}}>Model win probability</small><b>{x.modelSupported ? x.probability.toFixed(1)+"%" : "Not modelled yet"}</b></div>
           <div><small className="muted" style={{display:"block"}}>Bookmaker implied probability</small><b>{x.implied.toFixed(1)}%</b></div>
-          <div><small className="muted" style={{display:"block"}}>Probability edge vs market</small><b>{x.edge>0?"+":""}{x.edge.toFixed(1)} percentage points</b></div>
+          <div><small className="muted" style={{display:"block"}}>Probability edge vs market</small><b>{x.modelSupported ? (x.edge>0?"+":"")+x.edge.toFixed(1)+" percentage points" : "Not available"}</b></div>
         </div>
-        <small className="muted">{x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.value?"The offered price is above Autistik's fair odds, so it is potential value.":"The offered price is below Autistik's fair odds, so this is not a value bet by Autistik's model."}</small>
+        <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
     <small className="muted">Scans available 1X2, Over/Under goals and Both Teams To Score prices. Markets or matches without bookmaker prices are omitted. Positive expected value is a model estimate, not a guarantee; negative-EV comparisons are shown too so you can see where the market disagrees with Autistik.</small>
