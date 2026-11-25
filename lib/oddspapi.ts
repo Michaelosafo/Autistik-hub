@@ -150,30 +150,40 @@ export async function getOddsPapiUpcomingFixtures() {
   const key = process.env.ODDSPAPI_API_KEY;
   if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
   const account = await cachedGet("/account", 60 * 60_000);
-  const subscriptions = rows(account?.subscriptions).filter((s: any) => s?.is_active !== false);
-  const bookmakerSlugs = [...new Set(subscriptions.flatMap((s: any) =>
-    Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
+  const subscriptionRows = rows(account?.subscriptions);
+  const bookmakerSlugs = [...new Set(subscriptionRows.flatMap((s: any) =>
+    Object.keys(s?.bookmakers && typeof s.bookmakers === "object" ? s.bookmakers : {})
+      .filter((slug: string) => s.bookmakers[slug] !== false)
   ))].slice(0, 3);
   if (!bookmakerSlugs.length) throw new Error("OddsPapi account has no active bookmaker subscription.");
+
   const now = new Date();
   const dayInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
   }).format(d);
   const days = [dayInAccra(now), dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000))];
-  const fixtures: any[] = [];
-  for (const day of days) {
-    const from = day + "T00:00:00Z";
-    const end = new Date(new Date(from).getTime() + 24 * 60 * 60_000 - 1).toISOString();
-    const path = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
-      "&to=" + encodeURIComponent(end) + "&statusId=0&hasOdds=true&bookmakers=" +
-      encodeURIComponent(bookmakerSlugs.join(","));
-    fixtures.push(...rows(await cachedGet(path, 3 * 60_000)));
+  const fixtureById = new Map<string, any>();
+
+  // The fixtures endpoint accepts exactly one bookmaker. Query each book/day
+  // separately, then merge fixture IDs so the two boards can list all matches.
+  for (const bookmaker of bookmakerSlugs) {
+    for (const day of days) {
+      const from = day + "T00:00:00Z";
+      const end = new Date(new Date(from).getTime() + 24 * 60 * 60_000 - 1).toISOString();
+      const path = "/fixtures?sportId=10&from=" + encodeURIComponent(from) +
+        "&to=" + encodeURIComponent(end) + "&statusId=0&hasOdds=true&bookmaker=" + encodeURIComponent(bookmaker);
+      const result = await cachedGet(path, 3 * 60_000);
+      for (const fixture of rows(result)) {
+        if (fixture?.fixtureId) fixtureById.set(String(fixture.fixtureId), fixture);
+      }
+    }
   }
-  const unique = new Map<string, any>();
-  for (const f of fixtures) {
+
+  const upcoming: any[] = [];
+  for (const f of fixtureById.values()) {
     const date = String(f?.startTime || "");
-    if (!f?.fixtureId || !f?.participant1Name || !f?.participant2Name || !date || Date.parse(date) < now.getTime()) continue;
-    unique.set(String(f.fixtureId), {
+    if (!f?.participant1Name || !f?.participant2Name || !date || !Number.isFinite(Date.parse(date)) || Date.parse(date) < now.getTime()) continue;
+    upcoming.push({
       id: "oddspapi:" + String(f.fixtureId),
       date,
       status: "SCHEDULED",
@@ -184,7 +194,7 @@ export async function getOddsPapiUpcomingFixtures() {
       oddsFixtureId: String(f.fixtureId)
     });
   }
-  return [...unique.values()].sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date)).slice(0, 40);
+  return upcoming.sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date)).slice(0, 40);
 }
 
 export async function getOddsPapiMatchOdds(home: string, away: string, matchDate?: string) {
