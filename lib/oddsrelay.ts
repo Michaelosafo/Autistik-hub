@@ -2,6 +2,8 @@
  * The standard matched board is UK & Ireland only; international regions,
  * including Ghana, must use /v2/odds/raw.
  */
+let oddsBoardCache: { day: string; events: any[] } | null = null;
+
 export type OddsEvent = {
   id: string; sport_title?: string; commence_time: string; home_team: string; away_team: string;
   bookmakers: { key: string; title: string; last_update?: string; markets: { key: string; last_update?: string; outcomes: { name: string; price: number }[] }[] }[];
@@ -20,8 +22,10 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   const from = new Date(day.getTime() - 6 * 3600_000).toISOString();
   const to = new Date(day.getTime() + 36 * 3600_000).toISOString();
   const allEvents = new Map<string, any>();
+  const useCache = oddsBoardCache?.day === day.toISOString().slice(0, 10);
+  if (useCache) for (const event of oddsBoardCache!.events) allEvents.set(String(event.id || event.event_id || ""), event);
   let cursor: string | null = null;
-  for (let page = 0; page < 4; page++) {
+  for (let page = 0; !useCache && page < 4; page++) {
     const url = new URL("https://api.oddsrelay.io/v2/odds/raw");
     url.searchParams.set("region", "gh");
     url.searchParams.set("sports", "soccer");
@@ -59,7 +63,9 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     if (!cursor) break;
   }
 
-  const events: OddsEvent[] = [...allEvents.values()].map((event: any) => ({
+  const rawEvents = [...allEvents.values()];
+  if (!useCache) oddsBoardCache = { day: day.toISOString().slice(0, 10), events: rawEvents };
+  const events: OddsEvent[] = rawEvents.map((event: any) => ({
     id: String(event.id || event.event_id || ""),
     sport_title: event.sport_title,
     commence_time: event.commence_time,
