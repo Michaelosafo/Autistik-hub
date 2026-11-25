@@ -88,6 +88,27 @@ export async function todayCompetitionMatches() {
     }));
 }
 
+/** Resolve OddsPapi fixture team names to football-data IDs in one cached API call. */
+export async function resolveTeamIds(names: string[]) {
+  const data = await api("/teams?limit=500", 7 * 24 * 3600_000);
+  const teams = Array.isArray(data?.teams) ? data.teams : [];
+  const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
+    .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const result: Record<string, number> = {};
+  for (const name of names) {
+    const target = normalize(name);
+    if (!target) continue;
+    const exact = teams.filter((team: any) => [team.name, team.shortName, team.tla].some((v: any) => normalize(String(v || "")) === target));
+    const candidates = exact.length ? exact : teams.filter((team: any) => [team.name, team.shortName].some((v: any) => {
+      const candidate = normalize(String(v || ""));
+      return candidate && (candidate.includes(target) || target.includes(candidate));
+    }));
+    if (candidates.length === 1 && Number(candidates[0].id) > 0) result[target] = Number(candidates[0].id);
+  }
+  return result;
+}
+
 /** Completed fixtures played on one selected calendar date, with verified full-time scores. */
 export async function matchesOnDate(date: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) {
@@ -236,8 +257,9 @@ export async function analyse(homeId: number, awayId: number, matchDate?: string
   if (Number.isNaN(cutoff.getTime())) throw new Error("Invalid match date.");
   // Look up the fixture first so a completed game from earlier today is treated
   // as historical too, rather than using statistics that include the result.
-  const actualMatch = matchDate ? await matchOnDate(homeId, awayId, matchDate) : null;
   const dateIsPast = !!matchDate && cutoff.getTime() < new Date().setUTCHours(0, 0, 0, 0);
+  // Future fixtures cannot already have a final score; skip a redundant API call.
+  const actualMatch = dateIsPast ? await matchOnDate(homeId, awayId, matchDate!) : null;
   const kickoffIsPast = !!actualMatch && Date.parse(actualMatch.utcDate) < Date.now();
   const historical = dateIsPast || kickoffIsPast;
   const [hm, am] = await Promise.all([
