@@ -28,39 +28,55 @@ export async function POST(req: Request) {
               analyse(homeId, awayId, date),
               getGhanaMatchOdds(home, away, date)
             ]);
-            const model = analysis.model;
-            const selections = [
-              { name: home, p: Number(model.home), match: (n: string) => n.toLowerCase() === home.toLowerCase() },
-              { name: "Draw", p: Number(model.draw), match: (n: string) => ["draw", "the draw", "tie"].includes(n.toLowerCase()) },
-              { name: away, p: Number(model.away), match: (n: string) => n.toLowerCase() === away.toLowerCase() }
-            ];
-            for (const event of odds.matched || []) for (const selection of selections) {
-              if (!(selection.p > 0)) continue;
-              const candidates: any[] = [];
-              for (const book of event.bookmakers || []) {
-                if (/exchange/i.test(String(book.title || book.key || ""))) continue;
-                for (const market of book.markets || []) {
-                  if (market.key !== "h2h" || !Array.isArray(market.outcomes) || market.outcomes.length < 3) continue;
-                  const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
-                  const outcome = valid.find((o: any) => selection.match(String(o.name || "")));
-                  if (!outcome || !valid.length) continue;
-                  const overround = valid.reduce((sum: number, o: any) => sum + 100 / Number(o.price), 0);
-                  candidates.push({ price: Number(outcome.price), bookmaker: book.title || book.key || "Bookmaker",
-                    implied: 100 / Number(outcome.price), noVig: (100 / Number(outcome.price)) / overround * 100 });
+            const modelMarkets = Array.isArray(analysis.model?.markets) ? analysis.model.markets : [];
+            const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
+            const mapped: any[] = [];
+            for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
+              if (/exchange/i.test(String(book.title || book.key || ""))) continue;
+              for (const market of book.markets || []) {
+                if (!["h2h", "totals", "btts"].includes(market.key) || !Array.isArray(market.outcomes)) continue;
+                const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
+                if (valid.length < 2) continue;
+                const overround = valid.reduce((sum: number, o: any) => sum + 100 / Number(o.price), 0);
+                for (const outcome of valid) {
+                  const label = String(outcome.name || "");
+                  let modelName = "";
+                  if (market.key === "h2h") {
+                    if (norm(label) === norm(home)) modelName = "Home win (1)";
+                    else if (norm(label) === norm(away)) modelName = "Away win (2)";
+                    else if (["draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
+                  } else if (market.key === "btts") {
+                    modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
+                  } else {
+                    const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
+                    if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
+                  }
+                  const modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
+                  if (!modelPick || !(Number(modelPick.p) > 0)) continue;
+                  const price = Number(outcome.price);
+                  const implied = 100 / price;
+                  const noVig = implied / overround * 100;
+                  const probability = Number(modelPick.p);
+                  const fairOdds = 100 / probability;
+                  const ev = (probability / 100) * price * 100 - 100;
+                  const edge = probability - noVig;
+                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away,
+                    selection: label, market: market.key === "h2h" ? "1X2 · Match result" : market.key === "totals" ? "Goals · Over/Under" : "Both teams to score",
+                    probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker",
+                    implied, noVig, edge, ev, value: ev > 0 });
                 }
               }
-              candidates.sort((a,b) => b.price-a.price);
-              const best = candidates[0];
-              if (!best) continue;
-              const fairOdds = 100 / selection.p;
-              const ev = (selection.p / 100) * best.price * 100 - 100;
-              const edge = selection.p - best.noVig;
-              if (ev > 0) rows.push({ key: String(f.id)+selection.name, home, away, selection: selection.name,
-                probability: selection.p, fairOdds, odds: best.price, bookmaker: best.bookmaker,
-                implied: best.implied, edge, ev });
             }
+            // Keep the best available price per fixture/market/outcome across Ghana bookmakers.
+            const bestBySelection = new Map<string, any>();
+            for (const row of mapped) {
+              const k = row.market+"|"+row.selection;
+              const old = bestBySelection.get(k);
+              if (!old || row.odds > old.odds) bestBySelection.set(k,row);
+            }
+            rows.push(...bestBySelection.values());
           } catch (error) {
-            // One unsupported competition or missing price must not stop the remaining fixtures.
+            // Missing coverage for one fixture should not stop the remaining scan.
           }
         }
         return json({ rows });
