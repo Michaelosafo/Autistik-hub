@@ -7,7 +7,19 @@ import { supabaseService } from "@/lib/supabase/server";
 
 const BASE = "https://api.oddspapi.io/v4";
 const sb = () => supabaseService();
-const rows = (v: any): any[] => Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : v?.fixtureId ? [v] : [];
+const rows = (v: any): any[] => {
+  if (Array.isArray(v)) return v;
+  if (!v || typeof v !== "object") return [];
+  if (Array.isArray(v.data)) return v.data;
+  for (const key of ["fixtures", "subscriptions", "markets", "results", "items"]) {
+    if (Array.isArray(v[key])) return v[key];
+    if (v.data && Array.isArray(v.data[key])) return v.data[key];
+  }
+  if (v.fixtureId != null) return [v];
+  // Some OddsPapi responses return keyed objects rather than arrays.
+  const values = Object.values(v);
+  return values.length && values.every(x => x && typeof x === "object") ? values as any[] : [];
+};
 
 const inflight = new Map<string, Promise<any>>();
 const endpointLastRequest = new Map<string, number>();
@@ -132,7 +144,7 @@ export async function getOddsPapiStatus() {
     return { keyConfigured: false, provider: "OddsPapi", active: false, bookmakers: [], error: "ODDSPAPI_API_KEY is missing in Vercel Production." };
   }
   const account = await cachedGet("/account", 60 * 60_000);
-  const subscriptions = rows(account?.subscriptions).filter((s: any) => s?.is_active !== false);
+  const subscriptions = rows(account?.subscriptions ?? account?.data?.subscriptions ?? account?.data).filter((s: any) => s?.is_active !== false);
   const bookmakers = [...new Set(subscriptions.flatMap((s: any) =>
     Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
   ))] as string[];
@@ -150,7 +162,7 @@ export async function getOddsPapiUpcomingFixtures() {
   const key = process.env.ODDSPAPI_API_KEY;
   if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
   const account = await cachedGet("/account", 60 * 60_000);
-  const subscriptionRows = rows(account?.subscriptions);
+  const subscriptionRows = rows(account?.subscriptions ?? account?.data?.subscriptions ?? account?.data);
   const bookmakerSlugs = [...new Set(subscriptionRows.flatMap((s: any) =>
     Object.keys(s?.bookmakers && typeof s.bookmakers === "object" ? s.bookmakers : {})
       .filter((slug: string) => s.bookmakers[slug] !== false)
@@ -209,7 +221,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
   // OddsPapi exposes the bookmaker slugs included in the active subscription.
   // The tournament odds endpoint expects the subscribed bookmaker filter.
   const account = await cachedGet("/account", 60 * 60_000);
-  const subscriptions = rows(account?.subscriptions).filter((s: any) => s?.is_active !== false);
+  const subscriptions = rows(account?.subscriptions ?? account?.data?.subscriptions ?? account?.data).filter((s: any) => s?.is_active !== false);
   const bookmakerSlugs = [...new Set(subscriptions.flatMap((s: any) =>
     Object.keys(s?.bookmakers || {}).filter((slug: string) => s.bookmakers[slug] !== false)
   ))].slice(0, 3);
@@ -236,10 +248,10 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
     (nameMatches(String(f.participant1Name || f.participant1ShortName || ""), home) &&
      nameMatches(String(f.participant2Name || f.participant2ShortName || ""), away)));
   const tournamentIds = [...new Set(relevant.map((f: any) => String(f.tournamentId)))];
-  const oddsFixtures: any[] = [];
+  const oddsByFixture = new Map<string, any>();
   // OddsPapi v4 requires exactly ONE bookmaker on odds-by-tournaments.
-  // Request each subscribed bookmaker separately, then merge its prices by
-  // fixture ID so the value scanner can compare all available books.
+  // Request each subscribed bookmaker separately and MERGE (not overwrite)
+  // bookmakerOdds for the same fixture returned by different requests.
   for (const bookmaker of bookmakerSlugs) {
     for (let i = 0; i < tournamentIds.length; i += 3) {
       const chunk = tournamentIds.slice(i, i + 3);
@@ -247,9 +259,22 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
         "&bookmaker=" + encodeURIComponent(bookmaker) +
         "&language=en&oddsFormat=decimal&verbosity=3";
       const result = await cachedGet(path, 3 * 60_000);
-      oddsFixtures.push(...rows(result));
+      for (const item of rows(result)) {
+        if (item?.fixtureId == null) continue;
+        const id = String(item.fixtureId);
+        const previous = oddsByFixture.get(id);
+        oddsByFixture.set(id, previous ? {
+          ...previous,
+          ...item,
+          bookmakerOdds: {
+            ...(previous.bookmakerOdds && typeof previous.bookmakerOdds === "object" ? previous.bookmakerOdds : {}),
+            ...(item.bookmakerOdds && typeof item.bookmakerOdds === "object" ? item.bookmakerOdds : {})
+          }
+        } : item);
+      }
     }
   }
+  const oddsFixtures = [...oddsByFixture.values()];
   const markets = await getMarketMap();
   const byId = new Map(oddsFixtures.map((f: any) => [String(f.fixtureId), f]));
   const matched = relevant.map((f: any) => {
