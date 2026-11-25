@@ -66,9 +66,9 @@ export async function POST(req: Request) {
                 const label = String(outcome.name || "");
                 let modelName = "";
                 if (market.key === "h2h") {
-                  if (norm(label) === norm(home)) modelName = "Home win (1)";
-                  else if (norm(label) === norm(away)) modelName = "Away win (2)";
-                  else if (["draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
+                  if (["1", "home", "home win"].includes(norm(label)) || norm(label) === norm(home)) modelName = "Home win (1)";
+                  else if (["2", "away", "away win"].includes(norm(label)) || norm(label) === norm(away)) modelName = "Away win (2)";
+                  else if (["x", "draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
                 } else if (market.key === "double_chance") {
                   const pick = norm(label).replace(/\s/g, "");
                   if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Home or draw (1X)";
