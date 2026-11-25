@@ -27,12 +27,15 @@ export async function POST(req: Request) {
           if (!homeId || !awayId || homeId === awayId || !home || !away || !f?.date) continue;
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
-            const [analysis, odds] = await Promise.all([
+            const [analysisResult, oddsResult] = await Promise.allSettled([
               analyse(homeId, awayId, date),
               getCombinedMatchOdds(home, away, date)
             ]);
-            const modelMarkets = Array.isArray(analysis.model?.markets) ? analysis.model.markets : [];
-            scanDiagnostics.push({ fixture: home + ' vs ' + away, oddsEvents: odds.diagnostics?.eventsReturned ?? odds.count ?? 0, matchedEvents: (odds.matched || []).length, bookmakers: odds.availableBookmakers || [], markets: [...new Set((odds.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))], providers: odds.diagnostics?.providers || null });
+            const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
+            if (oddsResult.status === "rejected") throw oddsResult.reason;
+            const odds = oddsResult.value;
+            const modelMarkets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
+            scanDiagnostics.push({ fixture: home + ' vs ' + away, oddsEvents: odds.diagnostics?.eventsReturned ?? odds.count ?? 0, matchedEvents: (odds.matched || []).length, bookmakers: odds.availableBookmakers || [], markets: [...new Set((odds.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))], providers: odds.diagnostics?.providers || null, analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null });
             const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
             const mapped: any[] = [];
             for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
