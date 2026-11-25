@@ -79,7 +79,7 @@ function fixture(m: any) {
   const finished = isFinished(m);
   const status = finished ? "FINISHED" : isLive(m) ? (/half.?time|break/i.test(stateText(m)) ? "PAUSED" : "IN_PLAY") : "SCHEDULED";
   return {
-    id: m.id, date: m.starting_at ? (String(m.starting_at).includes("Z") ? m.starting_at : String(m.starting_at).replace(" ", "T") + "Z") : new Date(Number(m.starting_at_timestamp || 0) * 1000).toISOString(),
+    id: m.id, provider: "sportmonks", date: m.starting_at ? (String(m.starting_at).includes("Z") ? m.starting_at : String(m.starting_at).replace(" ", "T") + "Z") : new Date(Number(m.starting_at_timestamp || 0) * 1000).toISOString(),
     status, competition: m?.league?.name || "Football",
     home: { id: Number(home?.id), name: String(home?.name || ""), logo: String(home?.image_path || "") },
     away: { id: Number(away?.id), name: String(away?.name || ""), logo: String(away?.image_path || "") },
