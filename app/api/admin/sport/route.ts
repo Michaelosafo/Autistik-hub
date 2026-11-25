@@ -33,14 +33,33 @@ export async function POST(req: Request) {
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
-            const odds = oddsResult.value;
+            const odds: any = oddsResult.value || {};
+            const matchedEvents: any[] = Array.isArray(odds.matched) ? odds.matched : [];
+            const availableBookmakers: any[] = Array.isArray(odds.availableBookmakers) ? odds.availableBookmakers : [];
+            const sampleEvents: any[] = Array.isArray(odds.diagnostics?.sampleEvents) ? odds.diagnostics.sampleEvents : [];
             const modelMarkets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
-            scanDiagnostics.push({ fixture: home + ' vs ' + away, oddsEvents: odds.diagnostics?.eventsReturned ?? odds.count ?? 0, eventsReturned: odds.diagnostics?.eventsReturned ?? odds.count ?? 0, matchedEvents: (odds.matched || []).length, matched: (odds.matched || []).length, bookmakers: odds.availableBookmakers || [], markets: [...new Set((odds.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))], providers: odds.diagnostics?.providers || null, feedExamples: (odds.diagnostics?.sampleEvents || []).slice(0, 4).map((e: any) => String(e.home || "") + " vs " + String(e.away || "")), analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null });
-            const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
+            const marketsFound = [...new Set(matchedEvents.flatMap((e: any) =>
+              (Array.isArray(e?.bookmakers) ? e.bookmakers : []).flatMap((bk: any) =>
+                (Array.isArray(bk?.markets) ? bk.markets : []).map((m: any) => m?.key).filter(Boolean)
+              )
+            ))];
+            scanDiagnostics.push({
+              fixture: home + ' vs ' + away,
+              oddsEvents: Number(odds.diagnostics?.eventsReturned ?? odds.count ?? 0),
+              eventsReturned: Number(odds.diagnostics?.eventsReturned ?? odds.count ?? 0),
+              matchedEvents: matchedEvents.length,
+              matched: matchedEvents.length,
+              bookmakers: availableBookmakers,
+              markets: marketsFound,
+              providers: odds.diagnostics?.providers || null,
+              feedExamples: sampleEvents.slice(0, 4).map((e: any) => String(e?.home || "") + " vs " + String(e?.away || "")),
+              analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null
+            });
+            const norm = (v: string) => String(v || "").toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
             const mapped: any[] = [];
-            for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
+            for (const event of matchedEvents) for (const book of (Array.isArray(event?.bookmakers) ? event.bookmakers : [])) {
               if (/exchange/i.test(String(book.title || book.key || ""))) continue;
-              for (const market of book.markets || []) {
+              for (const market of (Array.isArray(book?.markets) ? book.markets : [])) {
                 if (!market.key || !Array.isArray(market.outcomes)) continue;
                 const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
                 if (valid.length < 2) continue;
