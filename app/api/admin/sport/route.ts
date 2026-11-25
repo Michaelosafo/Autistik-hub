@@ -76,10 +76,10 @@ export async function POST(req: Request) {
         });
       }
       case "valueScan": {
-        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
+        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 3) : [];
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
-        for (const f of fixtures) {
+        await Promise.all(fixtures.map(async (f: any) => {
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
           if (!home || !away || !f?.date) continue;
@@ -87,9 +87,9 @@ export async function POST(req: Request) {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysisResult, oddsResult] = await Promise.allSettled([
               homeId > 0 && awayId > 0 && homeId !== awayId
-                ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis")
+                ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              withTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi odds lookup", 18000)
+              withTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi odds lookup", 25000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
@@ -179,7 +179,7 @@ export async function POST(req: Request) {
             const message = error instanceof Error ? error.message : String(error);
             scanDiagnostics.push({ fixture: home + ' vs ' + away, error: message, oddsError: message, oddsEvents: null, matchedEvents: null, providers: null });
           }
-        }
+        }));
         return json({ rows, diagnostics: scanDiagnostics });
       }
       case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")) });
