@@ -120,7 +120,8 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
       if (allowance < units) {
         setMsg(`Step 1 of 2: allow the locker to take your ${info.name}…`);
         const h = await w.writeContract({ account: acc, chain: cfg.viem, address: info.address, abi: TOKEN_ABI, functionName: "approve", args: [site.address, units] });
-        const approvalReceipt = await pub.waitForTransactionReceipt({ hash: h });\n        if (approvalReceipt.status !== "success") throw new Error("Token approval failed on-chain. The lock was not submitted.");
+        const approvalReceipt = await pub.waitForTransactionReceipt({ hash: h });
+        if (approvalReceipt.status !== "success") throw new Error("Token approval failed on-chain. The lock was not submitted.");
       }
       setMsg(`${allowance < units ? "Step 2 of 2: " : ""}confirm the lock in your wallet…`);
       const args = steps
@@ -129,7 +130,7 @@ export default function Locker({ sites }: { sites: LockerSite[] }) {
       const { request } = await pub.simulateContract({ account: acc, address: site.address, abi: LOCKER_ABI, ...args } as any);
       const hash = await w.writeContract(request);
       setMsg("Locking… waiting for the network to confirm.");
-      const r = const receipt = await pub.waitForTransactionReceipt({ hash });\n      if (receipt.status !== "success") throw new Error("Unlock transaction reverted. Tokens were not released; check the lock schedule and try again when eligible.");
+      const r = await pub.waitForTransactionReceipt({ hash });
       if (r.status !== "success") { setMsg("The lock failed. Your tokens weren't moved, but the network fee was spent."); return; }
       const ev = r.logs.map((l) => { try { return decodeEventLog({ abi: LOCKER_ABI, ...l }) as any; } catch { return null; } }).find((x) => x?.eventName === "LockAdded");
       setDone({ id: ev ? String(ev.args.id) : "?", hash });
