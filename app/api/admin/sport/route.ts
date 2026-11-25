@@ -65,7 +65,7 @@ export async function POST(req: Request) {
                   }
                   let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
                   if (market.key === "double_chance") {
-                    const p = analysis.model || {};
+                    const p = analysis?.model || {};
                     const pick = norm(label).replace(/\\s/g, "");
                     const probability = ["1x", "homedraw", "homeordraw"].includes(pick) ? Number(p.home) + Number(p.draw)
                       : ["x2", "drawaway", "draworaway"].includes(pick) ? Number(p.away) + Number(p.draw)
