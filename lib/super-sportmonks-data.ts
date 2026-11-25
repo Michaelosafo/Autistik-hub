@@ -108,14 +108,22 @@ async function fixturesByDate(date: string) {
   return all;
 }
 async function fixturesForTeam(teamId: number, from: string, to: string) {
-  const all: any[] = [];
-  for (let page = 1; page <= 5; page++) {
-    const path = "/fixtures/between/date/" + from + "/" + to + "/" + teamId + "?include=participants;league;state;scores.participant;statistics&per_page=50&page=" + page;
-    const body = await api(path, 5 * 60_000);
-    all.push(...rows(body));
-    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || rows(body).length < 50) break;
+  const all = new Map<string, any>();
+  const start = new Date(from + "T00:00:00Z").getTime();
+  const finish = new Date(to + "T00:00:00Z").getTime();
+  // SportMonks date-range endpoints allow up to 100 days; use 90-day
+  // windows so a full season of form can be loaded without oversized requests.
+  for (let cursor = start; cursor <= finish; cursor += 90 * 86400_000) {
+    const windowStart = datePart(new Date(cursor));
+    const windowEnd = datePart(new Date(Math.min(finish, cursor + 89 * 86400_000)));
+    for (let page = 1; page <= 5; page++) {
+      const path = "/fixtures/between/" + windowStart + "/" + windowEnd + "/" + teamId + "?include=participants;league;state;scores&per_page=50&page=" + page;
+      const body = await api(path, 5 * 60_000);
+      for (const item of rows(body)) if (item?.id != null) all.set(String(item.id), item);
+      if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || rows(body).length < 50) break;
+    }
   }
-  return all;
+  return [...all.values()];
 }
 function summarize(teamId: number, games: any[]) {
   const matches = games.map((m: any) => {
