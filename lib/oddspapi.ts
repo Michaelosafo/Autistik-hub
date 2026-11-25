@@ -39,17 +39,23 @@ const norm = (s: string) => String(s || "").toLowerCase().normalize("NFKD")
   .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
   .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 
-function nameMatches(a: string, b: string) {
-  const x = norm(a), y = norm(b);
-  if (!x || !y) return false;
-  if (x === y || x.includes(y) || y.includes(x)) return true;
+function canonicalTeam(value: string) {
+  const x = norm(value);
   const aliases: Record<string,string> = {
-    "manchester united":"man utd", "manchester city":"man city",
-    "paris saint germain":"psg", "paris sg":"psg",
-    "atletico madrid":"atletico", "inter milan":"inter",
-    "borussia dortmund":"dortmund", "bayern munich":"bayern"
+    "ca mineiro": "atletico mineiro", "atletico mg": "atletico mineiro",
+    "atletico mineiro mg": "atletico mineiro",
+    "sc corinthians paulista": "corinthians", "corinthians paulista": "corinthians",
+    "manchester united": "man utd", "manchester city": "man city",
+    "paris saint germain": "psg", "paris sg": "psg",
+    "atletico madrid": "atletico", "inter milan": "inter",
+    "borussia dortmund": "dortmund", "bayern munich": "bayern"
   };
-  return (aliases[x] || x) === (aliases[y] || y);
+  return aliases[x] || x;
+}
+function nameMatches(a: string, b: string) {
+  const x = canonicalTeam(a), y = canonicalTeam(b);
+  if (!x || !y) return false;
+  return x === y || x.includes(y) || y.includes(x);
 }
 
 function outcomeName(market: any, outcomeId: string, player: any, home: string, away: string) {
