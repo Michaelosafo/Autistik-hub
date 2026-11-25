@@ -175,15 +175,18 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
      nameMatches(String(f.participant2Name || f.participant2ShortName || ""), away)));
   const tournamentIds = [...new Set(relevant.map((f: any) => String(f.tournamentId)))];
   const oddsFixtures: any[] = [];
-  // One request per tournament batch returns every bookmaker included in the
-  // account's plan. Avoid three back-to-back calls per batch, which used to
-  // trip OddsPapi's endpoint cooldown and produce HTTP 429 errors.
-  for (let i = 0; i < tournamentIds.length; i += 3) {
-    const chunk = tournamentIds.slice(i, i + 3);
-    const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
-      "&language=en&oddsFormat=decimal&verbosity=3";
-    const result = await cachedGet(path, 3 * 60_000);
-    oddsFixtures.push(...rows(result));
+  // OddsPapi v4 requires exactly ONE bookmaker on odds-by-tournaments.
+  // Request each subscribed bookmaker separately, then merge its prices by
+  // fixture ID so the value scanner can compare all available books.
+  for (const bookmaker of bookmakerSlugs) {
+    for (let i = 0; i < tournamentIds.length; i += 3) {
+      const chunk = tournamentIds.slice(i, i + 3);
+      const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
+        "&bookmaker=" + encodeURIComponent(bookmaker) +
+        "&language=en&oddsFormat=decimal&verbosity=3";
+      const result = await cachedGet(path, 3 * 60_000);
+      oddsFixtures.push(...rows(result));
+    }
   }
   const markets = await getMarketMap();
   const byId = new Map(oddsFixtures.map((f: any) => [String(f.fixtureId), f]));
