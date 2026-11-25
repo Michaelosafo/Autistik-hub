@@ -189,27 +189,36 @@ export default function SportBoard() {
   const highestChance = [...(m?.markets || [])].sort((a: any, b: any) => b.p - a.p)[0];
   const bestValue = pricedMarkets.filter((o: any) => o.value).sort((a: any, b: any) => b.ev - a.ev)[0];
   const oddsValueRows = (ghanaOdds?.matched || []).flatMap((event: any) => {
-    const offers = (event.bookmakers || []).flatMap((book: any) =>
-      (book.markets || []).filter((x: any) => x.key === "h2h").flatMap((x: any) =>
-        (x.outcomes || []).map((outcome: any) => ({ name: String(outcome.name || ""), price: Number(outcome.price), bookmaker: book.title || book.key || "Bookmaker", isExchange: /exchange/i.test(String(book.title || book.key || "")) }))
-      )
-    ).filter((x: any) => !x.isExchange && Number.isFinite(x.price) && x.price > 1);
     const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, " ").trim();
     const selections = [
       { name: home?.name || "Home", p: m?.home, matches: (s: string) => norm(s) === norm(home?.name || "") || norm(s).includes(norm(home?.name || "___")) },
       { name: "Draw", p: m?.draw, matches: (s: string) => ["draw", "the draw", "tie"].includes(norm(s)) },
       { name: away?.name || "Away", p: m?.away, matches: (s: string) => norm(s) === norm(away?.name || "") || norm(s).includes(norm(away?.name || "___")) },
     ];
+    const markets = (event.bookmakers || []).filter((book: any) => !/exchange/i.test(String(book.title || book.key || "")))
+      .flatMap((book: any) => (book.markets || []).filter((market: any) => market.key === "h2h" && Array.isArray(market.outcomes) && market.outcomes.length >= 3)
+        .map((market: any) => ({ book, outcomes: market.outcomes })));
     return selections.map((selection: any) => {
-      const best = offers.filter((o: any) => selection.matches(o.name)).sort((a: any, b: any) => b.price - a.price)[0];
-      if (!best || !Number.isFinite(selection.p)) return null;
-      const implied = 100 / best.price;
+      if (!Number.isFinite(selection.p)) return null;
+      const candidates = markets.map(({ book, outcomes }: any) => {
+        const outcome = outcomes.find((o: any) => selection.matches(String(o.name || "")) && Number(o.price) > 1);
+        const valid = outcomes.filter((o: any) => Number.isFinite(Number(o.price)) && Number(o.price) > 1);
+        const overround = valid.reduce((sum: number, o: any) => sum + 100 / Number(o.price), 0);
+        if (!outcome || !overround) return null;
+        const rawImplied = 100 / Number(outcome.price);
+        return { price: Number(outcome.price), bookmaker: book.title || book.key || "Bookmaker", rawImplied,
+          noVigProbability: rawImplied / overround * 100 };
+      }).filter(Boolean);
+      const best = candidates.sort((a: any, b: any) => b.price - a.price)[0];
+      if (!best) return { selection: selection.name, probability: selection.p, fairOdds: 100 / selection.p, odds: null, bookmaker: "No bookmaker price returned", implied: null, noVigProbability: null, edge: null, ev: null, disagreement: false };
       const ev = (selection.p / 100) * best.price - 1;
-      return { selection: selection.name, probability: selection.p, odds: best.price, bookmaker: best.bookmaker, implied, ev: ev * 100 };
-    }).filter(Boolean);
-  });
-  const bestOddsValue = oddsValueRows.filter((x: any) => x.ev >= 3).sort((a: any, b: any) => b.probability - a.probability)[0];
-  const highestOddsEV = oddsValueRows.filter((x: any) => x.ev > 0).sort((a: any, b: any) => b.ev - a.ev)[0];
+      const edge = selection.p - best.noVigProbability;
+      return { selection: selection.name, probability: selection.p, fairOdds: 100 / selection.p, odds: best.price, bookmaker: best.bookmaker,
+        implied: best.rawImplied, noVigProbability: best.noVigProbability, edge, ev: ev * 100, disagreement: Math.abs(edge) >= 10 };
+    });
+  }).filter(Boolean);
+  const bestOddsValue = oddsValueRows.filter((x: any) => x.ev != null && x.ev >= 3).sort((a: any, b: any) => b.probability - a.probability)[0];
+  const highestOddsEV = oddsValueRows.filter((x: any) => x.ev != null && x.ev > 0).sort((a: any, b: any) => b.ev - a.ev)[0];
   async function saveOdds() {
     const selections = pricedMarkets.filter((o: any) => o.odds != null).map((o: any) => ({
       name: o.name, probability: o.p, fairOdds: o.fair, bookmakerOdds: o.odds,
