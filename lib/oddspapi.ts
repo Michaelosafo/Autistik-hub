@@ -116,8 +116,8 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
         const isDouble = marketType.includes("doublechance") || marketTitle.includes("doublechance");
         const isBtts = marketType.includes("btts") || marketTitle.includes("bothteamstoscore");
         const isTotals = marketType.includes("total") || marketType.includes("overunder") || marketTitle.includes("totalgoals") || marketTitle.includes("overunder");
-        if (!isH2h && !isDouble && !isBtts && !isTotals) return [];
-        const kind = isH2h ? "h2h" : isDouble ? "double_chance" : isBtts ? "btts" : "totals";
+        const kind = isH2h ? "h2h" : isDouble ? "double_chance" : isBtts ? "btts" : isTotals ? "totals" : "other";
+        const normalizedKey = kind === "other" ? "oddspapi_" + String(marketId) : kind;
         const market: any = { ...(meta || {}), __kind: kind };
         const outcomes = Object.entries(marketData?.outcomes || {}).flatMap(([outcomeId, outcomeData]: [string, any]) =>
           Object.values(outcomeData?.players || {}).map((player: any) => {
@@ -126,11 +126,11 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
             const line = String(player?.handicap ?? player?.line ?? "");
             const name = kind === "btts" ? (/^(yes|no)$/i.test(raw) ? raw : /^(yes|no)$/i.test(playerName) ? playerName : raw)
               : kind === "totals" ? (/^(over|under)\\s/i.test(raw) ? raw : /^(over|under)$/i.test(playerName) && line ? playerName + " " + line : raw)
-              : raw;
+              : kind === "other" && (!raw || raw === String(player?.bookmakerOutcomeId || "")) ? (playerName || raw) : raw;
             return { name, price: Number(player?.price) };
           }).filter((o: any) => o.name && Number.isFinite(o.price) && o.price > 1 && playerActive(marketData, outcomeId, outcomeData))
         );
-        return outcomes.length ? [{ key: kind, outcomes }] : [];
+        return outcomes.length ? [{ key: normalizedKey, outcomes }] : [];
       })
     })).filter((b: any) => b.markets.length);
     return {
