@@ -110,35 +110,45 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
 
 export async function getGhanaOddsRelayStatus() {
   const key = process.env.ODDSRELAY_API_KEY || process.env.ODDSRELAY_KEY;
-  const headers: Record<string, string> = key ? { Authorization: "Bearer " + key } : {};
-  const get = async (path: string) => {
-    const response = await fetch("https://api.oddsrelay.io" + path, { headers, cache: "no-store" });
-    const body: any = await response.json().catch(() => ({}));
-    if (!response.ok) return { ok: false, status: response.status, error: body?.error || body };
-    return { ok: true, data: body };
+  const authHeaders: Record<string, string> = key ? { Authorization: "Bearer " + key } : {};
+  const request = async (path: string, authenticated = false) => {
+    const response = await fetch("https://api.oddsrelay.io" + path, {
+      headers: authenticated ? authHeaders : {},
+      cache: "no-store"
+    });
+    const data: any = await response.json().catch(() => ({}));
+    return response.ok ? { ok: true, data } : { ok: false, status: response.status, error: data?.error || data };
   };
-  const [regions, coverage, usage] = await Promise.all([
-    get("/v2/regions"),
-    get("/v2/coverage?region=gh"),
-    key ? get("/v2/usage") : Promise.resolve({ ok: false, status: 0, error: "No OddsRelay server key configured" })
+  const [regions, publicCoverage, accountCoverage, usage] = await Promise.all([
+    request("/v2/regions", true),
+    request("/v2/coverage?region=gh", false),
+    key ? request("/v2/coverage?region=gh", true) : Promise.resolve({ ok: false, status: 0, error: "No server key configured" }),
+    key ? request("/v2/usage", true) : Promise.resolve({ ok: false, status: 0, error: "No server key configured" })
   ]);
   const regionData: any = regions.ok ? regions.data : null;
-  const coverageData: any = coverage.ok ? coverage.data : null;
   const regionList = Array.isArray(regionData?.data) ? regionData.data : Array.isArray(regionData?.regions) ? regionData.regions : [];
-  const gh = regionList.find((r: any) => String(r.code || r.region || r.key).toLowerCase() === "gh");
-  const rawMarkets = coverageData?.markets?.raw || coverageData?.data?.markets?.raw || [];
-  const bookmakers = coverageData?.bookmakers || coverageData?.data?.bookmakers || [];
+  const ghRegion = regionList.find((r: any) => String(r.code || r.region || r.key || r.id).toLowerCase() === "gh") || null;
+  const publicData: any = publicCoverage.ok ? publicCoverage.data : null;
+  const accountData: any = accountCoverage.ok ? accountCoverage.data : null;
+  const rawMarkets = publicData?.markets?.raw || publicData?.data?.markets?.raw || [];
+  const publicBooks = publicData?.bookmakers || publicData?.data?.bookmakers || [];
+  const accountBooks = accountData?.bookmakers || accountData?.data?.bookmakers || [];
+  const soccerCoverage = Array.isArray(accountBooks)
+    ? accountBooks.filter((b: any) => (b.sports || b.coverage || []).some((x: any) => String(x.sport || x.key || x).toLowerCase().includes("soccer")))
+    : accountBooks;
   return {
     keyConfigured: Boolean(key),
-    regions: regions.ok ? regionList : null,
-    ghRegion: gh || null,
+    ghRegion,
+    regionError: regions.ok ? null : regions.error,
     rawMarkets,
-    bookmakers,
-    coverage: coverageData,
+    publicBookmakerCount: Array.isArray(publicBooks) ? publicBooks.length : Object.keys(publicBooks || {}).length,
+    publicBookmakers: publicBooks,
+    accountSoccerBookmakers: soccerCoverage,
+    accountCoverage: accountData,
     usage: usage.ok ? usage.data : usage.error,
     errors: {
-      regions: regions.ok ? null : regions.error,
-      coverage: coverage.ok ? null : coverage.error,
+      publicCoverage: publicCoverage.ok ? null : publicCoverage.error,
+      accountCoverage: accountCoverage.ok ? null : accountCoverage.error,
       usage: usage.ok ? null : usage.error
     }
   };
