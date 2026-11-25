@@ -1,6 +1,20 @@
 import { getGhanaMatchOdds, getGhanaStandardMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiMatchOdds } from "@/lib/oddspapi";
 
+async function withProviderTimeout<T>(task: Promise<T>, provider: string, timeoutMs = 14000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(provider + " timed out after " + timeoutMs + "ms")), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function getCombinedMatchOdds(home: string, away: string, date?: string) {
   const loadOddsRelay = async () => {
     let raw: any = null;
@@ -24,8 +38,8 @@ export async function getCombinedMatchOdds(home: string, away: string, date?: st
     }
   };
   const [papiResult, relayResult] = await Promise.allSettled([
-    getOddsPapiMatchOdds(home, away, date),
-    loadOddsRelay()
+    withProviderTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi"),
+    withProviderTimeout(loadOddsRelay(), "OddsRelay")
   ]);
   const papi = papiResult.status === "fulfilled" ? papiResult.value : null;
   const relay = relayResult.status === "fulfilled" ? relayResult.value : null;
