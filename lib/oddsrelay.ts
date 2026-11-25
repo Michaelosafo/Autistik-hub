@@ -7,7 +7,7 @@ export type OddsEvent = {
   bookmakers: { key: string; title: string; last_update?: string; markets: { key: string; last_update?: string; outcomes: { name: string; price: number }[] }[] }[];
 };
 
-export async function getGhanaMatchOdds(home: string, away: string, matchDate?: string) {
+export async function getGhanaMatchOdds(home: string, away: string, matchDate?: string, allFixtures = false) {
   const key = process.env.ODDSRELAY_API_KEY || process.env.ODDSRELAY_KEY;
   if (!key) throw new Error("OddsRelay API key is missing. Set ODDSRELAY_API_KEY (or ODDSRELAY_KEY) in Vercel.");
   const day = matchDate ? new Date(matchDate + "T00:00:00.000Z") : new Date();
@@ -25,9 +25,19 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     const url = new URL("https://api.oddsrelay.io/v2/odds/raw");
     url.searchParams.set("region", "gh");
     url.searchParams.set("sports", "soccer");
+    // Keep the request limited to match result and double-chance markets.
+    url.searchParams.set("markets", "h2h,double_chance");
     url.searchParams.set("commenceTimeFrom", from);
     url.searchParams.set("commenceTimeTo", to);
     if (cursor) url.searchParams.set("cursor", cursor);
+    const quoteUrl = new URL(url.toString());
+    quoteUrl.searchParams.set("quote", "true");
+    const quoteResponse = await fetch(quoteUrl, { headers: { Authorization: "Bearer " + key }, cache: "no-store" });
+    const quote: any = await quoteResponse.json().catch(() => ({}));
+    if (!quoteResponse.ok) throw new Error("OddsRelay quote failed: " + String(quote?.error?.message || quote?.error?.code || quoteResponse.status));
+    if (Number.isFinite(Number(quote.cost)) && Number.isFinite(Number(quote.remaining)) && Number(quote.cost) > Number(quote.remaining)) {
+      throw new Error("Filtered 1X2 and double-chance odds cost " + quote.cost + " tokens, but only " + quote.remaining + " remain. No tokens were spent.");
+    }
     const response = await fetch(url, {
       headers: { Authorization: "Bearer " + key, "Accept-Encoding": "gzip" },
       cache: "no-store"
@@ -91,7 +101,7 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
     const src = norm(source);
     return aliases(requested).some(a => src === a || src.includes(a) || a.includes(src));
   };
-  const matched = events.filter(e => matchesName(e.home_team, home) && matchesName(e.away_team, away));
+  const matched = allFixtures ? events : events.filter(e => matchesName(e.home_team, home) && matchesName(e.away_team, away));
   return {
     region: "gh", product: "raw", processedAt: null,
     count: events.length, historical: false,
