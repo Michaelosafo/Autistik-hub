@@ -225,7 +225,7 @@ export default function SportBoard() {
     .filter((x: any) => Number(x.p) >= 55 && Number(x.p) <= 90)
     .sort((a: any, b: any) => Number(b.p) - Number(a.p))
     .slice(0, 5);
-  const crossLeagueEstimate = !!res?.leagues?.home?.id && !!res?.leagues?.away?.id && res.leagues.home.id !== res.leagues.away.id;
+  const crossLeagueEstimate = !!res?.leagues?.home?.name && !!res?.leagues?.away?.name && String(res.leagues.home.name).trim().toLowerCase() !== String(res.leagues.away.name).trim().toLowerCase();
   async function saveOdds() {
     const selections = pricedMarkets.filter((o: any) => o.odds != null).map((o: any) => ({
       name: o.name, probability: o.p, fairOdds: o.fair, bookmakerOdds: o.odds,
