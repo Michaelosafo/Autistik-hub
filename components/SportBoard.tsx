@@ -298,17 +298,19 @@ export default function SportBoard() {
       </header>
       {m && <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
         <b>🏆 Value bets · ranked first by expected value</b>
-        <small className="muted">Automatically compares the model's 1X2 probabilities with OddsRelay Ghana bookmaker prices. EV = (model probability × decimal odds − 1) × 100. Only positive-EV prices are shown as value; this is an estimate, not a guarantee.</small>
+        <small className="muted">All three 1X2 outcomes (home, draw and away) are shown, ranked by expected value. Model fair odds = 1 ÷ model probability. Bookmaker decimal odds are not a percentage: odds 29.00 imply a market probability of 3.45%. EV = (model probability × bookmaker odds − 1) × 100. Positive EV is an estimate, not a guarantee.</small>
         {oddsBusy && <small className="muted">Checking bookmaker odds for {home?.name} vs {away?.name}…</small>}
         {oddsError && <div className="notice warn">Odds feed: {oddsError}</div>}
         {!oddsBusy && !ghanaOdds && !oddsError && <small className="muted">Waiting for bookmaker prices…</small>}
-        {ghanaOdds && positiveOddsValues.length > 0 && rankedOddsValueRows.filter((x: any) => x.ev > 0).slice(0, 5).map((x: any, i: number) =>
-          <div key={x.selection} className="sb-top-r hi">
+        {ghanaOdds && rankedOddsValueRows.length > 0 && rankedOddsValueRows.map((x: any, i: number) =>
+          <div key={x.selection} className={"sb-top-r " + (x.ev > 0 ? "hi" : "lo")}>
             <span className="sb-rank">#{i + 1}</span><span className="sb-name"><b>{x.selection}</b><small className="muted" style={{ display: "block" }}>{x.bookmaker}</small></span>
-            <b>EV +{x.ev.toFixed(1)}%</b><small className="muted">Model {x.probability.toFixed(1)}% · fair {x.fairOdds.toFixed(2)} · book {x.odds.toFixed(2)} · edge +{x.edge.toFixed(1)}pp</small>
+            <b>EV {x.ev >= 0 ? "+" : ""}{x.ev.toFixed(1)}%</b>
+            <small className="muted">Model chance {x.probability.toFixed(1)}% · fair odds {x.fairOdds.toFixed(2)} · bookmaker odds {x.odds.toFixed(2)} · market implied {x.implied.toFixed(1)}% · edge {x.edge >= 0 ? "+" : ""}{x.edge.toFixed(1)}pp</small>
           </div>
         )}
-        {ghanaOdds && positiveOddsValues.length === 0 && <div className="notice warn">No positive-value 1X2 bet at the available prices. The board will not force a pick.</div>}
+        {ghanaOdds && rankedOddsValueRows.length === 0 && <div className="notice warn">No usable 1X2 prices were returned for this fixture.</div>}
+        {ghanaOdds && positiveOddsValues.length === 0 && rankedOddsValueRows.length > 0 && <div className="notice warn">No positive-value 1X2 bet at the available prices. All three outcomes are shown above; no pick is forced.</div>}
         {ghanaOdds && <small className="muted">Odds feed updated: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "time not supplied"} · {ghanaOdds.historical ? "Historical snapshot" : "Live prices"}</small>}
       </section>}
       {m && <section className="card stack">
