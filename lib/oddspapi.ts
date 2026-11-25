@@ -162,7 +162,7 @@ export async function getOddsPapiUpcomingFixtures() {
   const key = process.env.ODDSPAPI_API_KEY;
   if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
   const account = await cachedGet("/account", 60 * 60_000);
-  const subscriptionRows = rows(account?.subscriptions ?? account?.data?.subscriptions ?? account?.data);
+  const subscriptionRows = rows(account?.subscriptions ?? account?.data?.subscriptions ?? account?.data).filter((s: any) => s?.is_active !== false);
   const bookmakerSlugs = [...new Set(subscriptionRows.flatMap((s: any) =>
     Object.keys(s?.bookmakers && typeof s.bookmakers === "object" ? s.bookmakers : {})
       .filter((slug: string) => s.bookmakers[slug] !== false)
