@@ -65,7 +65,7 @@ export async function getCombinedMatchOdds(home: string, away: string, date?: st
       requestedHome: home,
       requestedAway: away,
       providers: {
-        oddspapi: papi ? { ok: true, events: papi.diagnostics?.eventsReturned ?? papi.count ?? 0, matched: papi.matched?.length || 0 } :
+        oddspapi: papi ? { ok: true, events: papi.diagnostics?.eventsReturned ?? papi.count ?? 0, fixtureEvents: papi.diagnostics?.fixtureEvents ?? null, matchingFixtures: papi.diagnostics?.matchingFixtures ?? null, tournamentCount: papi.diagnostics?.tournamentCount ?? null, bookmakerSlugs: papi.diagnostics?.bookmakerSlugs ?? [], matched: papi.matched?.length || 0 } :
           { ok: false, error: String((papiResult as PromiseRejectedResult).reason?.message || (papiResult as PromiseRejectedResult).reason) },
         oddsrelay: relay ? { ok: true, source: relay.diagnostics?.source || relay.product, rawError: relay.diagnostics?.rawError || null, fallbackError: relay.diagnostics?.standardFallbackError || null, events: relay.diagnostics?.eventsReturned ?? relay.count ?? 0, matched: relay.matched?.length || 0 } :
           { ok: false, error: String((relayResult as PromiseRejectedResult).reason?.message || (relayResult as PromiseRejectedResult).reason) }
