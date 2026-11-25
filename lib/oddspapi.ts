@@ -9,22 +9,29 @@ const BASE = "https://api.oddspapi.io/v4";
 const sb = () => supabaseService();
 const rows = (v: any): any[] => Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : v?.fixtureId ? [v] : [];
 
+const inflight = new Map<string, Promise<any>>();
 async function cachedGet(path: string, ttl: number) {
   const cacheKey = "super-oddspapi:" + path;
-  const { data: hit } = await sb().from("sport_cache").select("data,at").eq("key", cacheKey).maybeSingle();
-  if (hit && Date.now() - Date.parse(hit.at) < ttl) return hit.data;
-  const key = process.env.ODDSPAPI_API_KEY;
-  if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
-  const url = new URL(BASE + path);
-  url.searchParams.set("apiKey", key);
-  const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    const message = body?.message || body?.error || body?.detail || response.statusText || "OddsPapi request failed";
-    throw new Error("OddsPapi (" + response.status + "): " + String(message).slice(0, 200));
-  }
-  await sb().from("sport_cache").upsert({ key: cacheKey, data: body, at: new Date().toISOString() });
-  return body;
+  const pending = inflight.get(cacheKey);
+  if (pending) return pending;
+  const task = (async () => {
+    const { data: hit } = await sb().from("sport_cache").select("data,at").eq("key", cacheKey).maybeSingle();
+    if (hit && Date.now() - Date.parse(hit.at) < ttl) return hit.data;
+    const key = process.env.ODDSPAPI_API_KEY;
+    if (!key) throw new Error("ODDSPAPI_API_KEY is missing in Vercel Production.");
+    const url = new URL(BASE + path);
+    url.searchParams.set("apiKey", key);
+    const response = await fetch(url, { cache: "no-store", headers: { Accept: "application/json" } });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = body?.message || body?.error || body?.detail || response.statusText || "OddsPapi request failed";
+      throw new Error("OddsPapi (" + response.status + "): " + String(message).slice(0, 200));
+    }
+    await sb().from("sport_cache").upsert({ key: cacheKey, data: body, at: new Date().toISOString() });
+    return body;
+  })();
+  inflight.set(cacheKey, task);
+  try { return await task; } finally { inflight.delete(cacheKey); }
 }
 
 const norm = (s: string) => String(s || "").toLowerCase().normalize("NFKD")
