@@ -7,10 +7,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 async function matchesWithOddsPapiFixtures() {
-  const [base, papi] = await Promise.all([
+  const [base, papiResult] = await Promise.allSettled([
     todayCompetitionMatches(),
     getOddsPapiUpcomingFixtures()
   ]);
+  if (base.status === "rejected") throw base.reason;
+  const papi = papiResult.status === "fulfilled" ? papiResult.value : [];
   const norm = (value: string) => {
     const raw = String(value || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
       .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
