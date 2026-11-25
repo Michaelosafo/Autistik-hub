@@ -18,6 +18,7 @@ export async function POST(req: Request) {
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 3) : [];
         const rows: any[] = [];
+        const scanDiagnostics: any[] = [];
         for (const f of fixtures) {
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
               getGhanaMatchOdds(home, away, date)
             ]);
             const modelMarkets = Array.isArray(analysis.model?.markets) ? analysis.model.markets : [];
+            scanDiagnostics.push({ fixture: home + ' vs ' + away, oddsEvents: odds.diagnostics?.eventsReturned ?? odds.count ?? 0, matchedEvents: (odds.matched || []).length, bookmakers: odds.availableBookmakers || [], markets: [...new Set((odds.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))] });
             const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
             const mapped: any[] = [];
             for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
@@ -77,10 +79,10 @@ export async function POST(req: Request) {
             }
             rows.push(...bestBySelection.values());
           } catch (error) {
-            // Missing coverage for one fixture should not stop the remaining scan.
+            scanDiagnostics.push({ fixture: home + ' vs ' + away, error: error instanceof Error ? error.message : String(error) });
           }
         }
-        return json({ rows });
+        return json({ rows, diagnostics: scanDiagnostics });
       }
       case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")) });
       case "teamFixtures": {
