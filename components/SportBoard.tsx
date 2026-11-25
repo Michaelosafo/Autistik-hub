@@ -121,12 +121,15 @@ export default function SportBoard() {
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
-  async function loadGhanaOdds() {
-    if (!home || !away) return;
+  async function fetchGhanaOddsFor(h: Team, a: Team, date: string) {
     setOddsBusy(true); setOddsError(""); setGhanaOdds(null);
-    try { setGhanaOdds(await api("odds", { homeName: home.name, awayName: away.name, matchDate })); }
+    try { setGhanaOdds(await api("odds", { homeName: h.name, awayName: a.name, matchDate: date })); }
     catch (e) { setOddsError((e as Error).message); }
     finally { setOddsBusy(false); }
+  }
+  async function loadGhanaOdds() {
+    if (!home || !away) return;
+    await fetchGhanaOddsFor(home, away, matchDate);
   }
   async function loadTeamFixtures(t: Team) {
     setFixturesBusy(true); setFixturesError(""); setTeamFixtures([]);
@@ -142,7 +145,12 @@ export default function SportBoard() {
     const date = new Date(f.date).toISOString().slice(0, 10);
     setHome(h); setAway(a); setMatchDate(date); setRes(null); setErr("");
     setBusy(true);
-    try { setRes(await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name })); setQuickPicksOpen(true); loadHist(); }
+    setGhanaOdds(null); setOddsError("");
+    try {
+      const result = await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name });
+      setRes(result); setQuickPicksOpen(true); loadHist();
+      void fetchGhanaOddsFor(h, a, date);
+    }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -152,7 +160,12 @@ export default function SportBoard() {
   async function run() {
     if (!home || !away) return;
     setBusy(true); setErr(""); setRes(null);
-    try { setRes(await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name })); setQuickPicksOpen(true); loadHist(); }
+    setGhanaOdds(null); setOddsError("");
+    try {
+      const result = await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name });
+      setRes(result); setQuickPicksOpen(true); loadHist();
+      void fetchGhanaOddsFor(home, away, matchDate);
+    }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
   }
@@ -198,11 +211,13 @@ export default function SportBoard() {
       if (!best || !Number.isFinite(selection.p)) return null;
       const implied = 100 / best.price;
       const ev = (selection.p / 100) * best.price - 1;
-      return { selection: selection.name, probability: selection.p, odds: best.price, bookmaker: best.bookmaker, implied, ev: ev * 100 };
+      return { selection: selection.name, probability: selection.p, fairOdds: 100 / selection.p, odds: best.price, bookmaker: best.bookmaker, implied, edge: selection.p - implied, ev: ev * 100 };
     }).filter(Boolean);
   });
-  const bestOddsValue = oddsValueRows.filter((x: any) => x.ev >= 3).sort((a: any, b: any) => b.probability - a.probability)[0];
-  const highestOddsEV = oddsValueRows.filter((x: any) => x.ev > 0).sort((a: any, b: any) => b.ev - a.ev)[0];
+  const rankedOddsValueRows = [...oddsValueRows].sort((a: any, b: any) => b.ev - a.ev);
+  const positiveOddsValues = rankedOddsValueRows.filter((x: any) => x.ev > 0);
+  const bestOddsValue = positiveOddsValues[0];
+  const highestOddsEV = bestOddsValue;
   async function saveOdds() {
     const selections = pricedMarkets.filter((o: any) => o.odds != null).map((o: any) => ({
       name: o.name, probability: o.p, fairOdds: o.fair, bookmakerOdds: o.odds,
@@ -273,6 +288,21 @@ export default function SportBoard() {
         <h1>⚽ Sport board</h1>
         <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
+      {m && <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
+        <b>🏆 Value bets · ranked first by expected value</b>
+        <small className="muted">Automatically compares the model's 1X2 probabilities with OddsRelay Ghana bookmaker prices. EV = (model probability × decimal odds − 1) × 100. Only positive-EV prices are shown as value; this is an estimate, not a guarantee.</small>
+        {oddsBusy && <small className="muted">Checking bookmaker odds for {home?.name} vs {away?.name}…</small>}
+        {oddsError && <div className="notice warn">Odds feed: {oddsError}</div>}
+        {!oddsBusy && !ghanaOdds && !oddsError && <small className="muted">Waiting for bookmaker prices…</small>}
+        {ghanaOdds && positiveOddsValues.length > 0 && rankedOddsValueRows.filter((x: any) => x.ev > 0).slice(0, 5).map((x: any, i: number) =>
+          <div key={x.selection} className="sb-top-r hi">
+            <span className="sb-rank">#{i + 1}</span><span className="sb-name"><b>{x.selection}</b><small className="muted" style={{ display: "block" }}>{x.bookmaker}</small></span>
+            <b>EV +{x.ev.toFixed(1)}%</b><small className="muted">Model {x.probability.toFixed(1)}% · fair {x.fairOdds.toFixed(2)} · book {x.odds.toFixed(2)} · edge +{x.edge.toFixed(1)}pp</small>
+          </div>
+        )}
+        {ghanaOdds && positiveOddsValues.length === 0 && <div className="notice warn">No positive-value 1X2 bet at the available prices. The board will not force a pick.</div>}
+        {ghanaOdds && <small className="muted">Odds feed updated: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "time not supplied"} · {ghanaOdds.historical ? "Historical snapshot" : "Live prices"}</small>}
+      </section>}
       {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel (free token from football-data.org), then redeploy.</div>}
 
       <section className="card stack">
