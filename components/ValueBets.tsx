@@ -30,8 +30,8 @@ export default function ValueBets({ endpoint }: Props) {
       const upcoming=matches.filter((f:any)=>f?.home?.id && f?.away?.id && f?.date && f.status!=="FINISHED");
       if(!upcoming.length){setError("No upcoming fixtures were returned by this board's football API.");return;}
       let all:any[]=[];
-      for(let i=0;i<upcoming.length;i+=3){
-        const batch=upcoming.slice(i,i+3);
+      for(let i=0;i<upcoming.length;i+=20){
+        const batch=upcoming.slice(i,i+20);
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
         all=all.concat(d.rows||[]);
