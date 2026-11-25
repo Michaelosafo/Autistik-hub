@@ -14,6 +14,7 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: superReady() });
+      case "oddsStatus": return json({ oddsPapiKeyConfigured: !!process.env.ODDSPAPI_API_KEY, providers: ["OddsPapi", "OddsRelay"] });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
       case "valueScan": {
@@ -91,7 +92,7 @@ export async function POST(req: Request) {
                 const price = Number(outcome.price);
                 const implied = 100 / price;
                 const noVig = implied / overround * 100;
-                const marketTitle = market.key === "h2h" ? "1X2 · Match result" : "Double chance";
+                const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : "Goals · Over/Under";
                 if (!modelPick || !(Number(modelPick.p) > 0)) {
                   mapped.push({ key: String(f.id)+market.key+label+String(book.key), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
                   continue;
