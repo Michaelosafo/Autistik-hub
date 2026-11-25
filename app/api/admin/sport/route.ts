@@ -15,6 +15,56 @@ export async function POST(req: Request) {
       case "ready": return json({ ready: sportReady() });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": return json({ matches: await todayCompetitionMatches() });
+      case "valueScan": {
+        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 3) : [];
+        const rows: any[] = [];
+        for (const f of fixtures) {
+          const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
+          const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
+          if (!homeId || !awayId || homeId === awayId || !home || !away || !f?.date) continue;
+          try {
+            const date = new Date(String(f.date)).toISOString().slice(0, 10);
+            const [analysis, odds] = await Promise.all([
+              analyse(homeId, awayId, date),
+              getGhanaMatchOdds(home, away, date)
+            ]);
+            const model = analysis.model;
+            const selections = [
+              { name: home, p: Number(model.home), match: (n: string) => n.toLowerCase() === home.toLowerCase() },
+              { name: "Draw", p: Number(model.draw), match: (n: string) => ["draw", "the draw", "tie"].includes(n.toLowerCase()) },
+              { name: away, p: Number(model.away), match: (n: string) => n.toLowerCase() === away.toLowerCase() }
+            ];
+            for (const event of odds.matched || []) for (const selection of selections) {
+              if (!(selection.p > 0)) continue;
+              const candidates: any[] = [];
+              for (const book of event.bookmakers || []) {
+                if (/exchange/i.test(String(book.title || book.key || ""))) continue;
+                for (const market of book.markets || []) {
+                  if (market.key !== "h2h" || !Array.isArray(market.outcomes) || market.outcomes.length < 3) continue;
+                  const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
+                  const outcome = valid.find((o: any) => selection.match(String(o.name || "")));
+                  if (!outcome || !valid.length) continue;
+                  const overround = valid.reduce((sum: number, o: any) => sum + 100 / Number(o.price), 0);
+                  candidates.push({ price: Number(outcome.price), bookmaker: book.title || book.key || "Bookmaker",
+                    implied: 100 / Number(outcome.price), noVig: (100 / Number(outcome.price)) / overround * 100 });
+                }
+              }
+              candidates.sort((a,b) => b.price-a.price);
+              const best = candidates[0];
+              if (!best) continue;
+              const fairOdds = 100 / selection.p;
+              const ev = (selection.p / 100) * best.price * 100 - 100;
+              const edge = selection.p - best.noVig;
+              if (ev > 0) rows.push({ key: String(f.id)+selection.name, home, away, selection: selection.name,
+                probability: selection.p, fairOdds, odds: best.price, bookmaker: best.bookmaker,
+                implied: best.implied, edge, ev });
+            }
+          } catch (error) {
+            // One unsupported competition or missing price must not stop the remaining fixtures.
+          }
+        }
+        return json({ rows });
+      }
       case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")) });
       case "teamFixtures": {
         const teamId = Number(b.teamId);
