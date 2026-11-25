@@ -14,9 +14,11 @@ export async function getCombinedMatchOdds(home: string, away: string, date?: st
     throw new Error("Both odds providers failed. OddsPapi: " + p + " | OddsRelay: " + r);
   }
 
-  const events = [...(papi?.matched || []), ...(relay?.matched || [])];
+  const papiEvents = (papi?.matched || []).map((event: any) => ({ ...event, __oddsProvider: "OddsPapi" }));
+  const relayEvents = (relay?.matched || []).map((event: any) => ({ ...event, __oddsProvider: "OddsRelay" }));
+  const events = [...papiEvents, ...relayEvents];
   const merged = events.map((event: any) => {
-    const provider = event.region === "gh" || relay?.matched?.includes(event) ? "OddsRelay" : "OddsPapi";
+    const provider = event.__oddsProvider || (event.region === "gh" ? "OddsRelay" : "OddsPapi");
     return {
       ...event,
       bookmakers: (event.bookmakers || []).map((book: any) => ({
@@ -35,8 +37,10 @@ export async function getCombinedMatchOdds(home: string, away: string, date?: st
     matched: merged,
     availableBookmakers: uniqueBooks,
     diagnostics: {
-      eventsReturned: Number(papi?.diagnostics?.eventsReturned || 0) + Number(relay?.diagnostics?.eventsReturned || 0),
+      eventsReturned: Number(papi?.diagnostics?.eventsReturned ?? papi?.count ?? 0) + Number(relay?.diagnostics?.eventsReturned ?? relay?.count ?? 0),
       matchingEvents: merged.length,
+      oddsEvents: Number(papi?.diagnostics?.eventsReturned ?? papi?.count ?? 0) + Number(relay?.diagnostics?.eventsReturned ?? relay?.count ?? 0),
+      matchedEvents: merged.length,
       requestedHome: home,
       requestedAway: away,
       providers: {
