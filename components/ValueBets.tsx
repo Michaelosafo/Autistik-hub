@@ -27,7 +27,8 @@ export default function ValueBets({ endpoint }: Props) {
   async function scan() {
     setBusy(true); setError(""); setRows([]); setScanned(0); setDayCounts({today:0,tomorrow:0}); setDiagnostics([]);
     try {
-      const {matches=[]}=await post("todayMatches");
+      const matchData=await post("todayMatches");
+      const matches=Array.isArray(matchData?.matches)?matchData.matches:[];
       const now=Date.now();
       const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
       const today=accraDay(new Date().toISOString());
@@ -43,8 +44,8 @@ export default function ValueBets({ endpoint }: Props) {
         const batch=upcoming.slice(i,i+2);
         setProgress("Analysing "+Math.min(i+batch.length,upcoming.length)+" of "+upcoming.length+" fixtures…");
         const d=await post("valueScan",{fixtures:batch});
-        all=all.concat(d.rows||[]);
-        setDiagnostics(prev=>prev.concat(d.diagnostics||[]));
+        all=all.concat(Array.isArray(d?.rows)?d.rows:[]);
+        setDiagnostics(prev=>prev.concat(Array.isArray(d?.diagnostics)?d.diagnostics:[]));
         setRows([...all].sort((a,b)=>(Number(b.value)-Number(a.value)) || ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity))));
         setScanned(Math.min(i+batch.length,upcoming.length));
       }
