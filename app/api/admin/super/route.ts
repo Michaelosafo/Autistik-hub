@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-api-football-data";
-import { getGhanaMatchOdds } from "@/lib/oddsrelay";
+import { getGhanaMatchOdds, getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
