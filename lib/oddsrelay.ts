@@ -17,13 +17,14 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   const url = new URL(isHistorical
     ? "https://api.oddsrelay.io/v2/historical/odds/standard"
     : "https://api.oddsrelay.io/v2/odds/standard");
-  url.searchParams.set("region", "gh");
+  // OddsRelay reports that Ghana (gh) does not serve the standard product.
+  // Query the global standard soccer board instead; only returned bookmaker offers are shown.
   url.searchParams.set("sports", "soccer");
 
   // Discover the market keys supported by the standard board (not raw, which is beta-gated).
   let marketKeys = ["h2h", "totals", "btts"];
   try {
-    const coverageResponse = await fetch("https://api.oddsrelay.io/v2/coverage?region=gh", { cache: "no-store" });
+    const coverageResponse = await fetch("https://api.oddsrelay.io/v2/coverage", { cache: "no-store" });
     if (coverageResponse.ok) {
       const coverage: any = await coverageResponse.json();
       const rawMarkets = coverage?.markets?.standard || coverage?.data?.markets?.standard || [];
@@ -106,7 +107,7 @@ export async function getGhanaMatchOdds(home: string, away: string, matchDate?: 
   };
   const matched = events.filter(e => matchesName(e.home_team, home) && matchesName(e.away_team, away));
   return {
-    region: body?.meta?.region || "gh",
+    region: body?.meta?.region || "global",
     processedAt: body?.meta?.processed_at || null,
     count: Number(body?.meta?.count ?? events.length),
     historical: isHistorical,
