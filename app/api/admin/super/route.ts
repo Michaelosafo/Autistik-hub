@@ -48,6 +48,7 @@ export async function POST(req: Request) {
           if (!odds.matched?.length) {
             diagnostic.feedExamples = (odds.diagnostics?.sampleEvents || []).slice(0, 4).map((e: any) => String(e.home || "") + " vs " + String(e.away || ""));
           }
+          const norm = (v: string) => v.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
           const modelMarkets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
           const mapped: any[] = [];
           for (const event of odds.matched || []) for (const book of event.bookmakers || []) {
