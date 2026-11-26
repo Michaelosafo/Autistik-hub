@@ -151,8 +151,13 @@ export async function analyse(homeId:number,awayId:number,matchDate?:string) {
   ]);
   const hGames=rows(hBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
   const aGames=rows(aBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
-  if(hGames.length<2||aGames.length<2)throw new Error("Highlightly returned too few completed matches for this team. Try another competition or match.");
-  const h=summarize(homeId,hGames,rows(hStatsBody)),a=summarize(awayId,aGames,rows(aStatsBody));
+  const hSeasonRows=rows(hStatsBody), aSeasonRows=rows(aStatsBody);
+  // Prefer recent form, but do not discard a valid season-statistics dataset
+  // just because a newly promoted/youth/women's side has fewer than two recent games.
+  if ((hGames.length < 2 && !hSeasonRows.length) || (aGames.length < 2 && !aSeasonRows.length)) {
+    throw new Error("Highlightly has insufficient recent-match and season-statistics coverage for one or both teams. This fixture remains odds-only; no probabilities are invented.");
+  }
+  const h=summarize(homeId,hGames,hSeasonRows),a=summarize(awayId,aGames,aSeasonRows);
   const hHome=h.season.goalsFor.home??h.season.goalsFor.total??1.35;
   const hCon=h.season.goalsAgainst.home??h.season.goalsAgainst.total??1.2;
   const aAway=a.season.goalsFor.away??a.season.goalsFor.total??1.1;
