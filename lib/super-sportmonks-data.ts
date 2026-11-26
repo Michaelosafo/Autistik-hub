@@ -237,7 +237,7 @@ export async function todayCompetitionMatches() {
  * The date-range endpoint supports up to 100 days; one 30-day request plus
  * pagination avoids 30 separate date calls and keeps European matchdays visible.
  */
-export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, leagueName: string) {
+export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, leagueName: string, leagueId?: number) {
   if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
   const now = new Date();
   const from = datePart(now);
@@ -269,12 +269,16 @@ export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, le
     BSA: ["brasileirao", "serie a"]
   };
   const wanted = [leagueName, ...(aliases[String(leagueCode || "").toUpperCase()] || [])].map(normalize).filter(Boolean);
-  const fixtures = [...all.values()].map(fixture).filter((f: any) => {
+  const fixtures = [...all.values()].filter((raw: any) => {
+    if (Number.isInteger(leagueId) && Number(leagueId) > 0) {
+      return Number(raw?.league_id ?? raw?.league?.id) === Number(leagueId);
+    }
+    const competition = normalize(raw?.league?.name);
+    return wanted.some((name) => competition === name || competition.includes(name) || name.includes(competition));
+  }).map(fixture).filter((f: any) => {
     const kickoff = Date.parse(f.date || "");
-    const competition = normalize(f.competition);
-    const leagueMatches = wanted.some((name) => competition === name || competition.includes(name) || name.includes(competition));
     return f.home?.id && f.away?.id && Number.isFinite(kickoff) && kickoff >= now.getTime() &&
-      f.status === "SCHEDULED" && leagueMatches;
+      f.status === "SCHEDULED";
   }).sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
   const clubs = new Map<number, any>();
   for (const f of fixtures) {
