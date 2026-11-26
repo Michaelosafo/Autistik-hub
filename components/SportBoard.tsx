@@ -507,10 +507,14 @@ export default function SportBoard() {
             Number.isFinite(Number(row.odds)) && Number(row.odds) > 1 &&
             Number.isFinite(Number(row.fairOdds)) && Number(row.fairOdds) > 1
           );
+          // Overpriced selections lead: rank by expected-value edge (bookmaker odds
+          // versus AUTISTIK fair odds), then no-vig odds edge, then model probability.
           const ranked = [...eligible].sort((a: any, b: any) => {
-            const aScore = Number(a.probability) * 0.70 + Math.max(-20, Math.min(20, Number(a.ev))) * 0.20 + Math.max(-20, Math.min(20, Number(a.edge) || 0)) * 0.10;
-            const bScore = Number(b.probability) * 0.70 + Math.max(-20, Math.min(20, Number(b.ev))) * 0.20 + Math.max(-20, Math.min(20, Number(b.edge) || 0)) * 0.10;
-            return bScore - aScore;
+            const evDiff = Number(b.ev) - Number(a.ev);
+            if (Math.abs(evDiff) > 0.0001) return evDiff;
+            const edgeDiff = Number(b.edge || 0) - Number(a.edge || 0);
+            if (Math.abs(edgeDiff) > 0.0001) return edgeDiff;
+            return Number(b.probability) - Number(a.probability);
           });
           const usedTeams = new Set<string>();
           const topPicks: any[] = [];
