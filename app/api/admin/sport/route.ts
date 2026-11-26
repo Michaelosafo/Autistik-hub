@@ -141,8 +141,8 @@ export async function POST(req: Request) {
             ))];
             scanDiagnostics.push({
               fixture: home + ' vs ' + away,
-              oddsEvents: Number(odds.diagnostics?.eventsReturned ?? odds.count ?? 0),
-              eventsReturned: Number(odds.diagnostics?.eventsReturned ?? odds.count ?? 0),
+              oddsEvents: oddsSources.reduce((sum: number, source: any) => sum + Number(source.value?.diagnostics?.eventsReturned ?? source.value?.count ?? 0), 0),
+              eventsReturned: oddsSources.reduce((sum: number, source: any) => sum + Number(source.value?.diagnostics?.eventsReturned ?? source.value?.count ?? 0), 0),
               matchedEvents: matchedEvents.length,
               matched: matchedEvents.length,
               bookmakers: availableBookmakers,
