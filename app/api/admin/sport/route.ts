@@ -3,7 +3,7 @@ import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
-import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds } from "@/lib/fivedollarfootball";
+import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -41,18 +41,21 @@ export async function POST(req: Request) {
       case "todayMatches": {
         // Keep football-data.org as the source for historical team statistics,
         // while restoring OddsPapi's broader subscribed-bookmaker fixture feed.
-        const [footballResult, oddsPapiResult] = await Promise.allSettled([
+        const [footballResult, oddsPapiResult, fiveDollarResult] = await Promise.allSettled([
           todayCompetitionMatches(),
-          getOddsPapiUpcomingFixtures()
+          getOddsPapiUpcomingFixtures(),
+          getFiveDollarFootballUpcomingFixtures()
         ]);
         const footballFixtures = footballResult.status === "fulfilled" && Array.isArray(footballResult.value)
           ? footballResult.value : [];
         const oddsPapiFixtures = oddsPapiResult.status === "fulfilled" && Array.isArray(oddsPapiResult.value)
           ? oddsPapiResult.value : [];
+        const fiveDollarFixtures = fiveDollarResult.status === "fulfilled" && Array.isArray(fiveDollarResult.value?.fixtures)
+          ? fiveDollarResult.value.fixtures : [];
         const normalizeFixture = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
           .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
           .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
-        const teamNames = oddsPapiFixtures.flatMap((f: any) => [
+        const teamNames = [...oddsPapiFixtures, ...fiveDollarFixtures].flatMap((f: any) => [
           String(f?.home?.name || ""), String(f?.away?.name || "")
         ]).filter(Boolean);
         let teamIds: Record<string, number> = {};
@@ -79,6 +82,20 @@ export async function POST(req: Request) {
           });
           added++;
         }
+        for (const fixture of fiveDollarFixtures) {
+          const homeName = String(fixture?.home?.name || "");
+          const awayName = String(fixture?.away?.name || "");
+          const key = normalizeFixture(homeName) + "|" + normalizeFixture(awayName);
+          if (!homeName || !awayName || merged.has(key)) continue;
+          const homeId = teamIds[normalizeFixture(homeName)] || 0;
+          const awayId = teamIds[normalizeFixture(awayName)] || 0;
+          merged.set(key, {
+            ...fixture,
+            home: { ...fixture.home, id: homeId },
+            away: { ...fixture.away, id: awayId }
+          });
+          added++;
+        }
         const fixtures = [...merged.values()].sort((a: any, b: any) =>
           Date.parse(a.date) - Date.parse(b.date)
         );
@@ -87,6 +104,9 @@ export async function POST(req: Request) {
           fixtureSources: {
             footballData: footballFixtures.length,
             oddsPapi: oddsPapiFixtures.length,
+            fiveDollarFootball: fiveDollarFixtures.length,
+            fiveDollarFootballError: fiveDollarResult.status === "rejected" ? String(fiveDollarResult.reason?.message || fiveDollarResult.reason) : null,
+            fiveDollarFootballDiagnostics: fiveDollarResult.status === "fulfilled" ? fiveDollarResult.value?.diagnostics : null,
             oddsPapiAdded: added,
             merged: fixtures.length
           },
@@ -98,7 +118,7 @@ export async function POST(req: Request) {
         });
       }
       case "valueScan": {
-        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 3) : [];
+        const fixtures = Array.isArray(b.fixtures) ? b.fixtures : [];
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
         await Promise.all(fixtures.map(async (f: any) => {
@@ -112,7 +132,7 @@ export async function POST(req: Request) {
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
               withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000),
-              withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date)), "5DollarFootballAPI odds lookup", 25000)
+              withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date), Number(f.providerFixtureId) || undefined), "5DollarFootballAPI odds lookup", 25000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             const oddsSources: any[] = [];
