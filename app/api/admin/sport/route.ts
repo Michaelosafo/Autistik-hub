@@ -4,7 +4,7 @@ import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams,
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
-import { analyse as analyseSportMonks, getSportMonksLeagueUpcomingFixtures, superReady } from "@/lib/super-sportmonks-data";
+import { analyse as analyseSportMonks, getSportMonksLeagueUpcomingFixtures, matchesOnDate as sportMonksMatchesOnDate, superReady } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -91,7 +91,10 @@ export async function POST(req: Request) {
         const matches = await todayCompetitionMatches();
         return json({ matches, fixtureProvider: "football-data.org", fixtureCount: matches.length });
       }
-      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")) });
+      case "dateMatches": {
+        const matches = await sportMonksMatchesOnDate(String(b.date || ""));
+        return json({ matches, fixtureProvider: "SportMonks", importedCount: matches.length });
+      }
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
