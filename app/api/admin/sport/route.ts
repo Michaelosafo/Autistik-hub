@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds, getLeagueCatalogue, getLeagueUpcomingFixtures } from "@/lib/sport-football-data";
+import { analyse, history, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds, getLeagueCatalogue, getLeagueUpcomingFixtures } from "@/lib/sport-football-data";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
