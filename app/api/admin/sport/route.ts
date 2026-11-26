@@ -100,6 +100,16 @@ export async function POST(req: Request) {
               oddsrelay: relayResult.status === "rejected" ? String(relayResult.reason?.message || relayResult.reason) : null,
               fivedollarfootball: fiveDollarResult.status === "rejected" ? String(fiveDollarResult.reason?.message || fiveDollarResult.reason) : null
             };
+            const modelContext = analysis ? {
+              homeForm: analysis.teams?.home?.season?.form || "",
+              awayForm: analysis.teams?.away?.season?.form || "",
+              homeGoalsFor: analysis.teams?.home?.season?.goalsFor?.total ?? null,
+              homeGoalsAgainst: analysis.teams?.home?.season?.goalsAgainst?.total ?? null,
+              awayGoalsFor: analysis.teams?.away?.season?.goalsFor?.total ?? null,
+              awayGoalsAgainst: analysis.teams?.away?.season?.goalsAgainst?.total ?? null,
+              expectedGoals: analysis.model?.xg || null,
+              verdict: Array.isArray(analysis.verdict) ? analysis.verdict.slice(0,5) : []
+            } : null;
             const modelMarkets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
             const marketsFound = [...new Set(matchedEvents.flatMap((e: any) =>
               (Array.isArray(e?.bookmakers) ? e.bookmakers : []).flatMap((bk: any) =>
@@ -172,14 +182,14 @@ export async function POST(req: Request) {
                   const noVig = implied / overround * 100;
                   const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "totals" ? "Goals · Over/Under" : market.key === "btts" ? "Both teams to score" : String(market.key).replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
                   if (!modelPick || !(Number(modelPick.p) > 0)) {
-                    mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, competition: String(f.competition?.name || f.competition || f.league?.name || "Other competitions"), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
+                    mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, competition: String(f.competition?.name || f.competition || f.league?.name || "Other competitions"), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false, modelContext });
                     continue;
                   }
                   const probability = Number(modelPick.p);
                   const fairOdds = 100 / probability;
                   const ev = (probability / 100) * price * 100 - 100;
                   const edge = probability - noVig;
-                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, competition: String(f.competition?.name || f.competition || f.league?.name || "Other competitions"), home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true });
+                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, competition: String(f.competition?.name || f.competition || f.league?.name || "Other competitions"), home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, modelContext });
                 }
               }
             }
