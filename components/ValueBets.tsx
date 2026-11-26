@@ -82,6 +82,35 @@ export default function ValueBets({ endpoint }: Props) {
     } catch(e) { setError((e as Error).message); }
     finally { setScanningFixture(""); }
   }
+  async function scanAllFixtures() {
+    if (!fixtures.length) { setError("Refresh matches first; no upcoming fixtures are loaded."); return; }
+    setBusy(true); setError(""); setRows([]); setDiagnostics([]); setScanned(0); setSelectedFixture("");
+    let allRows: any[] = [];
+    let allDiagnostics: any[] = [];
+    try {
+      for (let i = 0; i < fixtures.length; i++) {
+        const fixture = fixtures[i];
+        setProgress("Scanning " + (i + 1) + " of " + fixtures.length + ": " + fixture.home.name + " vs " + fixture.away.name);
+        try {
+          const result = await post("valueScan", { fixtures: [fixture] });
+          allRows = allRows.concat(Array.isArray(result?.rows) ? result.rows : []);
+          allDiagnostics = allDiagnostics.concat(Array.isArray(result?.diagnostics) ? result.diagnostics : []);
+          setRows([...allRows].sort((a:any,b:any)=>(Number(b.value)-Number(a.value)) || ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity))));
+          setDiagnostics([...allDiagnostics]);
+        } catch (e) {
+          allDiagnostics.push({ fixture: fixture.home.name + " vs " + fixture.away.name, error: (e as Error).message });
+          setDiagnostics([...allDiagnostics]);
+        }
+        setScanned(i + 1);
+        // Ultra allows 40 requests/minute. Space fixture lookups to stay below the limit.
+        if (i < fixtures.length - 1) await new Promise(resolve => setTimeout(resolve, 1600));
+      }
+      if (!allRows.length) setError("The scan completed, but no bookmaker prices were matched. Review the provider diagnostics.");
+    } finally {
+      setProgress("");
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     // SPORT automatically discovers and scans today + tomorrow when the board opens.
     // Keep SUPER manual/independent; this auto-run is only for the SPORT board.
@@ -92,12 +121,12 @@ export default function ValueBets({ endpoint }: Props) {
   }, [endpoint]);
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Automatically loads today's and tomorrow's fixtures. Tap any match to compare 5DollarFootballAPI bookmaker odds (plus any available OddsRelay prices) with SPORT model probabilities and calculate value individually."}</small></div>
-      <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn primary small" type="button" onClick={scan} disabled={busy}>{busy?"Loading…":endpoint==="/api/admin/sport"?"Refresh matches":"Scan all matches"}</button></div>
+       <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Loads upcoming fixtures across all competitions covered by 5DollarFootballAPI Ultra, plus existing fixture feeds. Compare available bookmaker prices with SPORT model probabilities."}</small></div>
+      <div className="row" style={{gap:8,flexWrap:"wrap"}}><button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button><button className="btn small" type="button" onClick={scan} disabled={busy}>{busy?"Loading…":endpoint==="/api/admin/sport"?"Refresh matches":"Reload matches"}</button>{endpoint==="/api/admin/sport" && <button className="btn primary small" type="button" onClick={()=>void scanAllFixtures()} disabled={busy || fixtures.length===0}>{busy?"Scanning…":"Scan all "+fixtures.length+" matches"}</button>}</div>
     </div>
     {progress && <small className="muted">{progress}</small>}
      {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b>{endpoint === "/api/admin/super" ? <><span>OddsPapi: {feedStatus.keyConfigured ? (feedStatus.active ? "active" : "no active bookmaker") : "key missing"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span>{feedStatus.error && <small>{feedStatus.error}</small>}<small>Highlightly Premium supplies fixtures and match statistics; OddsPapi supplies bookmaker prices.</small></> : <><span>5DollarFootballAPI: {feedStatus.fivedollarfootball?.active ? "connected · " + String(feedStatus.fivedollarfootball.plan || "plan unknown") + " plan" : feedStatus.fivedollarfootball?.keyConfigured ? "key found but connection failed" : "API key missing"}</span>{feedStatus.fivedollarfootball?.active && <small>5Dollar usage today: {feedStatus.fivedollarfootball.requestsToday ?? "unknown"} · limit: {feedStatus.fivedollarfootball.rateLimit ?? "unknown"} per {feedStatus.fivedollarfootball.rateWindowSeconds ?? "unknown"} seconds</small>}{feedStatus.fivedollarfootball?.error && <small>5DollarFootballAPI: {feedStatus.fivedollarfootball.error}</small>}<span>OddsRelay: retained as a secondary odds source</span><small>SPORT combines returned 5DollarFootballAPI and OddsRelay prices, then keeps the best price per selection. The model only labels markets it can calculate.</small>{feedStatus.oddsrelay?.errors?.accountCoverage && <small>OddsRelay: {String(feedStatus.oddsrelay.errors.accountCoverage?.message || feedStatus.oddsrelay.errors.accountCoverage)}</small>}</>}</div>}
-    {endpoint==="/api/admin/sport" && fixtures.length>0 && <small className="muted">Available fixtures: {fixtures.length} · Today: {dayCounts.today} · Tomorrow: {dayCounts.tomorrow}. Select a match to fetch its odds and analysis.</small>}{endpoint!=="/api/admin/sport" && scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures</small>}
+    {endpoint==="/api/admin/sport" && fixtures.length>0 && <small className="muted">Available fixtures across connected feeds: {fixtures.length} · Today: {dayCounts.today} · Tomorrow: {dayCounts.tomorrow}. Analyse one match or scan the full loaded board.</small>}{endpoint!=="/api/admin/sport" && scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures</small>}
     {endpoint==="/api/admin/sport" && fixtures.length>0 && <div className="stack"><b>Upcoming matches · tap to analyse individually</b>{fixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:12,flexWrap:"wrap"}}><div style={{minWidth:0,flex:"1 1 180px"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{display:"block"}}>{f.competition?.name || f.competition || f.league?.name || "Football"} · {new Date(f.date).toLocaleString()}</small></div><button className="btn primary small" type="button" onClick={()=>void scanFixture(f)} disabled={!!scanningFixture || busy}>{scanningFixture===fixtureKey(f)?"Analysing…":selectedFixture===fixtureKey(f) && rows.length?"Refresh odds":"Analyse match"}</button></div>)}</div>}{endpoint==="/api/admin/sport" && selectedFixture && <small className="muted">Showing odds and Autistik analysis for the selected match only.</small>}
     {error && <div className="notice warn">{error}</div>}
     {diagnostics.length>0 && <div className="stack" style={{fontSize:13}}>
@@ -125,6 +154,6 @@ export default function ValueBets({ endpoint }: Props) {
         <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
       </div>)}
     </div>}
-     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and The Odds API bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Uses 5DollarFootballAPI and any available OddsRelay bookmaker prices, removes duplicate selections, and keeps the best returned price. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
+     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and The Odds API bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Uses 5DollarFootballAPI Ultra bookmaker prices, removes duplicate selections, and keeps the best returned price. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
   </section>;
 }
