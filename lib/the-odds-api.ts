@@ -45,7 +45,13 @@ export async function getTheOddsApiMatchOdds(home:string,away:string,date?:strin
  if(!matches.length)return {matched:[],count:0,availableBookmakers:[],diagnostics:{eventsReturned:events.length,matchedEvents:0,sportKey,competition,sampleEvents:events.slice(0,5).map((x:any)=>({home:x.home_team,away:x.away_team})),providers:{theOddsApi:{ok:true,matched:0}}}};
  const event=matches[0].x;const regions=process.env.THE_ODDS_API_REGIONS||"eu";
  const markets=process.env.THE_ODDS_API_MARKETS||"h2h,totals,btts,double_chance";
- const odds=await get("/sports/"+encodeURIComponent(sportKey)+"/events/"+encodeURIComponent(event.id)+"/odds?regions="+encodeURIComponent(regions)+"&markets="+encodeURIComponent(markets)+"&oddsFormat=decimal",30000);
+ const oddsPath="/sports/"+encodeURIComponent(sportKey)+"/events/"+encodeURIComponent(event.id)+"/odds?regions="+encodeURIComponent(regions)+"&markets=";
+ let odds:any;
+ try { odds=await get(oddsPath+encodeURIComponent(markets)+"&oddsFormat=decimal",30000); }
+ catch (firstError) {
+   try { odds=await get(oddsPath+encodeURIComponent("h2h,totals")+"&oddsFormat=decimal",30000); }
+   catch { odds=await get(oddsPath+encodeURIComponent("h2h")+"&oddsFormat=decimal",30000); }
+ }
  const books=Array.isArray(odds.data?.bookmakers)?odds.data.bookmakers:[];
  const matched=books.length?[{home:event.home_team,away:event.away_team,commence_time:event.commence_time,bookmakers:books}]:[];
  return {matched,count:matched.length,availableBookmakers:[...new Set(books.map((b:any)=>b.title||b.key))],diagnostics:{eventsReturned:events.length,matchedEvents:matched.length,sportKey,eventId:event.id,remainingCredits:odds.remaining,usedCredits:odds.used,lastRequestCost:odds.last,sampleEvents:[{home:event.home_team,away:event.away_team}],providers:{theOddsApi:{ok:true,matched:matched.length,bookmakers:books.length,regions,markets}}}};
