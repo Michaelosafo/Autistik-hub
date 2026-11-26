@@ -168,6 +168,8 @@ export default function ValueBets({ endpoint }: Props) {
           <div className="stack" style={{marginTop:12}}>
             <b>Best value · highest EV first</b>
             {sortRows(items.filter((x:any)=>x.modelSupported&&x.ev>0)).slice(0,10).map(card)}
+            <b>Highest model probabilities in this league</b>
+            {[...items].filter((x:any)=>x.modelSupported).sort((a:any,b:any)=>Number(b.probability)-Number(a.probability)).slice(0,5).map(card)}
             <b>All selections · best bookmaker price and EV first</b>
             {sortRows(items).map(card)}
           </div>
