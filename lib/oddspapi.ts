@@ -322,7 +322,7 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
     diagnostics: {
       eventsReturned: oddsFixtures.length, fixtureEvents: fixtureRows.length,
       matchingFixtures: relevant.length, matchingEvents: matched.length,
-      requestedHome: home, requestedAway: away, tournamentCount: tournamentIds.length,
+      requestedHome: home, requestedAway: away, targetedFixtureLookups: relevant.length,
       bookmakerSlugsQueriedIndividually: bookmakerSlugs,
       sampleEvents: fixtureRows.slice(0, 8).map((f: any) => ({ home: f.participant1Name, away: f.participant2Name, hasOdds: f.hasOdds }))
     }
