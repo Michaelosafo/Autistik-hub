@@ -8,9 +8,9 @@ const cache = new Map<string, { expiresAt: number; value: any }>();
 
 function cleanName(value: string) {
   return String(value || "").toLowerCase().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "")
-    .replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
 async function api(path: string, ttlMs = 60_000): Promise<any> {
