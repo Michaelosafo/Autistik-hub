@@ -123,20 +123,20 @@ export async function POST(req: Request) {
                   const n = norm(label);
                   let modelName = "";
                   if (market.key === "h2h") modelName = ["home", norm(home)].includes(n) ? "Home win (1)" : ["away", norm(away)].includes(n) ? "Away win (2)" : ["draw","the draw","tie"].includes(n) ? "Draw (X)" : "";
-                  else if (market.key === "double_chance") modelName = ["1x","homedraw","homeordraw"].includes(n.replace(/\\s/g,"")) ? "Home or draw (1X)" : ["x2","drawaway","draworaway"].includes(n.replace(/\\s/g,"")) ? "Away or draw (X2)" : ["12","homeaway","homeoraway"].includes(n.replace(/\\s/g,"")) ? "Home or away (12)" : "";
+                  else if (market.key === "double_chance") modelName = ["1x","homedraw","homeordraw"].includes(n.replace(/\s/g,"")) ? "Home or draw (1X)" : ["x2","drawaway","draworaway"].includes(n.replace(/\s/g,"")) ? "Away or draw (X2)" : ["12","homeaway","homeoraway"].includes(n.replace(/\s/g,"")) ? "Home or away (12)" : "";
                   else if (market.key === "btts") modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
                   else if (market.key === "totals") {
-                    const m = label.match(/^(over|under)\\s+(\\d+(?:\\.\\d+)?)$/i);
+                    const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
                     if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
                   }
                   let pick = markets.find((x: any) => norm(x.name) === norm(modelName));
                   if (market.key === "totals") {
-                    const m = label.match(/^(over|under)\\s+(\\d+(?:\\.\\d+)?)$/i);
+                    const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
                     const p = m ? Number(analysis?.model?.over?.[String(Number(m[2]))]) : NaN;
                     if (m && Number.isFinite(p)) pick = { name: modelName, p: m[1].toLowerCase() === "over" ? p : 100 - p };
                   }
                   if (market.key === "double_chance") {
-                    const p = analysis.model || {}, k = n.replace(/\\s/g,"");
+                    const p = analysis.model || {}, k = n.replace(/\s/g,"");
                     const probability = ["1x","homedraw","homeordraw"].includes(k) ? Number(p.home)+Number(p.draw)
                       : ["x2","drawaway","draworaway"].includes(k) ? Number(p.away)+Number(p.draw)
                       : ["12","homeaway","homeoraway"].includes(k) ? Number(p.home)+Number(p.away) : 0;
