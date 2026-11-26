@@ -35,7 +35,7 @@ export default function ValueBets({ endpoint }: Props) {
       const list=Array.isArray(data.leagues)?data.leagues:[];
       setLeagues(list);
       if(!list.length)setError(endpoint==="/api/admin/super"
-        ? "SportMonks returned no leagues. Check SPORTMONKS_API_TOKEN and your league coverage."
+        ? "API-Football returned no leagues. Check APIFOOTBALL_KEY and your subscription coverage."
         : "No competitions are available from the selected provider.");
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
@@ -46,7 +46,7 @@ export default function ValueBets({ endpoint }: Props) {
       const leagueCode=String(league.code || "").toUpperCase();
       const leagueName=String(league.name || "");
       const isEuropaOrConference=leagueCode==="EL"||leagueCode==="ECL"||/europa league|conference league/i.test(leagueName);
-      const data=await post("leagueFixtures",{leagueId:Number(league.id),leagueCode,leagueName});
+      const data=await post("leagueFixtures",{leagueId:Number(league.id),season:Number(league.season),leagueCode,leagueName});
       setFixtureSource({...data.providers,fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
       const now=Date.now();
       const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
@@ -85,7 +85,7 @@ export default function ValueBets({ endpoint }: Props) {
     setBusy(true);setError("");setProgress("");
     let allRows:any[]=[];let allDiagnostics:any[]=[];
     try {
-      // Scan in small batches to respect football-data.org and bookmaker provider limits.
+      // Scan in small batches to respect API-Football and 5DollarFootballAPI limits.
       for(let i=0;i<leagueFixtures.length;i+=2) {
         const batch=leagueFixtures.slice(i,i+2);
         setProgress("Scanning "+leagueName+" · "+Math.min(i+batch.length,leagueFixtures.length)+" of "+leagueFixtures.length+" fixtures");
@@ -168,7 +168,7 @@ export default function ValueBets({ endpoint }: Props) {
     </div>}
     {error&&<div className="notice warn">{error}</div>}
     {loading&&<small className="muted">Loading competition and fixture list…</small>}
-    {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.fixtureProvider||"Provider not reported"} · analysis: football-data.org (SportMonks fallback) · prices: 5DollarFootballAPI Ultra + OddsRelay</small>}
+    {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.fixtureProvider||"Provider not reported"} · statistics: API-Football · prices: 5DollarFootballAPI</small>}
     {progress&&<small className="muted">{progress}</small>}
 
     {endpoint==="/api/admin/sport" && <>
@@ -196,7 +196,7 @@ export default function ValueBets({ endpoint }: Props) {
         return <div className="card stack" style={{padding:14}}>
           <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{league?.country} · {league?.name}</b><small className="muted" style={{display:"block"}}>{(league?.code==="EL"||league?.code==="ECL"||/europa league|conference league/i.test(String(league?.name||"")))?"Today (Ghana time)":"Next 30 days"} · {fixtures.length} fixtures</small></div><button className="btn small" type="button" onClick={()=>{setSelectedLeagueId(null);setFixtures([]);setError("");}}>Close league</button></div>
           {loading?<small className="muted">Loading clubs and fixtures…</small>:<>
-            <b>Clubs in this league · {clubs.length}</b><small className="muted">{clubs.join(" · ")||"No club list was returned by football-data.org for this competition."}</small>
+            <b>Clubs in this league · {clubs.length}</b><small className="muted">{clubs.join(" · ")||"Club list is supplied with the API-Football fixtures."}</small>
             {fixtures.length>0&&<div className="stack" style={{gap:6}}><b>Upcoming fixtures</b>{fixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{padding:9,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted">{new Date(f.date).toLocaleString()}</small></div>)}</div>}
             <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanLeague(leagueKey,String(league?.name||"Selected league"),fixtures)}>{busy?"Scanning…":"Scan this league · "+fixtures.length+" fixtures"}</button>
           </>}
@@ -220,6 +220,6 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack"><b>Ranked selections</b>{sortRows(superRows).map((r:any,i:number)=><SelectionCard key={r.key||i} row={r} index={i}/>)}</div>}
       {diagnostics.length>0&&<details><summary>Scan diagnostics ({diagnostics.length})</summary>{diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.analysisError||d.error||"Completed"}</small>)}</details>}
     </>}
-    <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from football-data.org recent form and season statistics. A selection is called value only when its model probability is available and expected value is positive.":"SUPER uses its own fixtures, model and odds providers."}</small>
+    <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from API-Football recent form and season statistics. A selection is called value only when its model probability is available and expected value is positive.":"SUPER uses its own fixtures, model and odds providers."}</small>
   </section>;
 }
