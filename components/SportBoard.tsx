@@ -500,17 +500,37 @@ export default function SportBoard() {
         {(() => {
           const eligible = dailyValueRows.filter((row: any) =>
             row.modelSupported &&
+            Number.isFinite(Number(row.probability)) &&
+            Number(row.probability) >= 45 &&
             Number.isFinite(Number(row.ev)) &&
             Number.isFinite(Number(row.odds)) &&
             Number.isFinite(Number(row.fairOdds)) &&
             Math.abs(Number(row.ev)) > 0.01
           );
-          const overpriced = eligible
-            .filter((row: any) => Number(row.ev) > 0.01)
-            .sort((a: any, b: any) => Number(b.ev) - Number(a.ev));
-          const underpriced = eligible
-            .filter((row: any) => Number(row.ev) < -0.01)
-            .sort((a: any, b: any) => Number(a.ev) - Number(b.ev));
+          // One club can appear only once across the complete shortlist. Rank
+          // high-confidence selections first, then use EV as the tie-breaker.
+          const ranked = [...eligible].sort((a: any, b: any) => {
+            const probabilityGap = Number(b.probability) - Number(a.probability);
+            if (Math.abs(probabilityGap) > 0.001) return probabilityGap;
+            const aValue = Number(a.ev) > 0 ? 1 : 0;
+            const bValue = Number(b.ev) > 0 ? 1 : 0;
+            if (aValue !== bValue) return bValue - aValue;
+            return Math.abs(Number(b.ev)) - Math.abs(Number(a.ev));
+          });
+          const usedTeams = new Set<string>();
+          const overpriced: any[] = [];
+          const underpriced: any[] = [];
+          for (const row of ranked) {
+            if (overpriced.length >= 25 && underpriced.length >= 10) break;
+            const homeKey = String(row.home || "").trim().toLowerCase();
+            const awayKey = String(row.away || "").trim().toLowerCase();
+            if (!homeKey || !awayKey || usedTeams.has(homeKey) || usedTeams.has(awayKey)) continue;
+            if (Number(row.ev) > 0.01 && overpriced.length < 25) {
+              overpriced.push(row); usedTeams.add(homeKey); usedTeams.add(awayKey);
+            } else if (Number(row.ev) < -0.01 && underpriced.length < 10) {
+              underpriced.push(row); usedTeams.add(homeKey); usedTeams.add(awayKey);
+            }
+          }
           const renderRows = (rows: any[], isOverpriced: boolean) => rows.map((row: any, index: number) => (
             <div key={(row.key || [row.home, row.away, row.market, row.selection, row.bookmaker].join("|")) + ":" + index}
               className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5,
