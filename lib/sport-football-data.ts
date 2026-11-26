@@ -43,7 +43,56 @@ async function api(path: string, ttl = TTL): Promise<any> {
   return body;
 }
 
+
 const COMPETITIONS = ["PL", "ELC", "BL1", "SA", "PD", "FL1", "DED", "PPL", "BSA", "CL", "EC", "WC"];
+
+/** Competitions available to this football-data.org account. */
+export async function getLeagueCatalogue() {
+  const data = await api("/competitions", 12 * 60 * 60_000);
+  const available = Array.isArray(data?.competitions) ? data.competitions : [];
+  const enabled = new Set(COMPETITIONS);
+  return available
+    .filter((x: any) => x?.code && enabled.has(String(x.code)))
+    .map((x: any) => ({
+      id: Number(x.id),
+      code: String(x.code),
+      name: String(x.name || x.code),
+      country: String(x.area?.name || "International"),
+      seasons: x.currentSeason?.id ? [Number(x.currentSeason.id)] : [],
+      emblem: x.emblem || null,
+    }))
+    .sort((a: any, b: any) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
+}
+
+/** Upcoming fixtures and participating clubs for one football-data.org competition. */
+export async function getLeagueUpcomingFixtures(code: string) {
+  const competition = String(code || "").trim().toUpperCase();
+  if (!COMPETITIONS.includes(competition)) throw new Error("Choose a competition supported by the connected football-data.org plan.");
+  const now = new Date();
+  const from = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const toDate = new Date(now.getTime() + 7 * 86400_000);
+  const to = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(toDate);
+  const [matchesData, teamsData] = await Promise.all([
+    api("/competitions/" + competition + "/matches?dateFrom=" + from + "&dateTo=" + to + "&limit=500", 5 * 60_000),
+    api("/competitions/" + competition + "/teams", 12 * 60 * 60_000).catch(() => ({ teams: [] })),
+  ]);
+  const fixtures = (Array.isArray(matchesData?.matches) ? matchesData.matches : [])
+    .filter((m: any) => m?.id && m.homeTeam?.id && m.awayTeam?.id && m.utcDate &&
+      ["SCHEDULED", "TIMED"].includes(m.status) && Date.parse(m.utcDate) >= now.getTime())
+    .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
+    .map((m: any) => ({
+      id: Number(m.id), date: m.utcDate, status: m.status,
+      competition: m.competition?.name || competition,
+      home: { id: Number(m.homeTeam.id), name: m.homeTeam.name, logo: m.homeTeam.crest || "" },
+      away: { id: Number(m.awayTeam.id), name: m.awayTeam.name, logo: m.awayTeam.crest || "" },
+    }));
+  const clubs = (Array.isArray(teamsData?.teams) ? teamsData.teams : [])
+    .filter((t: any) => t?.id && t?.name)
+    .map((t: any) => ({ id: Number(t.id), name: String(t.name), logo: String(t.crest || "") }))
+    .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  return { fixtures, clubs };
+}
+
 
 export async function searchTeams(q: string) {
   const query = q.trim().toLocaleLowerCase();
