@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Fixture = { id:number; date:string; status:string; competition?:string; league?:{name?:string}; home:{id:number;name:string}; away:{id:number;name:string} };
-type Pick = { key:string; home:string; away:string; competition:string; selection:string; market:string; probability:number; fairOdds:number; odds:number; bookmaker:string; ev:number; edge:number; date:string; autistikRank:number };
+const TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;\n\ntype Pick = { key:string; home:string; away:string; competition:string; selection:string; market:string; probability:number; fairOdds:number; odds:number; bookmaker:string; ev:number; edge:number; date:string; autistikRank:number };
 
 export default function DailyValueBets() {
   const [fixtures,setFixtures]=useState<Fixture[]>([]);
@@ -28,7 +28,7 @@ export default function DailyValueBets() {
   }
 
   function rankRows(rows:any[]):Pick[] {
-    const eligible=rows.filter((r:any)=>r.modelSupported&&Number.isFinite(Number(r.probability))&&Number(r.probability)>=45&&Number(r.ev)>0&&Number(r.edge)>0);
+    const eligible=rows.filter((r:any)=>r.modelSupported&&Number.isFinite(Number(r.probability))&&Number(r.probability)>=55&&Number(r.ev)>0&&Number(r.edge)>0);
     const best=new Map<string,any>();
     for(const r of eligible) {
       const key=[r.home,r.away,r.market,r.selection].join("|");
@@ -54,7 +54,7 @@ export default function DailyValueBets() {
         allRows=allRows.concat(Array.isArray(data.rows)?data.rows:[]);
         allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
         const ranked=rankRows(allRows);
-        setPicks(ranked.filter((r:any)=>Number(r.probability)>=45));
+        setPicks(ranked.filter((r:any)=>Number(r.probability)>=55));
         setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
           .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)));
         setDiagnostics([...allDiagnostics]);
@@ -95,12 +95,12 @@ export default function DailyValueBets() {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>All available leagues · API-Football statistics · 5DollarFootballAPI odds</small></div>
+      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>Top competitions only · API-Football statistics · 5DollarFootballAPI odds</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><input aria-label="Scan date" type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/><button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>Scan selected date</button></div>
     </div>
     <div className="notice">
       <b>Best value selections for {scanDate||"selected date"} · Ghana time</b>
-      <small className="muted" style={{display:"block"}}>Every fixture returned by your API-Football subscription for the selected date is checked. Results are ranked by model probability, price edge and expected value. The AUTISTIK rank is a comparison score, not a guarantee or a calibrated chance of winning.</small>
+      <small className="muted" style={{display:"block"}}>Only Champions League, Europa League, Conference League and leading domestic-league fixtures are checked. Picks require at least 55% model probability and positive expected value, then rank by model probability, price edge and expected value. The AUTISTIK rank is a comparison score, not a guarantee or a calibrated chance of winning.</small>
     </div>
     <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
       <small className="muted">{fixtures.length} fixtures found · {scanned} scanned · {picks.length} qualifying picks</small>
@@ -125,7 +125,7 @@ export default function DailyValueBets() {
       </div>)}
     </div>}
     {busy&&!picks.length&&<small className="muted">Scanning fixtures. The shortlist will appear as soon as qualified selections are found.</small>}
-    {redPicks.length>0&&<div className="stack" style={{gap:8}}>
+    {false&&redPicks.length>0&&<div className="stack" style={{gap:8}}>
       <b>🔴 Red / underpriced · Top {redPicks.length}</b>
       <small className="muted">Lower model-probability selections with positive estimated value. These are higher-risk options, not part of the high-conviction Top 25.</small>
       {redPicks.map((r:any,i:number)=><div key={"red-"+(r.key||i)} className="sb-top-r" style={{display:"grid",gap:6,padding:11,borderLeft:"4px solid var(--danger)",overflowWrap:"anywhere"}}>
