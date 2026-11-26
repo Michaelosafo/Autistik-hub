@@ -61,7 +61,11 @@ export default function SportBoard() {
   const [teamFixtures, setTeamFixtures] = useState<any[]>([]);
   const [fixturesBusy, setFixturesBusy] = useState(false);
   const [fixturesError, setFixturesError] = useState("");
-  const accraDate = (value = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+  const accraDate = (value = new Date()) => {
+    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+    const part = (type: string) => parts.find((item) => item.type === type)?.value || "";
+    return part("year") + "-" + part("month") + "-" + part("day");
+  };
   const [matchDate, setMatchDate] = useState(accraDate());
   const [res, setRes] = useState<any>(null);
   const [quickPicksOpen, setQuickPicksOpen] = useState(false);
