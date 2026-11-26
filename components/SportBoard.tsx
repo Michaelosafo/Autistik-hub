@@ -132,7 +132,7 @@ export default function SportBoard() {
       const d = await api<{ fixtures: any[]; clubs: any[] }>("leagueFixtures", { leagueCode: String(league.code || "") });
       setSelectedLeagueFixtures(Array.isArray(d.fixtures) ? d.fixtures : []);
       setLeagueClubs(Array.isArray(d.clubs) ? d.clubs : []);
-      if (!(d.fixtures || []).length) setTodayError("No upcoming fixtures found in this league over the next seven days. Close it and choose another league.");
+      if (!(d.fixtures || []).length) setTodayError("No upcoming fixtures found in this league over the next 30 days. Close it and choose another league.");
     } catch (e) { setTodayError((e as Error).message); }
     finally { setLeagueLoading(false); }
   }
