@@ -50,6 +50,11 @@ export async function POST(req: Request) {
       });
       case "search": return json({ teams: await searchApiFootballTeams(String(b.q || "")) });
       case "leagues": return json({ leagues: await apiFootballLeagueCatalogue(), provider: "API-Football" });
+      case "dailyFixtures": {
+        const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const matches = await apiFootballMatchesOnDate(date);
+        return json({ date, matches, fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "5DollarFootballAPI", fixtureCount: matches.length });
+      }
       case "leagueFixtures": {
         const leagueId = Number(b.leagueId), season = Number(b.season);
         const fixtures = await apiFootballLeagueUpcomingFixtures(leagueId, season, 30);
