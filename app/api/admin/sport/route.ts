@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
+import { analyse, history, matchesOnDate, saveOdds, savePrediction, setResult, sportReady, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
 import { analyse as analyseApiFootball, resolveFixtureTeamIds as resolveApiFootballTeamIds, searchTeams as searchApiFootballTeams, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
@@ -125,7 +125,6 @@ export async function POST(req: Request) {
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
         await Promise.all(fixtures.map(async (f: any) => {
-          const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
           if (!home || !away || !f?.date) return;
           try {
