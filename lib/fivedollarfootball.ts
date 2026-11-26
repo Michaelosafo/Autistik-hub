@@ -101,7 +101,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
   const fixture = candidates[0].fixture;
   const status = await getFiveDollarFootballStatus();
   let oddsPath = "/fixtures/" + encodeURIComponent(String(fixture.id)) + "/odds";
-  if (status.plan.toLowerCase() === "ultra") {
+  if (String(status.plan || "").toLowerCase() === "ultra") {
     try {
       const books = await api("/bookmakers", 6 * 60 * 60_000);
       const slugs = (Array.isArray(books) ? books : []).map((book: any) => String(book?.slug || "")).filter(Boolean);
