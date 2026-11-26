@@ -6,6 +6,7 @@ type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };
 export default function ValueBets({ endpoint }: Props) {
   const [fixtures,setFixtures]=useState<any[]>([]);
   const [leagues,setLeagues]=useState<any[]>([]);
+  const [selectedClubs,setSelectedClubs]=useState<any[]>([]);
   const [selectedLeagueId,setSelectedLeagueId]=useState<number|null>(null);
   const [busy,setBusy]=useState(false);
   const [loading,setLoading]=useState(false);
@@ -46,15 +47,18 @@ export default function ValueBets({ endpoint }: Props) {
     finally { setLoading(false); }
   }
   async function openLeague(league:any) {
-    setSelectedLeagueId(Number(league.id));setFixtures([]);setError("");setLoading(true);
+    setSelectedLeagueId(Number(league.id));setFixtures([]);setSelectedClubs([]);setError("");setLoading(true);
     try {
-      const data=await post("leagueFixtures",{leagueId:Number(league.id)});
+      const seasons=Array.isArray(league.seasons)?league.seasons.map(Number).filter(Number.isFinite):[];
+      const season=seasons.length?Math.max(...seasons):undefined;
+      const data=await post("leagueFixtures",{leagueId:Number(league.id),season});
       const now=Date.now();
       const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
         .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setFixtures(upcoming);
-      if(!upcoming.length)setError("No upcoming fixtures found in "+league.name+" during the next seven days. Choose another league or check again later.");
+      setSelectedClubs(Array.isArray(data.clubs)?data.clubs:[]);
+      if(!upcoming.length)setError("No upcoming fixtures found in "+league.name+" during the next seven days. The league club list can still be viewed if standings are available.");
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -171,11 +175,11 @@ export default function ValueBets({ endpoint }: Props) {
         const allRows=saved?.rows||[];
         const positive=sortRows(allRows.filter((r:any)=>r.modelSupported&&Number(r.ev)>0));
         const probabilityRank=[...allRows].filter((r:any)=>r.modelSupported).sort((a:any,b:any)=>Number(b.probability)-Number(a.probability));
-        const clubs=[...new Set(fixtures.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean))].sort();
+        const clubs=selectedClubs.map((club:any)=>String(club.name||"")).filter(Boolean).sort();
         return <div className="card stack" style={{padding:14}}>
           <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{league?.country} · {league?.name}</b><small className="muted" style={{display:"block"}}>Next seven days · {fixtures.length} fixtures</small></div><button className="btn small" type="button" onClick={()=>{setSelectedLeagueId(null);setFixtures([]);setError("");}}>Close league</button></div>
           {loading?<small className="muted">Loading clubs and fixtures…</small>:<>
-            <b>Clubs in upcoming fixtures</b><small className="muted">{clubs.join(" · ")||"No upcoming clubs returned for this seven-day window."}</small>
+            <b>Clubs in this league · {clubs.length}</b><small className="muted">{clubs.join(" · ")||"Highlightly has not returned a standings club list for this league yet."}</small>
             {fixtures.length>0&&<div className="stack" style={{gap:6}}><b>Upcoming fixtures</b>{fixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{padding:9,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted">{new Date(f.date).toLocaleString()}</small></div>)}</div>}
             <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanLeague(leagueKey,String(league?.name||"Selected league"),fixtures)}>{busy?"Scanning…":"Scan this league · "+fixtures.length+" fixtures"}</button>
           </>}
