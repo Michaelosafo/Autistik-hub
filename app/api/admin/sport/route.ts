@@ -3,6 +3,7 @@ import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
+import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds } from "@/lib/fivedollarfootball";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +31,11 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
       case "oddsStatus": {
-        return json({ oddsrelay: await getGhanaOddsRelayStatus() });
+        const [oddsrelay, fivedollarfootball] = await Promise.allSettled([getGhanaOddsRelayStatus(), getFiveDollarFootballStatus()]);
+        return json({
+          oddsrelay: oddsrelay.status === "fulfilled" ? oddsrelay.value : { active: false, error: String(oddsrelay.reason?.message || oddsrelay.reason) },
+          fivedollarfootball: fivedollarfootball.status === "fulfilled" ? fivedollarfootball.value : { keyConfigured: !!process.env.FIVEDOLLARFOOTBALL_API_KEY, active: false, error: String(fivedollarfootball.reason?.message || fivedollarfootball.reason) }
+        });
       }
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": {
@@ -102,18 +107,32 @@ export async function POST(req: Request) {
           if (!home || !away || !f?.date) return;
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
-            const [analysisResult, oddsResult] = await Promise.allSettled([
+            const [analysisResult, relayResult, fiveDollarResult] = await Promise.allSettled([
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000)
+              withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000),
+              withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date)), "5DollarFootballAPI odds lookup", 25000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
-            if (oddsResult.status === "rejected") throw oddsResult.reason;
-            const odds: any = oddsResult.value || {};
-            const matchedEvents: any[] = Array.isArray(odds.matched) ? odds.matched : [];
-            const availableBookmakers: any[] = Array.isArray(odds.availableBookmakers) ? odds.availableBookmakers : [];
-            const sampleEvents: any[] = Array.isArray(odds.diagnostics?.sampleEvents) ? odds.diagnostics.sampleEvents : [];
+            const oddsSources: any[] = [];
+            if (relayResult.status === "fulfilled") oddsSources.push({ name: "OddsRelay", value: relayResult.value });
+            if (fiveDollarResult.status === "fulfilled") oddsSources.push({ name: "5DollarFootballAPI", value: fiveDollarResult.value });
+            if (!oddsSources.length) {
+              const errors = [
+                relayResult.status === "rejected" ? "OddsRelay: " + String(relayResult.reason?.message || relayResult.reason) : "",
+                fiveDollarResult.status === "rejected" ? "5DollarFootballAPI: " + String(fiveDollarResult.reason?.message || fiveDollarResult.reason) : ""
+              ].filter(Boolean);
+              throw new Error(errors.join(" | ") || "No odds provider returned prices.");
+            }
+            const matchedEvents: any[] = oddsSources.flatMap((source: any) => Array.isArray(source.value?.matched) ? source.value.matched : []);
+            const availableBookmakers: any[] = [...new Set(oddsSources.flatMap((source: any) => Array.isArray(source.value?.availableBookmakers) ? source.value.availableBookmakers : []))];
+            const sampleEvents: any[] = oddsSources.flatMap((source: any) => Array.isArray(source.value?.diagnostics?.sampleEvents) ? source.value.diagnostics.sampleEvents : []);
+            const sourceDiagnostics = Object.fromEntries(oddsSources.map((source: any) => [source.name, source.value?.diagnostics || {}]));
+            const sourceErrors = {
+              oddsrelay: relayResult.status === "rejected" ? String(relayResult.reason?.message || relayResult.reason) : null,
+              fivedollarfootball: fiveDollarResult.status === "rejected" ? String(fiveDollarResult.reason?.message || fiveDollarResult.reason) : null
+            };
             const modelMarkets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
             const marketsFound = [...new Set(matchedEvents.flatMap((e: any) =>
               (Array.isArray(e?.bookmakers) ? e.bookmakers : []).flatMap((bk: any) =>
@@ -128,8 +147,11 @@ export async function POST(req: Request) {
               matched: matchedEvents.length,
               bookmakers: availableBookmakers,
               markets: marketsFound,
-              providers: odds.diagnostics?.providers || { oddspapi: { ok: true, matched: matchedEvents.length } },
-              feedExamples: sampleEvents.slice(0, 4).map((e: any) => String(e?.home || "") + " vs " + String(e?.away || "")),
+              providers: {
+                oddsrelay: { ok: relayResult.status === "fulfilled", matched: relayResult.status === "fulfilled" ? Number(relayResult.value?.count || 0) : 0, error: sourceErrors.oddsrelay },
+                fivedollarfootball: { ok: fiveDollarResult.status === "fulfilled", matched: fiveDollarResult.status === "fulfilled" ? Number(fiveDollarResult.value?.count || 0) : 0, error: sourceErrors.fivedollarfootball, plan: sourceDiagnostics["5DollarFootballAPI"]?.plan || null, bookmakers: sourceDiagnostics["5DollarFootballAPI"]?.bookmakers || [] }
+              },
+              feedExamples: sampleEvents.slice(0, 4).map((e: any) => String(e?.home_team || e?.home || "") + " vs " + String(e?.away_team || e?.away || "")),
               analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null
             });
             const norm = (v: string) => String(v || "").toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
