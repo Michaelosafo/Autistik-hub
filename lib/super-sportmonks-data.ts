@@ -151,6 +151,36 @@ function summarize(teamId: number, games: any[]) {
   }, last5: { games: matches.slice(0, 5), avg: {} } };
 }
 
+/** Resolve a selected team's display name to SportMonks IDs, then load its latest
+ * completed fixture and next scheduled fixture. This avoids relying on a separate
+ * football-data.org subscription for the team-match panel.
+ */
+export async function teamFixtureChoicesByName(teamName: string) {
+  const name = String(teamName || "").trim();
+  if (!name) throw new Error("Choose a team first.");
+  const normalize = (value: any) => String(value || "").toLowerCase().normalize("NFKD")
+    .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const body = await api("/teams/search/" + encodeURIComponent(name) + "?include=country&per_page=50", 24 * 3600_000);
+  const candidates = rows(body).filter((x: any) => x?.id && x?.name);
+  const target = normalize(name);
+  const exact = candidates.filter((x: any) => normalize(x.name) === target);
+  const selected = exact.length === 1 ? exact[0] : candidates.length === 1 ? candidates[0] : null;
+  if (!selected) throw new Error(candidates.length
+    ? "SportMonks returned multiple possible teams for " + name + ". Please use the league fixture list."
+    : "SportMonks could not find " + name + " in your subscription.");
+  const now = new Date();
+  const from = datePart(new Date(now.getTime() - 365 * 86400_000));
+  const to = datePart(new Date(now.getTime() + 90 * 86400_000));
+  const raw = await fixturesForTeam(Number(selected.id), from, to);
+  const mapped = raw.map(fixture).filter((f: any) => f.home.id && f.away.id && Number.isFinite(Date.parse(f.date)));
+  const last = mapped.filter((f: any) => f.status === "FINISHED" && f.score)
+    .sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date))[0];
+  const next = mapped.filter((f: any) => f.status !== "FINISHED" && Date.parse(f.date) >= now.getTime())
+    .sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date))[0];
+  return [last, next].filter(Boolean).map((f: any) => ({ ...f, fixtureSource: "SportMonks" }));
+}
+
 export async function searchTeams(q: string) {
   const s = q.trim(); if (s.length < 2) return [];
   const body = await api("/teams/search/" + encodeURIComponent(s) + "?per_page=50", 7 * 86400_000);
