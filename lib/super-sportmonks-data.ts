@@ -240,16 +240,26 @@ export async function matchesOnDate(date: string) {
   if (!validDate(date)) throw new Error("Choose a valid match date.");
   if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
   const body = await fixturesByDate(date);
+  // Return every fixture on the selected date: scheduled, live and completed.
+  // A missing full-time score is normal for a match that has not finished yet.
   const matches = body.map(fixture)
-    .filter((x: any) => x.home.id && x.away.id && x.status === "FINISHED" && x.score)
-    .sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date))
+    .filter((x: any) => x.home.id && x.away.id && Number.isFinite(Date.parse(x.date)))
+    .sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date))
     .map((x: any) => ({ ...x, fixtureSource: "SportMonks" }));
   // Persist the complete normalized SportMonks date result in the existing
-  // database cache, in addition to the raw paginated API responses cached by api().
+  // database cache, in addition to every raw paginated API response cached by api().
   const importedAt = new Date().toISOString();
   const { error } = await sb().from("sport_cache").upsert({
-    key: "sportmonks:completed-matches:" + date,
-    data: { provider: "SportMonks", date, importedAt, count: matches.length, matches },
+    key: "sportmonks:matches:" + date,
+    data: {
+      provider: "SportMonks", date, importedAt, count: matches.length,
+      counts: {
+        scheduled: matches.filter((m: any) => m.status === "SCHEDULED").length,
+        live: matches.filter((m: any) => ["IN_PLAY", "PAUSED"].includes(m.status)).length,
+        completed: matches.filter((m: any) => m.status === "FINISHED" && m.score).length
+      },
+      matches
+    },
     at: importedAt
   });
   if (error) throw new Error("SportMonks matches were fetched but could not be saved to the database: " + error.message);
@@ -312,7 +322,7 @@ export async function analyse(homeId: number, awayId: number, matchDate?: string
   const actuals = matchDate ? await fixturesByDate(matchDate).catch(() => []) : [];
   const actualMatch = actuals.find((x: any) => participants(x).home?.id === homeId && participants(x).away?.id === awayId);
   const actualScore = actualMatch ? currentScore(actualMatch) : null;
-  const historical = !!matchDate && Date.parse(matchDate + "T00:00:00Z") < Date.now();
+  const historical = !!matchDate && matchDate < datePart(new Date());
   return {
     leagues: { home: { id: 0, name: hGames[0]?.league?.name || "Football" }, away: { id: 0, name: aGames[0]?.league?.name || "Football" } },
     averages: { home: {}, away: {} }, teams: { home: h, away: a },
