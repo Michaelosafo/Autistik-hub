@@ -26,7 +26,7 @@ const CH: Record<ChainKey, { name: string; id: number; native: string; scan: str
 };
 type Tok = { chain: ChainKey; contract: string; symbol: string; name?: string; icon?: string };
 type Exec = { kind: "evm"; chainId: number; tx: { to: string; data: string; value: string; gas?: string }; spender?: string } | { kind: "sol"; txB64: string };
-type Route = { market?: string; protocol?: string; label: string; out: string; min: string; gasUsd: number | null; slip?: string | null; router?: "lifi" | "okx"; exec?: Exec; track?: { fromChain: string; toChain: string } };
+type Route = { market?: string; protocol?: string; label: string; out: string; min: string; gasUsd: number | null; slip?: string | null; features?: string[]; router?: "lifi" | "okx"; exec?: Exec; track?: { fromChain: string; toChain: string } };
 type RouterKey = "bitget" | "lifi" | "okx";
 const ROUTERS: { key: RouterKey; name: string; note: string }[] = [
   { key: "bitget", name: "Bitget Wallet", note: "Swaps and bridges" },
@@ -161,7 +161,7 @@ export default function Signal() {
     try {
       if (r.exec) { await goDirect(r); return; }
       setBusy("Building the order…");
-      const o = await api<{ orderId: string; txs: any[]; solTxs?: string[] }>("order", { ...fields, market: r.market, protocol: r.protocol, slippage: r.slip || slip, lastOut: r.out });
+      const o = await api<{ orderId: string; txs: any[]; solTxs?: string[] }>("order", { ...fields, market: r.market, protocol: r.protocol, slippage: r.slip || slip, lastOut: r.out, features: r.features || [] });
       if (!o.txs.length) throw new Error("Bitget Wallet's order had nothing to sign. Get a new quote.");
       const sent: string[] = [];
       if (fromChain === "sol") {
