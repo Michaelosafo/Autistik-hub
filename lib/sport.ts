@@ -35,6 +35,55 @@ async function api(path: string, ttl = TTL_MS): Promise<any[]> {
   return out;
 }
 
+export async function matchesOnDate(date: string) {
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error("Choose a valid match date.");
+  if (!sportReady()) throw new Error("APIFOOTBALL_KEY is missing in Vercel Production.");
+  const rows = await api("/fixtures?date=" + encodeURIComponent(date) + "&timezone=Africa%2FAccra", 5 * 60_000);
+  const matches = rows.map((f: any) => ({
+    id: Number(f.fixture?.id),
+    date: f.fixture?.date,
+    status: f.fixture?.status?.long || f.fixture?.status?.short || "Scheduled",
+    competition: f.league?.name || "Football",
+    league: { id: Number(f.league?.id), name: f.league?.name || "Football", country: f.league?.country || "" },
+    home: { id: Number(f.teams?.home?.id), name: f.teams?.home?.name || "", logo: f.teams?.home?.logo || "" },
+    away: { id: Number(f.teams?.away?.id), name: f.teams?.away?.name || "", logo: f.teams?.away?.logo || "" },
+    score: f.goals?.home == null || f.goals?.away == null ? null : { home: Number(f.goals.home), away: Number(f.goals.away) },
+    fixtureSource: "API-Football"
+  })).filter((f: any) => f.id > 0 && f.home.id > 0 && f.away.id > 0 && f.date);
+  const importedAt = new Date().toISOString();
+  const { error } = await sb().from("sport_cache").upsert({
+    key: "api-football:matches:" + date,
+    data: { provider: "API-Football", date, importedAt, count: matches.length, matches },
+    at: importedAt
+  });
+  if (error) throw new Error("API-Football fixtures fetched but database cache failed: " + error.message);
+  return matches;
+}
+
+export async function fixtureOdds(fixtureId: number) {
+  if (!Number.isInteger(fixtureId) || fixtureId <= 0) throw new Error("Missing API-Football fixture ID.");
+  const rows = await api("/odds?fixture=" + fixtureId, 60_000);
+  const matched = rows.map((event: any) => ({
+    bookmakers: (event.bookmakers || []).map((book: any) => ({
+      key: String(book.id || book.name || "bookmaker"),
+      title: String(book.name || "Bookmaker"),
+      markets: (book.bets || []).map((bet: any) => {
+        const name = String(bet.name || "");
+        const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, "");
+        const key = /matchwinner|1x2|fulltimeresult/.test(normalized) ? "h2h"
+          : /doublechance/.test(normalized) ? "double_chance"
+          : /bothteamstoscore/.test(normalized) ? "btts"
+          : /goalsoverunder|totalgoals/.test(normalized) ? "totals" : normalized || "other";
+        return {
+          key, title: name,
+          outcomes: (bet.values || []).map((v: any) => ({ name: String(v.value || ""), price: Number(v.odd) }))
+        };
+      })
+    }))
+  }));
+  return { matched, count: matched.length, availableBookmakers: [...new Set(matched.flatMap((e: any) => e.bookmakers.map((b: any) => b.title)))], diagnostics: { eventsReturned: matched.length } };
+}
+
 export async function searchTeams(q: string) {
   const s = q.trim();
   if (s.length < 3) return [];
