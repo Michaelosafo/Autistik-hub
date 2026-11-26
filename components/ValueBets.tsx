@@ -31,19 +31,12 @@ export default function ValueBets({ endpoint }: Props) {
   async function refreshFixtures() {
     setLoading(true);setError("");
     try {
-      if(endpoint==="/api/admin/sport") {
-        const data=await post("leagues");
-        const list=Array.isArray(data.leagues)?data.leagues:[];
-        setLeagues(list);
-        if(!list.length)setError("football-data.org returned no competitions available on your current plan.");
-      } else {
-        const data=await post("todayMatches");
-        const now=Date.now();
-        const upcoming=(Array.isArray(data.matches)?data.matches:[])
-          .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&f.status!=="FINISHED"&&Date.parse(f.date)>=now)
-          .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
-        setFixtures(upcoming);
-      }
+      const data=await post("leagues");
+      const list=Array.isArray(data.leagues)?data.leagues:[];
+      setLeagues(list);
+      if(!list.length)setError(endpoint==="/api/admin/super"
+        ? "SportMonks returned no leagues. Check SPORTMONKS_API_TOKEN and your league coverage."
+        : "No competitions are available from the selected provider.");
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -53,7 +46,7 @@ export default function ValueBets({ endpoint }: Props) {
       const leagueCode=String(league.code || "").toUpperCase();
       const leagueName=String(league.name || "");
       const isEuropaOrConference=leagueCode==="EL"||leagueCode==="ECL"||/europa league|conference league/i.test(leagueName);
-      const data=await post("leagueFixtures",{leagueCode,leagueName});
+      const data=await post("leagueFixtures",{leagueId:Number(league.id),leagueCode,leagueName});
       setFixtureSource({...data.providers,fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
       const now=Date.now();
       const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
@@ -154,8 +147,8 @@ export default function ValueBets({ endpoint }: Props) {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · Value scanner"}</b>
-        <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition, scan it, review ranked value bets, then close it and move to the next. football-data.org supplies fixtures and team statistics; 5DollarFootballAPI Ultra and OddsRelay supply prices.":"SportMonks fixtures and statistics with OddsPapi bookmaker prices."}</small>
+      <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · SportMonks league scanner"}</b>
+        <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition and scan its fixtures.":"Choose a SportMonks competition, scan today’s European fixtures first, then explore other leagues."}</small>
       </div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button>
