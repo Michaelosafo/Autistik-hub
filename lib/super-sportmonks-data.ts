@@ -98,14 +98,31 @@ function toLegacy(m: any) {
     statistics: rows(m?.statistics)
   };
 }
-async function fixturesByDate(date: string) {
-  const all: any[] = [];
-  for (let page = 1; page <= 20; page++) {
-    const body = await api("/fixtures/date/" + date + "?include=participants;league;state;scores.participant&per_page=50&page=" + page, 60_000);
+async function collectFixturePages(path: string) {
+  const all = new Map<string, any>();
+  let cursor = "";
+  for (let page = 1; page <= 30; page++) {
+    const suffix = cursor
+      ? "&cursor=" + encodeURIComponent(cursor)
+      : "&page=" + page;
+    const body = await api(path + suffix, 60_000);
     const pageRows = rows(body);
-    all.push(...pageRows);
-    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 50) break;
+    for (const item of pageRows) if (item?.id != null) all.set(String(item.id), item);
+    const pagination = body?.pagination || body?.meta?.pagination || {};
+    const next = String(pagination?.next_cursor || pagination?.nextCursor || "");
+    if (pagination?.has_more === false || pagination?.hasMore === false || (!next && pageRows.length < 50)) break;
+    if (next && next === cursor) break;
+    if (next) cursor = next;
+    else if (pageRows.length < 50) break;
   }
+  return [...all.values()];
+}
+async function fixturesByDate(date: string) {
+  const include = "?include=participants;league;state;scores.participant&per_page=50";
+  let all = await collectFixturePages("/fixtures/date/" + date + include);
+  // SportMonks has both date and date-range fixture endpoints. Retry through
+  // the documented range endpoint if the date endpoint yields an empty slate.
+  if (!all.length) all = await collectFixturePages("/fixtures/between/" + date + "/" + date + include);
   return all;
 }
 async function fixturesForTeam(teamId: number, from: string, to: string) {
