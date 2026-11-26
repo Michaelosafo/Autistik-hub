@@ -259,7 +259,7 @@ export default function SportBoard() {
     finally { setBusy(false); }
   }
   const loadHist = () => api<{ rows: any[] }>("history").then((d) => setHist(d.rows)).catch(() => {});
-  useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); void loadTodayMatches(); void searchMatchesByDate(accraDate()); }, []);
+  useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); void searchMatchesByDate(accraDate()); }, []);
 
   async function run() {
     if (!home || !away) return;
@@ -457,80 +457,6 @@ export default function SportBoard() {
         </div>) : <small className="muted">No alternative market currently clears the 55% probability display threshold.</small>}
       </section>}
       {ready === false && <div className="notice warn">API-Football is not configured. Add <code>APIFOOTBALL_KEY</code> to Vercel Production and redeploy.</div>}
-
-      <section className="card stack">
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <b>🏆 Choose a league or tournament</b>
-          <small className="muted">{leagueCatalogue.length} competitions</small>
-        </div>
-        <small className="muted">Select a competition to load its upcoming fixtures and automatically scan them using AUTISTIK statistics and Ghana bookmaker odds. Results are shown inside the selected league.</small>
-        <input value={leagueSearch} onChange={(e) => setLeagueSearch(e.target.value)} placeholder="Search league, tournament or country…" />
-        {todayBusy && <small className="muted">Loading available competitions from API-Football…</small>}
-        {todayError && !selectedLeague && <div className="notice warn">{todayError}</div>}
-        <div className="stack" style={{ gap: 8, maxHeight: 420, overflowY: "auto" }}>
-          {leaguesByCountry.map(([country, leagues]: any) => <details key={country}>
-            <summary style={{ cursor: "pointer", padding: "8px", background: "var(--surface-2)", borderRadius: 8, fontWeight: 700 }}>{country} · {leagues.length} competitions</summary>
-            <div className="stack" style={{ gap: 5, padding: "6px 0 8px" }}>
-              {leagues.map((league: any) => <button key={league.id} type="button" className="sb-opt" onClick={() => void openLeague(league)} style={{ border: selectedLeague?.id === league.id ? "2px solid var(--teal)" : undefined }}>
-                {league.logo && <img src={league.logo} alt="" width={24} height={24} />}
-                <span style={{ flex: 1 }}>{league.name}</span>
-                <small className="muted">{league.type} · {league.season}</small>
-              </button>)}
-            </div>
-          </details>)}
-          {!todayBusy && !filteredLeagues.length && <small className="muted">No competitions match that search.</small>}
-        </div>
-        {selectedLeague && <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-            <div className="row" style={{ alignItems: "center", gap: 8 }}>
-              {selectedLeague.logo && <img src={selectedLeague.logo} alt="" width={30} height={30} />}
-              <b>{selectedLeague.name} · {selectedLeague.country}</b>
-            </div>
-            <button type="button" className="btn small ghost" onClick={() => { setSelectedLeague(null); setSelectedLeagueFixtures([]); setLeagueValueRows([]); setLeagueValueDiagnostics([]); setTodayError(""); }}>Close league</button>
-          </div>
-          <small className="muted">{selectedLeagueFixtures.length} upcoming fixtures · Season {selectedLeague.season} · API-Football statistics · OddsRelay Ghana prices</small>
-          {leagueLoading && <small className="muted">Loading fixtures…</small>}
-          {leagueScanBusy && <small className="muted">{leagueScanProgress}</small>}
-          {selectedLeagueFixtures.map((fixture: any) => <div key={fixture.id} className="row" style={{ justifyContent: "space-between", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
-            <span><b>{fixture.home.name} vs {fixture.away.name}</b><small className="muted" style={{ display: "block" }}>{new Date(fixture.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small></span>
-            <small className="muted">{fixture.status}</small>
-          </div>)}
-          <button type="button" className="btn primary" disabled={!selectedLeagueFixtures.length || leagueScanBusy || leagueLoading} onClick={() => void scanSelectedLeague()}>
-            {leagueScanBusy ? "Scanning competition…" : "Rescan this league"}
-          </button>
-          {todayError && <div className="notice warn">{todayError}</div>}
-          {leagueValueRows.length > 0 && <div className="stack" style={{ gap: 8 }}>
-            <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-              <b>📊 {selectedLeague.name} · Value and price comparison</b>
-              <small className="muted">{leagueValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))).length} priced selections</small>
-            </div>
-            <small className="muted">AUTISTIK estimates each outcome probability from team form, home/away records, goals, recent performance and available match statistics. It then compares that estimate with the bookmaker's implied probability. Example: odds 2.60 imply a 38.5% break-even chance; if AUTISTIK's stats model estimates 50%, fair odds are 2.00 and estimated expected value is +30% per unit staked.</small>
-            {(() => {
-              const eligible = leagueValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01);
-              const grouped = new Map<string, any[]>();
-              for (const row of eligible) {
-                const key = row.home + "|" + row.away;
-                if (!grouped.has(key)) grouped.set(key, []);
-                grouped.get(key)!.push(row);
-              }
-              const picks = [...grouped.values()].flatMap((items) => items.sort((a: any, b: any) => Math.abs(Number(b.ev)) - Math.abs(Number(a.ev))).slice(0, 5));
-              return picks.length ? picks.map((row: any, index: number) => {
-                const difference = Number(row.odds) - Number(row.fairOdds);
-                const positive = Number(row.ev) > 0;
-                return <div key={row.key || index} className="sb-top-r" style={{ borderLeft: positive ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
-                  <b>{row.home} vs {row.away}</b>
-                  <b>{row.selection} · {row.market}</b>
-                  <small className="muted">{row.bookmaker} · bookmaker odds {Number(row.odds).toFixed(2)} · fair odds {Number(row.fairOdds).toFixed(2)}</small>
-                  <small>Bookmaker implied chance: {Number(row.implied).toFixed(1)}% · AUTISTIK estimated chance: {Number(row.probability).toFixed(1)}%</small>
-                  <small>Odds difference: {difference >= 0 ? "+" : ""}{difference.toFixed(2)} · Expected return (EV): {Number(row.ev) >= 0 ? "+" : ""}{Number(row.ev).toFixed(1)}%</small>
-                  <b className={positive ? "sb-ok" : "sb-no"}>{positive ? "Potential value at this price" : "Underpriced · avoid at this price"}</b>
-                </div>;
-              }) : <div className="notice warn">No positive or negative price discrepancies with supported Ghana bookmaker odds were found. No picks are forced.</div>;
-            })()}
-          </div>}
-          {leagueValueDiagnostics.length > 0 && <details><summary>Scan coverage and unavailable odds</summary>{leagueValueDiagnostics.map((item: any, index: number) => <small key={index} className="muted" style={{ display: "block" }}>{item.fixture}: {item.error || "Odds and model checked"}</small>)}</details>}
-        </div>}
-      </section>
 
       <section className="card stack">
         <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
