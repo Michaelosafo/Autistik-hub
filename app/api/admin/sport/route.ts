@@ -99,8 +99,7 @@ export async function POST(req: Request) {
               "premierbet": "Premier Bet", "premier bet": "Premier Bet",
               "melbet": "MelBet", "mel bet": "MelBet",
               "parimatch": "Parimatch", "pari match": "Parimatch",
-              "mybet": "MyBet", "my bet": "MyBet",
-              "bet365": "bet365"
+              "mybet": "MyBet", "my bet": "MyBet" 
             };
             const ghanaBookmaker = (name: any) => ghanaBookmakerAliases[norm(name)] || "";
             for (const event of events) for (const book of (event.bookmakers || [])) {
