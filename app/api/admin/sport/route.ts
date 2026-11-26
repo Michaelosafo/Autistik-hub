@@ -1,6 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
+import { analyse as analyseApiFootball, resolveFixtureTeamIds as resolveApiFootballTeamIds, sportReady as apiFootballReady } from "@/lib/sport";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
@@ -129,10 +130,17 @@ export async function POST(req: Request) {
           if (!home || !away || !f?.date) return;
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
+            // The old football-data.org IDs must never be passed to API-Football.
+            // Resolve each team against the same API-Football source used by the Poisson model.
+            const apiTeamIds = apiFootballReady() ? await resolveApiFootballTeamIds([home, away]) : {};
+            const apiHomeId = apiTeamIds[String(home).toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ")] || 0;
+            const apiAwayId = apiTeamIds[String(away).toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ")] || 0;
             const [analysisResult, relayResult, fiveDollarResult] = await Promise.allSettled([
-              homeId > 0 && awayId > 0 && homeId !== awayId
-                ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
-                : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
+              apiHomeId > 0 && apiAwayId > 0 && apiHomeId !== apiAwayId
+                ? withTimeout(analyseApiFootball(apiHomeId, apiAwayId), "API-Football model analysis", 25000)
+                : Promise.reject(new Error(apiFootballReady()
+                    ? "Could not confidently match both teams to API-Football. This fixture remains odds-only."
+                    : "APIFOOTBALL_KEY is missing in Vercel Production; the model cannot load team statistics.")),
               withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000),
               withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date), Number(f.providerFixtureId) || undefined), "5DollarFootballAPI odds lookup", 25000)
             ]);
@@ -204,6 +212,16 @@ export async function POST(req: Request) {
                     if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
                   }
                   let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
+                  // Totals are priced directly from the Poisson goal grid. This handles
+                  // every available half-goal line (including 3.5) without label mismatches.
+                  if (market.key === "totals") {
+                    const total = label.match(/^(over|under)\\s+(\\d+(?:\\.\\d+)?)$/i);
+                    const line = total ? String(Number(total[2])) : "";
+                    const overProbability = line ? Number(analysis?.model?.over?.[line]) : NaN;
+                    if (total && Number.isFinite(overProbability)) {
+                      modelPick = { name: modelName, p: total[1].toLowerCase() === "over" ? overProbability : 100 - overProbability };
+                    }
+                  }
                   if (market.key === "double_chance") {
                     const p = analysis?.model || {};
                     const pick = norm(label).replace(/\s/g, "");
@@ -217,7 +235,7 @@ export async function POST(req: Request) {
                   const noVig = implied / overround * 100;
                   const marketTitle = market.key === "h2h" ? "1X2 · Match result" : market.key === "totals" ? "Goals · Over/Under" : market.key === "btts" ? "Both teams to score" : String(market.key).replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase());
                   if (!modelPick || !(Number(modelPick.p) > 0)) {
-                    mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
+                    mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, competition: String(f.competition?.name || f.competition || f.league?.name || "Other competitions"), home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
                     continue;
                   }
                   const probability = Number(modelPick.p);
