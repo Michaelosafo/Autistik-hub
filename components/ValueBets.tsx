@@ -174,9 +174,6 @@ export default function ValueBets({ endpoint }: Props) {
         </details>)}</div>
       </div>;
     })()}
-     <small className="muted">{!x.modelSupported ? "This bookmaker option is shown, but Autistik does not yet calculate its fair probability. It is not labelled as value." : x.edge>0.05?"Autistik estimates this outcome is more likely than the bookmaker market implies.":x.edge< -0.05?"The bookmaker market implies this outcome is more likely than Autistik estimates.":"Autistik and the bookmaker market are close on this outcome."} {x.modelSupported ? (x.value?"The offered price is above Autistik fair odds: potential value.":"The offered price is below Autistik fair odds: not value.") : ""}</small>
-      </div>)}
-    </div>}
      <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and The Odds API bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Uses 5DollarFootballAPI Ultra bookmaker prices, removes duplicate selections, and keeps the best returned price. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
   </section>;
 }
