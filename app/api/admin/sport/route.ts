@@ -2,7 +2,7 @@ import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
 import { getTheOddsApiStatus, getTheOddsApiMatchOdds } from "@/lib/the-odds-api";
-import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
+import { getOddsPapiUpcomingFixtures, getOddsPapiMatchOdds } from "@/lib/oddspapi";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              withTimeout(getTheOddsApiMatchOdds(home, away, date, String(f?.competition?.name || f?.competition || f?.league?.name || "")), "OddsPapi odds lookup", 25000)
+              withTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi odds lookup", 25000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
