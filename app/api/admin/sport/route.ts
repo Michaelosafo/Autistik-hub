@@ -4,7 +4,7 @@ import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams,
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
-import { getSportMonksLeagueUpcomingFixtures, superReady } from "@/lib/super-sportmonks-data";
+import { analyse as analyseSportMonks, getSportMonksLeagueUpcomingFixtures, superReady } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -111,18 +111,29 @@ export async function POST(req: Request) {
             const normalizeTeam = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
               .replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
               .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-            const footballDataHomeId = footballDataTeamIds[normalizeTeam(home)] || Number(f?.home?.id) || 0;
-            const footballDataAwayId = footballDataTeamIds[normalizeTeam(away)] || Number(f?.away?.id) || 0;
-            const [analysisResult, relayResult, fiveDollarResult] = await Promise.allSettled([
+            const fromSportMonks = String(f?.fixtureSource || f?.provider || "").toLowerCase().includes("sportmonks");
+            // Never pass SportMonks team IDs into football-data.org. Resolve by
+            // club name first; only use fixture IDs directly for football-data fixtures.
+            const footballDataHomeId = footballDataTeamIds[normalizeTeam(home)] || (!fromSportMonks ? Number(f?.home?.id) : 0) || 0;
+            const footballDataAwayId = footballDataTeamIds[normalizeTeam(away)] || (!fromSportMonks ? Number(f?.away?.id) : 0) || 0;
+            const sportMonksHomeId = fromSportMonks ? Number(f?.home?.id) || 0 : 0;
+            const sportMonksAwayId = fromSportMonks ? Number(f?.away?.id) || 0 : 0;
+            const [analysisResult, sportMonksAnalysisResult, relayResult, fiveDollarResult] = await Promise.allSettled([
               footballDataHomeId > 0 && footballDataAwayId > 0 && footballDataHomeId !== footballDataAwayId
                 ? withTimeout(analyse(footballDataHomeId, footballDataAwayId, date), "football-data.org model analysis", 25000)
                 : Promise.reject(new Error(sportReady()
-                    ? "Could not confidently match both teams to football-data.org. This fixture remains odds-only."
+                    ? "Could not confidently match both teams to football-data.org."
                     : "FOOTBALL_DATA_TOKEN is missing in Vercel Production; football-data.org statistics are unavailable.")),
+              superReady() && sportMonksHomeId > 0 && sportMonksAwayId > 0 && sportMonksHomeId !== sportMonksAwayId
+                ? withTimeout(analyseSportMonks(sportMonksHomeId, sportMonksAwayId, date), "SportMonks model fallback", 25000)
+                : Promise.reject(new Error("SportMonks team IDs are unavailable for this fixture.")),
               withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000),
               withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date), Number(f.providerFixtureId) || undefined), "5DollarFootballAPI odds lookup", 25000)
             ]);
-            const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
+            const analysis = analysisResult.status === "fulfilled" ? analysisResult.value
+              : sportMonksAnalysisResult.status === "fulfilled" ? sportMonksAnalysisResult.value : null;
+            const analysisProvider = analysisResult.status === "fulfilled" ? "football-data.org"
+              : sportMonksAnalysisResult.status === "fulfilled" ? "SportMonks fallback" : null;
             const oddsSources: any[] = [];
             if (relayResult.status === "fulfilled") oddsSources.push({ name: "OddsRelay", value: relayResult.value });
             if (fiveDollarResult.status === "fulfilled") oddsSources.push({ name: "5DollarFootballAPI", value: fiveDollarResult.value });
@@ -170,7 +181,11 @@ export async function POST(req: Request) {
                 fivedollarfootball: { ok: fiveDollarResult.status === "fulfilled", matched: fiveDollarResult.status === "fulfilled" ? Number(fiveDollarResult.value?.count || 0) : 0, error: sourceErrors.fivedollarfootball, plan: sourceDiagnostics["5DollarFootballAPI"]?.plan || null, requestedBookmakers: sourceDiagnostics["5DollarFootballAPI"]?.requestedBookmakers ?? null, returnedBookmakers: sourceDiagnostics["5DollarFootballAPI"]?.returnedBookmakers ?? null, bookmakers: sourceDiagnostics["5DollarFootballAPI"]?.bookmakers || [], markets: sourceDiagnostics["5DollarFootballAPI"]?.markets || [], emptyOddsReason: sourceDiagnostics["5DollarFootballAPI"]?.emptyOddsReason || null, oddsRequestError: sourceDiagnostics["5DollarFootballAPI"]?.oddsRequestError || null }
               },
               feedExamples: sampleEvents.slice(0, 4).map((e: any) => String(e?.home_team || e?.home || "") + " vs " + String(e?.away_team || e?.away || "")),
-              analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null
+              analysisProvider,
+              analysisError: analysis ? null : [
+                analysisResult.status === "rejected" ? "football-data.org: " + String(analysisResult.reason?.message || analysisResult.reason) : "",
+                sportMonksAnalysisResult.status === "rejected" ? "SportMonks: " + String(sportMonksAnalysisResult.reason?.message || sportMonksAnalysisResult.reason) : ""
+              ].filter(Boolean).join(" | ")
             });
             const norm = (v: string) => String(v || "").toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().replace(/\s+/g, " ");
             const mapped: any[] = [];
