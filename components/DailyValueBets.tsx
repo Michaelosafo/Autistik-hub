@@ -54,17 +54,17 @@ export default function DailyValueBets() {
         allRows=allRows.concat(Array.isArray(data.rows)?data.rows:[]);
         allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
         const ranked=rankRows(allRows);
-        setPicks(ranked.filter((r:any)=>Number(r.probability)>=45).slice(0,25));
+        setPicks(ranked.filter((r:any)=>Number(r.probability)>=45));
         setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
-          .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)).slice(0,10));
+          .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)));
         setDiagnostics([...allDiagnostics]);
         setScanned(Math.min(i+batch.length,dayFixtures.length));
         if(i+2<dayFixtures.length)await new Promise(resolve=>setTimeout(resolve,650));
       }
       const ranked=rankRows(allRows);
-      setPicks(ranked.filter((r:any)=>Number(r.probability)>=45).slice(0,25));
+      setPicks(ranked.filter((r:any)=>Number(r.probability)>=45));
       setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
-        .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)).slice(0,10));
+        .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)));
       if(!ranked.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
     finally {setBusy(false);setProgress("");}
