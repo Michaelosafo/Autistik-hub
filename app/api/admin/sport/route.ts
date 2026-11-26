@@ -4,7 +4,7 @@ import { analyse, history, saveOdds, savePrediction, searchTeams, setResult, spo
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
-import { analyse as analyseSportMonks, getSportMonksLeagueUpcomingFixtures, matchesOnDate as sportMonksMatchesOnDate, superReady } from "@/lib/super-sportmonks-data";
+import { analyse as analyseSportMonks, getSportMonksLeagueUpcomingFixtures, matchesOnDate as sportMonksMatchesOnDate, teamFixtureChoicesByName, superReady } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -97,8 +97,27 @@ export async function POST(req: Request) {
       }
       case "teamFixtures": {
         const teamId = Number(b.teamId);
-        if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
-        return json({ fixtures: await teamFixtureChoices(teamId) });
+        const teamName = String(b.teamName || "").trim();
+        if (!teamName && (!Number.isInteger(teamId) || teamId <= 0)) return json({ error: "Choose a valid team." }, 400);
+        // Prefer SportMonks by the selected club name; the UI's selected team ID
+        // belongs to football-data.org and must never be passed to SportMonks.
+        if (superReady() && teamName) {
+          try {
+            const fixtures = await withTimeout(teamFixtureChoicesByName(teamName), "SportMonks team fixtures", 25000);
+            return json({ fixtures, fixtureProvider: "SportMonks" });
+          } catch (error) {
+            // Fall through to the legacy provider only if SportMonks cannot resolve this club.
+            if (!sportReady()) throw error;
+          }
+        }
+        try {
+          const fixtures = await teamFixtureChoices(teamId);
+          return json({ fixtures, fixtureProvider: "football-data.org" });
+        } catch (error) {
+          throw new Error("Could not load matches for " + (teamName || "this team") + ". SportMonks: " +
+            (error instanceof Error ? error.message : String(error)) +
+            ". football-data.org: " + (error instanceof Error ? error.message : String(error)));
+        }
       }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures : [];
