@@ -88,8 +88,23 @@ export async function POST(req: Request) {
             const mapped: any[] = [];
             const norm = (v: any) => String(v || "").toLowerCase().normalize("NFKD")
               .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim().replace(/\\s+/g, " ");
+            // Only show prices from bookmakers commonly used by Ghanaian bettors.
+            // Never let an international-only bookmaker create a displayed value bet.
+            const ghanaBookmakerAliases: Record<string, string> = {
+              "sportybet": "SportyBet", "sporty bet": "SportyBet",
+              "betway": "Betway", "1xbet": "1xBet", "1 x bet": "1xBet",
+              "betpawa": "betPawa", "bet pawa": "betPawa",
+              "22bet": "22Bet", "22 bet": "22Bet",
+              "premierbet": "Premier Bet", "premier bet": "Premier Bet",
+              "melbet": "MelBet", "mel bet": "MelBet",
+              "parimatch": "Parimatch", "pari match": "Parimatch",
+              "mybet": "MyBet", "my bet": "MyBet",
+              "bet365": "bet365"
+            };
+            const ghanaBookmaker = (name: any) => ghanaBookmakerAliases[norm(name)] || "";
             for (const event of events) for (const book of (event.bookmakers || [])) {
-              if (/exchange/i.test(String(book.title || book.key || ""))) continue;
+              const ghanaBook = ghanaBookmaker(book.title || book.key);
+              if (!ghanaBook) continue;
               for (const market of (book.markets || [])) {
                 if (!Array.isArray(market.outcomes)) continue;
                 const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
@@ -129,7 +144,7 @@ export async function POST(req: Request) {
                     home, away, selection: label, market: market.title || String(market.key),
                     probability: supported ? probability : null,
                     fairOdds: supported ? 100 / probability : null,
-                    odds: price, bookmaker: book.title || book.key || "Bookmaker",
+                    odds: price, bookmaker: ghanaBook,
                     implied, noVig, edge: supported ? probability - noVig : null,
                     ev, value: supported ? ev > 0 : false, modelSupported: supported
                   });
@@ -146,12 +161,12 @@ export async function POST(req: Request) {
             diagnostics.push({
               fixture: home + " vs " + away, provider: "API-Football",
               analysis: true, oddsEvents: Number(odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0),
-              matchedEvents: events.length, bookmakers: odds?.availableBookmakers || [],
+              matchedEvents: events.length, bookmakers: [...new Set((odds?.availableBookmakers || []).map((name: string) => ghanaBookmaker(name)).filter(Boolean))],
               markets: [...new Set(mapped.map((x: any) => x.market))],
-              error: events.length ? null : "SportMonks returned no bookmaker odds for this fixture."
+              error: mapped.length ? null : "No odds from the supported Ghana bookmakers were returned for this fixture."
             });
           } catch (error) {
-            diagnostics.push({ fixture: home + " vs " + away, provider: "SportMonks", error: error instanceof Error ? error.message : String(error) });
+            diagnostics.push({ fixture: home + " vs " + away, provider: "API-Football", error: error instanceof Error ? error.message : String(error) });
           }
         }));
         return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "API-Football" } });
