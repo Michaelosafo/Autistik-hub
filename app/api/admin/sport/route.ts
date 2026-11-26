@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
-import { analyse as analyseApiFootball, resolveFixtureTeamIds as resolveApiFootballTeamIds, sportReady as apiFootballReady } from "@/lib/sport";
+import { analyse as analyseApiFootball, resolveFixtureTeamIds as resolveApiFootballTeamIds, searchTeams as searchApiFootballTeams, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
           fivedollarfootball: fivedollarfootball.status === "fulfilled" ? fivedollarfootball.value : { keyConfigured: !!process.env.FIVEDOLLARFOOTBALL_API_KEY, active: false, error: String(fivedollarfootball.reason?.message || fivedollarfootball.reason) }
         });
       }
-      case "search": return json({ teams: await searchTeams(String(b.q || "")) });
+      case "search": return json({ teams: await searchApiFootballTeams(String(b.q || "")) });
       case "todayMatches": {
         // Keep football-data.org as the source for historical team statistics,
         // while restoring OddsPapi's broader subscribed-bookmaker fixture feed.
@@ -265,7 +265,7 @@ export async function POST(req: Request) {
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
-        return json({ fixtures: await teamFixtureChoices(teamId) });
+        return json({ fixtures: await apiFootballTeamFixtureChoices(teamId) });
       }
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
