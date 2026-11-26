@@ -62,12 +62,12 @@ async function swapBalances(f: { fromChain: string; fromContract: string; fromAm
     return { token, native, decimals, nativeSymbol: "SOL" };
   }
   const native = BigInt(await rpc(f.fromChain, "eth_getBalance", [f.fromAddress, "latest"]));
-  if (!f.fromContract) return { token: native, native, decimals: 18, nativeSymbol: NATIVE[f.fromChain].s };
+  if (!f.fromContract) return { token: native, native, decimals: 18, nativeSymbol: NATIVE[f.fromChain as keyof typeof NATIVE].s };
   const [balHex, decHex] = await Promise.all([
     rpc(f.fromChain, "eth_call", [{ to: f.fromContract, data: "0x70a08231" + f.fromAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0") }, "latest"]),
     rpc(f.fromChain, "eth_call", [{ to: f.fromContract, data: "0x313ce567" }, "latest"]),
   ]);
-  return { token: BigInt(balHex), native, decimals: Number(BigInt(decHex)), nativeSymbol: NATIVE[f.fromChain].s };
+  return { token: BigInt(balHex), native, decimals: Number(BigInt(decHex)), nativeSymbol: NATIVE[f.fromChain as keyof typeof NATIVE].s };
 }
 async function balancesFor(evm: string, sol: string) {
   const jobs: Promise<{ chain: string; symbol: string; contract: string; amount: string } | null>[] = [];
