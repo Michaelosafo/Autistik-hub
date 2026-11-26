@@ -106,6 +106,9 @@ export default function SportBoard() {
   const [selectedLeagueFixtures, setSelectedLeagueFixtures] = useState<any[]>([]);
   const [leagueClubs, setLeagueClubs] = useState<any[]>([]);
   const [leagueLoading, setLeagueLoading] = useState(false);
+  const [leagueScanBusy, setLeagueScanBusy] = useState(false);
+  const [leagueScanProgress, setLeagueScanProgress] = useState("");
+  const [leagueScanResults, setLeagueScanResults] = useState<any[]>([]);
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
   const [dateMatches, setDateMatches] = useState<any[]>([]);
@@ -121,7 +124,7 @@ export default function SportBoard() {
     finally { setTodayBusy(false); }
   }
   async function openLeague(league: any) {
-    setSelectedLeague(league); setSelectedLeagueFixtures([]); setLeagueClubs([]);
+    setSelectedLeague(league); setSelectedLeagueFixtures([]); setLeagueClubs([]); setLeagueScanResults([]);
     setTodayError(""); setLeagueLoading(true);
     try {
       const seasons = Array.isArray(league.seasons) ? league.seasons.map(Number).filter(Number.isFinite) : [];
@@ -132,6 +135,30 @@ export default function SportBoard() {
       if (!(d.fixtures || []).length) setTodayError("No upcoming fixtures found in this league over the next seven days. Close it and choose another league.");
     } catch (e) { setTodayError((e as Error).message); }
     finally { setLeagueLoading(false); }
+  }
+  async function scanSelectedLeague() {
+    if (!selectedLeague || !selectedLeagueFixtures.length || leagueScanBusy) return;
+    setLeagueScanBusy(true); setLeagueScanResults([]); setTodayError("");
+    const results: any[] = [];
+    try {
+      for (let i = 0; i < selectedLeagueFixtures.length; i++) {
+        const fixture = selectedLeagueFixtures[i];
+        setLeagueScanProgress("Scanning " + selectedLeague.name + " · " + (i + 1) + " of " + selectedLeagueFixtures.length + " · " + fixture.home.name + " vs " + fixture.away.name);
+        const date = new Date(fixture.date).toISOString().slice(0, 10);
+        try {
+          const analysis = await api("analyse", { home: fixture.home.id, away: fixture.away.id, matchDate: date, homeName: fixture.home.name, awayName: fixture.away.name });
+          results.push({ fixture, analysis });
+        } catch (error) {
+          results.push({ fixture, error: error instanceof Error ? error.message : String(error) });
+        }
+        setLeagueScanResults([...results]);
+        if (i < selectedLeagueFixtures.length - 1) await new Promise(resolve => setTimeout(resolve, 350));
+      }
+      void loadHist();
+    } finally {
+      setLeagueScanProgress("");
+      setLeagueScanBusy(false);
+    }
   }
   async function searchMatchesByDate() {
     setDateMatchesBusy(true); setDateMatchesError(""); setDateMatches([]);
@@ -393,12 +420,28 @@ export default function SportBoard() {
           {filteredLeagues.length === 0 && leagueCatalogue.length > 0 && <small className="muted">No country or league matches that search.</small>}
         </div>
         {selectedLeague && <div className="card stack" style={{ padding: 12 }}>
-          <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><div><b>{selectedLeague.country} · {selectedLeague.name}</b><small className="muted" style={{ display: "block" }}>Selected league</small></div><button type="button" className="btn small ghost" onClick={() => { setSelectedLeague(null); setSelectedLeagueFixtures([]); setLeagueClubs([]); setTodayError(""); }}>Close league</button></div>
+          <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><div><b>{selectedLeague.country} · {selectedLeague.name}</b><small className="muted" style={{ display: "block" }}>Selected league</small></div><button type="button" className="btn small ghost" onClick={() => { setSelectedLeague(null); setSelectedLeagueFixtures([]); setLeagueClubs([]); setLeagueScanResults([]); setTodayError(""); }}>Close league</button></div>
           {leagueLoading ? <small className="muted">Loading clubs and upcoming fixtures…</small> : <>
             <b>Clubs in this league · {leagueClubs.length}</b><small className="muted">{leagueClubs.map((club: any) => club.name).filter(Boolean).join(" · ") || "Club list not supplied by provider."}</small>
             <b>Upcoming fixtures · {selectedLeagueFixtures.length}</b>
             {selectedLeagueFixtures.map((fixture: any) => <button key={fixture.id} type="button" className="sb-opt" onClick={() => chooseFixture(fixture)} disabled={busy} style={{ justifyContent: "space-between" }}><span style={{ flex: 1, minWidth: 0 }}><b>{fixture.home.name} vs {fixture.away.name}</b><small className="muted" style={{ display: "block" }}>{new Date(fixture.date).toLocaleString()}</small></span><span>Analyse ›</span></button>)}
-            <button type="button" className="btn primary" disabled={busy || selectedLeagueFixtures.length === 0} onClick={() => selectedLeagueFixtures[0] && chooseFixture(selectedLeagueFixtures[0])}>Analyse first fixture</button>
+            <button type="button" className="btn primary" disabled={busy || leagueScanBusy || selectedLeagueFixtures.length === 0} onClick={() => void scanSelectedLeague()}>{leagueScanBusy ? "Scanning league…" : "Scan this league · " + selectedLeagueFixtures.length + " fixtures"}</button>
+            {leagueScanProgress && <small className="muted">{leagueScanProgress}</small>}
+            {leagueScanResults.length > 0 && <div className="stack" style={{ gap: 8 }}>
+              <b>League scan results · {leagueScanResults.length}/{selectedLeagueFixtures.length}</b>
+              {leagueScanResults.map((item: any, index: number) => {
+                const model = item.analysis?.model;
+                const best = Array.isArray(model?.markets) ? [...model.markets].sort((a: any, b: any) => Number(b.p) - Number(a.p))[0] : null;
+                return <div key={item.fixture.id} className="sb-top-r hi" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                  <b>{index + 1}. {item.fixture.home.name} vs {item.fixture.away.name}</b>
+                  {item.error ? <small className="muted">Analysis unavailable: {item.error}</small> : <>
+                    {best && <small>Highest probability: <b>{best.name}</b> · {best.p}% · fair odds {best.fair}</small>}
+                    <div className="sb-scores">{getValidQuickPicks(model).map((pick: any) => <span key={pick.name}>{pick.name}: <b>{pick.p}%</b></span>)}</div>
+                    <button type="button" className="btn small ghost" onClick={() => void chooseFixture(item.fixture)} disabled={busy}>Open full match analysis</button>
+                  </>}
+                </div>;
+              })}
+            </div>}
           </>}
         </div>}
       </section>
