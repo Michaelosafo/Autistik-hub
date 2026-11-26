@@ -558,55 +558,53 @@ export default function SportBoard() {
         {!dateMatchesBusy && !dateMatchesError && dateMatches.length === 0 && <small className="muted">No matches scheduled or recorded for this date.</small>}
         {dailyScanBusy && <small className="muted">{dailyScanProgress}</small>}
         {dailyScanError && <div className="notice warn">{dailyScanError}</div>}
-        {(dailyValueRows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))) || dailyScanDiagnostics.length > 0) && <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <b>📊 Daily odds mispricing scan</b>
-            <small className="muted">{dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))).length} priced selections</small>
-          </div>
-          <small className="muted">All fixtures for {matchDate} are checked against AUTISTIK model probabilities from API-Football statistics and available bookmaker prices. Positive EV means the bookmaker price is above fair odds; negative EV means it is below fair odds.</small>
-          {(() => {
-            const eligible = dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01);
-            const grouped = new Map<string, any[]>();
-            for (const row of eligible) {
-              const key = [row.home, row.away].join("|");
-              if (!grouped.has(key)) grouped.set(key, []);
-              grouped.get(key)!.push(row);
-            }
-            const topFivePerMatch = [...grouped.values()].flatMap(rows =>
-              rows.sort((a: any, b: any) => Math.abs(Number(b.odds) - Number(b.fairOdds)) - Math.abs(Number(a.odds) - Number(a.fairOdds))).slice(0, 5)
-            ).sort((a: any, b: any) => (Number(b.odds) - Number(b.fairOdds)) - (Number(a.odds) - Number(a.fairOdds)));
-            return topFivePerMatch.map((row: any, index: number) => {
-              const ev = Number(row.ev);
-              const oddsDifference = Number(row.odds) - Number(row.fairOdds);
-              const overpriced = oddsDifference > 0;
-              return <div key={row.key || index} className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5, borderLeft: overpriced ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
-                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-                  <b>{row.home} vs {row.away}</b>
-                  <b className={overpriced ? "sb-ok" : "sb-no"}>{overpriced ? "OVERPRICED · potential value" : "UNDERPRICED · avoid at this price"}</b>
+        {(() => {
+          const eligible = dailyValueRows.filter((row: any) =>
+            row.modelSupported &&
+            Number.isFinite(Number(row.ev)) &&
+            Number.isFinite(Number(row.odds)) &&
+            Number.isFinite(Number(row.fairOdds)) &&
+            Math.abs(Number(row.ev)) > 0.01
+          );
+          const overpriced = eligible
+            .filter((row: any) => Number(row.ev) > 0.01)
+            .sort((a: any, b: any) => Number(b.ev) - Number(a.ev));
+          const underpriced = eligible
+            .filter((row: any) => Number(row.ev) < -0.01)
+            .sort((a: any, b: any) => Number(a.ev) - Number(b.ev));
+          const renderRows = (rows: any[], isOverpriced: boolean) => rows.map((row: any, index: number) => (
+            <div key={(row.key || [row.home, row.away, row.market, row.selection, row.bookmaker].join("|")) + ":" + index}
+              className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5,
+                borderLeft: isOverpriced ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
+              <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                <b>{row.home} vs {row.away}</b>
+                <b className={isOverpriced ? "sb-ok" : "sb-no"}>{isOverpriced ? "OVERPRICED · potential value" : "UNDERPRICED · poor value"}</b>
+              </div>
+              <span>{row.selection} · {row.market}</span>
+              <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
+              <small>Bookmaker odds: <b>{Number(row.odds).toFixed(2)}</b> · AUTISTIK fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
+              <small className={isOverpriced ? "sb-ok" : "sb-no"}>Expected value: {Number(row.ev) > 0 ? "+" : ""}{Number(row.ev).toFixed(1)}% · {row.bookmaker}</small>
+            </div>
+          ));
+          return (
+            <div className="stack" style={{ gap: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+              <section className="stack" style={{ gap: 7 }}>
+                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <b>🟢 Overpriced · positive value</b><small className="muted">{overpriced.length} selections</small>
                 </div>
-                <span>{row.selection} · {row.market}</span>
-                <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
-                <small>Bookmaker odds: <b>{Number(row.odds).toFixed(2)}</b> · Autistik fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
-                <small className={overpriced ? "sb-ok" : "sb-no"}>Odds difference: {oddsDifference > 0 ? "+" : ""}{oddsDifference.toFixed(2)} · Expected value: {ev > 0 ? "+" : ""}{ev.toFixed(1)}% · {row.bookmaker}</small>
-              </div>;
-            });
-          })()}
-          {dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01).length > 0 &&
-            <small className="muted">Showing up to five strongest mispriced selections per match. Matches without a supported price difference are excluded.</small>}
-          {dailyScanDiagnostics.length > 0 && <details><summary>Scan coverage and diagnostics ({dailyScanDiagnostics.length} matches)</summary><div className="stack" style={{ gap: 4 }}>{dailyScanDiagnostics.map((item: any, i: number) => <small key={i} className="muted">{item.fixture}: {item.error || (item.matchedEvents ? item.matchedEvents + " odds event(s), " + (item.markets || []).length + " market types" : "No bookmaker odds matched")}</small>)}</div></details>}
-        </div>}
-        {dateMatches.length > 0 && <div className="stack" style={{ gap: 7 }}>
-          {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <b>{f.home.name} vs {f.away.name}</b>
-              <small className="muted" style={{ display: "block" }}>{f.competition || "Football"} · {new Date(f.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} (Ghana time)</small>
-            </span>
-            <span style={{ display: "grid", justifyItems: "end", gap: 3, whiteSpace: "nowrap" }}>
-              <b>{f.status === "FINISHED" && f.score ? "FT " + f.score.home + "–" + f.score.away : f.status === "IN_PLAY" ? "LIVE" : f.status === "PAUSED" ? "HALF-TIME" : f.status.replace("_", " ")}</b>
-              <small className="muted">Analyse & value odds ›</small>
-            </span>
-          </button>)}
-        </div>}
+                <small className="muted">Bookmaker odds are above AUTISTIK fair odds. Sorted by highest estimated expected value.</small>
+                {overpriced.length ? renderRows(overpriced, true) : <small className="muted">No overpriced selections qualified for this date.</small>}
+              </section>
+              <section className="stack" style={{ gap: 7 }}>
+                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
+                  <b>🔴 Underpriced · negative value</b><small className="muted">{underpriced.length} selections</small>
+                </div>
+                <small className="muted">Bookmaker odds are below AUTISTIK fair odds. These are not recommended value bets.</small>
+                {underpriced.length ? renderRows(underpriced, false) : <small className="muted">No underpriced selections qualified for this date.</small>}
+              </section>
+            </div>
+          );
+        })()}
         {busy && <small className="muted">Analysing selected match…</small>}
         {err && <div className="notice warn">{err}</div>}
       </section>
