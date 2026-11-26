@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: sportReady() });
+      case "ready": return json({ ready: apiFootballReady() });
       case "oddsStatus": {
         const [oddsrelay, fivedollarfootball] = await Promise.allSettled([getGhanaOddsRelayStatus(), getFiveDollarFootballStatus()]);
         return json({
@@ -132,8 +132,8 @@ export async function POST(req: Request) {
             // The old football-data.org IDs must never be passed to API-Football.
             // Resolve each team against the same API-Football source used by the Poisson model.
             const apiTeamIds = apiFootballReady() ? await resolveApiFootballTeamIds([home, away]) : {};
-            const apiHomeId = apiTeamIds[String(home).toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ")] || 0;
-            const apiAwayId = apiTeamIds[String(away).toLowerCase().normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ")] || 0;
+            const apiHomeId = apiTeamIds[String(home).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")] || 0;
+            const apiAwayId = apiTeamIds[String(away).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ")] || 0;
             const [analysisResult, relayResult, fiveDollarResult] = await Promise.allSettled([
               apiHomeId > 0 && apiAwayId > 0 && apiHomeId !== apiAwayId
                 ? withTimeout(analyseApiFootball(apiHomeId, apiAwayId), "API-Football model analysis", 25000)
@@ -214,7 +214,7 @@ export async function POST(req: Request) {
                   // Totals are priced directly from the Poisson goal grid. This handles
                   // every available half-goal line (including 3.5) without label mismatches.
                   if (market.key === "totals") {
-                    const total = label.match(/^(over|under)\\s+(\\d+(?:\\.\\d+)?)$/i);
+                    const total = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
                     const line = total ? String(Number(total[2])) : "";
                     const overProbability = line ? Number(analysis?.model?.over?.[line]) : NaN;
                     if (total && Number.isFinite(overProbability)) {
