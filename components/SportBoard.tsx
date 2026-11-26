@@ -115,6 +115,11 @@ export default function SportBoard() {
   const [dateMatchesImportedCount, setDateMatchesImportedCount] = useState(0);
   const [dateMatchesBusy, setDateMatchesBusy] = useState(false);
   const [dateMatchesError, setDateMatchesError] = useState("");
+  const [dailyValueRows, setDailyValueRows] = useState<any[]>([]);
+  const [dailyScanDiagnostics, setDailyScanDiagnostics] = useState<any[]>([]);
+  const [dailyScanBusy, setDailyScanBusy] = useState(false);
+  const [dailyScanProgress, setDailyScanProgress] = useState("");
+  const [dailyScanError, setDailyScanError] = useState("");
   async function loadTodayMatches() {
     setTodayBusy(true); setTodayError("");
     try {
@@ -161,15 +166,45 @@ export default function SportBoard() {
       setLeagueScanBusy(false);
     }
   }
+  async function scanDateMatches(fixtures: any[], dateToScan: string) {
+    setDailyValueRows([]); setDailyScanDiagnostics([]); setDailyScanError("");
+    if (!fixtures.length) return;
+    setDailyScanBusy(true);
+    const allRows: any[] = [];
+    const allDiagnostics: any[] = [];
+    try {
+      // Keep batches small so a busy match day does not overwhelm provider limits.
+      for (let i = 0; i < fixtures.length; i += 2) {
+        const batch = fixtures.slice(i, i + 2);
+        setDailyScanProgress("Comparing odds · " + Math.min(i + batch.length, fixtures.length) + " of " + fixtures.length + " matches");
+        const result = await api<{ rows: any[]; diagnostics: any[] }>("valueScan", { fixtures: batch });
+        allRows.push(...(Array.isArray(result.rows) ? result.rows : []));
+        allDiagnostics.push(...(Array.isArray(result.diagnostics) ? result.diagnostics : []));
+        setDailyValueRows([...allRows].sort((a: any, b: any) => Math.abs(Number(b.ev) || 0) - Math.abs(Number(a.ev) || 0)));
+        setDailyScanDiagnostics([...allDiagnostics]);
+        if (i + 2 < fixtures.length) await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      if (!allRows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))) {
+        setDailyScanError("No bookmaker prices with a matching model probability were returned for these matches. Check scan diagnostics for unavailable odds or analysis.");
+      }
+    } catch (e) {
+      setDailyScanError((e as Error).message);
+    } finally {
+      setDailyScanProgress("");
+      setDailyScanBusy(false);
+    }
+  }
   async function searchMatchesByDate(dateToLoad = matchDate) {
     if (!dateToLoad) return;
     setDateMatchesBusy(true); setDateMatchesError(""); setDateMatches([]);
+    setDailyValueRows([]); setDailyScanDiagnostics([]); setDailyScanError("");
     try {
       const d = await api<{ matches: any[]; importedCount?: number; fixtureProvider?: string }>("dateMatches", { date: dateToLoad });
-      const matches = Array.isArray(d.matches) ? d.matches : [];
-      setDateMatches(matches.sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date)));
+      const matches = (Array.isArray(d.matches) ? d.matches : []).sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
+      setDateMatches(matches);
       setDateMatchesImportedCount(Number(d.importedCount ?? matches.length));
       if (!matches.length) setDateMatchesError("No matches were returned by SportMonks for this date.");
+      else void scanDateMatches(matches, dateToLoad);
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -430,6 +465,32 @@ export default function SportBoard() {
         {dateMatchesBusy && <small className="muted">Fetching fixtures from SportMonks…</small>}
         {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
         {!dateMatchesBusy && !dateMatchesError && dateMatches.length === 0 && <small className="muted">No matches scheduled or recorded for this date.</small>}
+        {dailyScanBusy && <small className="muted">{dailyScanProgress}</small>}
+        {dailyScanError && <div className="notice warn">{dailyScanError}</div>}
+        {(dailyValueRows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))) || dailyScanDiagnostics.length > 0) && <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+          <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <b>📊 Daily odds mispricing scan</b>
+            <small className="muted">{dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))).length} priced selections</small>
+          </div>
+          <small className="muted">All fixtures for {matchDate} are checked against SportMonks model probabilities and available bookmaker prices. Positive EV means the bookmaker price is above fair odds; negative EV means it is below fair odds.</small>
+          {dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))
+            .sort((a: any, b: any) => Number(b.ev) - Number(a.ev))
+            .map((row: any, index: number) => {
+              const ev = Number(row.ev);
+              const overpriced = ev > 0;
+              return <div key={row.key || index} className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5, borderLeft: overpriced ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
+                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                  <b>{row.home} vs {row.away}</b>
+                  <b className={overpriced ? "sb-ok" : "sb-no"}>{overpriced ? "OVERPRICED · potential value" : "UNDERPRICED · avoid at this price"}</b>
+                </div>
+                <span>{row.selection} · {row.market}</span>
+                <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
+                <small>Bookmaker: <b>{Number(row.odds).toFixed(2)}</b> · Fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
+                <small className={overpriced ? "sb-ok" : "sb-no"}>Expected value: {ev > 0 ? "+" : ""}{ev.toFixed(1)}% · {row.bookmaker}</small>
+              </div>;
+            })}
+          {dailyScanDiagnostics.length > 0 && <details><summary>Scan coverage and diagnostics ({dailyScanDiagnostics.length} matches)</summary><div className="stack" style={{ gap: 4 }}>{dailyScanDiagnostics.map((item: any, i: number) => <small key={i} className="muted">{item.fixture}: {item.error || (item.matchedEvents ? item.matchedEvents + " odds event(s), " + (item.markets || []).length + " market types" : "No bookmaker odds matched")}</small>)}</div></details>}
+        </div>}
         {dateMatches.length > 0 && <div className="stack" style={{ gap: 7 }}>
           {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
             <span style={{ flex: 1, minWidth: 0 }}>
