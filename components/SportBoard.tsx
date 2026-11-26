@@ -183,7 +183,7 @@ export default function SportBoard() {
   }
   async function loadTeamFixtures(t: Team) {
     setFixturesBusy(true); setFixturesError(""); setTeamFixtures([]);
-    try { const d = await api<{ fixtures: any[] }>("teamFixtures", { teamId: t.id }); setTeamFixtures(d.fixtures || []); }
+    try { const d = await api<{ fixtures: any[]; fixtureProvider?: string }>("teamFixtures", { teamId: t.id, teamName: t.name }); setTeamFixtures(d.fixtures || []); }
     catch (e) { setFixturesError((e as Error).message); }
     finally { setFixturesBusy(false); }
   }
