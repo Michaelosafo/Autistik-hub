@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 type Fixture = { id:number; date:string; status:string; competition?:string; league?:{name?:string}; home:{id:number;name:string}; away:{id:number;name:string} };
-const TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;\n\ntype Pick = { key:string; home:string; away:string; competition:string; selection:string; market:string; probability:number; fairOdds:number; odds:number; bookmaker:string; ev:number; edge:number; date:string; autistikRank:number };
+const TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;
+
+type Pick = { key:string; home:string; away:string; competition:string; selection:string; market:string; probability:number; fairOdds:number; odds:number; bookmaker:string; ev:number; edge:number; date:string; autistikRank:number };
 
 export default function DailyValueBets() {
   const [fixtures,setFixtures]=useState<Fixture[]>([]);
@@ -55,16 +57,14 @@ export default function DailyValueBets() {
         allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
         const ranked=rankRows(allRows);
         setPicks(ranked.filter((r:any)=>Number(r.probability)>=55));
-        setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
-          .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)));
+        setRedPicks([]);
         setDiagnostics([...allDiagnostics]);
         setScanned(Math.min(i+batch.length,dayFixtures.length));
         if(i+2<dayFixtures.length)await new Promise(resolve=>setTimeout(resolve,650));
       }
       const ranked=rankRows(allRows);
       setPicks(ranked.filter((r:any)=>Number(r.probability)>=45));
-      setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
-        .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)));
+      setRedPicks([]);
       if(!ranked.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
     finally {setBusy(false);setProgress("");}
@@ -77,7 +77,7 @@ export default function DailyValueBets() {
       const isPast=String(data.date||"")<String(data.today||"");
       const now=Date.now();
       const matches=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>
-        f?.id&&f?.home?.name&&f?.away?.name&&f?.date&&(isPast||Date.parse(f.date)>=now)
+        f?.id&&f?.home?.name&&f?.away?.name&&f?.date&&TOP_COMPETITION.test(String(f.competition||f.league?.name||""))&&(isPast||Date.parse(f.date)>=now)
       ).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setScanDate(String(data.date||""));
       setSelectedDate(String(data.date||""));setTodayDate(String(data.today||""));
