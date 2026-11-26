@@ -124,24 +124,32 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
     }
 
     const fixedLines = Array.isArray(odds.goal_line_fixed) ? odds.goal_line_fixed : [];
-    const totals: any[] = [];
+    const seenGoalLines = new Set<string>();
     for (const line of fixedLines) {
       const stage = latest(line);
       if (!stage) continue;
       const lineValue = Number(line.line);
       if (!Number.isFinite(lineValue)) continue;
-      const over = validPrice(stage.over), under = validPrice(stage.under);
-      if (over) totals.push({ name: "Over " + lineValue, price: over });
-      if (under) totals.push({ name: "Under " + lineValue, price: under });
+      const outcomes = [
+        { name: "Over " + lineValue, price: validPrice(stage.over) },
+        { name: "Under " + lineValue, price: validPrice(stage.under) }
+      ].filter((x: any) => x.price);
+      if (outcomes.length) {
+        markets.push({ key: "totals", outcomes });
+        seenGoalLines.add(String(lineValue));
+      }
     }
     const mainGoalLine = latest(odds.goal_line);
     if (mainGoalLine && Number.isFinite(Number(mainGoalLine.line))) {
       const lineValue = Number(mainGoalLine.line);
-      const over = validPrice(mainGoalLine.over), under = validPrice(mainGoalLine.under);
-      if (over && !totals.some((x: any) => x.name === "Over " + lineValue)) totals.push({ name: "Over " + lineValue, price: over });
-      if (under && !totals.some((x: any) => x.name === "Under " + lineValue)) totals.push({ name: "Under " + lineValue, price: under });
+      if (!seenGoalLines.has(String(lineValue))) {
+        const outcomes = [
+          { name: "Over " + lineValue, price: validPrice(mainGoalLine.over) },
+          { name: "Under " + lineValue, price: validPrice(mainGoalLine.under) }
+        ].filter((x: any) => x.price);
+        if (outcomes.length) markets.push({ key: "totals", outcomes });
+      }
     }
-    if (totals.length) markets.push({ key: "totals", outcomes: totals });
 
     const btts = latest(odds.btts);
     if (btts) {
