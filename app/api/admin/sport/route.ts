@@ -93,20 +93,23 @@ export async function POST(req: Request) {
             const events = Array.isArray(odds?.matched) ? odds.matched : [];
             const mapped: any[] = [];
             const norm = (v: any) => String(v || "").toLowerCase().normalize("NFKD")
-              .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9.]+/g, " ").trim().replace(/\\s+/g, " ");
-            // Only show prices from bookmakers commonly used by Ghanaian bettors.
-            // Never let an international-only bookmaker create a displayed value bet.
-            const ghanaBookmakerAliases: Record<string, string> = {
-              "sportybet": "SportyBet", "sporty bet": "SportyBet",
-              "betway": "Betway", "1xbet": "1xBet", "1 x bet": "1xBet",
-              "betpawa": "betPawa", "bet pawa": "betPawa",
-              "22bet": "22Bet", "22 bet": "22Bet",
-              "premierbet": "Premier Bet", "premier bet": "Premier Bet",
-              "melbet": "MelBet", "mel bet": "MelBet",
-              "parimatch": "Parimatch", "pari match": "Parimatch",
-              "mybet": "MyBet", "my bet": "MyBet" 
+              .replace(/[\\u0300-\\u036f]/g, "")
+              .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+            // Provider bookmaker labels can include country/region suffixes or slugs.
+            // Match the Ghana operator token, not only one exact display spelling.
+            const ghanaBookmaker = (name: any) => {
+              const compact = norm(name).replace(/[^a-z0-9]/g, "");
+              if (compact.includes("sportybet")) return "SportyBet";
+              if (compact.includes("betway")) return "Betway";
+              if (compact.includes("1xbet")) return "1xBet";
+              if (compact.includes("betpawa")) return "betPawa";
+              if (compact.includes("22bet")) return "22Bet";
+              if (compact.includes("premierbet")) return "Premier Bet";
+              if (compact.includes("melbet")) return "MelBet";
+              if (compact.includes("parimatch")) return "Parimatch";
+              if (compact.includes("mybet")) return "MyBet";
+              return "";
             };
-            const ghanaBookmaker = (name: any) => ghanaBookmakerAliases[norm(name)] || "";
             for (const event of events) for (const book of (event.bookmakers || [])) {
               const ghanaBook = ghanaBookmaker(book.title || book.key);
               if (!ghanaBook) continue;
@@ -166,9 +169,16 @@ export async function POST(req: Request) {
             diagnostics.push({
               fixture: home + " vs " + away, provider: "5DollarFootballAPI Ghana bookmakers",
               analysis: true, oddsEvents: Number(odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0),
-              matchedEvents: events.length, bookmakers: [...new Set((odds?.availableBookmakers || []).map((name: string) => ghanaBookmaker(name)).filter(Boolean))],
+              matchedEvents: events.length,
+              providerPlan: odds?.diagnostics?.plan || "unknown",
+              returnedBookmakers: odds?.availableBookmakers || [],
+              bookmakers: [...new Set((odds?.availableBookmakers || []).map((name: string) => ghanaBookmaker(name)).filter(Boolean))],
+              oddsRequestError: odds?.diagnostics?.oddsRequestError || null,
+              oddsMarkets: odds?.diagnostics?.markets || [],
               markets: [...new Set(mapped.map((x: any) => x.market))],
-              error: mapped.length ? null : "No priced odds from the supported Ghana bookmakers were returned by 5DollarFootballAPI for this fixture."
+              error: mapped.length ? null : (events.length
+                ? "Odds feed returned bookmakers/markets, but none matched the Ghana bookmaker filter or had a supported model market. Returned: " + ((odds?.availableBookmakers || []).join(", ") || "no named bookmakers") + ". Plan: " + (odds?.diagnostics?.plan || "unknown")
+                : "5DollarFootballAPI returned no matching priced event for this fixture.")
             });
           } catch (error) {
             diagnostics.push({ fixture: home + " vs " + away, provider: "5DollarFootballAPI", error: error instanceof Error ? error.message : String(error) });
