@@ -64,6 +64,26 @@ export async function resolveFixtureTeamIds(names: string[]) {
   return result;
 }
 
+
+/** Last completed and next upcoming fixture using API-Football team IDs. */
+export async function teamFixtureChoices(teamId: number) {
+  if (!Number.isInteger(teamId) || teamId <= 0) throw new Error("Choose a valid API-Football team.");
+  const [lastRows, nextRows] = await Promise.all([
+    api("/fixtures?team=" + teamId + "&last=1", 5 * 60_000),
+    api("/fixtures?team=" + teamId + "&next=1", 5 * 60_000)
+  ]);
+  const mapFixture = (f: any) => ({
+    id: Number(f.fixture?.id),
+    date: f.fixture?.date,
+    status: f.fixture?.status?.long || f.fixture?.status?.short || "",
+    competition: f.league?.name || "Football",
+    home: { id: Number(f.teams?.home?.id), name: f.teams?.home?.name || "", logo: f.teams?.home?.logo || "" },
+    away: { id: Number(f.teams?.away?.id), name: f.teams?.away?.name || "", logo: f.teams?.away?.logo || "" },
+    score: f.goals?.home == null || f.goals?.away == null ? null : { home: Number(f.goals.home), away: Number(f.goals.away) }
+  });
+  return [...(lastRows || []).slice(0, 1), ...(nextRows || []).slice(0, 1)].map(mapFixture);
+}
+
 /** The team's current domestic league (type League), else its first current competition. */
 async function homeLeague(team: number) {
   const rows = await api(`/leagues?team=${team}&current=true`, 24 * 3600_000);
