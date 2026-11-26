@@ -93,8 +93,8 @@ export async function POST(req: Request) {
             const events = Array.isArray(odds?.matched) ? odds.matched : [];
             const mapped: any[] = [];
             const norm = (v: any) => String(v || "").toLowerCase().normalize("NFKD")
-              .replace(/[\\u0300-\\u036f]/g, "")
-              .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
             // Provider bookmaker labels can include country/region suffixes or slugs.
             // Match the Ghana operator token, not only one exact display spelling.
             const ghanaBookmaker = (name: any) => {
