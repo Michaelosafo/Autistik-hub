@@ -69,7 +69,8 @@ export async function POST(req: Request) {
         const leagueCode = String(b.leagueCode || "").trim().toUpperCase();
         const leagueName = String(b.leagueName || "").trim();
         if (!leagueCode) return json({ error: "Choose a valid league." }, 400);
-        const result = await getSportMonksLeagueUpcomingFixtures(leagueCode, leagueName);
+        const leagueId = Number(b.leagueId);
+        const result = await getSportMonksLeagueUpcomingFixtures(leagueCode, leagueName, Number.isInteger(leagueId) && leagueId > 0 ? leagueId : undefined);
         return json({ ...result, fixtureProvider: "SportMonks", statisticsProvider: "SportMonks" });
       }
       case "todayMatches": {
