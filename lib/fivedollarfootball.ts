@@ -151,31 +151,41 @@ export async function getFiveDollarFootballUpcomingFixtures() {
   };
 }
 
-export async function getFiveDollarFootballMatchOdds(home: string, away: string, kickoff?: string) {
+export async function getFiveDollarFootballMatchOdds(home: string, away: string, kickoff?: string, providerFixtureId?: number) {
   if (!home || !away) throw new Error("Both team names are required for 5DollarFootballAPI odds lookup.");
   const target = kickoff && Number.isFinite(Date.parse(kickoff)) ? Date.parse(kickoff) : Date.now();
   // The provider limits /fixtures windows to 24 hours. Centre the window on kickoff.
   const start = Math.floor((target - 12 * 60 * 60_000) / 1000);
   const end = Math.floor((target + 12 * 60 * 60_000) / 1000);
-  const query = "?start_time=" + start + "&end_time=" + end + "&status=all&per_page=100";
-  const fixtures = await api("/fixtures" + query, 90_000);
-  const list = Array.isArray(fixtures) ? fixtures : Array.isArray(fixtures?.data) ? fixtures.data : [];
-  const h = cleanName(home), a = cleanName(away);
-  const candidates = list.map((fixture: any) => {
-    const fh = cleanName(fixture?.teams?.home?.name || "");
-    const fa = cleanName(fixture?.teams?.away?.name || "");
-    const kickoffMs = Date.parse(fixture?.kickoff_utc || "");
-    const sameTeams = fh === h && fa === a;
-    const distance = Number.isFinite(kickoffMs) ? Math.abs(kickoffMs - target) : Number.MAX_SAFE_INTEGER;
-    return { fixture, sameTeams, distance };
-  }).filter((x: any) => x.sameTeams && x.distance <= 18 * 60 * 60_000)
-    .sort((x: any, y: any) => x.distance - y.distance);
-
-  if (!candidates.length) {
-    const nearby = list.slice(0, 12).map((x: any) => String(x?.teams?.home?.name || "") + " vs " + String(x?.teams?.away?.name || "")).filter((x: string) => x !== " vs ");
-    throw new Error("5DollarFootballAPI returned " + list.length + " fixtures in the kickoff window but no team match for " + home + " vs " + away + ". Sample provider fixtures: " + nearby.slice(0, 6).join("; "));
+  let fixture: any = null;
+  let eventsReturned = 0;
+  if (providerFixtureId && Number.isFinite(providerFixtureId)) {
+    fixture = {
+      id: providerFixtureId,
+      kickoff_utc: kickoff || "",
+      teams: { home: { name: home }, away: { name: away } }
+    };
+  } else {
+    // Provider fixture windows are capped at 24 hours; paginate to find the exact event.
+    const startTime = Math.floor((target - 12 * 60 * 60_000) / 1000);
+    const endTime = Math.floor((target + 12 * 60 * 60_000) / 1000);
+    const h = cleanName(home), a = cleanName(away);
+    let found: any[] = [];
+    for (let page = 1; page <= 20; page++) {
+      const query = "?start_time=" + startTime + "&end_time=" + endTime + "&status=all&per_page=100&page=" + page;
+      const body = await apiEnvelope("/fixtures" + query);
+      const list = Array.isArray(body?.data) ? body.data : [];
+      eventsReturned += list.length;
+      found.push(...list.filter((item: any) =>
+        cleanName(item?.teams?.home?.name || "") === h &&
+        cleanName(item?.teams?.away?.name || "") === a
+      ));
+      if (!body?.pagination?.has_more || list.length === 0) break;
+    }
+    found.sort((x: any, y: any) => Math.abs(Date.parse(x.kickoff_utc || "") - target) - Math.abs(Date.parse(y.kickoff_utc || "") - target));
+    fixture = found[0] || null;
+    if (!fixture) throw new Error("5DollarFootballAPI searched " + eventsReturned + " fixtures across paginated results but did not find " + home + " vs " + away + ".");
   }
-  const fixture = candidates[0].fixture;
   const status = await getFiveDollarFootballStatus();
   let oddsPath = "/fixtures/" + encodeURIComponent(String(fixture.id)) + "/odds";
   if (String(status.plan || "").toLowerCase() === "ultra") {
@@ -258,7 +268,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
     availableBookmakers: bookmakers.map((book: any) => book.title),
     diagnostics: {
       provider: "5DollarFootballAPI",
-      eventsReturned: list.length,
+      eventsReturned: eventsReturned,
       matchedEvents: bookmakers.length ? 1 : 0,
       fixtureId: fixture.id,
       plan: status.plan || "unknown",
