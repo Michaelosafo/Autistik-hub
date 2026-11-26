@@ -504,7 +504,7 @@ export default function SportBoard() {
               <b>📊 {selectedLeague.name} · Value and price comparison</b>
               <small className="muted">{leagueValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))).length} priced selections</small>
             </div>
-            <small className="muted">AUTISTIK estimates each outcome probability from team form, home/away records, goals, recent performance and available match statistics. It then compares that estimate with the bookmaker's implied probability.</small>
+            <small className="muted">AUTISTIK estimates each outcome probability from team form, home/away records, goals, recent performance and available match statistics. It then compares that estimate with the bookmaker's implied probability. Example: odds 2.60 imply a 38.5% break-even chance; if AUTISTIK's stats model estimates 50%, fair odds are 2.00 and estimated expected value is +30% per unit staked.</small>
             {(() => {
               const eligible = leagueValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01);
               const grouped = new Map<string, any[]>();
