@@ -164,7 +164,7 @@ export async function POST(req: Request) {
               error: mapped.length ? null : "No priced odds from the supported Ghana bookmakers were returned by 5DollarFootballAPI for this fixture."
             });
           } catch (error) {
-            diagnostics.push({ fixture: home + " vs " + away, provider: "OddsRelay Ghana", error: error instanceof Error ? error.message : String(error) });
+            diagnostics.push({ fixture: home + " vs " + away, provider: "5DollarFootballAPI", error: error instanceof Error ? error.message : String(error) });
           }
         }));
         return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "5DollarFootballAPI" } });
