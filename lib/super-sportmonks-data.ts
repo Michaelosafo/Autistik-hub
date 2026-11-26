@@ -123,7 +123,24 @@ async function fixturesByDate(date: string) {
   // SportMonks has both date and date-range fixture endpoints. Retry through
   // the documented range endpoint if the date endpoint yields an empty slate.
   if (!all.length) all = await collectFixturePages("/fixtures/between/" + date + "/" + date + include);
-  return all;
+  // Explicitly resolve UEFA Europa League and UEFA Conference League fixtures
+  // for the selected matchday as well; some provider responses omit them from
+  // the general date feed even though the leagues are present in the account.
+  try {
+    const leagueBody = await api("/leagues/date/" + date + "?per_page=50", 60_000);
+    const europeanIds = rows(leagueBody)
+      .filter((league: any) => /europa league|conference league/i.test(String(league?.name || "")))
+      .map((league: any) => Number(league.id))
+      .filter((id: number) => Number.isInteger(id) && id > 0);
+    if (europeanIds.length) {
+      const path = "/fixtures/between/" + date + "/" + date + include +
+        "&filters=fixtureLeagues:" + europeanIds.join(",");
+      for (const item of await collectFixturePages(path)) all.set(String(item.id), item);
+    }
+  } catch {
+    // Keep the general date-feed results if league-date discovery is unavailable.
+  }
+  return [...all.values()];
 }
 async function fixturesForTeam(teamId: number, from: string, to: string) {
   const all = new Map<string, any>();
