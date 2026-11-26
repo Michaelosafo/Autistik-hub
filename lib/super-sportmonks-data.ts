@@ -198,7 +198,7 @@ export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, le
     if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 100) break;
   }
   const normalize = (value: any) => String(value || "").toLowerCase().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   const aliases: Record<string, string[]> = {
     CL: ["uefa champions league", "champions league"],
     EC: ["uefa european championship", "european championship", "european championship qualification"],
