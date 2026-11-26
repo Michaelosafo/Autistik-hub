@@ -100,8 +100,12 @@ export default function SportBoard() {
   const [ghanaOdds, setGhanaOdds] = useState<any>(null);
   const [oddsBusy, setOddsBusy] = useState(false);
   const [oddsError, setOddsError] = useState("");
-  const [todayMatches, setTodayMatches] = useState<any[]>([]);
-  const [todayCompetition, setTodayCompetition] = useState<"ALL" | "UEFA Champions League" | "Championship">("ALL");
+  const [leagueCatalogue, setLeagueCatalogue] = useState<any[]>([]);
+  const [leagueSearch, setLeagueSearch] = useState("");
+  const [selectedLeague, setSelectedLeague] = useState<any>(null);
+  const [selectedLeagueFixtures, setSelectedLeagueFixtures] = useState<any[]>([]);
+  const [leagueClubs, setLeagueClubs] = useState<any[]>([]);
+  const [leagueLoading, setLeagueLoading] = useState(false);
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
   const [dateMatches, setDateMatches] = useState<any[]>([]);
@@ -109,9 +113,25 @@ export default function SportBoard() {
   const [dateMatchesError, setDateMatchesError] = useState("");
   async function loadTodayMatches() {
     setTodayBusy(true); setTodayError("");
-    try { const d = await api<{ matches: any[] }>("todayMatches"); setTodayMatches(d.matches || []); }
-    catch (e) { setTodayError((e as Error).message); }
+    try {
+      const d = await api<{ leagues: any[] }>("leagues");
+      setLeagueCatalogue(Array.isArray(d.leagues) ? d.leagues : []);
+      if (!(d.leagues || []).length) setTodayError("No leagues were returned by the football provider.");
+    } catch (e) { setTodayError((e as Error).message); }
     finally { setTodayBusy(false); }
+  }
+  async function openLeague(league: any) {
+    setSelectedLeague(league); setSelectedLeagueFixtures([]); setLeagueClubs([]);
+    setTodayError(""); setLeagueLoading(true);
+    try {
+      const seasons = Array.isArray(league.seasons) ? league.seasons.map(Number).filter(Number.isFinite) : [];
+      const season = seasons.length ? Math.max(...seasons) : undefined;
+      const d = await api<{ fixtures: any[]; clubs: any[] }>("leagueFixtures", { leagueId: Number(league.id), season });
+      setSelectedLeagueFixtures(Array.isArray(d.fixtures) ? d.fixtures : []);
+      setLeagueClubs(Array.isArray(d.clubs) ? d.clubs : []);
+      if (!(d.fixtures || []).length) setTodayError("No upcoming fixtures found in this league over the next seven days. Close it and choose another league.");
+    } catch (e) { setTodayError((e as Error).message); }
+    finally { setLeagueLoading(false); }
   }
   async function searchMatchesByDate() {
     setDateMatchesBusy(true); setDateMatchesError(""); setDateMatches([]);
@@ -139,7 +159,7 @@ export default function SportBoard() {
     finally { setFixturesBusy(false); }
   }
   async function chooseFixture(f: any) {
-    setActiveFixtureIndex(dateMatches.findIndex((x: any) => String(x.id) === String(f.id)));
+    setActiveFixtureIndex(selectedLeagueFixtures.findIndex((x: any) => String(x.id) === String(f.id)));
     setShowFullAnalysis(false);
     const h: Team = { id: f.home.id, name: f.home.name, logo: f.home.logo };
     const a: Team = { id: f.away.id, name: f.away.name, logo: f.away.logo };
@@ -278,7 +298,15 @@ export default function SportBoard() {
     ["Last 5: keeper saves", v(H.last5.avg.saves), v(A.last5.avg.saves)],
   ] : [];
 
-  const visibleTodayMatches = todayCompetition === "ALL" ? todayMatches : todayMatches.filter((f: any) => f.competition === todayCompetition);
+  const filteredLeagues = leagueCatalogue.filter((league: any) =>
+    String(league.name || "").toLowerCase().includes(leagueSearch.toLowerCase()) ||
+    String(league.country || "").toLowerCase().includes(leagueSearch.toLowerCase())
+  );
+  const leaguesByCountry = Object.entries(filteredLeagues.reduce((acc: any, league: any) => {
+    const country = String(league.country || "International");
+    (acc[country] ||= []).push(league);
+    return acc;
+  }, {} as Record<string, any[]>)).sort((a: any, b: any) => a[0].localeCompare(b[0]));
 
   return (
     <div className="sb stack">
@@ -349,44 +377,30 @@ export default function SportBoard() {
       {ready === false && <div className="notice warn">The running SPORT deployment is not detecting a non-empty <code>FOOTBALL_DATA_TOKEN</code>. The variable exists in Vercel Production; check that its value is saved correctly and that this deployment has been redeployed.</div>}
 
       <section className="card stack">
-        <b>Today's matches · all available competitions</b>
-        <small className="muted">Select any fixture to load its prediction shortlist automatically.</small>
-        <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
+        <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><b>⚽ Select a league to scan</b><small className="muted">{leagueCatalogue.length} leagues</small></div>
+        <small className="muted">Choose a country, open a league, review its clubs and fixtures, then scan. Close it to choose another league.</small>
+        <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing leagues…" : "Refresh leagues"}</button>
+        <input value={leagueSearch} onChange={(e) => setLeagueSearch(e.target.value)} placeholder="Search country or league…" aria-label="Search country or league" />
         {todayError && <div className="notice warn">{todayError}</div>}
-        {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
-        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No Championship or Champions League fixtures found for today.</small>}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8, marginTop: 8 }}>
-          {(["ALL", "UEFA Champions League", "Championship"] as const).map((competition) => {
-            const count = competition === "ALL" ? todayMatches.length : todayMatches.filter((f: any) => f.competition === competition).length;
-            const active = todayCompetition === competition;
-            return <button key={competition} type="button" onClick={() => setTodayCompetition(competition)}
-              aria-pressed={active}
-              style={{ padding: "12px 8px", borderRadius: 12, border: active ? "2px solid var(--accent, #eab308)" : "1px solid var(--line)", background: active ? "var(--surface-2, #f1eef9)" : "transparent", color: "inherit", fontWeight: active ? 700 : 500 }}>
-              {competition === "ALL" ? "🌍 All competitions" : competition === "UEFA Champions League" ? "🏆 Champions League" : "🏴 Championship"}
-              <small style={{ display: "block", color: "var(--muted)", marginTop: 3 }}>{count} matches</small>
-            </button>;
-          })}
+        {todayBusy && leagueCatalogue.length === 0 && <small className="muted">Loading league catalogue…</small>}
+        <div className="stack" style={{ gap: 8 }}>
+          {leaguesByCountry.map(([country, leagues]: any) => <details key={country} className="sb-top-r hi" style={{ display: "block", padding: 11, borderRadius: 12 }}>
+            <summary style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontWeight: 700 }}><span>{country}</span><small className="muted">{leagues.length} leagues</small></summary>
+            <div className="stack" style={{ gap: 6, marginTop: 10 }}>
+              {leagues.map((league: any) => <button key={league.id} type="button" className={selectedLeague?.id === league.id ? "btn primary" : "btn"} onClick={() => void openLeague(league)} style={{ width: "100%", textAlign: "left", whiteSpace: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><span>{league.name}</span><span>Open ›</span></button>)}
+            </div>
+          </details>)}
+          {filteredLeagues.length === 0 && leagueCatalogue.length > 0 && <small className="muted">No country or league matches that search.</small>}
         </div>
-        <div className="stack" style={{ gap: 0, marginTop: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 8px", borderBottom: "1px solid var(--line)" }}>
-            <span style={{ fontSize: 24 }}>{todayCompetition === "ALL" ? "🌍" : todayCompetition === "UEFA Champions League" ? "🏆" : "🏴"}</span>
-            <b>{todayCompetition === "ALL" ? "All available competitions" : todayCompetition === "UEFA Champions League" ? "UEFA Champions League" : "EFL Championship"}</b>
-            <span className="muted" style={{ marginLeft: "auto" }}>{visibleTodayMatches.length}</span>
-          </div>
-          {visibleTodayMatches.length === 0
-            ? <small className="muted" style={{ padding: 12 }}>No fixtures found for this selection today.</small>
-            : visibleTodayMatches.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
-              style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
-              <span style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", whiteSpace: "pre-line" }}>{f.status === "IN_PLAY" || f.status === "PAUSED" ? "LIVE" : f.status === "FINISHED" ? "FT" : new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}{f.score ? `\\n${f.score.home}–${f.score.away}` : ""}</span>
-              <span style={{ display: "grid", gap: 5 }}>
-                {[f.home, f.away].map((team: any) => <span key={team.id} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
-                  {team.logo ? <img src={team.logo} alt="" width="23" height="23" style={{ objectFit: "contain" }} /> : <span style={{ width: 23 }} />}
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{team.name}</span>
-                </span>)}
-              </span>
-              <span style={{ fontSize: 22, color: "var(--muted)", textAlign: "center" }}>›</span>
-            </button>)}
-        </div>
+        {selectedLeague && <div className="card stack" style={{ padding: 12 }}>
+          <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><div><b>{selectedLeague.country} · {selectedLeague.name}</b><small className="muted" style={{ display: "block" }}>Selected league</small></div><button type="button" className="btn small ghost" onClick={() => { setSelectedLeague(null); setSelectedLeagueFixtures([]); setLeagueClubs([]); setTodayError(""); }}>Close league</button></div>
+          {leagueLoading ? <small className="muted">Loading clubs and upcoming fixtures…</small> : <>
+            <b>Clubs in this league · {leagueClubs.length}</b><small className="muted">{leagueClubs.map((club: any) => club.name).filter(Boolean).join(" · ") || "Club list not supplied by provider."}</small>
+            <b>Upcoming fixtures · {selectedLeagueFixtures.length}</b>
+            {selectedLeagueFixtures.map((fixture: any) => <button key={fixture.id} type="button" className="sb-opt" onClick={() => chooseFixture(fixture)} disabled={busy} style={{ justifyContent: "space-between" }}><span style={{ flex: 1, minWidth: 0 }}><b>{fixture.home.name} vs {fixture.away.name}</b><small className="muted" style={{ display: "block" }}>{new Date(fixture.date).toLocaleString()}</small></span><span>Analyse ›</span></button>)}
+            <button type="button" className="btn primary" disabled={busy || selectedLeagueFixtures.length === 0} onClick={() => selectedLeagueFixtures[0] && chooseFixture(selectedLeagueFixtures[0])}>Analyse first fixture</button>
+          </>}
+        </div>}
       </section>
 
       {!res && (
@@ -586,9 +600,9 @@ export default function SportBoard() {
             </div>
             <button type="button" className="btn primary" onClick={() => setShowFullAnalysis(true)}>View full analysis ↓</button>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <button type="button" className="btn small ghost" disabled={activeFixtureIndex <= 0 || busy} onClick={() => chooseFixture(todayMatches[activeFixtureIndex - 1])}>← Previous</button>
-              <small className="muted">{activeFixtureIndex >= 0 ? activeFixtureIndex + 1 : "–"} / {todayMatches.length}</small>
-              <button type="button" className="btn small ghost" disabled={activeFixtureIndex < 0 || activeFixtureIndex >= todayMatches.length - 1 || busy} onClick={() => chooseFixture(todayMatches[activeFixtureIndex + 1])}>Next →</button>
+              <button type="button" className="btn small ghost" disabled={activeFixtureIndex <= 0 || busy} onClick={() => chooseFixture(selectedLeagueFixtures[activeFixtureIndex - 1])}>← Previous</button>
+              <small className="muted">{activeFixtureIndex >= 0 ? activeFixtureIndex + 1 : "–"} / {selectedLeagueFixtures.length}</small>
+              <button type="button" className="btn small ghost" disabled={activeFixtureIndex < 0 || activeFixtureIndex >= selectedLeagueFixtures.length - 1 || busy} onClick={() => chooseFixture(selectedLeagueFixtures[activeFixtureIndex + 1])}>Next →</button>
             </div>
           </section>
         </div>
