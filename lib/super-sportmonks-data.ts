@@ -159,8 +159,8 @@ export async function teamFixtureChoicesByName(teamName: string) {
   const name = String(teamName || "").trim();
   if (!name) throw new Error("Choose a team first.");
   const normalize = (value: any) => String(value || "").toLowerCase().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   const body = await api("/teams/search/" + encodeURIComponent(name) + "?include=country&per_page=50", 24 * 3600_000);
   const candidates = rows(body).filter((x: any) => x?.id && x?.name);
   const target = normalize(name);
