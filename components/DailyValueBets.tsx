@@ -63,7 +63,7 @@ export default function DailyValueBets() {
         if(i+2<dayFixtures.length)await new Promise(resolve=>setTimeout(resolve,650));
       }
       const ranked=rankRows(allRows);
-      setPicks(ranked.filter((r:any)=>Number(r.probability)>=45));
+      setPicks(ranked.filter((r:any)=>Number(r.probability)>=55));
       setRedPicks([]);
       if(!ranked.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
