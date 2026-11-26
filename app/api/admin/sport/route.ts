@@ -1,4 +1,5 @@
 import { json } from "@/lib/ai";
+import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, fixtureOdds as apiFootballFixtureOdds, sportReady as apiFootballReady } from "@/lib/sport";
 import { adminState } from "@/lib/admin";
 import {
   analyse as analyseSportMonks,
@@ -40,12 +41,12 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: superReady(), provider: "SportMonks" });
+      case "ready": return json({ ready: apiFootballReady(), provider: "API-Football" });
       case "oddsStatus": return json({
-        sportmonks: { active: superReady(), provider: "SportMonks", error: superReady() ? null : "SPORTMONKS_API_TOKEN is missing in Vercel Production." },
-        fixtureProvider: "SportMonks", statisticsProvider: "SportMonks", oddsProvider: "SportMonks"
+        apiFootball: { active: apiFootballReady(), provider: "API-Football", error: apiFootballReady() ? null : "APIFOOTBALL_KEY is missing in Vercel Production." },
+        fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "API-Football"
       });
-      case "search": return json({ teams: await searchSportMonksTeams(String(b.q || "")) });
+      case "search": return json({ teams: await searchApiFootballTeams(String(b.q || "")) });
       case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue() });
       case "leagueFixtures": {
         const leagueCode = String(b.leagueCode || "").trim().toUpperCase();
@@ -53,15 +54,15 @@ export async function POST(req: Request) {
         if (!leagueCode) return json({ error: "Choose a valid league." }, 400);
         const leagueId = Number(b.leagueId);
         const result = await getSportMonksLeagueUpcomingFixtures(leagueCode, leagueName, Number.isInteger(leagueId) && leagueId > 0 ? leagueId : undefined);
-        return json({ ...result, fixtureProvider: "SportMonks", statisticsProvider: "SportMonks" });
+        return json({ ...result, fixtureProvider: "API-Football", statisticsProvider: "API-Football" });
       }
       case "todayMatches": {
         const matches = await todayCompetitionMatches();
         return json({ matches, fixtureProvider: "SportMonks", fixtureCount: matches.length });
       }
       case "dateMatches": {
-        const matches = await sportMonksMatchesOnDate(String(b.date || ""));
-        return json({ matches, fixtureProvider: "SportMonks", importedCount: matches.length });
+        const matches = await apiFootballMatchesOnDate(String(b.date || ""));
+        return json({ matches, fixtureProvider: "API-Football", importedCount: matches.length });
       }
       case "teamFixtures": {
         const teamName = String(b.teamName || "").trim();
@@ -79,8 +80,8 @@ export async function POST(req: Request) {
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysis, odds] = await Promise.all([
-              withTimeout(analyseSportMonks(Number(f.home.id), Number(f.away.id), date), "SportMonks analysis"),
-              withTimeout(getSuperMatchOdds(fixtureId, home, away, date), "SportMonks odds")
+              withTimeout(analyseApiFootball(Number(f.home.id), Number(f.away.id)), "API-Football analysis"),
+              withTimeout(apiFootballFixtureOdds(fixtureId), "API-Football odds")
             ]);
             const markets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
             const events = Array.isArray(odds?.matched) ? odds.matched : [];
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
                   const label = String(outcome.name || "");
                   const n = norm(label);
                   let modelName = "";
-                  if (market.key === "h2h") modelName = n === norm(home) ? "Home win (1)" : n === norm(away) ? "Away win (2)" : ["draw","the draw","tie"].includes(n) ? "Draw (X)" : "";
+                  if (market.key === "h2h") modelName = ["home", norm(home)].includes(n) ? "Home win (1)" : ["away", norm(away)].includes(n) ? "Away win (2)" : ["draw","the draw","tie"].includes(n) ? "Draw (X)" : "";
                   else if (market.key === "double_chance") modelName = ["1x","homedraw","homeordraw"].includes(n.replace(/\\s/g,"")) ? "Home or draw (1X)" : ["x2","drawaway","draworaway"].includes(n.replace(/\\s/g,"")) ? "Away or draw (X2)" : ["12","homeaway","homeoraway"].includes(n.replace(/\\s/g,"")) ? "Home or away (12)" : "";
                   else if (market.key === "btts") modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
                   else if (market.key === "totals") {
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
                   const ev = supported ? (probability / 100) * price * 100 - 100 : null;
                   mapped.push({
                     key: String(fixtureId)+market.key+label+String(book.key),
-                    modelProvider: "SportMonks", date: f.date, competition: f.competition || "Football",
+                    modelProvider: "API-Football", date: f.date, competition: f.competition || "Football",
                     home, away, selection: label, market: market.title || String(market.key),
                     probability: supported ? probability : null,
                     fairOdds: supported ? 100 / probability : null,
@@ -143,7 +144,7 @@ export async function POST(req: Request) {
             }
             rows.push(...best.values());
             diagnostics.push({
-              fixture: home + " vs " + away, provider: "SportMonks",
+              fixture: home + " vs " + away, provider: "API-Football",
               analysis: true, oddsEvents: Number(odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0),
               matchedEvents: events.length, bookmakers: odds?.availableBookmakers || [],
               markets: [...new Set(mapped.map((x: any) => x.market))],
@@ -153,7 +154,7 @@ export async function POST(req: Request) {
             diagnostics.push({ fixture: home + " vs " + away, provider: "SportMonks", error: error instanceof Error ? error.message : String(error) });
           }
         }));
-        return json({ rows, diagnostics, providers: { fixtures: "SportMonks", statistics: "SportMonks", odds: "SportMonks" } });
+        return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "API-Football" } });
       }
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
@@ -165,7 +166,7 @@ export async function POST(req: Request) {
         const h = Number(b.home), a = Number(b.away);
         if (!h || !a || h === a) return json({ error: "Pick two different teams." }, 400);
         const matchDate = typeof b.matchDate === "string" ? b.matchDate : undefined;
-        const r = await analyseSportMonks(h, a, matchDate);
+        const r = await analyseApiFootball(h, a);
         const m = r.model;
         const pick = m.home >= m.away && m.home >= m.draw ? "Home" : m.away >= m.draw ? "Away" : "Draw";
         const predictionId = await savePrediction({ home: String(b.homeName || h), away: String(b.awayName || a), league: r.leagues.home.name, kickoff: r.actual?.date || (b.matchDate ? new Date(b.matchDate + "T12:00:00Z").toISOString() : null), xg_home: m.xg.home, xg_away: m.xg.away, p_home: m.home, p_draw: m.draw, p_away: m.away, p_btts: m.btts, p_o25: m.over["2.5"], pick, note: JSON.stringify({ matchDate: b.matchDate || null, historical: r.historical, actual: r.actual }) }).catch(() => null);
