@@ -482,11 +482,12 @@ export default function SportBoard() {
               grouped.get(key)!.push(row);
             }
             const topFivePerMatch = [...grouped.values()].flatMap(rows =>
-              rows.sort((a: any, b: any) => Math.abs(Number(b.ev)) - Math.abs(Number(a.ev))).slice(0, 5)
-            ).sort((a: any, b: any) => Number(b.ev) - Number(a.ev));
+              rows.sort((a: any, b: any) => Math.abs(Number(b.odds) - Number(b.fairOdds)) - Math.abs(Number(a.odds) - Number(a.fairOdds))).slice(0, 5)
+            ).sort((a: any, b: any) => (Number(b.odds) - Number(b.fairOdds)) - (Number(a.odds) - Number(a.fairOdds)));
             return topFivePerMatch.map((row: any, index: number) => {
               const ev = Number(row.ev);
-              const overpriced = ev > 0;
+              const oddsDifference = Number(row.odds) - Number(row.fairOdds);
+              const overpriced = oddsDifference > 0;
               return <div key={row.key || index} className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5, borderLeft: overpriced ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
                 <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
                   <b>{row.home} vs {row.away}</b>
@@ -494,8 +495,8 @@ export default function SportBoard() {
                 </div>
                 <span>{row.selection} · {row.market}</span>
                 <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
-                <small>Bookmaker: <b>{Number(row.odds).toFixed(2)}</b> · Fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
-                <small className={overpriced ? "sb-ok" : "sb-no"}>Expected value: {ev > 0 ? "+" : ""}{ev.toFixed(1)}% · {row.bookmaker}</small>
+                <small>Bookmaker odds: <b>{Number(row.odds).toFixed(2)}</b> · Autistik fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
+                <small className={overpriced ? "sb-ok" : "sb-no"}>Odds difference: {oddsDifference > 0 ? "+" : ""}{oddsDifference.toFixed(2)} · Expected value: {ev > 0 ? "+" : ""}{ev.toFixed(1)}% · {row.bookmaker}</small>
               </div>;
             });
           })()}
