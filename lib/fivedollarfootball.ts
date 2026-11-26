@@ -8,11 +8,10 @@ const cache = new Map<string, { expiresAt: number; value: any }>();
 
 function cleanName(value: string) {
   return String(value || "").toLowerCase().normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "")
-    // Normalize common naming differences in South American and European feeds.
-    .replace(/\\b(clube do|clube de|club de|club del|club da|football club|fc|afc|cf|sc|club)\\b/g, " ")
-    .replace(/\\b(do|da|de|del|the)\\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(clube do|clube de|club de|club del|club da|football club|fc|afc|cf|sc|club)\b/g, " ")
+    .replace(/\b(do|da|de|del|the)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
 async function api(path: string, ttlMs = 60_000): Promise<any> {
@@ -77,6 +76,81 @@ function validPrice(value: any) {
   return Number.isFinite(n) && n > 1 ? n : null;
 }
 
+const fixtureBoardCache = new Map<string, { expiresAt: number; value: any[] }>();
+
+async function apiEnvelope(path: string): Promise<any> {
+  const key = process.env.FIVEDOLLARFOOTBALL_API_KEY;
+  if (!key) throw new Error("FIVEDOLLARFOOTBALL_API_KEY is missing in Vercel Production.");
+  const response = await fetch(BASE + path, {
+    headers: { Authorization: "Bearer " + key, Accept: "application/json" },
+    cache: "no-store",
+    signal: AbortSignal.timeout(12_000)
+  });
+  const raw = await response.text();
+  let body: any = {};
+  try { body = raw ? JSON.parse(raw) : {}; } catch { body = {}; }
+  if (!response.ok || body?.success === 0) {
+    const message = body?.error?.message || body?.message || response.statusText || "API request failed";
+    throw new Error("5DollarFootballAPI (" + response.status + "): " + String(message).slice(0, 180));
+  }
+  return body;
+}
+
+/**
+ * Pull every scheduled fixture from the Ultra-covered competition catalogue.
+ * The provider limits each window to 24 hours, so load two adjacent windows
+ * for the next 48 hours and follow its has_more pagination flag.
+ */
+export async function getFiveDollarFootballUpcomingFixtures() {
+  const now = Date.now();
+  const start = Math.floor(now / 1000);
+  const end = Math.floor((now + 48 * 60 * 60_000) / 1000);
+  const windows = [
+    { from: start, to: start + 24 * 60 * 60 },
+    { from: start + 24 * 60 * 60, to: end }
+  ];
+  const all = new Map<string, any>();
+  let pagesFetched = 0;
+  for (const window of windows) {
+    for (let page = 1; page <= 20; page++) {
+      const cacheKey = window.from + ":" + window.to + ":" + page;
+      let body: any;
+      const hit = fixtureBoardCache.get(cacheKey);
+      if (hit && hit.expiresAt > Date.now()) {
+        const rows = hit.value;
+        for (const fixture of rows) all.set(String(fixture.id), fixture);
+        pagesFetched++;
+        // Cached pages still need pagination metadata, so continue from cached has_more marker.
+        const meta = (rows as any).__pagination;
+        if (!meta?.has_more) break;
+        continue;
+      }
+      const query = "?start_time=" + window.from + "&end_time=" + window.to + "&status=scheduled&per_page=100&page=" + page;
+      body = await apiEnvelope("/fixtures" + query);
+      const rows = Array.isArray(body?.data) ? body.data : [];
+      const pagination = body?.pagination || {};
+      Object.defineProperty(rows, "__pagination", { value: pagination, enumerable: false });
+      fixtureBoardCache.set(cacheKey, { expiresAt: Date.now() + 45_000, value: rows });
+      for (const fixture of rows) all.set(String(fixture.id), fixture);
+      pagesFetched++;
+      if (!pagination.has_more || rows.length === 0) break;
+    }
+  }
+  return {
+    fixtures: [...all.values()].map((fixture: any) => ({
+      id: String(fixture.id),
+      providerFixtureId: Number(fixture.id),
+      date: String(fixture.kickoff_utc || ""),
+      status: String(fixture.status || "SCHEDULED").toUpperCase(),
+      competition: { name: String(fixture.league?.name || "Football"), id: fixture.league?.id ?? null },
+      home: { id: 0, name: String(fixture.teams?.home?.name || "") },
+      away: { id: 0, name: String(fixture.teams?.away?.name || "") },
+      fixtureSource: "5DollarFootballAPI"
+    })).filter((fixture: any) => fixture.home.name && fixture.away.name && fixture.date),
+    diagnostics: { pagesFetched, fixturesReturned: all.size, windows: 2, source: "5DollarFootballAPI Ultra" }
+  };
+}
+
 export async function getFiveDollarFootballMatchOdds(home: string, away: string, kickoff?: string) {
   if (!home || !away) throw new Error("Both team names are required for 5DollarFootballAPI odds lookup.");
   const target = kickoff && Number.isFinite(Date.parse(kickoff)) ? Date.parse(kickoff) : Date.now();
@@ -126,7 +200,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       if (outcomes.length >= 2) markets.push({ key: "h2h", outcomes });
     }
 
-    const fixedLines = Array.isArray(odds.goal_line_fixed) ? odds.goal_line_fixed : [];
+    const fixedLines = Array.isArray(odds.goalline_fixed) ? odds.goalline_fixed : Array.isArray(odds.goal_line_fixed) ? odds.goal_line_fixed : [];
     const seenGoalLines = new Set<string>();
     for (const line of fixedLines) {
       const stage = latest(line);
@@ -142,7 +216,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
         seenGoalLines.add(String(lineValue));
       }
     }
-    const mainGoalLine = latest(odds.goal_line);
+    const mainGoalLine = latest(odds.goalline || odds.goal_line);
     if (mainGoalLine && Number.isFinite(Number(mainGoalLine.line))) {
       const lineValue = Number(mainGoalLine.line);
       if (!seenGoalLines.has(String(lineValue))) {
