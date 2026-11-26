@@ -8,9 +8,11 @@ const cache = new Map<string, { expiresAt: number; value: any }>();
 
 function cleanName(value: string) {
   return String(value || "").toLowerCase().normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+    .replace(/[\\u0300-\\u036f]/g, "")
+    // Normalize common naming differences in South American and European feeds.
+    .replace(/\\b(clube do|clube de|club de|club del|club da|football club|fc|afc|cf|sc|club)\\b/g, " ")
+    .replace(/\\b(do|da|de|del|the)\\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
 }
 
 async function api(path: string, ttlMs = 60_000): Promise<any> {
@@ -96,7 +98,8 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
     .sort((x: any, y: any) => x.distance - y.distance);
 
   if (!candidates.length) {
-    throw new Error("5DollarFootballAPI returned " + list.length + " fixtures in the kickoff window but no exact team match for " + home + " vs " + away + ".");
+    const nearby = list.slice(0, 12).map((x: any) => String(x?.teams?.home?.name || "") + " vs " + String(x?.teams?.away?.name || "")).filter((x: string) => x !== " vs ");
+    throw new Error("5DollarFootballAPI returned " + list.length + " fixtures in the kickoff window but no team match for " + home + " vs " + away + ". Sample provider fixtures: " + nearby.slice(0, 6).join("; "));
   }
   const fixture = candidates[0].fixture;
   const status = await getFiveDollarFootballStatus();
