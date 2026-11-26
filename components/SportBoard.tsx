@@ -253,7 +253,6 @@ export default function SportBoard() {
     try {
       const result = await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name, fixtureSource: f.fixtureSource || f.provider });
       setRes(result); setQuickPicksOpen(true); loadHist();
-      void fetchGhanaOddsFor(h, a, date);
     }
     catch (e) { setErr((e as Error).message); }
     finally { setBusy(false); }
@@ -268,7 +267,6 @@ export default function SportBoard() {
     try {
       const result = await api("analyse", { home: home.id, away: away.id, matchDate, homeName: home.name, awayName: away.name });
       setRes(result); setQuickPicksOpen(true); loadHist();
-      void fetchGhanaOddsFor(home, away, matchDate);
     }
     catch (e) { setErr((e as Error).message); }
     setBusy(false);
@@ -557,42 +555,6 @@ export default function SportBoard() {
         })()}
         {busy && <small className="muted">Analysing selected match…</small>}
         {err && <div className="notice warn">{err}</div>}
-      </section>
-
-      <section className="card stack">
-        <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
-        <small className="muted">Bookmaker prices are compared with this board's model probabilities. Value calculations use the best bookmaker back price for each 1X2 outcome, not exchange lay prices.</small>
-        <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching Ghana bookmaker odds…" : "Fetch Ghana bookmaker odds"}</button>
-        {oddsError && <div className="notice warn">{oddsError}</div>}
-        {ghanaOdds && <>
-          <small className="muted">Region: {ghanaOdds.region} · Feed processed: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "not supplied"} · Events scanned: {ghanaOdds.count}{ghanaOdds.historical ? " · Historical odds snapshot" : " · Live odds"}</small>
-          {ghanaOdds.matched.length === 0 ? <div className="notice warn">No matching event with odds was returned for these teams and date. Past prices are only available where OddsRelay has archived that region and date. No prices are estimated or invented.</div> :
-            ghanaOdds.matched.map((event: any) => <div key={event.id} className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
-              <b>{event.home_team} vs {event.away_team}</b>
-              <small className="muted">{event.sport_title || "Football"} · Kick-off {new Date(event.commence_time).toLocaleString()}</small>
-              {(event.bookmakers || []).map((book: any) => <div key={book.key} className="stack" style={{ gap: 3 }}>
-                <b>{book.title || book.key}</b>
-                {(book.markets || []).filter((market: any) => market.key === "h2h").map((market: any) => <div key={market.key} className="sb-scores">
-                  {(market.outcomes || []).map((outcome: any) => <span key={outcome.name}>{outcome.name}: <b>{Number(outcome.price).toFixed(2)}</b></span>)}
-                </div>)}
-                <small className="muted">Last updated: {book.last_update ? new Date(book.last_update).toLocaleString() : "not supplied"}</small>
-              </div>)}
-            </div>)
-          }
-          {m && ghanaOdds && <div className="stack" style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-            <b>Model vs bookmaker · value check</b>
-            <small className="muted">Raw implied probability = 1 ÷ odds. No-vig probability removes the bookmaker's overround across all three outcomes. EV = model probability × decimal odds − 1; large model/market gaps are flagged for verification.</small>
-            {oddsValueRows.length === 0 ? <div className="notice warn">No usable bookmaker 1X2 prices were returned for comparison.</div> : <>
-              {oddsValueRows.map((x: any) => <div key={x.selection} className="sb-top-r">
-                <span className="sb-name">{x.selection}</span><b>Model {x.probability.toFixed(1)}%</b>
-                <small className="muted">Fair {x.fairOdds == null ? "—" : x.fairOdds.toFixed(2)} · book {x.odds == null ? "—" : x.odds.toFixed(2)} · raw implied {x.implied == null ? "—" : x.implied.toFixed(1) + "%"} · no-vig {x.noVigProbability == null ? "—" : x.noVigProbability.toFixed(1) + "%"}</small>
-                <small className={x.ev == null ? "muted" : x.ev >= 3 ? "sb-ok" : x.ev > 0 ? "sb-g D" : "sb-no"}>{x.ev == null ? "No bookmaker price" : "EV " + (x.ev >= 0 ? "+" : "") + x.ev.toFixed(1) + "%"}</small>
-              </div>)}
-              {oddsValueRows.some((x: any) => x.disagreement) && <div className="notice warn"><b>Model/market disagreement detected.</b> A gap of 10 percentage points or more is flagged for fixture, team-strength and lineup verification. It is not automatically treated as a genuine value bet.</div>}
-              {bestOddsValue ? <div className="notice"><b>Top expected-value bet:</b> {bestOddsValue.selection} · model {bestOddsValue.probability.toFixed(1)}% · fair odds {bestOddsValue.fairOdds.toFixed(2)} · book {bestOddsValue.odds.toFixed(2)} at {bestOddsValue.bookmaker} · implied {bestOddsValue.implied.toFixed(1)}% · edge +{bestOddsValue.edge.toFixed(1)}pp · EV +{bestOddsValue.ev.toFixed(1)}%.<small className="muted" style={{ display: "block" }}>Ranked by highest expected return, not by probability alone.</small></div> : <div className="notice warn"><b>No value bet found.</b> None of the bookmaker prices beat the model's fair price.</div>}
-            </>}
-          </div>}
-        </>}
       </section>
 
       {m && showFullAnalysis && (
