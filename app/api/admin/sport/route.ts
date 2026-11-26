@@ -4,6 +4,7 @@ import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams,
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
+import { getSportMonksLeagueUpcomingFixtures, superReady } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -41,8 +42,32 @@ export async function POST(req: Request) {
       case "leagues": return json({ leagues: await getLeagueCatalogue() });
       case "leagueFixtures": {
         const leagueCode=String(b.leagueCode || "").trim().toUpperCase();
+        const leagueName=String(b.leagueName || "").trim();
         if(!leagueCode)return json({error:"Choose a valid league."},400);
-        return json(await getLeagueUpcomingFixtures(leagueCode));
+        const [sportMonksResult, footballDataResult] = await Promise.allSettled([
+          superReady()
+            ? getSportMonksLeagueUpcomingFixtures(leagueCode, leagueName)
+            : Promise.reject(new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.")),
+          getLeagueUpcomingFixtures(leagueCode)
+        ]);
+        const sportMonks = sportMonksResult.status === "fulfilled" ? sportMonksResult.value : null;
+        const footballData = footballDataResult.status === "fulfilled" ? footballDataResult.value : { fixtures: [], clubs: [] };
+        // SportMonks is the fixture source. Keep football-data.org as a fallback
+        // so an upstream SportMonks outage does not blank the selector entirely.
+        const fixtures = sportMonks?.fixtures?.length ? sportMonks.fixtures : footballData.fixtures;
+        const clubs = sportMonks?.clubs?.length ? sportMonks.clubs : footballData.clubs;
+        return json({
+          fixtures, clubs,
+          fixtureProvider: sportMonks?.fixtures?.length ? "SportMonks" : "football-data.org fallback",
+          statisticsProvider: "football-data.org",
+          fixtureWindowDays: 30,
+          providers: {
+            sportmonks: { active: superReady(), matchedFixtures: sportMonks?.fixtures?.length || 0,
+              error: sportMonksResult.status === "rejected" ? String(sportMonksResult.reason?.message || sportMonksResult.reason) : null },
+            footballData: { active: sportReady(), matchedFixtures: footballData.fixtures?.length || 0,
+              error: footballDataResult.status === "rejected" ? String(footballDataResult.reason?.message || footballDataResult.reason) : null }
+          }
+        });
       }
       case "todayMatches": {
         const matches = await todayCompetitionMatches();
