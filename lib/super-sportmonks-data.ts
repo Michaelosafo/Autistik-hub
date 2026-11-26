@@ -242,7 +242,8 @@ export async function matchesOnDate(date: string) {
   const body = await fixturesByDate(date);
   const matches = body.map(fixture)
     .filter((x: any) => x.home.id && x.away.id && x.status === "FINISHED" && x.score)
-    .sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date));
+    .sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date))
+    .map((x: any) => ({ ...x, fixtureSource: "SportMonks" }));
   // Persist the complete normalized SportMonks date result in the existing
   // database cache, in addition to the raw paginated API responses cached by api().
   const importedAt = new Date().toISOString();
@@ -281,7 +282,9 @@ export async function analyse(homeId: number, awayId: number, matchDate?: string
     fixturesForTeam(awayId, from, end),
     api("/fixtures/head-to-head/" + homeId + "/" + awayId + "?include=participants;league;state;scores.participant&per_page=50", 6 * 3600_000).catch(() => ({ data: [] }))
   ]);
-  const completed = (list: any[]) => list.map(toLegacy).filter((m: any) => isFinished({ state: { description: m.state.description } }) && Date.parse(m.date) < Date.parse(end + "T23:59:59Z") && /\d+\s*-\s*\d+/.test(m.state.score.current));
+  // For historical estimates, only use matches completed before the selected
+  // calendar date so the target fixture's result cannot leak into the model.
+  const completed = (list: any[]) => list.map(toLegacy).filter((m: any) => isFinished({ state: { description: m.state.description } }) && Date.parse(m.date) < Date.parse(end + "T00:00:00Z") && /\d+\s*-\s*\d+/.test(m.state.score.current));
   const hGames = completed(hBody).slice(-50).sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date));
   const aGames = completed(aBody).slice(-50).sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date));
   if (hGames.length < 2 || aGames.length < 2) throw new Error("SportMonks returned fewer than two completed matches for one team in the last 12 months. Check your plan's league coverage.");
