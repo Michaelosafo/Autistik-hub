@@ -42,6 +42,28 @@ export async function searchTeams(q: string) {
   return rows.slice(0, 12).map((x: any) => ({ id: x.team.id, name: x.team.name, country: x.team.country, logo: x.team.logo }));
 }
 
+
+/** Resolve provider fixture names to API-Football team IDs (not football-data.org IDs). */
+export async function resolveFixtureTeamIds(names: string[]) {
+  const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
+    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const result: Record<string, number> = {};
+  const unique = [...new Set(names.map((name) => String(name || "").trim()).filter(Boolean))];
+  await Promise.all(unique.map(async (name) => {
+    const candidates = await searchTeams(name).catch(() => []);
+    const target = normalize(name);
+    const exact = candidates.filter((team: any) => normalize(team.name) === target);
+    const pool = exact.length ? exact : candidates.filter((team: any) => {
+      const candidate = normalize(team.name);
+      return candidate && (candidate.startsWith(target) || target.startsWith(candidate));
+    });
+    if (pool.length === 1 && Number(pool[0].id) > 0) result[target] = Number(pool[0].id);
+  }));
+  return result;
+}
+
 /** The team's current domestic league (type League), else its first current competition. */
 async function homeLeague(team: number) {
   const rows = await api(`/leagues?team=${team}&current=true`, 24 * 3600_000);
