@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import ValueBets from "@/components/ValueBets";
 
 /**
  * Sport board (owner only): pick the home and the away team, and it compares both (home record for the home side,
@@ -62,7 +61,8 @@ export default function SportBoard() {
   const [teamFixtures, setTeamFixtures] = useState<any[]>([]);
   const [fixturesBusy, setFixturesBusy] = useState(false);
   const [fixturesError, setFixturesError] = useState("");
-  const [matchDate, setMatchDate] = useState(new Date().toISOString().slice(0, 10));
+  const accraDate = (value = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(value);
+  const [matchDate, setMatchDate] = useState(accraDate());
   const [res, setRes] = useState<any>(null);
   const [quickPicksOpen, setQuickPicksOpen] = useState(false);
   const [activeFixtureIndex, setActiveFixtureIndex] = useState(-1);
@@ -161,13 +161,15 @@ export default function SportBoard() {
       setLeagueScanBusy(false);
     }
   }
-  async function searchMatchesByDate() {
+  async function searchMatchesByDate(dateToLoad = matchDate) {
+    if (!dateToLoad) return;
     setDateMatchesBusy(true); setDateMatchesError(""); setDateMatches([]);
     try {
-      const d = await api<{ matches: any[]; importedCount?: number; fixtureProvider?: string }>("dateMatches", { date: matchDate });
-      setDateMatches(d.matches || []);
-      setDateMatchesImportedCount(Number(d.importedCount ?? d.matches?.length ?? 0));
-      if (!(d.matches || []).length) setDateMatchesError("SportMonks returned no fixtures for this date. Try another date or check the SportMonks subscription coverage.");
+      const d = await api<{ matches: any[]; importedCount?: number; fixtureProvider?: string }>("dateMatches", { date: dateToLoad });
+      const matches = Array.isArray(d.matches) ? d.matches : [];
+      setDateMatches(matches.sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date)));
+      setDateMatchesImportedCount(Number(d.importedCount ?? matches.length));
+      if (!matches.length) setDateMatchesError("No matches were returned by SportMonks for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -192,7 +194,7 @@ export default function SportBoard() {
     setShowFullAnalysis(false);
     const h: Team = { id: f.home.id, name: f.home.name, logo: f.home.logo };
     const a: Team = { id: f.away.id, name: f.away.name, logo: f.away.logo };
-    const date = new Date(f.date).toISOString().slice(0, 10);
+    const date = accraDate(new Date(f.date));
     setHome(h); setAway(a); setMatchDate(date); setRes(null); setErr("");
     setBusy(true);
     setGhanaOdds(null); setOddsError("");
@@ -205,7 +207,7 @@ export default function SportBoard() {
     finally { setBusy(false); }
   }
   const loadHist = () => api<{ rows: any[] }>("history").then((d) => setHist(d.rows)).catch(() => {});
-  useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); loadTodayMatches(); }, []);
+  useEffect(() => { api<{ ready: boolean }>("ready").then((d) => setReady(d.ready)).catch(() => setReady(false)); loadHist(); void searchMatchesByDate(accraDate()); }, []);
 
   async function run() {
     if (!home || !away) return;
@@ -376,7 +378,6 @@ export default function SportBoard() {
         <h1>⚽ Sport board</h1>
         <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
-      <ValueBets endpoint="/api/admin/sport" />
       {m && <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
         <b>🏆 Value bets · ranked first by expected value</b>
         <small className="muted">All three 1X2 outcomes (home, draw and away) are shown, ranked by expected value. Model fair odds = 1 ÷ model probability. Bookmaker decimal odds are not a percentage: odds 29.00 imply a market probability of 3.45%. EV = (model probability × bookmaker odds − 1) × 100. Positive EV is an estimate, not a guarantee.</small>
@@ -406,78 +407,44 @@ export default function SportBoard() {
       {ready === false && <div className="notice warn">SPORT is configured to use SportMonks only. The deployment cannot detect <code>SPORTMONKS_API_TOKEN</code>; add it to Vercel Production and redeploy.</div>}
 
       <section className="card stack">
-        <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><b>⚽ Select a league to scan</b><small className="muted">{leagueCatalogue.length} leagues</small></div>
-        <small className="muted">Choose a country, open a league, review its clubs and fixtures, then scan. Close it to choose another league.</small>
-        <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing leagues…" : "Refresh leagues"}</button>
-        <input value={leagueSearch} onChange={(e) => setLeagueSearch(e.target.value)} placeholder="Search country or league…" aria-label="Search country or league" />
-        {todayError && <div className="notice warn">{todayError}</div>}
-        {todayBusy && leagueCatalogue.length === 0 && <small className="muted">Loading league catalogue…</small>}
-        <div className="stack" style={{ gap: 8 }}>
-          {leaguesByCountry.map(([country, leagues]: any) => <details key={country} className="sb-top-r hi" style={{ display: "block", padding: 11, borderRadius: 12 }}>
-            <summary style={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontWeight: 700 }}><span>{country}</span><small className="muted">{leagues.length} leagues</small></summary>
-            <div className="stack" style={{ gap: 6, marginTop: 10 }}>
-              {leagues.map((league: any) => <button key={league.id} type="button" className={selectedLeague?.id === league.id ? "btn primary" : "btn"} onClick={() => void openLeague(league)} style={{ width: "100%", textAlign: "left", whiteSpace: "normal", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><span>{league.name}</span><span>Open ›</span></button>)}
-            </div>
-          </details>)}
-          {filteredLeagues.length === 0 && leagueCatalogue.length > 0 && <small className="muted">No country or league matches that search.</small>}
+        <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+          <b>⚽ Today's matches</b>
+          <small className="muted">SportMonks · Ghana time</small>
         </div>
-        {selectedLeague && <div className="card stack" style={{ padding: 12 }}>
-          <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><div><b>{selectedLeague.country} · {selectedLeague.name}</b><small className="muted" style={{ display: "block" }}>Selected league</small></div><button type="button" className="btn small ghost" onClick={() => { setSelectedLeague(null); setSelectedLeagueFixtures([]); setLeagueClubs([]); setLeagueScanResults([]); setTodayError(""); }}>Close league</button></div>
-          {leagueLoading ? <small className="muted">Loading clubs and upcoming fixtures…</small> : <>
-            <b>Clubs in this league · {leagueClubs.length}</b><small className="muted">{leagueClubs.map((club: any) => club.name).filter(Boolean).join(" · ") || "Club list not supplied by provider."}</small>
-            <b>Upcoming fixtures · {selectedLeagueFixtures.length}</b>
-            {selectedLeagueFixtures.map((fixture: any) => <button key={fixture.id} type="button" className="sb-opt" onClick={() => chooseFixture(fixture)} disabled={busy} style={{ justifyContent: "space-between" }}><span style={{ flex: 1, minWidth: 0 }}><b>{fixture.home.name} vs {fixture.away.name}</b><small className="muted" style={{ display: "block" }}>{new Date(fixture.date).toLocaleString()}</small></span><span>Analyse ›</span></button>)}
-            <button type="button" className="btn primary" disabled={busy || leagueScanBusy || selectedLeagueFixtures.length === 0} onClick={() => void scanSelectedLeague()}>{leagueScanBusy ? "Scanning league…" : "Scan this league · " + selectedLeagueFixtures.length + " fixtures"}</button>
-            {leagueScanProgress && <small className="muted">{leagueScanProgress}</small>}
-            {leagueScanResults.length > 0 && <div className="stack" style={{ gap: 8 }}>
-              <b>League scan results · {leagueScanResults.length}/{selectedLeagueFixtures.length}</b>
-              {leagueScanResults.map((item: any, index: number) => {
-                const model = item.analysis?.model;
-                const best = Array.isArray(model?.markets) ? [...model.markets].sort((a: any, b: any) => Number(b.p) - Number(a.p))[0] : null;
-                return <div key={item.fixture.id} className="sb-top-r hi" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                  <b>{index + 1}. {item.fixture.home.name} vs {item.fixture.away.name}</b>
-                  {item.error ? <small className="muted">Analysis unavailable: {item.error}</small> : <>
-                    {best && <small>Highest probability: <b>{best.name}</b> · {best.p}% · fair odds {best.fair}</small>}
-                    <div className="sb-scores">{getValidQuickPicks(model).map((pick: any) => <span key={pick.name}>{pick.name}: <b>{pick.p}%</b></span>)}</div>
-                    <button type="button" className="btn small ghost" onClick={() => void chooseFixture(item.fixture)} disabled={busy}>Open full match analysis</button>
-                  </>}
-                </div>;
-              })}
-            </div>}
-          </>}
+        <small className="muted">Today's fixtures load automatically whenever you open the board. Choose another date to view its matches. Tap any match to run the team analysis and compare available SportMonks bookmaker odds for value.</small>
+        <label className="stack" style={{ gap: 4 }}>
+          <b>Choose match date</b>
+          <input type="date" value={matchDate} onChange={(e) => {
+            const nextDate = e.target.value;
+            setMatchDate(nextDate); setDateMatches([]); setDateMatchesImportedCount(0);
+            setDateMatchesError(""); setRes(null); setQuickPicksOpen(false);
+            void searchMatchesByDate(nextDate);
+          }} />
+        </label>
+        <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy} onClick={() => void searchMatchesByDate(matchDate)}>
+            {dateMatchesBusy ? "Loading matches…" : "Refresh matches"}
+          </button>
+          <small className="muted">{dateMatches.length} matches · {dateMatchesImportedCount} saved to database</small>
+        </div>
+        {dateMatchesBusy && <small className="muted">Fetching fixtures from SportMonks…</small>}
+        {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
+        {!dateMatchesBusy && !dateMatchesError && dateMatches.length === 0 && <small className="muted">No matches scheduled or recorded for this date.</small>}
+        {dateMatches.length > 0 && <div className="stack" style={{ gap: 7 }}>
+          {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b>{f.home.name} vs {f.away.name}</b>
+              <small className="muted" style={{ display: "block" }}>{f.competition || "Football"} · {new Date(f.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} (Ghana time)</small>
+            </span>
+            <span style={{ display: "grid", justifyItems: "end", gap: 3, whiteSpace: "nowrap" }}>
+              <b>{f.status === "FINISHED" && f.score ? "FT " + f.score.home + "–" + f.score.away : f.status === "IN_PLAY" ? "LIVE" : f.status === "PAUSED" ? "HALF-TIME" : f.status.replace("_", " ")}</b>
+              <small className="muted">Analyse & value odds ›</small>
+            </span>
+          </button>)}
         </div>}
-      </section>
-
-      {!res && (
-      <section className="card stack">
-        <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
-        {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
-        <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <b>All matches by date</b>
-          <small className="muted">Search every fixture SportMonks returns for this date — scheduled, live and completed. All returned matches are imported into the database cache; completed matches include their verified full-time score.</small>
-          <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesImportedCount(0); setDateMatchesError(""); setRes(null); }} /></label>
-          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Loading SportMonks fixtures…" : "Load all SportMonks matches"}</button>
-          {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
-          {dateMatches.length > 0 && <div className="stack" style={{ gap: 0 }}>
-            <b>{dateMatches.length} {dateMatches.length === 1 ? "match" : "matches"} returned by SportMonks</b><small className="muted">Database import confirmed: {dateMatchesImportedCount} match records saved for {matchDate}. All competitions available in your SportMonks feed are included. Tap any fixture to open its analysis.</small>
-            {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <b>{f.home.name} vs {f.away.name}</b>
-                <small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
-              </span>
-              <span style={{ display: "grid", justifyItems: "end", gap: 3, whiteSpace: "nowrap" }}><b>{f.status === "FINISHED" && f.score ? "FT " + f.score.home + "–" + f.score.away : f.status === "IN_PLAY" ? "LIVE" : f.status === "PAUSED" ? "HALF-TIME" : f.status.replace("_", " ")}</b><small className="muted">View analysis ›</small></span>
-              <span style={{ color: "var(--muted)" }}>›</span>
-            </button>)}
-          </div>}
-        </div>
-        <small className="muted">Or choose the opponent manually:</small>
-        <TeamPick label="✈️ Away team" team={away} setTeam={(t) => { setAway(t); setRes(null); }} />
-        <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} onChange={(e) => { setMatchDate(e.target.value); setRes(null); }} /><small className="muted">Choose today or a past date. For past dates, the model uses matches before the selected date and looks for the actual fixture result.</small></label>
-        <button type="button" className="btn primary" disabled={!home || !away || busy || !ready || !matchDate} onClick={run}>{busy ? "Checking both teams…" : "Analyse match"}</button>
+        {busy && <small className="muted">Analysing selected match…</small>}
         {err && <div className="notice warn">{err}</div>}
       </section>
-
-            )}
 
       <section className="card stack">
         <b>🇬🇭 Ghana bookmaker odds · OddsRelay</b>
