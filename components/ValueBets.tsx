@@ -34,7 +34,7 @@ export default function ValueBets({ endpoint }: Props) {
         const data=await post("leagues");
         const list=Array.isArray(data.leagues)?data.leagues:[];
         setLeagues(list);
-        if(!list.length)setError("Highlightly did not return a competition catalogue.");
+        if(!list.length)setError("football-data.org returned no competitions available on your current plan.");
       } else {
         const data=await post("todayMatches");
         const now=Date.now();
@@ -51,7 +51,7 @@ export default function ValueBets({ endpoint }: Props) {
     try {
       const seasons=Array.isArray(league.seasons)?league.seasons.map(Number).filter(Number.isFinite):[];
       const season=seasons.length?Math.max(...seasons):undefined;
-      const data=await post("leagueFixtures",{leagueId:Number(league.id),season});
+      const data=await post("leagueFixtures",{leagueCode:String(league.code || "")});
       const now=Date.now();
       const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
         .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
@@ -78,7 +78,7 @@ export default function ValueBets({ endpoint }: Props) {
     setBusy(true);setError("");setProgress("");
     let allRows:any[]=[];let allDiagnostics:any[]=[];
     try {
-      // Scan in small batches so Highlightly Premium and the odds provider are not flooded.
+      // Scan in small batches to respect football-data.org and bookmaker provider limits.
       for(let i=0;i<leagueFixtures.length;i+=2) {
         const batch=leagueFixtures.slice(i,i+2);
         setProgress("Scanning "+leagueName+" · "+Math.min(i+batch.length,leagueFixtures.length)+" of "+leagueFixtures.length+" fixtures");
@@ -140,7 +140,7 @@ export default function ValueBets({ endpoint }: Props) {
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
       <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · Value scanner"}</b>
-        <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose one competition, scan it, review the ranked value bets, then close it and move to the next. Highlightly Premium supplies fixtures and team analysis; 5DollarFootballAPI Ultra and OddsRelay supply prices.":"SportMonks fixtures and statistics with OddsPapi bookmaker prices."}</small>
+        <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition, scan it, review ranked value bets, then close it and move to the next. football-data.org supplies fixtures and team statistics; 5DollarFootballAPI Ultra and OddsRelay supply prices.":"SportMonks fixtures and statistics with OddsPapi bookmaker prices."}</small>
       </div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button>
@@ -152,7 +152,7 @@ export default function ValueBets({ endpoint }: Props) {
       {endpoint==="/api/admin/sport"?<>
         <span>5DollarFootballAPI: {feedStatus.fivedollarfootball?.active?"Connected · "+String(feedStatus.fivedollarfootball.plan||"plan unknown"):"Not connected"}</span>
         <span>OddsRelay: {feedStatus.oddsrelay?.active?"Connected":"Not active / unavailable"}</span>
-        <small>Highlightly Premium is the fixture and team-statistics source.</small>
+        <small>football-data.org supplies fixtures and historical team statistics.</small>
       </>:<span>OddsPapi: {feedStatus.active?"Connected":"Check provider configuration"}</span>}
       {feedStatus.error&&<small>{feedStatus.error}</small>}
     </div>}
@@ -185,7 +185,7 @@ export default function ValueBets({ endpoint }: Props) {
         return <div className="card stack" style={{padding:14}}>
           <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{league?.country} · {league?.name}</b><small className="muted" style={{display:"block"}}>Next seven days · {fixtures.length} fixtures</small></div><button className="btn small" type="button" onClick={()=>{setSelectedLeagueId(null);setFixtures([]);setError("");}}>Close league</button></div>
           {loading?<small className="muted">Loading clubs and fixtures…</small>:<>
-            <b>Clubs in this league · {clubs.length}</b><small className="muted">{clubs.join(" · ")||"Highlightly has not returned a standings club list for this league yet."}</small>
+            <b>Clubs in this league · {clubs.length}</b><small className="muted">{clubs.join(" · ")||"No club list was returned by football-data.org for this competition."}</small>
             {fixtures.length>0&&<div className="stack" style={{gap:6}}><b>Upcoming fixtures</b>{fixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{padding:9,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted">{new Date(f.date).toLocaleString()}</small></div>)}</div>}
             <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanLeague(leagueKey,String(league?.name||"Selected league"),fixtures)}>{busy?"Scanning…":"Scan this league · "+fixtures.length+" fixtures"}</button>
           </>}
@@ -209,6 +209,6 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack"><b>Ranked selections</b>{sortRows(superRows).map((r:any,i:number)=><SelectionCard key={r.key||i} row={r} index={i}/>)}</div>}
       {diagnostics.length>0&&<details><summary>Scan diagnostics ({diagnostics.length})</summary>{diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.analysisError||d.error||"Completed"}</small>)}</details>}
     </>}
-    <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from Highlightly Premium recent form and season statistics. A selection is called value only when its model probability is available and expected value is positive.":"SUPER uses its own fixtures, model and odds providers."}</small>
+    <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from football-data.org recent form and season statistics. A selection is called value only when its model probability is available and expected value is positive.":"SUPER uses its own fixtures, model and odds providers."}</small>
   </section>;
 }
