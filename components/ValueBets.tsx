@@ -15,8 +15,11 @@ export default function ValueBets({ endpoint }: Props) {
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [checkingFeed,setCheckingFeed]=useState(false);
+  const [selectedCompetition,setSelectedCompetition]=useState("");
+  const [competitionSearch,setCompetitionSearch]=useState("");
+  const [leagueResults,setLeagueResults]=useState<Record<string,{rows:any[];diagnostics:any[];scannedAt:string}>>({});
   const autoStarted=useRef(false);
-  const autoScanStarted=useRef(false);
+
   async function post(action:string, body:any={}) {
     const r=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
     const d=await r.json().catch(()=>({}));
@@ -31,7 +34,7 @@ export default function ValueBets({ endpoint }: Props) {
   }
   const fixtureKey=(f:any)=>String(f?.id || (String(f?.home?.name||"")+"|"+String(f?.away?.name||"")+"|"+String(f?.date||"")));
   async function scan() {
-    setBusy(true); if(endpoint==="/api/admin/sport") autoScanStarted.current=false; setError(""); setRows([]); setScanned(0); setDayCounts({today:0,tomorrow:0}); setDiagnostics([]); setSelectedFixture("");
+    setBusy(true); setError(""); setRows([]); setScanned(0); setDayCounts({today:0,tomorrow:0}); setDiagnostics([]); setSelectedFixture("");
     try {
       if(endpoint==="/api/admin/sport") {
         const matchData=await post("todayMatches");
@@ -119,13 +122,30 @@ export default function ValueBets({ endpoint }: Props) {
       void scan();
     }
   }, [endpoint]);
-  useEffect(() => {
-    // Once fixtures arrive, scan them automatically; no per-match Analyse clicks.
-    if (endpoint === "/api/admin/sport" && fixtures.length && !autoScanStarted.current) {
-      autoScanStarted.current = true;
-      void scanAllFixtures(fixtures);
-    }
-  }, [endpoint, fixtures]);
+  async function scanLeague(competition:string, leagueFixtures:any[]) {
+    if (!leagueFixtures.length) { setError("No upcoming fixtures are available in this competition."); return; }
+    setSelectedCompetition(competition);
+    setBusy(true); setError(""); setProgress(""); setScanned(0);
+    let collectedRows:any[]=[];
+    let collectedDiagnostics:any[]=[];
+    try {
+      for (let i=0;i<leagueFixtures.length;i+=2) {
+        const batch=leagueFixtures.slice(i,i+2);
+        setProgress("Scanning "+competition+" · "+Math.min(i+batch.length,leagueFixtures.length)+" of "+leagueFixtures.length+" fixtures");
+        const result=await post("valueScan",{fixtures:batch});
+        collectedRows=collectedRows.concat(Array.isArray(result?.rows)?result.rows:[]);
+        collectedDiagnostics=collectedDiagnostics.concat(Array.isArray(result?.diagnostics)?result.diagnostics:[]);
+        setScanned(Math.min(i+batch.length,leagueFixtures.length));
+        setLeagueResults(prev=>({...prev,[competition]:{
+          rows:[...collectedRows].sort((a:any,b:any)=>(Number(b.modelSupported)-Number(a.modelSupported)) || ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity))),
+          diagnostics:[...collectedDiagnostics],scannedAt:new Date().toISOString()
+        }}));
+        if(i+2<leagueFixtures.length) await new Promise(resolve=>setTimeout(resolve,1200));
+      }
+      if(!collectedRows.length) setError("No bookmaker prices were returned for this competition. Check the diagnostics below.");
+    } catch(e) { setError((e as Error).message); }
+    finally { setProgress(""); setBusy(false); }
+  }
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
        <div><b>📈 Value bets · today + tomorrow</b><small className="muted" style={{display:"block"}}>{endpoint === "/api/admin/super" ? "Uses SportMonks for fixtures and match statistics, and OddsPapi for bookmaker prices. Scans today's and tomorrow's fixtures and ranks model-supported positive expected value." : "Uses Highlightly Premium for fixtures and team form/season data. OddsRelay and 5DollarFootballAPI supply bookmaker prices for comparison with Autistik probabilities."}</small></div>
@@ -133,7 +153,7 @@ export default function ValueBets({ endpoint }: Props) {
     </div>
     {progress && <small className="muted">{progress}</small>}
      {feedStatus && <div className="notice stack" style={{fontSize:13}}><b>{endpoint === "/api/admin/super" ? "SUPER odds-provider status" : "SPORT odds-provider status"}</b>{endpoint === "/api/admin/super" ? <><span>OddsPapi: {feedStatus.keyConfigured ? (feedStatus.active ? "active" : "no active bookmaker") : "key missing"}</span><span>Subscribed bookmakers: {(feedStatus.bookmakers || []).join(", ") || "none returned"}</span>{feedStatus.error && <small>{feedStatus.error}</small>}<small>Highlightly Premium supplies fixtures and match statistics; OddsPapi supplies bookmaker prices.</small></> : <><span>5DollarFootballAPI: {feedStatus.fivedollarfootball?.active ? "connected · " + String(feedStatus.fivedollarfootball.plan || "plan unknown") + " plan" : feedStatus.fivedollarfootball?.keyConfigured ? "key found but connection failed" : "API key missing"}</span>{feedStatus.fivedollarfootball?.active && <small>5Dollar usage today: {feedStatus.fivedollarfootball.requestsToday ?? "unknown"} · limit: {feedStatus.fivedollarfootball.rateLimit ?? "unknown"} per {feedStatus.fivedollarfootball.rateWindowSeconds ?? "unknown"} seconds</small>}{feedStatus.fivedollarfootball?.error && <small>5DollarFootballAPI: {feedStatus.fivedollarfootball.error}</small>}<span>OddsRelay: retained as a secondary odds source</span><small>SPORT combines returned 5DollarFootballAPI and OddsRelay prices, then keeps the best price per selection. The model only labels markets it can calculate.</small>{feedStatus.oddsrelay?.errors?.accountCoverage && <small>OddsRelay: {String(feedStatus.oddsrelay.errors.accountCoverage?.message || feedStatus.oddsrelay.errors.accountCoverage)}</small>}</>}</div>}
-    {endpoint==="/api/admin/sport" && fixtures.length>0 && <small className="muted">Highlightly fixtures: {fixtures.length} · Today: {dayCounts.today} · Tomorrow: {dayCounts.tomorrow}. Autistik scans the loaded fixtures automatically.</small>}{endpoint!=="/api/admin/sport" && scanned>0 && <small className="muted">Scanned {scanned} upcoming fixtures</small>}
+    {endpoint==="/api/admin/sport" && fixtures.length>0 && <small className="muted">Highlightly Premium fixtures loaded: {fixtures.length} · {new Set(fixtures.map((f:any)=>String(f.competition?.name || f.competition || "Other competitions"))).size} competitions · {new Set(fixtures.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean)).size} clubs represented in upcoming fixtures.</small>}
     {endpoint==="/api/admin/sport" && fixtures.length>0 && <div className="notice" style={{fontSize:13}}>Loaded {fixtures.length} fixtures across {new Set(fixtures.map((f:any)=>String(f.competition?.name || f.competition || f.league?.name || "Other competitions"))).size} competitions. {busy ? "Autistik is checking bookmaker prices and calculating value automatically." : "Open a competition below to see its ranked analysis."}</div>}
     {endpoint==="/api/admin/sport" && scanned>0 && <small className="muted">Automatically analysed {scanned} of {fixtures.length} fixtures.</small>}
     {error && <div className="notice warn">{error}</div>}
@@ -141,7 +161,52 @@ export default function ValueBets({ endpoint }: Props) {
       <b>Odds feed diagnostics</b>
       {diagnostics.slice(0,6).map((d,i)=><small key={i} className="muted">{d.fixture}: {d.fixtureCount != null ? d.fixtureCount+" odds-enabled fixture candidates from "+d.source : d.oddsError || d.error || ((d.oddsEvents ?? d.eventsReturned ?? 0)+" events returned · "+(d.matchedEvents ?? d.matched ?? 0)+" matched · "+(d.bookmakers||[]).length+" bookmakers · markets: "+((d.markets||[]).join(", ")||"none"))}{d.analysisError ? " · model: "+d.analysisError : ""}{d.feedExamples?.length ? " · feed examples: "+d.feedExamples.join("; ") : ""}{d.providers?.theOddsApi ? " · The Odds API: "+(d.providers.theOddsApi.ok ? "OK ("+(d.providers.theOddsApi.matched ?? 0)+" matched)" : "ERROR "+(d.providers.theOddsApi.error || "")) : ""}{d.providers?.oddsrelay ? " · OddsRelay: "+(d.providers.oddsrelay.ok ? "OK ("+(d.providers.oddsrelay.matched ?? 0)+" matched)" : "ERROR "+(d.providers.oddsrelay.error || "")) : ""}{d.providers?.fivedollarfootball ? " · 5DollarFootballAPI: "+(d.providers.fivedollarfootball.ok ? "OK ("+(d.providers.fivedollarfootball.matched ?? 0)+" matched · "+(d.providers.fivedollarfootball.returnedBookmakers ?? (d.providers.fivedollarfootball.bookmakers || []).length)+" books · markets: "+((d.providers.fivedollarfootball.markets || []).join(", ") || "none")+")" : "ERROR "+(d.providers.fivedollarfootball.error || ""))+(d.providers.fivedollarfootball.emptyOddsReason ? " · "+d.providers.fivedollarfootball.emptyOddsReason : "")+(d.providers.fivedollarfootball.oddsRequestError ? " · "+d.providers.fivedollarfootball.oddsRequestError : "") : ""}</small>)}
     </div>}
-    {rows.length>0 && (() => {
+    {endpoint==="/api/admin/sport" && fixtures.length>0 && (() => {
+      const grouped=fixtures.reduce((acc:any,f:any)=>{
+        const name=String(f.competition?.name || f.competition || "Other competitions");
+        (acc[name] ||= []).push(f);
+        return acc;
+      },{} as Record<string,any[]>);
+      const competitions=Object.entries(grouped).sort((a:any,b:any)=>a[0].localeCompare(b[0]));
+      const filtered=competitions.filter(([name,items]:any)=>String(name).toLowerCase().includes(competitionSearch.toLowerCase()) || items.some((f:any)=>[f.home?.name,f.away?.name].some((n:any)=>String(n||"").toLowerCase().includes(competitionSearch.toLowerCase()))));
+      const activeFixtures=grouped[selectedCompetition] || [];
+      const saved=leagueResults[selectedCompetition];
+      const sorted=(items:any[])=>[...items].sort((a:any,b:any)=>(Number(b.modelSupported)-Number(a.modelSupported)) || ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity)));
+      const valueRows=(saved?.rows||[]).filter((x:any)=>x.modelSupported && Number(x.ev)>0);
+      return <div className="stack">
+        <div className="stack">
+          <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><b>Choose a competition</b><small className="muted">{competitions.length} available</small></div>
+          <input className="input" value={competitionSearch} onChange={e=>setCompetitionSearch(e.target.value)} placeholder="Search country, league or club…" />
+          <div className="stack" style={{gap:8}}>
+            {filtered.map(([name,items]:any)=>{
+              const clubs=[...new Set(items.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean))].sort();
+              const count=leagueResults[name]?.rows?.filter((x:any)=>x.modelSupported&&Number(x.ev)>0).length || 0;
+              const active=selectedCompetition===name;
+              return <button key={name} type="button" className={active?"btn primary":"btn"} onClick={()=>{setSelectedCompetition(active?"":name);setError("");}} style={{width:"100%",display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:10,textAlign:"left",alignItems:"center",padding:"12px 14px",whiteSpace:"normal"}}>
+                <span style={{minWidth:0,display:"grid",gap:4}}><b style={{overflowWrap:"anywhere"}}>{name}</b><small style={{opacity:.8}}>{clubs.length} clubs · {items.length} upcoming fixtures</small></span>
+                <span style={{fontSize:12,whiteSpace:"nowrap",textAlign:"right"}}>{count} value bets　{active?"⌃":"›"}</span>
+              </button>;
+            })}
+            {!filtered.length && <small className="muted">No competition or club matches that search.</small>}
+          </div>
+        </div>
+        {selectedCompetition && <div className="card stack" style={{padding:14}}>
+          <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{selectedCompetition}</b><small className="muted" style={{display:"block"}}>{activeFixtures.length} upcoming fixtures</small></div><button className="btn small" type="button" onClick={()=>setSelectedCompetition("")}>Close league</button></div>
+          <div className="stack" style={{gap:5}}><b>Clubs in the loaded fixtures</b><small className="muted">{[...new Set(activeFixtures.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean))].sort().join(" · ") || "No clubs listed"}</small></div>
+          <button className="btn primary" type="button" disabled={busy || !activeFixtures.length} onClick={()=>void scanLeague(selectedCompetition,activeFixtures)}>{busy?"Scanning…":"Scan this league · "+activeFixtures.length+" fixtures"}</button>
+          {progress && <small className="muted">{progress}</small>}
+          {saved && <div className="notice" style={{fontSize:13}}>Last scan: {new Date(saved.scannedAt).toLocaleString()} · {saved.rows.length} priced selections · {valueRows.length} positive-EV value bets.</div>}
+          {saved && <div className="stack">
+            <b>Top value bets · highest EV first</b>
+            {valueRows.length?sorted(valueRows).slice(0,20).map((x:any,i:number)=><div key={x.key} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,borderLeft:"4px solid var(--teal)",minWidth:0}}><b>{i+1}. {x.home} vs {x.away}</b><div><b>{x.selection}</b> · {x.market}</div><div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13}}><span>Bookmaker <b>{Number(x.odds).toFixed(2)}</b> · {x.bookmaker}</span><span>Fair odds <b>{Number(x.fairOdds).toFixed(2)}</b></span><span>Probability <b>{Number(x.probability).toFixed(1)}%</b></span><b>EV +{Number(x.ev).toFixed(1)}%</b></div></div>):<small className="muted">No positive-EV selections with a supported model. Odds-only selections are not labelled as value.</small>}
+            <b>All selections · model-supported first, then EV</b>
+            {sorted(saved.rows).map((x:any)=><div key={x.key} className="sb-top-r hi" style={{display:"grid",gap:6,padding:11,minWidth:0}}><b>{x.home} vs {x.away}</b><div><b>{x.selection}</b> · {x.market}</div><div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13}}><span>Bookmaker <b>{Number(x.odds).toFixed(2)}</b> · {x.bookmaker}</span><span>Fair odds <b>{x.modelSupported?Number(x.fairOdds).toFixed(2):"—"}</b></span><span>Probability <b>{x.modelSupported?Number(x.probability).toFixed(1)+"%":"—"}</b></span><b>{x.modelSupported?(Number(x.ev)>0?"OVERPRICED +"+Number(x.ev).toFixed(1)+"% EV":Number(x.ev)<0?"UNDERPRICED "+Number(x.ev).toFixed(1)+"% EV":"FAIR PRICE"):"ODDS ONLY · NOT MODELLED"}</b></div></div>)}
+            {saved.diagnostics.length>0 && <details><summary>Scan diagnostics ({saved.diagnostics.length})</summary><div className="stack">{saved.diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.analysisError || d.error || "Odds lookup completed"} · markets: {(d.markets||[]).join(", ")||"none"}</small>)}</div></details>}
+          </div>}
+        </div>}
+      </div>;
+    })()}
+    {endpoint!=="/api/admin/sport" && rows.length>0 && (() => {
       const sortRows=(items:any[])=>[...items].sort((a,b)=>
         (Number(b.modelSupported)-Number(a.modelSupported)) ||
         ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity))
@@ -176,6 +241,3 @@ export default function ValueBets({ endpoint }: Props) {
         </details>)}</div>
       </div>;
     })()}
-     <small className="muted">{endpoint === "/api/admin/super" ? "Uses SportMonks match statistics and The Odds API bookmaker prices, removes duplicate selections, and keeps the best returned price. " : "Uses 5DollarFootballAPI Ultra bookmaker prices, removes duplicate selections, and keeps the best returned price. "}Value is labelled only where the board has a supported probability model; other returned markets are shown as odds-only, not falsely called value.</small>
-  </section>;
-}
