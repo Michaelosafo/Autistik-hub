@@ -53,7 +53,7 @@ export default function ValueBets({ endpoint }: Props) {
       const seasons=Array.isArray(league.seasons)?league.seasons.map(Number).filter(Number.isFinite):[];
       const season=seasons.length?Math.max(...seasons):undefined;
       const data=await post("leagueFixtures",{leagueCode:String(league.code || ""),leagueName:String(league.name || "")});
-      setFixtureSource(data.providers || {fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
+      setFixtureSource({...data.providers,fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
       const now=Date.now();
       const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
         .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
@@ -124,6 +124,7 @@ export default function ValueBets({ endpoint }: Props) {
     return <div key={row.key||index} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:supported&&ev>0?"4px solid var(--teal)":supported&&ev<0?"4px solid #d69b28":"4px solid var(--line)"}}>
       <b>{index+1}. {row.home} vs {row.away}</b>
       <div><b>{row.selection}</b> · {row.market}</div>
+      {row.modelProvider&&<small className="muted">Model: {row.modelProvider}</small>}
       <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13}}>
         <span>Bookmaker <b>{Number(row.odds).toFixed(2)}</b> · {row.bookmaker}</span>
         <span>Fair odds <b>{supported?Number(row.fairOdds).toFixed(2):"—"}</b></span>
@@ -162,7 +163,7 @@ export default function ValueBets({ endpoint }: Props) {
     </div>}
     {error&&<div className="notice warn">{error}</div>}
     {loading&&<small className="muted">Loading competition and fixture list…</small>}
-    {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.sportmonks?.active?"SportMonks":"football-data.org fallback"} · analysis: football-data.org · prices: 5DollarFootballAPI Ultra + OddsRelay</small>}
+    {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.fixtureProvider||"Provider not reported"} · analysis: football-data.org (SportMonks fallback) · prices: 5DollarFootballAPI Ultra + OddsRelay</small>}
     {progress&&<small className="muted">{progress}</small>}
 
     {endpoint==="/api/admin/sport" && <>
