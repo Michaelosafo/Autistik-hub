@@ -113,6 +113,8 @@ export default function SportBoard() {
   const [leagueScanBusy, setLeagueScanBusy] = useState(false);
   const [leagueScanProgress, setLeagueScanProgress] = useState("");
   const [leagueScanResults, setLeagueScanResults] = useState<any[]>([]);
+  const [leagueValueRows, setLeagueValueRows] = useState<any[]>([]);
+  const [leagueValueDiagnostics, setLeagueValueDiagnostics] = useState<any[]>([]);
   const [todayBusy, setTodayBusy] = useState(false);
   const [todayError, setTodayError] = useState("");
   const [dateMatches, setDateMatches] = useState<any[]>([]);
@@ -134,41 +136,52 @@ export default function SportBoard() {
     finally { setTodayBusy(false); }
   }
   async function openLeague(league: any) {
-    setSelectedLeague(league); setSelectedLeagueFixtures([]); setLeagueClubs([]); setLeagueScanResults([]);
+    setSelectedLeague(league); setSelectedLeagueFixtures([]); setLeagueClubs([]);
+    setLeagueScanResults([]); setLeagueValueRows([]); setLeagueValueDiagnostics([]);
     setTodayError(""); setLeagueLoading(true);
     try {
-      const seasons = Array.isArray(league.seasons) ? league.seasons.map(Number).filter(Number.isFinite) : [];
-      const season = seasons.length ? Math.max(...seasons) : undefined;
-      const d = await api<{ fixtures: any[]; clubs: any[] }>("leagueFixtures", { leagueCode: String(league.code || ""), leagueName: String(league.name || ""), leagueId: Number(league.id) });
-      setSelectedLeagueFixtures(Array.isArray(d.fixtures) ? d.fixtures : []);
-      setLeagueClubs(Array.isArray(d.clubs) ? d.clubs : []);
-      if (!(d.fixtures || []).length) setTodayError("No upcoming fixtures found in this league over the next 30 days. Close it and choose another league.");
+      const d = await api<{ fixtures: any[]; clubs: any[] }>("leagueFixtures", { leagueId: Number(league.id), season: Number(league.season) });
+      const fixtures = Array.isArray(d.fixtures) ? d.fixtures : [];
+      setSelectedLeagueFixtures(fixtures);
+      setLeagueClubs([]);
+      if (!fixtures.length) {
+        setTodayError("No upcoming fixtures were returned for this competition and season.");
+      } else {
+        // Opening a competition automatically starts its odds/value scan.
+        await scanLeagueFixtures(fixtures, league);
+      }
     } catch (e) { setTodayError((e as Error).message); }
     finally { setLeagueLoading(false); }
   }
-  async function scanSelectedLeague() {
-    if (!selectedLeague || !selectedLeagueFixtures.length || leagueScanBusy) return;
-    setLeagueScanBusy(true); setLeagueScanResults([]); setTodayError("");
-    const results: any[] = [];
+  async function scanLeagueFixtures(fixtures: any[], league: any) {
+    if (!fixtures.length) return;
+    setLeagueScanBusy(true); setLeagueValueRows([]); setLeagueValueDiagnostics([]);
+    setLeagueScanResults([]); setTodayError("");
+    const rows: any[] = [], diagnostics: any[] = [];
     try {
-      for (let i = 0; i < selectedLeagueFixtures.length; i++) {
-        const fixture = selectedLeagueFixtures[i];
-        setLeagueScanProgress("Scanning " + selectedLeague.name + " · " + (i + 1) + " of " + selectedLeagueFixtures.length + " · " + fixture.home.name + " vs " + fixture.away.name);
-        const date = new Date(fixture.date).toISOString().slice(0, 10);
-        try {
-          const analysis = await api("analyse", { home: fixture.home.id, away: fixture.away.id, matchDate: date, homeName: fixture.home.name, awayName: fixture.away.name, fixtureSource: fixture.fixtureSource || fixture.provider });
-          results.push({ fixture, analysis });
-        } catch (error) {
-          results.push({ fixture, error: error instanceof Error ? error.message : String(error) });
-        }
-        setLeagueScanResults([...results]);
-        if (i < selectedLeagueFixtures.length - 1) await new Promise(resolve => setTimeout(resolve, 350));
+      for (let i = 0; i < fixtures.length; i += 2) {
+        const batch = fixtures.slice(i, i + 2);
+        setLeagueScanProgress("Scanning " + league.name + " · " + Math.min(i + batch.length, fixtures.length) + " of " + fixtures.length + " matches");
+        const result = await api<{ rows: any[]; diagnostics: any[] }>("valueScan", { fixtures: batch });
+        rows.push(...(Array.isArray(result.rows) ? result.rows : []));
+        diagnostics.push(...(Array.isArray(result.diagnostics) ? result.diagnostics : []));
+        setLeagueValueRows([...rows].sort((a: any, b: any) => Number(b.ev || 0) - Number(a.ev || 0)));
+        setLeagueValueDiagnostics([...diagnostics]);
+        if (i + 2 < fixtures.length) await new Promise(resolve => setTimeout(resolve, 400));
       }
-      void loadHist();
+      if (!rows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))) {
+        setTodayError("No supported Ghana bookmaker prices with matching AUTISTIK probabilities were found in this competition.");
+      }
+    } catch (error) {
+      setTodayError(error instanceof Error ? error.message : String(error));
     } finally {
       setLeagueScanProgress("");
       setLeagueScanBusy(false);
     }
+  }
+  async function scanSelectedLeague() {
+    if (!selectedLeague || !selectedLeagueFixtures.length || leagueScanBusy) return;
+    await scanLeagueFixtures(selectedLeagueFixtures, selectedLeague);
   }
   async function scanDateMatches(fixtures: any[], dateToScan: string) {
     setDailyValueRows([]); setDailyScanDiagnostics([]); setDailyScanError("");
