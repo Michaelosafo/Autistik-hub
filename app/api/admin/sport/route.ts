@@ -34,24 +34,6 @@ async function withTimeout<T>(task: Promise<T>, label: string, timeoutMs = 25000
   }
 }
 
-export const dynamic = "force-dynamic";
-export const maxDuration = 60;
-
-async function withTimeout<T>(task: Promise<T>, label: string, timeoutMs = 20000): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      task,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(label + " timed out after " + timeoutMs + "ms")), timeoutMs);
-      })
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
-
 /** Sport board (owner only). POST { action: "ready" | "search" | "analyse" | "history" | "result" }. */
 export async function POST(req: Request) {
   if (!(await adminState()).owner) return json({ error: "Not found." }, 404);
