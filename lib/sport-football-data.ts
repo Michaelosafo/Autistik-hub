@@ -70,7 +70,9 @@ export async function getLeagueUpcomingFixtures(code: string) {
   if (!COMPETITIONS.includes(competition)) throw new Error("Choose a competition supported by the connected football-data.org plan.");
   const now = new Date();
   const from = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-  const toDate = new Date(now.getTime() + 7 * 86400_000);
+  // European cup matchdays are often more than seven days apart. A 30-day
+  // window keeps the league selector useful between Champions/Europa League rounds.
+  const toDate = new Date(now.getTime() + 30 * 86400_000);
   const to = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(toDate);
   const [matchesData, teamsData] = await Promise.all([
     api("/competitions/" + competition + "/matches?dateFrom=" + from + "&dateTo=" + to + "&limit=500", 5 * 60_000),
