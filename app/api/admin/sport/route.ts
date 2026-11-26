@@ -1,4 +1,5 @@
 import { json } from "@/lib/ai";
+import { getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, fixtureOdds as apiFootballFixtureOdds, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { adminState } from "@/lib/admin";
 import {
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysis, odds] = await Promise.all([
               withTimeout(analyseApiFootball(Number(f.home.id), Number(f.away.id)), "API-Football analysis"),
-              withTimeout(apiFootballFixtureOdds(fixtureId), "API-Football odds")
+              withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay Ghana bookmaker odds")
             ]);
             const markets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
             const events = Array.isArray(odds?.matched) ? odds.matched : [];
@@ -159,17 +160,17 @@ export async function POST(req: Request) {
             }
             rows.push(...best.values());
             diagnostics.push({
-              fixture: home + " vs " + away, provider: "API-Football",
+              fixture: home + " vs " + away, provider: "OddsRelay Ghana",
               analysis: true, oddsEvents: Number(odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0),
               matchedEvents: events.length, bookmakers: [...new Set((odds?.availableBookmakers || []).map((name: string) => ghanaBookmaker(name)).filter(Boolean))],
               markets: [...new Set(mapped.map((x: any) => x.market))],
               error: mapped.length ? null : "No odds from the supported Ghana bookmakers were returned for this fixture."
             });
           } catch (error) {
-            diagnostics.push({ fixture: home + " vs " + away, provider: "API-Football", error: error instanceof Error ? error.message : String(error) });
+            diagnostics.push({ fixture: home + " vs " + away, provider: "OddsRelay Ghana", error: error instanceof Error ? error.message : String(error) });
           }
         }));
-        return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "API-Football" } });
+        return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "OddsRelay Ghana" } });
       }
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
