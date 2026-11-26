@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
 import { adminState } from "@/lib/admin";
-import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
+import { analyse, getSportMonksLeagueCatalogue, getSportMonksLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -18,6 +18,12 @@ export async function POST(req: Request) {
       case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "SportMonks" }); }
+      case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue(), provider: "SportMonks" });
+      case "leagueFixtures": {
+        const leagueId = Number(b.leagueId);
+        const result = await getSportMonksLeagueUpcomingFixtures(String(b.leagueCode || ""), String(b.leagueName || ""), Number.isInteger(leagueId) && leagueId > 0 ? leagueId : undefined);
+        return json(result);
+      }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
         const rows: any[] = [];
