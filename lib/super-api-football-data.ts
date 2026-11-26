@@ -100,9 +100,14 @@ export async function getLeagueUpcomingFixtures(leagueId:number,season?:number) 
   const now=new Date();
   const localDate=(d:Date)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
   const dates=Array.from({length:7},(_,i)=>localDate(new Date(now.getTime()+i*24*60*60_000)));
-  const bodies=await Promise.all(dates.map(date=>api("/matches?date="+date+"&leagueId="+leagueId+"&timezone=Africa%2FAccra&limit=100",5*60_000).catch(()=>({data:[]}))));
+  const bodies=await Promise.all(dates.map(async date=>{
+    try{return await api("/matches?date="+date+"&leagueId="+leagueId+"&timezone=Africa%2FAccra&limit=100",5*60_000);}
+    catch(error){return {_requestError:error instanceof Error?error.message:String(error),data:[]};}
+  }));
+  const successful=bodies.filter((body:any)=>!body?._requestError);
+  if(!successful.length)throw new Error("Highlightly could not load fixtures for this league: "+String((bodies.find((body:any)=>body?._requestError)?._requestError)||"Provider unavailable"));
   const unique=new Map<string,any>();
-  for(const body of bodies)for(const raw of rows(body)){
+  for(const body of successful)for(const raw of rows(body)){
     const item=fixture(raw);
     const kickoff=Date.parse(item.date);
     if(item.home.id&&item.away.id&&item.date&&item.status!=="FINISHED"&&Number.isFinite(kickoff)&&kickoff>=now.getTime())unique.set(String(item.id),item);
