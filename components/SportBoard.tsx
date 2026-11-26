@@ -202,7 +202,7 @@ export default function SportBoard() {
         if (i + 2 < fixtures.length) await new Promise(resolve => setTimeout(resolve, 500));
       }
       if (!allRows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))) {
-        setDailyScanError("No bookmaker prices with a matching model probability were returned for these matches. Check scan diagnostics for unavailable odds or analysis.");
+        setDailyScanError("No qualifying prices were found yet. Open Odds-feed diagnostics below to see which bookmakers the provider returned, the detected plan, and any odds or model-matching errors.");
       }
     } catch (e) {
       setDailyScanError((e as Error).message);
