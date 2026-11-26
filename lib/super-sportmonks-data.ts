@@ -179,6 +179,62 @@ export async function todayCompetitionMatches() {
   }
   return [...unique.values()].sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
 }
+/** Upcoming fixtures for a selected SPORT competition, sourced from SportMonks.
+ * The date-range endpoint supports up to 100 days; one 30-day request plus
+ * pagination avoids 30 separate date calls and keeps European matchdays visible.
+ */
+export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, leagueName: string) {
+  if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
+  const now = new Date();
+  const from = datePart(now);
+  const to = datePart(new Date(now.getTime() + 30 * 86400_000));
+  const all = new Map<string, any>();
+  for (let page = 1; page <= 20; page++) {
+    const path = "/fixtures/between/" + from + "/" + to +
+      "?include=participants;league;state;scores.participant&per_page=100&page=" + page;
+    const body = await api(path, 60_000);
+    const pageRows = rows(body);
+    for (const item of pageRows) if (item?.id != null) all.set(String(item.id), item);
+    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 100) break;
+  }
+  const normalize = (value: any) => String(value || "").toLowerCase().normalize("NFKD")
+    .replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  const aliases: Record<string, string[]> = {
+    CL: ["uefa champions league", "champions league"],
+    EC: ["uefa european championship", "european championship", "european championship qualification"],
+    EL: ["uefa europa league", "europa league"],
+    ECL: ["uefa conference league", "conference league"],
+    PL: ["premier league"],
+    ELC: ["championship"],
+    BL1: ["bundesliga"],
+    SA: ["serie a"],
+    PD: ["la liga"],
+    FL1: ["ligue 1"],
+    DED: ["eredivisie"],
+    PPL: ["primeira liga"],
+    BSA: ["brasileirao", "serie a"]
+  };
+  const wanted = [leagueName, ...(aliases[String(leagueCode || "").toUpperCase()] || [])].map(normalize).filter(Boolean);
+  const fixtures = [...all.values()].map(fixture).filter((f: any) => {
+    const kickoff = Date.parse(f.date || "");
+    const competition = normalize(f.competition);
+    const leagueMatches = wanted.some((name) => competition === name || competition.includes(name) || name.includes(competition));
+    return f.home?.id && f.away?.id && Number.isFinite(kickoff) && kickoff >= now.getTime() &&
+      f.status === "SCHEDULED" && leagueMatches;
+  }).sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
+  const clubs = new Map<number, any>();
+  for (const f of fixtures) {
+    clubs.set(Number(f.home.id), f.home);
+    clubs.set(Number(f.away.id), f.away);
+  }
+  return {
+    fixtures: fixtures.map((f: any) => ({ ...f, fixtureSource: "SportMonks", providerFixtureId: null })),
+    clubs: [...clubs.values()].sort((a: any, b: any) => a.name.localeCompare(b.name)),
+    fixtureProvider: "SportMonks",
+    fixtureWindowDays: 30
+  };
+}
+
 export async function matchesOnDate(date: string) {
   if (!validDate(date)) throw new Error("Choose a valid match date.");
   const body = await fixturesByDate(date);
