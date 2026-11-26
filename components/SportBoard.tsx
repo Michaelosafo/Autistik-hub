@@ -484,6 +484,19 @@ export default function SportBoard() {
         {!dateMatchesBusy && !dateMatchesError && dateMatches.length === 0 && <small className="muted">No matches scheduled or recorded for this date.</small>}
         {dailyScanBusy && <small className="muted">{dailyScanProgress}</small>}
         {dailyScanError && <div className="notice warn">{dailyScanError}</div>}
+        {dailyScanDiagnostics.length > 0 && <details>
+          <summary>Odds-feed diagnostics · {dailyScanDiagnostics.length} fixtures checked</summary>
+          <div className="stack" style={{ gap: 5, paddingTop: 8 }}>
+            <small className="muted">This shows whether the odds provider returned any books, which plan was detected, and why a fixture did not produce a comparable price.</small>
+            {dailyScanDiagnostics.map((item: any, index: number) => <div key={index} className="stack" style={{ gap: 2, borderBottom: "1px solid var(--line)", padding: "5px 0" }}>
+              <b>{item.fixture}</b>
+              <small className="muted">Plan: {item.providerPlan || "unknown"} · matched events: {item.matchedEvents ?? 0} · Ghana books matched: {(item.bookmakers || []).join(", ") || "none"}</small>
+              {(item.returnedBookmakers || []).length > 0 && <small className="muted">Books returned by provider: {item.returnedBookmakers.join(", ")}</small>}
+              {item.oddsRequestError && <small className="sb-no">Odds request: {item.oddsRequestError}</small>}
+              {item.error && <small className="muted">{item.error}</small>}
+            </div>)}
+          </div>
+        </details>}
         {(() => {
           const eligible = dailyValueRows.filter((row: any) =>
             row.modelSupported &&
