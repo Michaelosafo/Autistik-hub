@@ -498,69 +498,55 @@ export default function SportBoard() {
           </div>
         </details>}
         {(() => {
+          // Rank all model-supported priced selections. No hard probability or
+          // edge cutoffs: prefer likely outcomes, then positive value and price edge.
           const eligible = dailyValueRows.filter((row: any) =>
             row.modelSupported &&
             Number.isFinite(Number(row.probability)) &&
-            Number(row.probability) > 50 &&
-            Number.isFinite(Number(row.edge)) &&
-            Math.abs(Number(row.edge)) > 3 &&
             Number.isFinite(Number(row.ev)) &&
-            Number.isFinite(Number(row.odds)) &&
-            Number.isFinite(Number(row.fairOdds)) &&
-            Math.abs(Number(row.ev)) > 0.01
+            Number.isFinite(Number(row.odds)) && Number(row.odds) > 1 &&
+            Number.isFinite(Number(row.fairOdds)) && Number(row.fairOdds) > 1
           );
-          // One club can appear only once across the complete shortlist. Rank
-          // high-confidence selections first, then use EV as the tie-breaker.
           const ranked = [...eligible].sort((a: any, b: any) => {
-            const probabilityGap = Number(b.probability) - Number(a.probability);
-            if (Math.abs(probabilityGap) > 0.001) return probabilityGap;
-            const aValue = Number(a.ev) > 0 ? 1 : 0;
-            const bValue = Number(b.ev) > 0 ? 1 : 0;
-            if (aValue !== bValue) return bValue - aValue;
-            return Math.abs(Number(b.ev)) - Math.abs(Number(a.ev));
+            const aScore = Number(a.probability) * 0.70 + Math.max(-20, Math.min(20, Number(a.ev))) * 0.20 + Math.max(-20, Math.min(20, Number(a.edge) || 0)) * 0.10;
+            const bScore = Number(b.probability) * 0.70 + Math.max(-20, Math.min(20, Number(b.ev))) * 0.20 + Math.max(-20, Math.min(20, Number(b.edge) || 0)) * 0.10;
+            return bScore - aScore;
           });
           const usedTeams = new Set<string>();
-          const overpriced: any[] = [];
-          const underpriced: any[] = [];
+          const topPicks: any[] = [];
           for (const row of ranked) {
             const homeKey = String(row.home || "").trim().toLowerCase();
             const awayKey = String(row.away || "").trim().toLowerCase();
             if (!homeKey || !awayKey || usedTeams.has(homeKey) || usedTeams.has(awayKey)) continue;
-            if (Number(row.ev) > 0.01) {
-              overpriced.push(row); usedTeams.add(homeKey); usedTeams.add(awayKey);
-            } else if (Number(row.ev) < -0.01) {
-              underpriced.push(row); usedTeams.add(homeKey); usedTeams.add(awayKey);
-            }
+            topPicks.push(row);
+            usedTeams.add(homeKey); usedTeams.add(awayKey);
+            if (topPicks.length >= 25) break;
           }
-          const renderRows = (rows: any[], isOverpriced: boolean) => rows.map((row: any, index: number) => (
-            <div key={(row.key || [row.home, row.away, row.market, row.selection, row.bookmaker].join("|")) + ":" + index}
-              className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5,
-                borderLeft: isOverpriced ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
-              <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-                <b>{row.home} vs {row.away}</b>
-                <b className={isOverpriced ? "sb-ok" : "sb-no"}>{isOverpriced ? "OVERPRICED · potential value" : "UNDERPRICED · poor value"}</b>
+          const renderRows = (rows: any[]) => rows.map((row: any, index: number) => {
+            const positive = Number(row.ev) > 0;
+            return (
+              <div key={(row.key || [row.home, row.away, row.market, row.selection, row.bookmaker].join("|")) + ":" + index}
+                className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5,
+                  borderLeft: positive ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
+                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                  <b>#{index + 1} · {row.home} vs {row.away}</b>
+                  <b className={positive ? "sb-ok" : "sb-no"}>{positive ? "POSITIVE VALUE" : "LOWER VALUE / PRICE WARNING"}</b>
+                </div>
+                <span>{row.selection} · {row.market}</span>
+                <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
+                <small>Bookmaker odds: <b>{Number(row.odds).toFixed(2)}</b> · AUTISTIK fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
+                <small className={positive ? "sb-ok" : "sb-no"}>Expected value: {Number(row.ev) > 0 ? "+" : ""}{Number(row.ev).toFixed(1)}% · Odds edge: {Number(row.edge || 0).toFixed(1)} points · {row.bookmaker}</small>
               </div>
-              <span>{row.selection} · {row.market}</span>
-              <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
-              <small>Bookmaker odds: <b>{Number(row.odds).toFixed(2)}</b> · AUTISTIK fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
-              <small className={isOverpriced ? "sb-ok" : "sb-no"}>Expected value: {Number(row.ev) > 0 ? "+" : ""}{Number(row.ev).toFixed(1)}% · {row.bookmaker}</small>
-            </div>
-          ));
+            );
+          });
           return (
             <div className="stack" style={{ gap: 12, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
               <section className="stack" style={{ gap: 7 }}>
                 <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-                  <b>🟢 Overpriced · positive value</b><small className="muted">{overpriced.length} selections</small>
+                  <b>🤖 AUTISTIK AI shortlist · Top 25</b><small className="muted">{topPicks.length} selections</small>
                 </div>
-                <small className="muted">Bookmaker odds are above AUTISTIK fair odds. Sorted by highest estimated expected value.</small>
-                {overpriced.length ? renderRows(overpriced, true) : <small className="muted">No overpriced selections qualified for this date.</small>}
-              </section>
-              <section className="stack" style={{ gap: 7 }}>
-                <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-                  <b>🔴 Underpriced · negative value</b><small className="muted">{underpriced.length} selections</small>
-                </div>
-                <small className="muted">Bookmaker odds are below AUTISTIK fair odds. These are not recommended value bets.</small>
-                {underpriced.length ? renderRows(underpriced, false) : <small className="muted">No underpriced selections qualified for this date.</small>}
+                <small className="muted">Ranked by model win probability, expected value and odds edge. One selection per team. Fewer than 25 appear when fewer distinct teams have usable, model-supported odds.</small>
+                {topPicks.length ? renderRows(topPicks) : <small className="muted">No model-supported bookmaker prices are available for this date yet.</small>}
               </section>
             </div>
           );
