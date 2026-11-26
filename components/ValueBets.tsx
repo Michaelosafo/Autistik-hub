@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import DailyValueBets from "@/components/DailyValueBets";
 
 type Props = { endpoint: "/api/admin/sport" | "/api/admin/super" };
-type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };
+type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };\nconst TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;
+
 export default function ValueBets({ endpoint }: Props) {
   const [fixtures,setFixtures]=useState<any[]>([]);
   const [leagues,setLeagues]=useState<any[]>([]);
@@ -33,7 +34,7 @@ export default function ValueBets({ endpoint }: Props) {
     setLoading(true);setError("");
     try {
       const data=await post("leagues");
-      const list=Array.isArray(data.leagues)?data.leagues:[];
+      const list=(Array.isArray(data.leagues)?data.leagues:[]).filter((league:any)=>TOP_COMPETITION.test(String(league.name||"")));
       setLeagues(list);
       if(!list.length)setError(endpoint==="/api/admin/super"
         ? "API-Football returned no leagues. Check APIFOOTBALL_KEY and your subscription coverage."
@@ -150,7 +151,7 @@ export default function ValueBets({ endpoint }: Props) {
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
       <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · SportMonks league scanner"}</b>
-        <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition and scan its fixtures.":"Choose a SportMonks competition, scan today’s European fixtures first, then explore other leagues."}</small>
+        <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition and scan its fixtures.":"Top competitions only · Champions League, Europa League and leading domestic leagues."}</small>
       </div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button className="btn small" type="button" onClick={checkFeed} disabled={checkingFeed}>{checkingFeed?"Checking…":"Check odds feed"}</button>
@@ -172,7 +173,7 @@ export default function ValueBets({ endpoint }: Props) {
     {progress&&<small className="muted">{progress}</small>}
 
     {endpoint==="/api/admin/sport" && <>
-      <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} competitions · {countries.length} countries</small></div>
+      <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} top competitions · {countries.length} countries</small></div>
       <input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search country or league (e.g. Europa League)…" />
       <div className="stack" style={{gap:8}}>
         {filteredCountries.map(([country,list]:any)=><details key={country} className="sb-country-card" style={{display:"block",width:"100%",minWidth:0,padding:11,borderRadius:12,background:"var(--surface-2)",borderLeft:"4px solid var(--teal)",boxSizing:"border-box"}}>
