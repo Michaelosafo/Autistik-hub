@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { getGhanaMatchOdds } from "@/lib/oddsrelay";
-import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, fixtureOdds as apiFootballFixtureOdds, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
+import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { adminState } from "@/lib/admin";
 import {
   analyse as analyseSportMonks,
