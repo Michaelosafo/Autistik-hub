@@ -187,16 +187,45 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
     if (!fixture) throw new Error("5DollarFootballAPI searched " + eventsReturned + " fixtures across paginated results but did not find " + home + " vs " + away + ".");
   }
   const status = await getFiveDollarFootballStatus();
-  let oddsPath = "/fixtures/" + encodeURIComponent(String(fixture.id)) + "/odds";
+  const baseOddsPath = "/fixtures/" + encodeURIComponent(String(fixture.id)) + "/odds";
+  let requestedBookmakers: string[] = [];
+  let oddsData: any = null;
+  let oddsRequestError: string | null = null;
   if (String(status.plan || "").toLowerCase() === "ultra") {
     try {
       const books = await api("/bookmakers", 6 * 60 * 60_000);
-      const slugs = (Array.isArray(books) ? books : []).map((book: any) => String(book?.slug || "")).filter(Boolean);
-      if (slugs.length) oddsPath += "?bookmakers=" + encodeURIComponent(slugs.join(","));
-    } catch { /* Bet365 default remains a safe fallback. */ }
+      requestedBookmakers = (Array.isArray(books) ? books : [])
+        .map((book: any) => String(book?.slug || "").trim())
+        .filter(Boolean);
+    } catch (error) {
+      oddsRequestError = "Bookmaker catalogue: " + (error instanceof Error ? error.message : String(error));
+    }
   }
-  const oddsData = await api(oddsPath, 30_000);
-  const bookmakerRows = Array.isArray(oddsData?.bookmakers) ? oddsData.bookmakers : [];
+  // Request the subscribed Ultra bookmaker set first. If it is rejected or returns
+  // no quoted books, retry the documented default Bet365 response rather than
+  // treating a bookmaker-list issue as a fixture with no odds.
+  if (requestedBookmakers.length) {
+    try {
+      oddsData = await api(baseOddsPath + "?bookmakers=" + encodeURIComponent(requestedBookmakers.join(",")), 20_000);
+    } catch (error) {
+      oddsRequestError = "Ultra bookmaker request: " + (error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (!oddsData || !Array.isArray(oddsData?.bookmakers) || oddsData.bookmakers.length === 0) {
+    try {
+      oddsData = await api(baseOddsPath, 20_000);
+    } catch (error) {
+      const fallbackError = error instanceof Error ? error.message : String(error);
+      throw new Error((oddsRequestError ? oddsRequestError + " | " : "") + "Default Bet365 odds request: " + fallbackError);
+    }
+  }
+  // The documented endpoint returns data.bookmakers[].odds. Also accept a
+  // single-bookmaker data.odds shape so minor response-envelope differences
+  // cannot silently turn valid prices into an empty odds board.
+  let bookmakerRows: any[] = Array.isArray(oddsData?.bookmakers) ? oddsData.bookmakers : [];
+  if (!bookmakerRows.length && oddsData?.odds && typeof oddsData.odds === "object") {
+    bookmakerRows = [{ name: "Bet 365", slug: "bet365", odds: oddsData.odds }];
+  }
   const bookmakers = bookmakerRows.map((book: any) => {
     const markets: any[] = [];
     const odds = book?.odds || {};
@@ -210,7 +239,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       if (outcomes.length >= 2) markets.push({ key: "h2h", outcomes });
     }
 
-    const fixedLines = Array.isArray(odds.goalline_fixed) ? odds.goalline_fixed : Array.isArray(odds.goal_line_fixed) ? odds.goal_line_fixed : [];
+    const fixedLines = Array.isArray(odds.goal_line_fixed) ? odds.goal_line_fixed : Array.isArray(odds.goalline_fixed) ? odds.goalline_fixed : [];
     const seenGoalLines = new Set<string>();
     for (const line of fixedLines) {
       const stage = latest(line);
@@ -226,7 +255,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
         seenGoalLines.add(String(lineValue));
       }
     }
-    const mainGoalLine = latest(odds.goalline || odds.goal_line);
+    const mainGoalLine = latest(odds.goal_line || odds.goalline);
     if (mainGoalLine && Number.isFinite(Number(mainGoalLine.line))) {
       const lineValue = Number(mainGoalLine.line);
       if (!seenGoalLines.has(String(lineValue))) {
@@ -272,6 +301,11 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       matchedEvents: bookmakers.length ? 1 : 0,
       fixtureId: fixture.id,
       plan: status.plan || "unknown",
+      requestedBookmakers: requestedBookmakers.length,
+      returnedBookmakers: bookmakerRows.length,
+      oddsRequestError,
+      oddsPayloadKeys: Object.keys(oddsData || {}),
+      emptyOddsReason: bookmakers.length ? null : "The fixture odds endpoint returned no supported priced markets for the requested/default bookmakers.",
       bookmakers: bookmakers.map((book: any) => book.title),
       markets,
       providers: { fivedollarfootball: { ok: true, matched: bookmakers.length ? 1 : 0, bookmakers: bookmakers.length, markets, plan: status.plan || "unknown" } }
