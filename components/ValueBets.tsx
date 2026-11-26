@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import DailyValueBets from "@/components/DailyValueBets";
 
 type Props = { endpoint: "/api/admin/sport" | "/api/admin/super" };
-type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };\nconst TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;
+type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };
+const TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;
 
 export default function ValueBets({ endpoint }: Props) {
   const [fixtures,setFixtures]=useState<any[]>([]);
