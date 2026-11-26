@@ -120,7 +120,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ leagues: any[] }>("leagues");
       setLeagueCatalogue(Array.isArray(d.leagues) ? d.leagues : []);
-      if (!(d.leagues || []).length) setTodayError("No leagues were returned by the football provider.");
+      if (!(d.leagues || []).length) setTodayError("No leagues were returned by SportMonks. Check your SportMonks subscription and API token.");
     } catch (e) { setTodayError((e as Error).message); }
     finally { setTodayBusy(false); }
   }
@@ -403,7 +403,7 @@ export default function SportBoard() {
           <b>{Number(x.p).toFixed(1)}%</b><small className="muted">Estimated probability</small>
         </div>) : <small className="muted">No alternative market currently clears the 55% probability display threshold.</small>}
       </section>}
-      {ready === false && <div className="notice warn">The running SPORT deployment is not detecting a non-empty <code>FOOTBALL_DATA_TOKEN</code>. The variable exists in Vercel Production; check that its value is saved correctly and that this deployment has been redeployed.</div>}
+      {ready === false && <div className="notice warn">SPORT is configured to use SportMonks only. The deployment cannot detect <code>SPORTMONKS_API_TOKEN</code>; add it to Vercel Production and redeploy.</div>}
 
       <section className="card stack">
         <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}><b>⚽ Select a league to scan</b><small className="muted">{leagueCatalogue.length} leagues</small></div>
