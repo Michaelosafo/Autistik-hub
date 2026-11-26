@@ -501,7 +501,9 @@ export default function SportBoard() {
           const eligible = dailyValueRows.filter((row: any) =>
             row.modelSupported &&
             Number.isFinite(Number(row.probability)) &&
-            Number(row.probability) >= 45 &&
+            Number(row.probability) > 50 &&
+            Number.isFinite(Number(row.edge)) &&
+            Math.abs(Number(row.edge)) > 3 &&
             Number.isFinite(Number(row.ev)) &&
             Number.isFinite(Number(row.odds)) &&
             Number.isFinite(Number(row.fairOdds)) &&
@@ -521,13 +523,12 @@ export default function SportBoard() {
           const overpriced: any[] = [];
           const underpriced: any[] = [];
           for (const row of ranked) {
-            if (overpriced.length >= 25 && underpriced.length >= 10) break;
             const homeKey = String(row.home || "").trim().toLowerCase();
             const awayKey = String(row.away || "").trim().toLowerCase();
             if (!homeKey || !awayKey || usedTeams.has(homeKey) || usedTeams.has(awayKey)) continue;
-            if (Number(row.ev) > 0.01 && overpriced.length < 25) {
+            if (Number(row.ev) > 0.01) {
               overpriced.push(row); usedTeams.add(homeKey); usedTeams.add(awayKey);
-            } else if (Number(row.ev) < -0.01 && underpriced.length < 10) {
+            } else if (Number(row.ev) < -0.01) {
               underpriced.push(row); usedTeams.add(homeKey); usedTeams.add(awayKey);
             }
           }
