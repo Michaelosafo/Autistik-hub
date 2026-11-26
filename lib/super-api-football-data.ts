@@ -51,6 +51,28 @@ export async function searchTeams(q:string) {
     id:Number(x.id),name:x.name,country:x.country?.name||"",logo:x.logo||""
   }));
 }
+
+/** Resolve third-party fixture names to Highlightly's own team IDs. */
+export async function resolveFixtureTeamIds(names: string[]) {
+  const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  const result: Record<string, number> = {};
+  const unique = [...new Set(names.map((name) => String(name || "").trim()).filter(Boolean))];
+  await Promise.all(unique.map(async (name) => {
+    const candidates = await searchTeams(name).catch(() => []);
+    const target = normalize(name);
+    const exact = candidates.filter((team: any) => normalize(team.name) === target);
+    const pool = exact.length ? exact : candidates.filter((team: any) => {
+      const candidate = normalize(team.name);
+      return candidate && (candidate.startsWith(target) || target.startsWith(candidate));
+    });
+    if (pool.length === 1 && Number(pool[0].id) > 0) result[target] = Number(pool[0].id);
+  }));
+  return result;
+}
+
 export async function todayCompetitionMatches() {
   // Scan both calendar days in Ghana time so Europa League and Conference League
   // fixtures tomorrow are included without waiting for the date to roll over.
