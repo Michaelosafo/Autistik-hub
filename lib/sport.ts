@@ -87,6 +87,43 @@ export async function fixtureOdds(fixtureId: number) {
   return { matched, count: matched.length, availableBookmakers: [...new Set(matched.flatMap((e: any) => e.bookmakers.map((b: any) => b.title)))], diagnostics: { eventsReturned: matched.length } };
 }
 
+/** Current competitions exposed by the subscribed API-Football account. */
+export async function leagueCatalogue() {
+  const rows = await api("/leagues?current=true", 12 * 3600_000);
+  return rows.map((row: any) => {
+    const seasons = Array.isArray(row.seasons) ? row.seasons : [];
+    const current = seasons.find((item: any) => item.current) || seasons[seasons.length - 1];
+    return {
+      id: Number(row.league?.id),
+      name: String(row.league?.name || ""),
+      type: String(row.league?.type || ""),
+      country: String(row.country?.name || "International"),
+      countryCode: String(row.country?.code || ""),
+      logo: row.league?.logo || "",
+      season: Number(current?.year || 0),
+      seasons: seasons.map((item: any) => Number(item.year)).filter(Number.isFinite)
+    };
+  }).filter((league: any) => league.id > 0 && league.name && league.season > 0)
+    .sort((a: any, b: any) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
+}
+
+/** Upcoming matches in one selected league/season, returned in Ghana local time. */
+export async function leagueUpcomingFixtures(leagueId: number, season: number, limit = 30) {
+  if (!Number.isInteger(leagueId) || leagueId <= 0 || !Number.isInteger(season) || season < 2000) throw new Error("Choose a valid league and season.");
+  const rows = await api("/fixtures?league=" + leagueId + "&season=" + season + "&next=" + Math.min(50, Math.max(1, limit)) + "&timezone=Africa%2FAccra", 5 * 60_000);
+  return rows.map((f: any) => ({
+    id: Number(f.fixture?.id),
+    date: f.fixture?.date,
+    status: f.fixture?.status?.long || f.fixture?.status?.short || "Scheduled",
+    competition: f.league?.name || "Football",
+    league: { id: Number(f.league?.id), name: f.league?.name || "Football", country: f.league?.country || "" },
+    home: { id: Number(f.teams?.home?.id), name: f.teams?.home?.name || "", logo: f.teams?.home?.logo || "" },
+    away: { id: Number(f.teams?.away?.id), name: f.teams?.away?.name || "", logo: f.teams?.away?.logo || "" },
+    score: f.goals?.home == null || f.goals?.away == null ? null : { home: Number(f.goals.home), away: Number(f.goals.away) },
+    fixtureSource: "API-Football"
+  })).filter((f: any) => f.id > 0 && f.home.id > 0 && f.away.id > 0 && f.date);
+}
+
 export async function searchTeams(q: string) {
   const s = q.trim();
   if (s.length < 3) return [];
