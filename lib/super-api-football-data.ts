@@ -115,7 +115,7 @@ export async function teamFixtureChoices(teamId:number) {
   const next=unique.filter((m:any)=>!finished(m)&&Date.parse(m.date)>=now).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date))[0];
   return [last,next].filter(Boolean).map(fixture);
 }
-function summarize(teamId:number,games:any[]) {
+function summarize(teamId:number,games:any[],seasonRows:any[] = []) {
   const matches=games.map((m:any)=>{
     const isHome=m.homeTeam?.id===teamId;
     const [h,a]=scoreParts(m);
@@ -125,28 +125,34 @@ function summarize(teamId:number,games:any[]) {
   const home=matches.filter((x:any)=>x.home),away=matches.filter((x:any)=>!x.home);
   const mean=(xs:any[],k:"gf"|"ga")=>xs.length?+(xs.reduce((s:number,x:any)=>s+x[k],0)/xs.length).toFixed(2):null;
   const count=(xs:any[],r:string)=>xs.filter((x:any)=>x.res===r).length;
+  const seasonRow=[...seasonRows].sort((a:any,b:any)=>Number(b.season||0)-Number(a.season||0))[0];
+  const avg=(side:any,kind:"scored"|"received")=>Number(side?.games?.played)>0?+(Number(side?.goals?.[kind]||0)/Number(side.games.played)).toFixed(2):null;
+  const sh=seasonRow?.home,sa=seasonRow?.away,st=seasonRow?.total;
   return {season:{
     form:matches.slice(0,10).reverse().map((x:any)=>x.res).join(""),
-    played:{home:home.length,away:away.length,total:matches.length},
-    wins:{home:count(home,"W"),away:count(away,"W"),total:count(matches,"W")},
-    draws:{home:count(home,"D"),away:count(away,"D"),total:count(matches,"D")},
-    loses:{home:count(home,"L"),away:count(away,"L"),total:count(matches,"L")},
-    goalsFor:{home:mean(home,"gf"),away:mean(away,"gf"),total:mean(matches,"gf")},
-    goalsAgainst:{home:mean(home,"ga"),away:mean(away,"ga"),total:mean(matches,"ga")},
+    played:{home:Number(sh?.games?.played)||home.length,away:Number(sa?.games?.played)||away.length,total:Number(st?.games?.played)||matches.length},
+    wins:{home:Number(sh?.games?.wins)||count(home,"W"),away:Number(sa?.games?.wins)||count(away,"W"),total:Number(st?.games?.wins)||count(matches,"W")},
+    draws:{home:Number(sh?.games?.draws)||count(home,"D"),away:Number(sa?.games?.draws)||count(away,"D"),total:Number(st?.games?.draws)||count(matches,"D")},
+    loses:{home:Number(sh?.games?.loses)||count(home,"L"),away:Number(sa?.games?.loses)||count(away,"L"),total:Number(st?.games?.loses)||count(matches,"L")},
+    goalsFor:{home:avg(sh,"scored")??mean(home,"gf"),away:avg(sa,"scored")??mean(away,"gf"),total:avg(st,"scored")??mean(matches,"gf")},
+    goalsAgainst:{home:avg(sh,"received")??mean(home,"ga"),away:avg(sa,"received")??mean(away,"ga"),total:avg(st,"received")??mean(matches,"ga")},
     cleanSheets:{home:home.filter((x:any)=>x.ga===0).length,away:away.filter((x:any)=>x.ga===0).length,total:matches.filter((x:any)=>x.ga===0).length},
     failedToScore:{home:home.filter((x:any)=>x.gf===0).length,away:away.filter((x:any)=>x.gf===0).length,total:matches.filter((x:any)=>x.gf===0).length}
-  },last5:{games:matches.slice(0,5),avg:{}}};
+  },last5:{games:matches.slice(0,5),avg:{goalsFor:mean(matches,"gf"),goalsAgainst:mean(matches,"ga")}}};
 }
 export async function analyse(homeId:number,awayId:number,matchDate?:string) {
   if(matchDate&&!dateOK(matchDate))throw new Error("Choose a valid match date.");
-  const [hBody,aBody]=await Promise.all([
+  const fromDate = new Date(Date.now()-365*24*60*60_000).toISOString().slice(0,10);
+  const [hBody,aBody,hStatsBody,aStatsBody]=await Promise.all([
     api("/last-five-games?teamId="+homeId,24*60*60_000),
-    api("/last-five-games?teamId="+awayId,24*60*60_000)
+    api("/last-five-games?teamId="+awayId,24*60*60_000),
+    api("/teams/statistics/"+homeId+"?fromDate="+fromDate,6*3600_000).catch(()=>[]),
+    api("/teams/statistics/"+awayId+"?fromDate="+fromDate,6*3600_000).catch(()=>[])
   ]);
   const hGames=rows(hBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
   const aGames=rows(aBody).filter((m:any)=>!matchDate||Date.parse(m.date)<Date.parse(matchDate+"T00:00:00Z"));
   if(hGames.length<2||aGames.length<2)throw new Error("Highlightly returned too few completed matches for this team. Try another competition or match.");
-  const h=summarize(homeId,hGames),a=summarize(awayId,aGames);
+  const h=summarize(homeId,hGames,rows(hStatsBody)),a=summarize(awayId,aGames,rows(aStatsBody));
   const hHome=h.season.goalsFor.home??h.season.goalsFor.total??1.35;
   const hCon=h.season.goalsAgainst.home??h.season.goalsAgainst.total??1.2;
   const aAway=a.season.goalsFor.away??a.season.goalsFor.total??1.1;
