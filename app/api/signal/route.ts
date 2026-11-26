@@ -52,7 +52,7 @@ function units(v: string, decimals: number): bigint {
   const i = parts[0] || "0", f = parts[1] || "";
   return BigInt(i) * 10n ** BigInt(decimals) + BigInt((f + "0".repeat(decimals)).slice(0, decimals) || "0");
 }
-async function swapBalances(f: { fromChain: string; fromContract: string; fromAmount: string; fromAddress: string }) {
+async function swapBalances(f: { fromChain: string; fromContract: string; fromAddress: string }) {
   if (f.fromChain === "sol") {
     const native = BigInt((await rpc("sol", "getBalance", [f.fromAddress]))?.value ?? 0);
     if (!f.fromContract) return { token: native, native, decimals: 9, nativeSymbol: "SOL" };
@@ -217,6 +217,10 @@ export async function POST(req: Request) {
     }
     return json({ error: "Unknown action." }, 400);
   } catch (e) {
-    return json({ error: (e as Error).message.slice(0, 300) }, 502);
+    const message = (e as Error).message || "Swap request failed."; 
+    if (/demo trading failed/i.test(message)) {
+      return json({ error: "Bitget could not simulate this swap. Signal checks your token balance and gas before confirmation. Refresh the quote; if both balances are sufficient, increase slippage slightly and get new routes. No transaction was signed or sent." }, 502);
+    }
+    return json({ error: message.slice(0, 300) }, 502);
   }
 }
