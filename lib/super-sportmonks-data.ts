@@ -299,7 +299,14 @@ export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, le
 export async function matchesOnDate(date: string) {
   if (!validDate(date)) throw new Error("Choose a valid match date.");
   if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
-  const body = await fixturesByDate(date);
+  let body = await fixturesByDate(date);
+  // Some SportMonks plans/edge responses return an empty date endpoint while
+  // the date-range endpoint still contains that day's fixtures. Retry once
+  // using a same-day range before reporting an empty slate.
+  if (!body.length) {
+    const fallback = await api("/fixtures/between/" + date + "/" + date + "?include=participants;league;state;scores.participant&per_page=50&page=1", 60_000);
+    body = rows(fallback);
+  }
   // Return every fixture on the selected date: scheduled, live and completed.
   // A missing full-time score is normal for a match that has not finished yet.
   const matches = body.map(fixture)
