@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import DailyValueBets from "@/components/DailyValueBets";
 
 type Props = { endpoint: "/api/admin/sport" | "/api/admin/super" };
 type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };
@@ -112,7 +113,8 @@ export default function ValueBets({ endpoint }: Props) {
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
   }
-  useEffect(()=>{if(!started.current){started.current=true;void refreshFixtures();}},[endpoint]);
+  useEffect(()=>{if(endpoint!=="/api/admin/sport"&&!started.current){started.current=true;void refreshFixtures();}},[endpoint]);
+  if(endpoint==="/api/admin/sport") return <DailyValueBets />;
 
   const countries=Object.entries(leagues.reduce((acc:any,league:any)=>{
     const country=String(league.country||"International");
