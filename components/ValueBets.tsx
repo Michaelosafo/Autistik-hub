@@ -128,6 +128,12 @@ export default function ValueBets({ endpoint }: Props) {
         <span>Model probability <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span>
       </div>
       <b>{!supported?"ODDS ONLY · NOT MODELLED":ev>0?"OVERPRICED · +"+ev.toFixed(1)+"% EV":ev<0?"UNDERPRICED · "+ev.toFixed(1)+"% EV":"FAIR PRICE"}</b>
+      {row.modelContext&&<details><summary>Autistik analysis · team form and goal data</summary><div className="stack" style={{fontSize:13,marginTop:8}}>
+        <span>{row.home}: last form <b>{row.modelContext.homeForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.homeGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.homeGoalsAgainst??"—"}</b></span>
+        <span>{row.away}: last form <b>{row.modelContext.awayForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.awayGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.awayGoalsAgainst??"—"}</b></span>
+        {row.modelContext.expectedGoals&&<span>Expected goals: home <b>{row.modelContext.expectedGoals.home}</b> · away <b>{row.modelContext.expectedGoals.away}</b></span>}
+        {(row.modelContext.verdict||[]).map((v:string,i:number)=><small key={i}>{v}</small>)}
+      </div></details>}
     </div>;
   }
 
