@@ -125,7 +125,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ leagues: any[] }>("leagues");
       setLeagueCatalogue(Array.isArray(d.leagues) ? d.leagues : []);
-      if (!(d.leagues || []).length) setTodayError("No leagues were returned by SportMonks. Check your SportMonks subscription and API token.");
+      if (!(d.leagues || []).length) setTodayError("No leagues were returned by the football data provider. Check your API-Football plan and key.");
     } catch (e) { setTodayError((e as Error).message); }
     finally { setTodayBusy(false); }
   }
@@ -203,7 +203,7 @@ export default function SportBoard() {
       const matches = (Array.isArray(d.matches) ? d.matches : []).sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
       setDateMatches(matches);
       setDateMatchesImportedCount(Number(d.importedCount ?? matches.length));
-      if (!matches.length) setDateMatchesError("No matches were returned by SportMonks for this date.");
+      if (!matches.length) setDateMatchesError("No matches were returned by API-Football for this date.");
       else void scanDateMatches(matches, dateToLoad);
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
@@ -439,14 +439,14 @@ export default function SportBoard() {
           <b>{Number(x.p).toFixed(1)}%</b><small className="muted">Estimated probability</small>
         </div>) : <small className="muted">No alternative market currently clears the 55% probability display threshold.</small>}
       </section>}
-      {ready === false && <div className="notice warn">SPORT is configured to use SportMonks only. The deployment cannot detect <code>SPORTMONKS_API_TOKEN</code>; add it to Vercel Production and redeploy.</div>}
+      {ready === false && <div className="notice warn">API-Football is not configured. Add <code>APIFOOTBALL_KEY</code> to Vercel Production and redeploy.</div>}
 
       <section className="card stack">
         <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <b>⚽ Today's matches</b>
-          <small className="muted">SportMonks · Ghana time</small>
+          <small className="muted">API-Football · Ghana time</small>
         </div>
-        <small className="muted">Today's fixtures load automatically whenever you open the board. Choose another date to view its matches. Tap any match to run the team analysis and compare available SportMonks bookmaker odds for value.</small>
+        <small className="muted">Today's fixtures load automatically whenever you open the board. Choose another date to view its matches. Tap any match to run the team analysis and compare available bookmaker odds against AUTISTIK's API-Football analysis.</small>
         <label className="stack" style={{ gap: 4 }}>
           <b>Choose match date</b>
           <input type="date" value={matchDate} onChange={(e) => {
@@ -462,7 +462,7 @@ export default function SportBoard() {
           </button>
           <small className="muted">{dateMatches.length} matches · {dateMatchesImportedCount} saved to database</small>
         </div>
-        {dateMatchesBusy && <small className="muted">Fetching fixtures from SportMonks…</small>}
+        {dateMatchesBusy && <small className="muted">Fetching fixtures from API-Football…</small>}
         {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
         {!dateMatchesBusy && !dateMatchesError && dateMatches.length === 0 && <small className="muted">No matches scheduled or recorded for this date.</small>}
         {dailyScanBusy && <small className="muted">{dailyScanProgress}</small>}
@@ -472,7 +472,7 @@ export default function SportBoard() {
             <b>📊 Daily odds mispricing scan</b>
             <small className="muted">{dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))).length} priced selections</small>
           </div>
-          <small className="muted">All fixtures for {matchDate} are checked against SportMonks model probabilities and available bookmaker prices. Positive EV means the bookmaker price is above fair odds; negative EV means it is below fair odds.</small>
+          <small className="muted">All fixtures for {matchDate} are checked against AUTISTIK model probabilities from API-Football statistics and available bookmaker prices. Positive EV means the bookmaker price is above fair odds; negative EV means it is below fair odds.</small>
           {(() => {
             const eligible = dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01);
             const grouped = new Map<string, any[]>();
