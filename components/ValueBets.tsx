@@ -50,17 +50,29 @@ export default function ValueBets({ endpoint }: Props) {
   async function openLeague(league:any) {
     setSelectedLeagueId(Number(league.id));setFixtures([]);setSelectedClubs([]);setError("");setLoading(true);
     try {
-      const seasons=Array.isArray(league.seasons)?league.seasons.map(Number).filter(Number.isFinite):[];
-      const season=seasons.length?Math.max(...seasons):undefined;
-      const data=await post("leagueFixtures",{leagueCode:String(league.code || ""),leagueName:String(league.name || "")});
+      const leagueCode=String(league.code || "").toUpperCase();
+      const leagueName=String(league.name || "");
+      const isEuropaOrConference=leagueCode==="EL"||leagueCode==="ECL"||/europa league|conference league/i.test(leagueName);
+      const data=await post("leagueFixtures",{leagueCode,leagueName});
       setFixtureSource({...data.providers,fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
       const now=Date.now();
+      const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
+      const today=accraDay(new Date().toISOString());
       const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
-        .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
+        .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now&&(!isEuropaOrConference||accraDay(f.date)===today))
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setFixtures(upcoming);
       setSelectedClubs(Array.isArray(data.clubs)?data.clubs:[]);
-      if(!upcoming.length)setError("No upcoming fixtures found in "+league.name+" during the next 30 days. The league club list can still be viewed if standings are available.");
+      if(!upcoming.length)setError(isEuropaOrConference
+        ? "No scheduled "+leagueName+" fixtures found for today (Ghana time)."
+        : "No upcoming fixtures found in "+leagueName+" during the next 30 days. The league club list can still be viewed if standings are available.");
+      // Europa League and Conference League open directly on today's full fixture list
+      // and automatically calculate the available model-vs-bookmaker value selections.
+      if(isEuropaOrConference&&upcoming.length){
+        setProgress("Loading today's "+leagueName+" fixtures and calculating value…");
+        setLoading(false);
+        await scanLeague(String(league.id),leagueName,upcoming);
+      }
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -189,7 +201,7 @@ export default function ValueBets({ endpoint }: Props) {
         const probabilityRank=[...allRows].filter((r:any)=>r.modelSupported).sort((a:any,b:any)=>Number(b.probability)-Number(a.probability));
         const clubs=selectedClubs.map((club:any)=>String(club.name||"")).filter(Boolean).sort();
         return <div className="card stack" style={{padding:14}}>
-          <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{league?.country} · {league?.name}</b><small className="muted" style={{display:"block"}}>Next 30 days · {fixtures.length} fixtures</small></div><button className="btn small" type="button" onClick={()=>{setSelectedLeagueId(null);setFixtures([]);setError("");}}>Close league</button></div>
+          <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{league?.country} · {league?.name}</b><small className="muted" style={{display:"block"}}>{(league?.code==="EL"||league?.code==="ECL"||/europa league|conference league/i.test(String(league?.name||"")))?"Today (Ghana time)":"Next 30 days"} · {fixtures.length} fixtures</small></div><button className="btn small" type="button" onClick={()=>{setSelectedLeagueId(null);setFixtures([]);setError("");}}>Close league</button></div>
           {loading?<small className="muted">Loading clubs and fixtures…</small>:<>
             <b>Clubs in this league · {clubs.length}</b><small className="muted">{clubs.join(" · ")||"No club list was returned by football-data.org for this competition."}</small>
             {fixtures.length>0&&<div className="stack" style={{gap:6}}><b>Upcoming fixtures</b>{fixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{padding:9,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted">{new Date(f.date).toLocaleString()}</small></div>)}</div>}
