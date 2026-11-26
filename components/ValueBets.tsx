@@ -164,11 +164,11 @@ export default function ValueBets({ endpoint }: Props) {
         <div className="stack"><b>Top value bets · all competitions</b>{topValue.length?topValue.map((x:any,i:number)=>card(x,i,true)):<small className="muted">No positive-EV selections with a supported model yet.</small>}</div>
         <div className="stack"><b>Highest model probabilities</b>{topChance.length?topChance.map((x:any,i:number)=>card(x,i,true)):<small className="muted">No model-supported selections yet.</small>}</div>
         <div className="stack"><b>Competitions · {groups.length}</b>{groups.map(([league,items]:any)=><details key={league} className="sb-top-r hi" style={{padding:12,borderRadius:12}}>
-          <summary style={{cursor:"pointer",fontWeight:700,display:"flex",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}><span>{league}</span><small className="muted">{items.length} selections · {items.filter((x:any)=>x.modelSupported&&x.ev>0).length} value bets</small></summary>
+          <summary style={{cursor:"pointer",fontWeight:700,display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,width:"100%"}}><span style={{minWidth:0,overflowWrap:"anywhere"}}>{league}</span><small className="muted" style={{whiteSpace:"nowrap",textAlign:"right"}}>{items.length} picks · {items.filter((x:any)=>x.modelSupported&&x.ev>0).length} value</small></summary>
           <div className="stack" style={{marginTop:12}}>
-            <b>Best value in {league}</b>
+            <b>Best value · highest EV first</b>
             {sortRows(items.filter((x:any)=>x.modelSupported&&x.ev>0)).slice(0,10).map(card)}
-            <b>All priced selections · ranked by EV</b>
+            <b>All selections · best bookmaker price and EV first</b>
             {sortRows(items).map(card)}
           </div>
         </details>)}</div>
