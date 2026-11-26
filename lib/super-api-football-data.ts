@@ -95,7 +95,7 @@ export async function getLeagueCatalogue() {
 }
 
 /** Upcoming fixtures for one selected league, fetched on demand for the next seven local days. */
-export async function getLeagueUpcomingFixtures(leagueId:number) {
+export async function getLeagueUpcomingFixtures(leagueId:number,season?:number) {
   if(!Number.isInteger(leagueId)||leagueId<=0)throw new Error("Choose a valid competition.");
   const now=new Date();
   const localDate=(d:Date)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(d);
@@ -107,7 +107,19 @@ export async function getLeagueUpcomingFixtures(leagueId:number) {
     const kickoff=Date.parse(item.date);
     if(item.home.id&&item.away.id&&item.date&&item.status!=="FINISHED"&&Number.isFinite(kickoff)&&kickoff>=now.getTime())unique.set(String(item.id),item);
   }
-  return [...unique.values()].sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+  const fixtures=[...unique.values()].sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+  let clubs:any[]=[];
+  if(Number.isInteger(Number(season))&&Number(season)>0) {
+    try {
+      const table=await api("/standings?leagueId="+leagueId+"&season="+Number(season),60*60_000);
+      const groups=Array.isArray(table?.groups)?table.groups:Array.isArray(table)?table:[];
+      clubs=groups.flatMap((group:any)=>Array.isArray(group?.standings)?group.standings:[])
+        .map((entry:any)=>({id:Number(entry?.team?.id)||null,name:String(entry?.team?.name||""),logo:String(entry?.team?.logo||"")}))
+        .filter((team:any)=>team.name);
+    } catch { /* The league may not publish standings; fixture clubs remain available. */ }
+  }
+  if(!clubs.length)clubs=[...new Map(fixtures.flatMap((f:any)=>[f.home,f.away]).filter((t:any)=>t?.name).map((t:any)=>[String(t.id||t.name),t])).values()];
+  return {fixtures,clubs};
 }
 
 export async function todayCompetitionMatches() {
