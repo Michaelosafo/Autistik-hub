@@ -35,8 +35,11 @@ async function api(path: string, ttl = TTL_MS): Promise<any[]> {
   return out;
 }
 
-export async function matchesOnDate(date: string) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) throw new Error("Choose a valid match date.");
+export async function matchesOnDate(inputDate: string) {
+  const raw = String(inputDate || "").trim();
+  const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  const date = us ? us[3] + "-" + us[1].padStart(2, "0") + "-" + us[2].padStart(2, "0") : raw;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) throw new Error("Invalid match date. Please choose a date again.");
   if (!sportReady()) throw new Error("APIFOOTBALL_KEY is missing in Vercel Production.");
   const rows = await api("/fixtures?date=" + encodeURIComponent(date) + "&timezone=Africa%2FAccra", 5 * 60_000);
   const matches = rows.map((f: any) => ({
