@@ -241,7 +241,7 @@ export async function POST(req: Request) {
                   const fairOdds = 100 / probability;
                   const ev = (probability / 100) * price * 100 - 100;
                   const edge = probability - noVig;
-                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true });
+                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, competition: String(f.competition?.name || f.competition || f.league?.name || "Other competitions"), home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true });
                 }
               }
             }
