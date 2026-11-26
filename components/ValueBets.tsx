@@ -164,8 +164,8 @@ export default function ValueBets({ endpoint }: Props) {
       <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} competitions · {countries.length} countries</small></div>
       <input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search country or league (e.g. Europa League)…" />
       <div className="stack" style={{gap:8}}>
-        {filteredCountries.map(([country,list]:any)=><details key={country} className="sb-top-r hi" style={{padding:11,borderRadius:12}}>
-          <summary style={{cursor:"pointer",display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,fontWeight:700}}><span style={{minWidth:0,overflowWrap:"anywhere"}}>{country}</span><small className="muted" style={{whiteSpace:"nowrap"}}>{list.length} leagues</small></summary>
+        {filteredCountries.map(([country,list]:any)=><details key={country} className="sb-country-card" style={{display:"block",width:"100%",minWidth:0,padding:11,borderRadius:12,background:"var(--surface-2)",borderLeft:"4px solid var(--teal)",boxSizing:"border-box"}}>
+          <summary style={{cursor:"pointer",display:"flex",width:"100%",minWidth:0,justifyContent:"space-between",alignItems:"center",gap:12,fontWeight:700,listStyle:"none"}}><span style={{display:"block",flex:"1 1 auto",minWidth:0,whiteSpace:"normal",overflowWrap:"break-word"}}>{country}</span><small className="muted" style={{flex:"0 0 auto",whiteSpace:"nowrap"}}>{list.length} {list.length===1?"league":"leagues"}</small></summary>
           <div className="stack" style={{marginTop:10,gap:7}}>
             {list.map((league:any)=><button key={league.id} type="button" className={selectedLeagueId===league.id?"btn primary":"btn"} onClick={()=>void openLeague(league)} style={{width:"100%",textAlign:"left",whiteSpace:"normal",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
               <span style={{minWidth:0,overflowWrap:"anywhere"}}>{league.name}</span><span style={{whiteSpace:"nowrap",fontSize:12}}>Open ›</span>
