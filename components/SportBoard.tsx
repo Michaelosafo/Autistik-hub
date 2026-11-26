@@ -453,19 +453,19 @@ export default function SportBoard() {
         <TeamPick label="🏠 Search a team" team={home} setTeam={(t) => { setHome(t); setAway(null); setRes(null); setTeamFixtures([]); }} onChoose={loadTeamFixtures} />
         {home && <div className="stack" style={{ gap: 8 }}><b>Matches for {home.name}</b><small className="muted">Only the last completed match and the next upcoming fixture are shown. Select either one to load its prediction and actual score (if completed).</small>{fixturesBusy && <small className="muted">Loading fixtures…</small>}{fixturesError && <div className="notice warn">{fixturesError}</div>}{!fixturesBusy && teamFixtures.length === 0 && !fixturesError && <small className="muted">No fixtures found for this team.</small>}{teamFixtures.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy}><span style={{ flex: 1 }}><b>{f.home.name} vs {f.away.name}</b><small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleString()} · {f.status === "FINISHED" ? `FT ${f.score?.home ?? "-"}–${f.score?.away ?? "-"}` : f.status.replace("_", " ")}</small></span><b>{f.status === "FINISHED" ? "Last match · View" : "Next match · View"}</b></button>)}</div>}
         <div className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <b>Past matches by date</b>
-          <small className="muted">Search all competitions and completed fixtures available to your SportMonks subscription for this date. Results are imported into the database cache with verified full-time scores; select a match to load its historical analysis.</small>
+          <b>All matches by date</b>
+          <small className="muted">Search every fixture SportMonks returns for this date — scheduled, live and completed. All returned matches are imported into the database cache; completed matches include their verified full-time score.</small>
           <label className="stack" style={{ gap: 4 }}><b>Match date</b><input type="date" value={matchDate} max={new Date().toISOString().slice(0, 10)} onChange={(e) => { setMatchDate(e.target.value); setDateMatches([]); setDateMatchesImportedCount(0); setDateMatchesError(""); setRes(null); }} /></label>
-          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Searching completed matches…" : "Search all available matches"}</button>
+          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy} onClick={searchMatchesByDate}>{dateMatchesBusy ? "Loading SportMonks fixtures…" : "Load all SportMonks matches"}</button>
           {dateMatchesError && <div className={dateMatches.length ? "notice" : "notice warn"}>{dateMatchesError}</div>}
           {dateMatches.length > 0 && <div className="stack" style={{ gap: 0 }}>
-            <b>{dateMatches.length} completed {dateMatches.length === 1 ? "match" : "matches"} returned by SportMonks</b><small className="muted">Database import confirmed: {dateMatchesImportedCount} match records saved for {matchDate}. All competitions available in your SportMonks feed are included. Tap any fixture to open its historical predictions and full analysis.</small>
+            <b>{dateMatches.length} {dateMatches.length === 1 ? "match" : "matches"} returned by SportMonks</b><small className="muted">Database import confirmed: {dateMatchesImportedCount} match records saved for {matchDate}. All competitions available in your SportMonks feed are included. Tap any fixture to open its analysis.</small>
             {dateMatches.map((f: any) => <button key={f.id} type="button" className="sb-opt" onClick={() => chooseFixture(f)} disabled={busy} style={{ justifyContent: "space-between", textAlign: "left" }}>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <b>{f.home.name} vs {f.away.name}</b>
                 <small className="muted" style={{ display: "block" }}>{f.competition} · {new Date(f.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
               </span>
-              <span style={{ display: "grid", justifyItems: "end", gap: 3, whiteSpace: "nowrap" }}><b>FT {f.score.home}–{f.score.away}</b><small className="muted">View analysis ›</small></span>
+              <span style={{ display: "grid", justifyItems: "end", gap: 3, whiteSpace: "nowrap" }}><b>{f.status === "FINISHED" && f.score ? "FT " + f.score.home + "–" + f.score.away : f.status === "IN_PLAY" ? "LIVE" : f.status === "PAUSED" ? "HALF-TIME" : f.status.replace("_", " ")}</b><small className="muted">View analysis ›</small></span>
               <span style={{ color: "var(--muted)" }}>›</span>
             </button>)}
           </div>}
