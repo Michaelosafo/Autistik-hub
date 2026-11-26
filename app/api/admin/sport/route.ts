@@ -41,7 +41,23 @@ export async function POST(req: Request) {
         });
       }
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "leagues": return json({ leagues: await getLeagueCatalogue() });
+      case "leagues": {
+        const leagues = await getLeagueCatalogue();
+        // Keep the major UEFA knockout competitions selectable even when the
+        // football-data.org account does not list them in its own catalogue.
+        // SportMonks supplies their fixtures; football-data.org is still used
+        // for team-history modelling wherever its team coverage allows it.
+        if (superReady()) {
+          const known = new Set(leagues.map((league: any) => String(league.code || "").toUpperCase()));
+          const european = [
+            { id: -9001, code: "CL", name: "UEFA Champions League", country: "Europe", seasons: [] },
+            { id: -9002, code: "EL", name: "UEFA Europa League", country: "Europe", seasons: [] },
+            { id: -9003, code: "ECL", name: "UEFA Conference League", country: "Europe", seasons: [] }
+          ];
+          for (const league of european) if (!known.has(league.code)) leagues.push(league);
+        }
+        return json({ leagues });
+      }
       case "leagueFixtures": {
         const leagueCode=String(b.leagueCode || "").trim().toUpperCase();
         const leagueName=String(b.leagueName || "").trim();
