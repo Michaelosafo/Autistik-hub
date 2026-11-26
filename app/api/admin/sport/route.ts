@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { history, saveOdds, savePrediction, setResult } from "@/lib/sport-football-data";
-import { analyse as analyseHighlightly, matchesOnDate as highlightlyMatchesOnDate, searchTeams as searchHighlightlyTeams, teamFixtureChoices as highlightlyTeamFixtureChoices, todayCompetitionMatches as highlightlyTodayMatches, superReady as highlightlyReady, resolveFixtureTeamIds as resolveHighlightlyTeamIds } from "@/lib/super-api-football-data";
+import { analyse as analyseHighlightly, matchesOnDate as highlightlyMatchesOnDate, searchTeams as searchHighlightlyTeams, teamFixtureChoices as highlightlyTeamFixtureChoices, todayCompetitionMatches as highlightlyTodayMatches, superReady as highlightlyReady, resolveFixtureTeamIds as resolveHighlightlyTeamIds, getLeagueCatalogue, getLeagueUpcomingFixtures } from "@/lib/super-api-football-data";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
@@ -39,6 +39,12 @@ export async function POST(req: Request) {
         });
       }
       case "search": return json({ teams: await searchHighlightlyTeams(String(b.q || "")) });
+      case "leagues": return json({ leagues: await getLeagueCatalogue() });
+      case "leagueFixtures": {
+        const leagueId=Number(b.leagueId);
+        if(!Number.isInteger(leagueId)||leagueId<=0)return json({error:"Choose a valid league."},400);
+        return json({fixtures:await getLeagueUpcomingFixtures(leagueId)});
+      }
       case "todayMatches": {
         const matches = await highlightlyTodayMatches();
         return json({ matches, fixtureProvider: "Highlightly Premium", fixtureCount: matches.length });
