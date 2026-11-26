@@ -1,7 +1,6 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
-import { history, saveOdds, savePrediction, setResult } from "@/lib/sport-football-data";
-import { analyse as analyseHighlightly, matchesOnDate as highlightlyMatchesOnDate, searchTeams as searchHighlightlyTeams, teamFixtureChoices as highlightlyTeamFixtureChoices, todayCompetitionMatches as highlightlyTodayMatches, superReady as highlightlyReady, resolveFixtureTeamIds as resolveHighlightlyTeamIds, getLeagueCatalogue, getLeagueUpcomingFixtures } from "@/lib/super-api-football-data";
+import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds, getLeagueCatalogue, getLeagueUpcomingFixtures } from "@/lib/sport-football-data";
 import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
 import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 import { getFiveDollarFootballStatus, getFiveDollarFootballMatchOdds, getFiveDollarFootballUpcomingFixtures } from "@/lib/fivedollarfootball";
@@ -30,7 +29,7 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: highlightlyReady(), provider: "Highlightly Premium" });
+      case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
       case "oddsStatus": {
         const [oddsrelay, fivedollarfootball] = await Promise.allSettled([getGhanaOddsRelayStatus(), getFiveDollarFootballStatus()]);
         return json({
@@ -38,22 +37,22 @@ export async function POST(req: Request) {
           fivedollarfootball: fivedollarfootball.status === "fulfilled" ? fivedollarfootball.value : { keyConfigured: !!process.env.FIVEDOLLARFOOTBALL_API_KEY, active: false, error: String(fivedollarfootball.reason?.message || fivedollarfootball.reason) }
         });
       }
-      case "search": return json({ teams: await searchHighlightlyTeams(String(b.q || "")) });
+      case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "leagues": return json({ leagues: await getLeagueCatalogue() });
       case "leagueFixtures": {
-        const leagueId=Number(b.leagueId);
-        if(!Number.isInteger(leagueId)||leagueId<=0)return json({error:"Choose a valid league."},400);
-        return json(await getLeagueUpcomingFixtures(leagueId,Number(b.season)||undefined));
+        const leagueCode=String(b.leagueCode || "").trim().toUpperCase();
+        if(!leagueCode)return json({error:"Choose a valid league."},400);
+        return json(await getLeagueUpcomingFixtures(leagueCode));
       }
       case "todayMatches": {
-        const matches = await highlightlyTodayMatches();
-        return json({ matches, fixtureProvider: "Highlightly Premium", fixtureCount: matches.length });
+        const matches = await todayCompetitionMatches();
+        return json({ matches, fixtureProvider: "football-data.org", fixtureCount: matches.length });
       }
-      case "dateMatches": return json({ matches: await highlightlyMatchesOnDate(String(b.date || "")) });
+      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")) });
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
-        return json({ fixtures: await highlightlyTeamFixtureChoices(teamId) });
+        return json({ fixtures: await teamFixtureChoices(teamId) });
       }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures : [];
@@ -64,20 +63,19 @@ export async function POST(req: Request) {
           if (!home || !away || !f?.date) return;
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
-            // Highlightly fixtures and third-party odds feeds can use different IDs.
-            // Resolve names to Highlightly's canonical team IDs before loading form and season stats.
-            const highlightlyTeamIds = highlightlyReady() ? await resolveHighlightlyTeamIds([home, away]) : {};
+            // Resolve third-party fixture names to football-data.org team IDs before loading team statistics.
+            const footballDataTeamIds = sportReady() ? await resolveTeamIds([home, away]) : {};
             const normalizeTeam = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
               .replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
               .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-            const highlightlyHomeId = highlightlyTeamIds[normalizeTeam(home)] || Number(f?.home?.id) || 0;
-            const highlightlyAwayId = highlightlyTeamIds[normalizeTeam(away)] || Number(f?.away?.id) || 0;
+            const footballDataHomeId = footballDataTeamIds[normalizeTeam(home)] || Number(f?.home?.id) || 0;
+            const footballDataAwayId = footballDataTeamIds[normalizeTeam(away)] || Number(f?.away?.id) || 0;
             const [analysisResult, relayResult, fiveDollarResult] = await Promise.allSettled([
-              highlightlyHomeId > 0 && highlightlyAwayId > 0 && highlightlyHomeId !== highlightlyAwayId
-                ? withTimeout(analyseHighlightly(highlightlyHomeId, highlightlyAwayId, date), "Highlightly model analysis", 25000)
-                : Promise.reject(new Error(highlightlyReady()
-                    ? "Could not confidently match both teams to Highlightly. This fixture remains odds-only."
-                    : "SUPER_HIGHLIGHTLY_API_KEY is missing in Vercel Production; Highlightly statistics are unavailable.")),
+              footballDataHomeId > 0 && footballDataAwayId > 0 && footballDataHomeId !== footballDataAwayId
+                ? withTimeout(analyse(footballDataHomeId, footballDataAwayId, date), "football-data.org model analysis", 25000)
+                : Promise.reject(new Error(sportReady()
+                    ? "Could not confidently match both teams to football-data.org. This fixture remains odds-only."
+                    : "FOOTBALL_DATA_TOKEN is missing in Vercel Production; football-data.org statistics are unavailable.")),
               withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000),
               withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date), Number(f.providerFixtureId) || undefined), "5DollarFootballAPI odds lookup", 25000)
             ]);
@@ -216,7 +214,7 @@ export async function POST(req: Request) {
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
         if (!h || !a || h === a) return json({ error: "Pick two different teams." }, 400);
-        const r = await analyseHighlightly(h, a, typeof b.matchDate === "string" ? b.matchDate : undefined);
+        const r = await analyse(h, a, typeof b.matchDate === "string" ? b.matchDate : undefined);
         const m = r.model;
         const pick = m.home >= m.away && m.home >= m.draw ? "Home" : m.away >= m.draw ? "Away" : "Draw";
         const predictionId = await savePrediction({ home: String(b.homeName || h), away: String(b.awayName || a), league: r.leagues.home.name, kickoff: r.actual?.date || (b.matchDate ? new Date(b.matchDate + "T12:00:00Z").toISOString() : null), xg_home: m.xg.home, xg_away: m.xg.away, p_home: m.home, p_draw: m.draw, p_away: m.away, p_btts: m.btts, p_o25: m.over["2.5"], pick, note: JSON.stringify({ matchDate: b.matchDate || null, historical: r.historical, actual: r.actual }) }).catch(() => null);
