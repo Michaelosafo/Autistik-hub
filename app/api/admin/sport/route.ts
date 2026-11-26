@@ -208,12 +208,6 @@ export async function POST(req: Request) {
         }));
         return json({ rows, diagnostics: scanDiagnostics });
       }
-      case "dateMatches": return json({ matches: await highlightlyMatchesOnDate(String(b.date || "")) });
-      case "teamFixtures": {
-        const teamId = Number(b.teamId);
-        if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
-        return json({ fixtures: await highlightlyTeamFixtureChoices(teamId) });
-      }
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
