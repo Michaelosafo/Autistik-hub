@@ -43,7 +43,7 @@ export async function POST(req: Request) {
       case "leagueFixtures": {
         const leagueId=Number(b.leagueId);
         if(!Number.isInteger(leagueId)||leagueId<=0)return json({error:"Choose a valid league."},400);
-        return json({fixtures:await getLeagueUpcomingFixtures(leagueId)});
+        return json(await getLeagueUpcomingFixtures(leagueId,Number(b.season)||undefined));
       }
       case "todayMatches": {
         const matches = await highlightlyTodayMatches();
