@@ -53,8 +53,10 @@ export async function POST(req: Request) {
         const fiveDollarFixtures = fiveDollarResult.status === "fulfilled" && Array.isArray(fiveDollarResult.value?.fixtures)
           ? fiveDollarResult.value.fixtures : [];
         const normalizeFixture = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
-          .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
-          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/\b(clube do|clube de|club de|club del|club da|football club|fc|afc|cf|sc|club)\b/g, " ")
+          .replace(/\b(do|da|de|del|the)\b/g, " ")
+          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
         const teamNames = [...oddsPapiFixtures, ...fiveDollarFixtures].flatMap((f: any) => [
           String(f?.home?.name || ""), String(f?.away?.name || "")
         ]).filter(Boolean);
