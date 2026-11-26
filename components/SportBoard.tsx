@@ -704,11 +704,11 @@ export default function SportBoard() {
         </div>
       )}
       {hist.length > 0 && (
-        <section className="card stack">
+        <section className="card stack sb-history-panel" style={{ minWidth: 0, width: "100%", overflowAnchor: "none" }}>
           <b>Past predictions</b>
           <small className="muted">Mark how each one ended to see how often the board is right.</small>
           {hist.map((h) => (
-            <div key={h.id} className="sb-hist">
+            <div key={h.id} className="sb-hist" style={{ minWidth: 0, width: "100%", overflowWrap: "anywhere" }}>
               <span><b>{h.home}</b> vs <b>{h.away}</b> <small className="muted">{new Date(h.created_at).toLocaleDateString()}</small></span>
               <small>Pick: <b>{h.pick}</b> · {h.p_home}/{h.p_draw}/{h.p_away}% · BTTS {h.p_btts}% · O2.5 {h.p_o25}%</small>
               {h.note && (() => { try { const saved = JSON.parse(h.note); return <div className="stack" style={{ width: "100%", gap: 4 }}>
