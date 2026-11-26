@@ -99,6 +99,7 @@ export async function POST(req: Request) {
             // Match the Ghana operator token, not only one exact display spelling.
             const ghanaBookmaker = (name: any) => {
               const compact = norm(name).replace(/[^a-z0-9]/g, "");
+              if (compact.includes("bet365")) return "Bet365";
               if (compact.includes("sportybet")) return "SportyBet";
               if (compact.includes("betway")) return "Betway";
               if (compact.includes("1xbet")) return "1xBet";
