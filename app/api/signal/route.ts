@@ -44,6 +44,31 @@ async function rpc(chain: string, method: string, params: unknown[]) {
   throw new Error("node unreachable");
 }
 const human = (raw: bigint, dec: number) => { const s = raw.toString().padStart(dec + 1, "0"); const i = s.slice(0, -dec), f = s.slice(-dec).replace(/0+$/, ""); return f ? `${i}.${f}` : i; };
+
+// Check the real wallet balance before Bitget confirm. Its Demo trading failed response
+// can be misleading when the input token or native gas balance is insufficient.
+function units(v: string, decimals: number): bigint {
+  const parts = v.split(".");
+  const i = parts[0] || "0", f = parts[1] || "";
+  return BigInt(i) * 10n ** BigInt(decimals) + BigInt((f + "0".repeat(decimals)).slice(0, decimals) || "0");
+}
+async function swapBalances(f: { fromChain: string; fromContract: string; fromAddress: string }) {
+  if (f.fromChain === "sol") {
+    const native = BigInt((await rpc("sol", "getBalance", [f.fromAddress]))?.value ?? 0);
+    if (!f.fromContract) return { token: native, native, decimals: 9, nativeSymbol: "SOL" };
+    const r = await rpc("sol", "getTokenAccountsByOwner", [f.fromAddress, { mint: f.fromContract }, { encoding: "jsonParsed" }]);
+    let token = 0n, decimals = 6;
+    for (const a of r?.value || []) { const ta = a?.account?.data?.parsed?.info?.tokenAmount; if (ta) { token += BigInt(ta.amount || "0"); decimals = Number(ta.decimals ?? decimals); } }
+    return { token, native, decimals, nativeSymbol: "SOL" };
+  }
+  const native = BigInt(await rpc(f.fromChain, "eth_getBalance", [f.fromAddress, "latest"]));
+  if (!f.fromContract) return { token: native, native, decimals: 18, nativeSymbol: NATIVE[f.fromChain as keyof typeof NATIVE].s };
+  const [balHex, decHex] = await Promise.all([
+    rpc(f.fromChain, "eth_call", [{ to: f.fromContract, data: "0x70a08231" + f.fromAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0") }, "latest"]),
+    rpc(f.fromChain, "eth_call", [{ to: f.fromContract, data: "0x313ce567" }, "latest"]),
+  ]);
+  return { token: BigInt(balHex), native, decimals: Number(BigInt(decHex)), nativeSymbol: NATIVE[f.fromChain as keyof typeof NATIVE].s };
+}
 async function balancesFor(evm: string, sol: string) {
   const jobs: Promise<{ chain: string; symbol: string; contract: string; amount: string } | null>[] = [];
   for (const chain of ["bnb", "eth", "base", "arbitrum", "matic"]) {
@@ -152,8 +177,21 @@ export async function POST(req: Request) {
     if (b.action === "order") {
       const market = str(b.market, 64), protocol = str(b.protocol, 96);
       if (!market) return json({ error: "Pick a route first." }, 400);
+      const balances = await swapBalances(f);
+      const required = units(f.fromAmount!, balances.decimals);
+      if (balances.token < required) {
+        return json({ error: "Insufficient " + f.fromSymbol + ": wallet has " + human(balances.token, balances.decimals) + " " + f.fromSymbol + ", but this swap needs " + f.fromAmount + "." }, 400);
+      }
+      let gasFeature = "user_gas";
+      if (balances.native === 0n) {
+        const available = Array.isArray(b.features) ? b.features.map(String) : [];
+        if (!f.fromContract || !available.includes("no_gas")) {
+          return json({ error: "Your wallet has no " + balances.nativeSymbol + " for network fees. Add some " + balances.nativeSymbol + " or choose a route that supports gasless swaps." }, 400);
+        }
+        gasFeature = "no_gas";
+      }
       const cf = await bgwCall("/swap-go/swapx/confirm", {
-        ...f, market, protocol, slippage: slip, recommendSlippage: slip, gasLevel: "fast", features: ["user_gas"], lastOutAmount: str(b.lastOut, 40),
+        ...f, market, protocol, slippage: slip, recommendSlippage: slip, gasLevel: "fast", features: [gasFeature], lastOutAmount: str(b.lastOut, 40),
         mevProtection: { chain: f.fromChain, mevFee: "0", amountMin: f.fromAmount, mevTarget: true, mode: "smart" },
       });
       if (!cf?.orderId) return json({ error: "Bitget Wallet didn't give an order. Get a new quote." }, 502);
@@ -179,6 +217,10 @@ export async function POST(req: Request) {
     }
     return json({ error: "Unknown action." }, 400);
   } catch (e) {
-    return json({ error: (e as Error).message.slice(0, 300) }, 502);
+    const message = (e as Error).message || "Swap request failed."; 
+    if (/demo trading failed/i.test(message)) {
+      return json({ error: "Bitget could not simulate this swap. Signal checks your token balance and gas before confirmation. Refresh the quote; if both balances are sufficient, increase slippage slightly and get new routes. No transaction was signed or sent." }, 502);
+    }
+    return json({ error: message.slice(0, 300) }, 502);
   }
 }
