@@ -181,6 +181,29 @@ export async function teamFixtureChoicesByName(teamName: string) {
   return [last, next].filter(Boolean).map((f: any) => ({ ...f, fixtureSource: "SportMonks" }));
 }
 
+/** Active SportMonks league catalogue for the SPORT selector. */
+export async function getSportMonksLeagueCatalogue() {
+  if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
+  const all = new Map<number, any>();
+  for (let page = 1; page <= 20; page++) {
+    const body = await api("/leagues?include=country;seasons&per_page=100&page=" + page, 24 * 3600_000);
+    const pageRows = rows(body);
+    for (const item of pageRows) if (item?.id && item?.name) all.set(Number(item.id), item);
+    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 100) break;
+  }
+  const known: Array<[RegExp,string]> = [
+    [/champions league/i,"CL"], [/europa league/i,"EL"], [/conference league/i,"ECL"],
+    [/premier league/i,"PL"], [/championship/i,"ELC"], [/bundesliga/i,"BL1"],
+    [/serie a/i,"SA"], [/la liga/i,"PD"], [/ligue 1/i,"FL1"], [/eredivisie/i,"DED"],
+    [/primeira liga/i,"PPL"], [/brasileir[aã]o|brasileiro.*serie a/i,"BSA"]
+  ];
+  return [...all.values()].map((l: any) => {
+    const code = known.find(([pattern]) => pattern.test(String(l.name)))?.[1] || "SM-" + String(l.id);
+    const seasons = rows(l.seasons).map((season: any) => Number(season.year)).filter(Number.isFinite);
+    return { id: Number(l.id), code, name: String(l.name), country: String(l.country?.name || "World"), seasons };
+  }).sort((a: any, b: any) => a.country.localeCompare(b.country) || a.name.localeCompare(b.name));
+}
+
 export async function searchTeams(q: string) {
   const s = q.trim(); if (s.length < 2) return [];
   const body = await api("/teams/search/" + encodeURIComponent(s) + "?per_page=50", 7 * 86400_000);
