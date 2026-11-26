@@ -5,6 +5,8 @@ type Props = { endpoint: "/api/admin/sport" | "/api/admin/super" };
 type LeagueResult = { rows:any[]; diagnostics:any[]; scannedAt:string };
 export default function ValueBets({ endpoint }: Props) {
   const [fixtures,setFixtures]=useState<any[]>([]);
+  const [leagues,setLeagues]=useState<any[]>([]);
+  const [selectedLeagueId,setSelectedLeagueId]=useState<number|null>(null);
   const [busy,setBusy]=useState(false);
   const [loading,setLoading]=useState(false);
   const [progress,setProgress]=useState("");
@@ -27,13 +29,32 @@ export default function ValueBets({ endpoint }: Props) {
   async function refreshFixtures() {
     setLoading(true);setError("");
     try {
-      const data=await post("todayMatches");
+      if(endpoint==="/api/admin/sport") {
+        const data=await post("leagues");
+        const list=Array.isArray(data.leagues)?data.leagues:[];
+        setLeagues(list);
+        if(!list.length)setError("Highlightly did not return a competition catalogue.");
+      } else {
+        const data=await post("todayMatches");
+        const now=Date.now();
+        const upcoming=(Array.isArray(data.matches)?data.matches:[])
+          .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&f.status!=="FINISHED"&&Date.parse(f.date)>=now)
+          .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+        setFixtures(upcoming);
+      }
+    } catch(e) { setError((e as Error).message); }
+    finally { setLoading(false); }
+  }
+  async function openLeague(league:any) {
+    setSelectedLeagueId(Number(league.id));setFixtures([]);setError("");setLoading(true);
+    try {
+      const data=await post("leagueFixtures",{leagueId:Number(league.id)});
       const now=Date.now();
-      const upcoming=(Array.isArray(data.matches)?data.matches:[])
-        .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&f.status!=="FINISHED"&&Date.parse(f.date)>=now)
+      const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
+        .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setFixtures(upcoming);
-      if(!upcoming.length)setError("No upcoming fixtures were returned by Highlightly for today and tomorrow.");
+      if(!upcoming.length)setError("No upcoming fixtures found in "+league.name+" during the next seven days. Choose another league or check again later.");
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -48,22 +69,22 @@ export default function ValueBets({ endpoint }: Props) {
     (Number(b.modelSupported)-Number(a.modelSupported)) ||
     ((Number.isFinite(Number(b.ev))?Number(b.ev):-Infinity)-(Number.isFinite(Number(a.ev))?Number(a.ev):-Infinity))
   );
-  async function scanLeague(name:string,leagueFixtures:any[]) {
+  async function scanLeague(leagueKey:string,leagueName:string,leagueFixtures:any[]) {
     if(!leagueFixtures.length)return;
-    setSelectedLeague(name);setBusy(true);setError("");setProgress("");
+    setBusy(true);setError("");setProgress("");
     let allRows:any[]=[];let allDiagnostics:any[]=[];
     try {
       // Scan in small batches so Highlightly Premium and the odds provider are not flooded.
       for(let i=0;i<leagueFixtures.length;i+=2) {
         const batch=leagueFixtures.slice(i,i+2);
-        setProgress("Scanning "+name+" · "+Math.min(i+batch.length,leagueFixtures.length)+" of "+leagueFixtures.length+" fixtures");
+        setProgress("Scanning "+leagueName+" · "+Math.min(i+batch.length,leagueFixtures.length)+" of "+leagueFixtures.length+" fixtures");
         const data=await post("valueScan",{fixtures:batch});
         allRows=allRows.concat(Array.isArray(data.rows)?data.rows:[]);
         allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
-        setResults(prev=>({...prev,[name]:{rows:sortRows(allRows),diagnostics:[...allDiagnostics],scannedAt:new Date().toISOString()}}));
+        setResults(prev=>({...prev,[leagueKey]:{rows:sortRows(allRows),diagnostics:[...allDiagnostics],scannedAt:new Date().toISOString()}}));
         if(i+2<leagueFixtures.length)await new Promise(resolve=>setTimeout(resolve,1200));
       }
-      if(!allRows.length)setError("No bookmaker prices were returned for "+name+". Open scan diagnostics to see why.");
+      if(!allRows.length)setError("No bookmaker prices were returned for "+leagueName+". Open scan diagnostics to see why.");
     } catch(e) { setError((e as Error).message); }
     finally { setProgress("");setBusy(false); }
   }
@@ -82,15 +103,14 @@ export default function ValueBets({ endpoint }: Props) {
   }
   useEffect(()=>{if(!started.current){started.current=true;void refreshFixtures();}},[endpoint]);
 
-  const grouped=fixtures.reduce((acc:any,f:any)=>{
-    const name=String(f.competition?.name||f.competition||f.league?.name||"Other competitions");
-    (acc[name] ||= []).push(f);return acc;
-  },{} as Record<string,any[]>);
-  const competitions=Object.entries(grouped).sort((a:any,b:any)=>a[0].localeCompare(b[0]));
-  const filtered=competitions.filter(([name,items]:any)=>
-    String(name).toLowerCase().includes(search.toLowerCase()) ||
-    items.some((f:any)=>[f.home?.name,f.away?.name].some((n:any)=>String(n||"").toLowerCase().includes(search.toLowerCase())))
-  );
+  const countries=Object.entries(leagues.reduce((acc:any,league:any)=>{
+    const country=String(league.country||"International");
+    (acc[country] ||= []).push(league);return acc;
+  },{} as Record<string,any[]>)).sort((a:any,b:any)=>a[0].localeCompare(b[0]));
+  const filteredCountries=countries.map(([country,list]:any)=>[country,list.filter((league:any)=>
+    String(league.name).toLowerCase().includes(search.toLowerCase()) ||
+    String(league.country).toLowerCase().includes(search.toLowerCase())
+  )]).filter(([,list]:any)=>list.length);
 
   function SelectionCard({row,index}:{row:any;index:number}) {
     const supported=!!row.modelSupported;
@@ -131,45 +151,39 @@ export default function ValueBets({ endpoint }: Props) {
     {progress&&<small className="muted">{progress}</small>}
 
     {endpoint==="/api/admin/sport" && <>
-      <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
-        <b>Choose a competition</b>
-        <small className="muted">{competitions.length} competitions · {new Set(fixtures.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean)).size} clubs in upcoming fixtures</small>
-      </div>
-      <input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search country, league or club…" />
+      <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} competitions · {countries.length} countries</small></div>
+      <input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search country or league (e.g. Europa League)…" />
       <div className="stack" style={{gap:8}}>
-        {filtered.map(([name,items]:any)=>{
-          const clubs=[...new Set(items.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean))].sort();
-          const valueCount=(results[name]?.rows||[]).filter((r:any)=>r.modelSupported&&Number(r.ev)>0).length;
-          const active=selectedLeague===name;
-          return <button key={name} type="button" className={active?"btn primary":"btn"} onClick={()=>{setSelectedLeague(active?"":name);setError("");}} style={{width:"100%",display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",gap:10,textAlign:"left",alignItems:"center",padding:"12px 14px",whiteSpace:"normal"}}>
-            <span style={{minWidth:0,display:"grid",gap:4}}><b style={{overflowWrap:"anywhere"}}>{name}</b><small style={{opacity:.8}}>{clubs.length} clubs · {items.length} fixtures</small></span>
-            <span style={{fontSize:12,whiteSpace:"nowrap",textAlign:"right"}}>{valueCount} value bets　{active?"⌃":"›"}</span>
-          </button>;
-        })}
-        {!filtered.length&&<small className="muted">No competitions match that search. Refresh the fixture list when new matches are published.</small>}
+        {filteredCountries.map(([country,list]:any)=><details key={country} className="sb-top-r hi" style={{padding:11,borderRadius:12}}>
+          <summary style={{cursor:"pointer",display:"grid",gridTemplateColumns:"minmax(0,1fr) auto",alignItems:"center",gap:10,fontWeight:700}}><span style={{minWidth:0,overflowWrap:"anywhere"}}>{country}</span><small className="muted" style={{whiteSpace:"nowrap"}}>{list.length} leagues</small></summary>
+          <div className="stack" style={{marginTop:10,gap:7}}>
+            {list.map((league:any)=><button key={league.id} type="button" className={selectedLeagueId===league.id?"btn primary":"btn"} onClick={()=>void openLeague(league)} style={{width:"100%",textAlign:"left",whiteSpace:"normal",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+              <span style={{minWidth:0,overflowWrap:"anywhere"}}>{league.name}</span><span style={{whiteSpace:"nowrap",fontSize:12}}>Open ›</span>
+            </button>)}
+          </div>
+        </details>)}
+        {!filteredCountries.length&&<small className="muted">No countries or leagues match that search.</small>}
       </div>
-      {selectedLeague&&(()=>{
-        const leagueFixtures=grouped[selectedLeague]||[];
-        const saved=results[selectedLeague];
+      {selectedLeagueId!==null&&(()=>{
+        const league=leagues.find((x:any)=>Number(x.id)===selectedLeagueId);
+        const leagueKey=String(selectedLeagueId);
+        const saved=results[leagueKey];
         const allRows=saved?.rows||[];
         const positive=sortRows(allRows.filter((r:any)=>r.modelSupported&&Number(r.ev)>0));
         const probabilityRank=[...allRows].filter((r:any)=>r.modelSupported).sort((a:any,b:any)=>Number(b.probability)-Number(a.probability));
+        const clubs=[...new Set(fixtures.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean))].sort();
         return <div className="card stack" style={{padding:14}}>
-          <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-            <div><b>{selectedLeague}</b><small className="muted" style={{display:"block"}}>{leagueFixtures.length} upcoming fixtures</small></div>
-            <button className="btn small" type="button" onClick={()=>setSelectedLeague("")}>Close league</button>
-          </div>
-          <b>Clubs in this competition's loaded fixtures</b>
-          <small className="muted">{[...new Set(leagueFixtures.flatMap((f:any)=>[f.home?.name,f.away?.name]).filter(Boolean))].sort().join(" · ")||"No clubs listed"}</small>
-          <div className="stack" style={{gap:6}}>
-            <b>Upcoming fixtures</b>
-            {leagueFixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{padding:9,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted">{new Date(f.date).toLocaleString()}</small></div>)}
-          </div>
-          <button className="btn primary" type="button" disabled={busy||!leagueFixtures.length} onClick={()=>void scanLeague(selectedLeague,leagueFixtures)}>{busy?"Scanning…":"Scan this league · "+leagueFixtures.length+" fixtures"}</button>
+          <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><div><b>{league?.country} · {league?.name}</b><small className="muted" style={{display:"block"}}>Next seven days · {fixtures.length} fixtures</small></div><button className="btn small" type="button" onClick={()=>{setSelectedLeagueId(null);setFixtures([]);setError("");}}>Close league</button></div>
+          {loading?<small className="muted">Loading clubs and fixtures…</small>:<>
+            <b>Clubs in upcoming fixtures</b><small className="muted">{clubs.join(" · ")||"No upcoming clubs returned for this seven-day window."}</small>
+            {fixtures.length>0&&<div className="stack" style={{gap:6}}><b>Upcoming fixtures</b>{fixtures.map((f:any)=><div key={fixtureKey(f)} className="sb-top-r hi" style={{padding:9,display:"flex",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>{f.home.name} vs {f.away.name}</b><small className="muted">{new Date(f.date).toLocaleString()}</small></div>)}</div>}
+            <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanLeague(leagueKey,String(league?.name||"Selected league"),fixtures)}>{busy?"Scanning…":"Scan this league · "+fixtures.length+" fixtures"}</button>
+          </>}
+          {progress&&<small className="muted">{progress}</small>}
           {saved&&<div className="notice" style={{fontSize:13}}>Last scan: {new Date(saved.scannedAt).toLocaleString()} · {allRows.length} selections · {positive.length} positive-EV value bets.</div>}
           {saved&&<>
             <b>Top value bets · highest EV first</b>
-            {positive.length?positive.slice(0,20).map((r:any,i:number)=><SelectionCard key={r.key||i} row={r} index={i}/>):<small className="muted">No positive-EV selections with supported model probabilities. See all prices below; unsupported markets are not falsely labelled as value.</small>}
+            {positive.length?positive.slice(0,20).map((r:any,i:number)=><SelectionCard key={r.key||i} row={r} index={i}/>):<small className="muted">No positive-EV selections with supported model probabilities. See all prices below; unsupported markets are not labelled as value.</small>}
             <b>Highest model probabilities</b>
             {probabilityRank.slice(0,10).map((r:any,i:number)=><SelectionCard key={"prob-"+(r.key||i)} row={r} index={i}/>)}
             <b>All bookmaker selections · best prices</b>
@@ -179,7 +193,6 @@ export default function ValueBets({ endpoint }: Props) {
         </div>;
       })()}
     </>}
-
     {endpoint==="/api/admin/super"&&<>
       <small className="muted">{fixtures.length} upcoming fixtures loaded.</small>
       <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanSuper()}>{busy?"Scanning…":"Scan all fixtures"}</button>
