@@ -14,6 +14,9 @@ export default function DailyValueBets() {
   const [progress,setProgress]=useState("");
   const [error,setError]=useState("");
   const [scanDate,setScanDate]=useState("");
+  const [selectedDate,setSelectedDate]=useState("");
+  const [todayDate,setTodayDate]=useState("");
+  const [redPicks,setRedPicks]=useState<any[]>([]);
   const [scanned,setScanned]=useState(0);
   const started=useRef(false);
 
@@ -41,7 +44,7 @@ export default function DailyValueBets() {
   }
 
   async function runDailyScan(dayFixtures:Fixture[]) {
-    setBusy(true);setError("");setPicks([]);setDiagnostics([]);setScanned(0);
+    setBusy(true);setError("");setPicks([]);setRedPicks([]);setDiagnostics([]);setScanned(0);
     let allRows:any[]=[];let allDiagnostics:any[]=[];
     try {
       for(let i=0;i<dayFixtures.length;i+=2) {
@@ -50,14 +53,19 @@ export default function DailyValueBets() {
         const data=await post("valueScan",{fixtures:batch});
         allRows=allRows.concat(Array.isArray(data.rows)?data.rows:[]);
         allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
-        setPicks(rankRows(allRows).slice(0,25));
+        const ranked=rankRows(allRows);
+        setPicks(ranked.filter((r:any)=>Number(r.probability)>=45).slice(0,25));
+        setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
+          .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)).slice(0,10));
         setDiagnostics([...allDiagnostics]);
         setScanned(Math.min(i+batch.length,dayFixtures.length));
         if(i+2<dayFixtures.length)await new Promise(resolve=>setTimeout(resolve,650));
       }
       const ranked=rankRows(allRows);
-      setPicks(ranked.slice(0,25));
-      if(!ranked.length)setError("All remaining fixtures were scanned, but no model-supported positive-value selections qualified today. Check scan coverage below.");
+      setPicks(ranked.filter((r:any)=>Number(r.probability)>=45).slice(0,25));
+      setRedPicks(allRows.filter((r:any)=>r.modelSupported&&Number(r.probability)>0&&Number(r.probability)<45&&Number(r.ev)>0&&Number(r.edge)>0)
+        .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev)).slice(0,10));
+      if(!ranked.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
     finally {setBusy(false);setProgress("");}
   }
@@ -65,14 +73,16 @@ export default function DailyValueBets() {
   async function loadAndScan() {
     setLoading(true);setError("");setPicks([]);setDiagnostics([]);setScanned(0);
     try {
-      const data=await post("dailyFixtures");
+      const data=await post("dailyFixtures",{date:selectedDate||undefined});
+      const isPast=String(data.date||"")<String(data.today||"");
       const now=Date.now();
       const matches=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>
-        f?.id&&f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now
+        f?.id&&f?.home?.name&&f?.away?.name&&f?.date&&(isPast||Date.parse(f.date)>=now)
       ).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setScanDate(String(data.date||""));
+      setSelectedDate(String(data.date||""));setTodayDate(String(data.today||""));
       setFixtures(matches);
-      if(!matches.length)setError("API-Football returned no remaining scheduled fixtures for today in Ghana time.");
+      if(!matches.length)setError("API-Football returned no fixtures for the selected date.");
       else {
         setLoading(false);
         await runDailyScan(matches);
@@ -85,12 +95,12 @@ export default function DailyValueBets() {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 AUTISTIK · Daily Top 25 Value Bets</b><small className="muted" style={{display:"block"}}>Automatic all-league scan · API-Football statistics · 5DollarFootballAPI odds</small></div>
-      <button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>{loading||busy?"Scanning…":"Refresh today's scan"}</button>
+      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>All available leagues · API-Football statistics · 5DollarFootballAPI odds</small></div>
+      <div className="row" style={{gap:8,flexWrap:"wrap"}}><input aria-label="Scan date" type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/><button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>Scan selected date</button></div>
     </div>
     <div className="notice">
-      <b>Best value selections for {scanDate||"today"} · Ghana time</b>
-      <small className="muted" style={{display:"block"}}>Every remaining fixture returned by your API-Football subscription is checked. Results are ranked by model probability, price edge and expected value. The AUTISTIK rank is a comparison score, not a guarantee or a calibrated chance of winning.</small>
+      <b>Best value selections for {scanDate||"selected date"} · Ghana time</b>
+      <small className="muted" style={{display:"block"}}>Every fixture returned by your API-Football subscription for the selected date is checked. Results are ranked by model probability, price edge and expected value. The AUTISTIK rank is a comparison score, not a guarantee or a calibrated chance of winning.</small>
     </div>
     <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
       <small className="muted">{fixtures.length} fixtures found · {scanned} scanned · {picks.length} qualifying picks</small>
@@ -115,6 +125,17 @@ export default function DailyValueBets() {
       </div>)}
     </div>}
     {busy&&!picks.length&&<small className="muted">Scanning fixtures. The shortlist will appear as soon as qualified selections are found.</small>}
+    {redPicks.length>0&&<div className="stack" style={{gap:8}}>
+      <b>🔴 Red / underpriced · Top {redPicks.length}</b>
+      <small className="muted">Lower model-probability selections with positive estimated value. These are higher-risk options, not part of the high-conviction Top 25.</small>
+      {redPicks.map((r:any,i:number)=><div key={"red-"+(r.key||i)} className="sb-top-r" style={{display:"grid",gap:6,padding:11,borderLeft:"4px solid var(--danger)",overflowWrap:"anywhere"}}>
+        <b>#{i+1} · {r.competition||"Football"} · {r.home} vs {r.away}</b>
+        <div><b>{r.selection}</b> · {r.market}</div>
+        <small>Model {Number(r.probability).toFixed(1)}% · Odds {Number(r.odds).toFixed(2)} · Fair {Number(r.fairOdds).toFixed(2)} · EV +{Number(r.ev).toFixed(1)}% · Edge {Number(r.edge).toFixed(1)}pp</small>
+        <small className="muted">{r.bookmaker}</small>
+      </div>)}
+    </div>}
+    {scanDate&&scanDate<todayDate&&<div className="notice warn"><b>Retrospective date selected.</b> Historical fixtures and available odds are scanned, but the current team-statistics model is not a true pre-kickoff historical model. Do not treat these estimates as predictions that were knowable before the match.</div>}
     {diagnostics.length>0&&<details><summary>Scan coverage and diagnostics · {diagnostics.length} fixtures checked</summary><div className="stack" style={{gap:7}}>
       <small className="muted">Matches without supported odds or a usable model probability are excluded from the shortlist.</small>
       {diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.error||d.analysisError||((d.markets||[]).length?"Analysed · "+d.markets.join(", "):"No supported prices returned")}</small>)}
