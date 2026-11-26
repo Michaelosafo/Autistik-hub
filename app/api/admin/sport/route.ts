@@ -1,5 +1,5 @@
 import { json } from "@/lib/ai";
-import { getGhanaMatchOdds } from "@/lib/oddsrelay";
+import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, leagueCatalogue as apiFootballLeagueCatalogue, leagueUpcomingFixtures as apiFootballLeagueUpcomingFixtures, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { adminState } from "@/lib/admin";
 import {
@@ -45,7 +45,8 @@ export async function POST(req: Request) {
       case "ready": return json({ ready: apiFootballReady(), provider: "API-Football" });
       case "oddsStatus": return json({
         apiFootball: { active: apiFootballReady(), provider: "API-Football", error: apiFootballReady() ? null : "APIFOOTBALL_KEY is missing in Vercel Production." },
-        fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "API-Football"
+        fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "5DollarFootballAPI",
+        fiveDollarFootball: await getFiveDollarFootballStatus()
       });
       case "search": return json({ teams: await searchApiFootballTeams(String(b.q || "")) });
       case "leagues": return json({ leagues: await apiFootballLeagueCatalogue(), provider: "API-Football" });
@@ -79,7 +80,7 @@ export async function POST(req: Request) {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysis, odds] = await Promise.all([
               withTimeout(analyseApiFootball(Number(f.home.id), Number(f.away.id)), "API-Football analysis"),
-              withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay Ghana bookmaker odds")
+              withTimeout(getFiveDollarFootballMatchOdds(home, away, String(f.date)), "5DollarFootballAPI bookmaker odds")
             ]);
             const markets = Array.isArray(analysis?.model?.markets) ? analysis.model.markets : [];
             const events = Array.isArray(odds?.matched) ? odds.matched : [];
@@ -156,17 +157,17 @@ export async function POST(req: Request) {
             }
             rows.push(...best.values());
             diagnostics.push({
-              fixture: home + " vs " + away, provider: "OddsRelay Ghana",
+              fixture: home + " vs " + away, provider: "5DollarFootballAPI Ghana bookmakers",
               analysis: true, oddsEvents: Number(odds?.diagnostics?.eventsReturned ?? odds?.count ?? 0),
               matchedEvents: events.length, bookmakers: [...new Set((odds?.availableBookmakers || []).map((name: string) => ghanaBookmaker(name)).filter(Boolean))],
               markets: [...new Set(mapped.map((x: any) => x.market))],
-              error: mapped.length ? null : "No odds from the supported Ghana bookmakers were returned for this fixture."
+              error: mapped.length ? null : "No priced odds from the supported Ghana bookmakers were returned by 5DollarFootballAPI for this fixture."
             });
           } catch (error) {
             diagnostics.push({ fixture: home + " vs " + away, provider: "OddsRelay Ghana", error: error instanceof Error ? error.message : String(error) });
           }
         }));
-        return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "OddsRelay Ghana" } });
+        return json({ rows, diagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "5DollarFootballAPI" } });
       }
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
