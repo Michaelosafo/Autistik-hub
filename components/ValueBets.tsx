@@ -158,11 +158,9 @@ export default function ValueBets({ endpoint }: Props) {
     {feedStatus && <div className="notice stack" style={{fontSize:13}}>
       <b>{endpoint==="/api/admin/sport"?"SPORT provider status":"SUPER provider status"}</b>
       {endpoint==="/api/admin/sport"?<>
-        <span>SportMonks fixtures: {feedStatus.sportmonks?.active?"Connected":"Not connected"}</span>
-        <span>football-data.org analysis: {feedStatus.footballData?.active?"Connected":"Not connected"}</span>
-        <span>5DollarFootballAPI odds: {feedStatus.fivedollarfootball?.active?"Connected · "+String(feedStatus.fivedollarfootball.plan||"plan unknown"):"Not connected"}</span>
-        <span>OddsRelay: {feedStatus.oddsrelay?.active?"Connected":"Not active / unavailable"}</span>
-        <small>football-data.org supplies fixtures and historical team statistics.</small>
+        <span>API-Football fixtures &amp; statistics: {feedStatus.apiFootball?.active?"Connected":"Not connected"}</span>
+        <span>5DollarFootballAPI odds: {feedStatus.fiveDollarFootball?.active?"Connected · "+String(feedStatus.fiveDollarFootball.plan||"plan unknown"):"Not connected"}</span>
+        <small>API-Football supplies fixtures and team statistics; 5DollarFootballAPI supplies bookmaker prices.</small>
       </>:<span>OddsPapi: {feedStatus.active?"Connected":"Check provider configuration"}</span>}
       {feedStatus.error&&<small>{feedStatus.error}</small>}
     </div>}
