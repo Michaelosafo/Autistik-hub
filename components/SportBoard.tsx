@@ -130,7 +130,7 @@ export default function SportBoard() {
     try {
       const seasons = Array.isArray(league.seasons) ? league.seasons.map(Number).filter(Number.isFinite) : [];
       const season = seasons.length ? Math.max(...seasons) : undefined;
-      const d = await api<{ fixtures: any[]; clubs: any[] }>("leagueFixtures", { leagueCode: String(league.code || "") });
+      const d = await api<{ fixtures: any[]; clubs: any[] }>("leagueFixtures", { leagueCode: String(league.code || ""), leagueName: String(league.name || ""), leagueId: Number(league.id) });
       setSelectedLeagueFixtures(Array.isArray(d.fixtures) ? d.fixtures : []);
       setLeagueClubs(Array.isArray(d.clubs) ? d.clubs : []);
       if (!(d.fixtures || []).length) setTodayError("No upcoming fixtures found in this league over the next 30 days. Close it and choose another league.");
