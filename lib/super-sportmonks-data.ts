@@ -186,10 +186,10 @@ export async function getSportMonksLeagueCatalogue() {
   if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
   const all = new Map<number, any>();
   for (let page = 1; page <= 20; page++) {
-    const body = await api("/leagues?include=country;seasons&per_page=100&page=" + page, 24 * 3600_000);
+    const body = await api("/leagues?include=country;seasons&per_page=50&page=" + page, 24 * 3600_000);
     const pageRows = rows(body);
     for (const item of pageRows) if (item?.id && item?.name) all.set(Number(item.id), item);
-    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 100) break;
+    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 50) break;
   }
   const known: Array<[RegExp,string]> = [
     [/champions league/i,"CL"], [/europa league/i,"EL"], [/conference league/i,"ECL"],
@@ -244,12 +244,15 @@ export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, le
   const to = datePart(new Date(now.getTime() + 30 * 86400_000));
   const all = new Map<string, any>();
   for (let page = 1; page <= 20; page++) {
+    const leagueFilter = Number.isInteger(leagueId) && Number(leagueId) > 0
+      ? "&filters=fixtureLeagues:" + Number(leagueId)
+      : "";
     const path = "/fixtures/between/" + from + "/" + to +
-      "?include=participants;league;state;scores.participant&per_page=100&page=" + page;
+      "?include=participants;league;state;scores.participant" + leagueFilter + "&per_page=50&page=" + page;
     const body = await api(path, 60_000);
     const pageRows = rows(body);
     for (const item of pageRows) if (item?.id != null) all.set(String(item.id), item);
-    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 100) break;
+    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 50) break;
   }
   const normalize = (value: any) => String(value || "").toLowerCase().normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
