@@ -247,30 +247,28 @@ export async function getOddsPapiMatchOdds(home: string, away: string, matchDate
   const relevant = fixtureRows.filter((f: any) => f?.fixtureId && f?.tournamentId &&
     (nameMatches(String(f.participant1Name || f.participant1ShortName || ""), home) &&
      nameMatches(String(f.participant2Name || f.participant2ShortName || ""), away)));
-  const tournamentIds = [...new Set(relevant.map((f: any) => String(f.tournamentId)))];
   const oddsByFixture = new Map<string, any>();
-  // OddsPapi v4 requires exactly ONE bookmaker on odds-by-tournaments.
-  // Request each subscribed bookmaker separately and MERGE (not overwrite)
-  // bookmakerOdds for the same fixture returned by different requests.
-  for (const bookmaker of bookmakerSlugs) {
-    for (let i = 0; i < tournamentIds.length; i += 3) {
-      const chunk = tournamentIds.slice(i, i + 3);
-      const path = "/odds-by-tournaments?tournamentIds=" + encodeURIComponent(chunk.join(",")) +
+  // We already resolved the exact OddsPapi fixture above. Fetch odds for that
+  // fixture directly instead of downloading every match in its tournament.
+  // This keeps a one-match click to one targeted odds request per bookmaker.
+  for (const fixture of relevant) {
+    for (const bookmaker of bookmakerSlugs) {
+      const fixtureId = String(fixture.fixtureId);
+      const path = "/odds?fixtureId=" + encodeURIComponent(fixtureId) +
         "&bookmakers=" + encodeURIComponent(bookmaker) +
         "&language=en&oddsFormat=decimal&verbosity=3";
-      const result = await cachedGet(path, 3 * 60_000);
+      const result = await cachedGet(path, 45_000);
       for (const item of rows(result)) {
-        if (item?.fixtureId == null) continue;
-        const id = String(item.fixtureId);
-        const previous = oddsByFixture.get(id);
-        oddsByFixture.set(id, previous ? {
+        if (String(item?.fixtureId ?? fixtureId) !== fixtureId) continue;
+        const previous = oddsByFixture.get(fixtureId);
+        oddsByFixture.set(fixtureId, previous ? {
           ...previous,
           ...item,
           bookmakerOdds: {
             ...(previous.bookmakerOdds && typeof previous.bookmakerOdds === "object" ? previous.bookmakerOdds : {}),
             ...(item.bookmakerOdds && typeof item.bookmakerOdds === "object" ? item.bookmakerOdds : {})
           }
-        } : item);
+        } : { ...item, fixtureId });
       }
     }
   }
