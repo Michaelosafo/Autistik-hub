@@ -63,6 +63,53 @@ async function balancesFor(evm: string, sol: string) {
   return (await Promise.all(jobs)).filter((x): x is NonNullable<typeof x> => !!x && Number(x.amount) > 0);
 }
 
+// Verify the wallet actually holds the amount being swapped before Bitget's confirm call.
+// Bitget can return the misleading "40001: Demo trading failed" message for insufficient from-token balance.
+function amountUnits(value: string, decimals: number): bigint {
+   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) throw new Error("Token decimals are invalid.");
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole || "0") * 10n ** BigInt(decimals) + BigInt((fraction + "0".repeat(decimals)).slice(0, decimals) || "0");
+}
+async function checkSwapFunds(f: {
+  fromChain: string; fromContract: string; fromSymbol: string; fromAmount: string | null; fromAddress: string;
+}) {
+  if (!f.fromAmount) throw new Error("Enter an amount.");
+  let balance = 0n, decimals = 18, nativeBalance = 0n;
+  if (f.fromChain === "sol") {
+    nativeBalance = BigInt((await rpc("sol", "getBalance", [f.fromAddress]))?.value ?? 0);
+    if (!f.fromContract) { balance = nativeBalance; decimals = 9; }
+    else {
+      const data = await rpc("sol", "getTokenAccountsByOwner", [f.fromAddress, { mint: f.fromContract }, { encoding: "jsonParsed" }]);
+      decimals = 0;
+      for (const account of data?.value || []) {
+        const amount = account?.account?.data?.parsed?.info?.tokenAmount;
+        if (amount) { balance += BigInt(amount.amount || "0"); decimals = Number(amount.decimals ?? decimals); }
+      }
+    }
+  } else {
+    nativeBalance = BigInt(await rpc(f.fromChain, "eth_getBalance", [f.fromAddress, "latest"]));
+    if (!f.fromContract) balance = nativeBalance;
+    else {
+      const [raw, dec] = await Promise.all([
+        rpc(f.fromChain, "eth_call", [{ to: f.fromContract, data: "0x70a08231" + f.fromAddress.toLowerCase().replace(/^0x/, "").padStart(64, "0") }, "latest"]),
+        rpc(f.fromChain, "eth_call", [{ to: f.fromContract, data: "0x313ce567" }, "latest"]),
+      ]);
+      balance = BigInt(raw === "0x" ? "0x0" : raw);
+      decimals = Number(BigInt(dec));
+    }
+  }
+  const required = amountUnits(f.fromAmount, decimals);
+  if (balance < required) {
+    const held = human(balance, decimals), wanted = f.fromAmount;
+    throw new Error(`Insufficient ${f.fromSymbol} balance: this wallet has ${held} ${f.fromSymbol}, but the swap needs ${wanted} ${f.fromSymbol}. Add funds or reduce the amount, then get a fresh quote.`);
+  }
+  // For token-funded swaps, make sure there is at least some native coin for network gas.
+  if (f.fromContract && nativeBalance === 0n) {
+    const gasCoin = NATIVE[f.fromChain]?.s || "native coin";
+    throw new Error(`This wallet has no ${gasCoin} for network fees. Add a little ${gasCoin}, then try again.`);
+  }
+}
+
 // Bitget's Solana orders: the unsigned transaction can sit under different keys (data.serializedTx, deriveTransaction,
 // a plain string…) and be base58 (v0) or base64 (v1). Find it wherever it is and hand the page plain base64.
 const B58A = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -152,6 +199,9 @@ export async function POST(req: Request) {
     if (b.action === "order") {
       const market = str(b.market, 64), protocol = str(b.protocol, 96);
       if (!market) return json({ error: "Pick a route first." }, 400);
+      // Check the live on-chain balance first; Bitget's 40001 "Demo trading failed" can mean
+      // the sending token balance is too low, despite the misleading slippage wording.
+      await checkSwapFunds(f as typeof f & { fromAmount: string });
       const cf = await bgwCall("/swap-go/swapx/confirm", {
         ...f, market, protocol, slippage: slip, recommendSlippage: slip, gasLevel: "fast", features: ["user_gas"], lastOutAmount: str(b.lastOut, 40),
         mevProtection: { chain: f.fromChain, mevFee: "0", amountMin: f.fromAmount, mevTarget: true, mode: "smart" },
