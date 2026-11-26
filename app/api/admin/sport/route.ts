@@ -1,5 +1,5 @@
 import { json } from "@/lib/ai";
-import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, fixtureOdds as apiFootballFixtureOdds, sportReady as apiFootballReady } from "@/lib/sport";
+import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, fixtureOdds as apiFootballFixtureOdds, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { adminState } from "@/lib/admin";
 import {
   analyse as analyseSportMonks,
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
       case "teamFixtures": {
         const teamName = String(b.teamName || "").trim();
         if (!teamName) return json({ error: "Choose a valid team." }, 400);
-        return json({ fixtures: await teamFixtureChoicesByName(teamName), fixtureProvider: "SportMonks" });
+        return json({ fixtures: await apiFootballTeamFixtureChoices(Number(b.teamId)), fixtureProvider: "API-Football" });
       }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures : [];
