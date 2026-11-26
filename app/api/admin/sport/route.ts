@@ -1,6 +1,6 @@
 import { json } from "@/lib/ai";
 import { getGhanaMatchOdds } from "@/lib/oddsrelay";
-import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
+import { analyse as analyseApiFootball, searchTeams as searchApiFootballTeams, matchesOnDate as apiFootballMatchesOnDate, leagueCatalogue as apiFootballLeagueCatalogue, leagueUpcomingFixtures as apiFootballLeagueUpcomingFixtures, teamFixtureChoices as apiFootballTeamFixtureChoices, sportReady as apiFootballReady } from "@/lib/sport";
 import { adminState } from "@/lib/admin";
 import {
   analyse as analyseSportMonks,
@@ -48,14 +48,11 @@ export async function POST(req: Request) {
         fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "API-Football"
       });
       case "search": return json({ teams: await searchApiFootballTeams(String(b.q || "")) });
-      case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue() });
+      case "leagues": return json({ leagues: await apiFootballLeagueCatalogue(), provider: "API-Football" });
       case "leagueFixtures": {
-        const leagueCode = String(b.leagueCode || "").trim().toUpperCase();
-        const leagueName = String(b.leagueName || "").trim();
-        if (!leagueCode) return json({ error: "Choose a valid league." }, 400);
-        const leagueId = Number(b.leagueId);
-        const result = await getSportMonksLeagueUpcomingFixtures(leagueCode, leagueName, Number.isInteger(leagueId) && leagueId > 0 ? leagueId : undefined);
-        return json({ ...result, fixtureProvider: "API-Football", statisticsProvider: "API-Football" });
+        const leagueId = Number(b.leagueId), season = Number(b.season);
+        const fixtures = await apiFootballLeagueUpcomingFixtures(leagueId, season, 30);
+        return json({ fixtures, clubs: [], fixtureProvider: "API-Football", statisticsProvider: "API-Football" });
       }
       case "todayMatches": {
         const matches = await todayCompetitionMatches();
