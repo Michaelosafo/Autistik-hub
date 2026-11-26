@@ -18,6 +18,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [superRows,setSuperRows]=useState<any[]>([]);
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [feedStatus,setFeedStatus]=useState<any>(null);
+  const [fixtureSource,setFixtureSource]=useState<any>(null);
   const [checkingFeed,setCheckingFeed]=useState(false);
   const started=useRef(false);
 
@@ -51,7 +52,8 @@ export default function ValueBets({ endpoint }: Props) {
     try {
       const seasons=Array.isArray(league.seasons)?league.seasons.map(Number).filter(Number.isFinite):[];
       const season=seasons.length?Math.max(...seasons):undefined;
-      const data=await post("leagueFixtures",{leagueCode:String(league.code || "")});
+      const data=await post("leagueFixtures",{leagueCode:String(league.code || ""),leagueName:String(league.name || "")});
+      setFixtureSource(data.providers || {fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
       const now=Date.now();
       const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
         .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
@@ -150,7 +152,9 @@ export default function ValueBets({ endpoint }: Props) {
     {feedStatus && <div className="notice stack" style={{fontSize:13}}>
       <b>{endpoint==="/api/admin/sport"?"SPORT provider status":"SUPER provider status"}</b>
       {endpoint==="/api/admin/sport"?<>
-        <span>5DollarFootballAPI: {feedStatus.fivedollarfootball?.active?"Connected · "+String(feedStatus.fivedollarfootball.plan||"plan unknown"):"Not connected"}</span>
+        <span>SportMonks fixtures: {feedStatus.sportmonks?.active?"Connected":"Not connected"}</span>
+        <span>football-data.org analysis: {feedStatus.footballData?.active?"Connected":"Not connected"}</span>
+        <span>5DollarFootballAPI odds: {feedStatus.fivedollarfootball?.active?"Connected · "+String(feedStatus.fivedollarfootball.plan||"plan unknown"):"Not connected"}</span>
         <span>OddsRelay: {feedStatus.oddsrelay?.active?"Connected":"Not active / unavailable"}</span>
         <small>football-data.org supplies fixtures and historical team statistics.</small>
       </>:<span>OddsPapi: {feedStatus.active?"Connected":"Check provider configuration"}</span>}
@@ -158,6 +162,7 @@ export default function ValueBets({ endpoint }: Props) {
     </div>}
     {error&&<div className="notice warn">{error}</div>}
     {loading&&<small className="muted">Loading competition and fixture list…</small>}
+    {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.sportmonks?.active?"SportMonks":"football-data.org fallback"} · analysis: football-data.org · prices: 5DollarFootballAPI Ultra + OddsRelay</small>}
     {progress&&<small className="muted">{progress}</small>}
 
     {endpoint==="/api/admin/sport" && <>
