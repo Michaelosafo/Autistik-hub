@@ -473,9 +473,18 @@ export default function SportBoard() {
             <small className="muted">{dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev))).length} priced selections</small>
           </div>
           <small className="muted">All fixtures for {matchDate} are checked against SportMonks model probabilities and available bookmaker prices. Positive EV means the bookmaker price is above fair odds; negative EV means it is below fair odds.</small>
-          {dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))
-            .sort((a: any, b: any) => Number(b.ev) - Number(a.ev))
-            .map((row: any, index: number) => {
+          {(() => {
+            const eligible = dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01);
+            const grouped = new Map<string, any[]>();
+            for (const row of eligible) {
+              const key = [row.home, row.away].join("|");
+              if (!grouped.has(key)) grouped.set(key, []);
+              grouped.get(key)!.push(row);
+            }
+            const topFivePerMatch = [...grouped.values()].flatMap(rows =>
+              rows.sort((a: any, b: any) => Math.abs(Number(b.ev)) - Math.abs(Number(a.ev))).slice(0, 5)
+            ).sort((a: any, b: any) => Number(b.ev) - Number(a.ev));
+            return topFivePerMatch.map((row: any, index: number) => {
               const ev = Number(row.ev);
               const overpriced = ev > 0;
               return <div key={row.key || index} className="sb-top-r" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 5, borderLeft: overpriced ? "4px solid var(--teal)" : "4px solid var(--coral)" }}>
@@ -488,7 +497,10 @@ export default function SportBoard() {
                 <small>Bookmaker: <b>{Number(row.odds).toFixed(2)}</b> · Fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · Model chance: <b>{Number(row.probability).toFixed(1)}%</b></small>
                 <small className={overpriced ? "sb-ok" : "sb-no"}>Expected value: {ev > 0 ? "+" : ""}{ev.toFixed(1)}% · {row.bookmaker}</small>
               </div>;
-            })}
+            });
+          })()}
+          {dailyValueRows.filter((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)) && Math.abs(Number(row.ev)) > 0.01).length > 0 &&
+            <small className="muted">Showing up to five strongest mispriced selections per match. Matches without a supported price difference are excluded.</small>}
           {dailyScanDiagnostics.length > 0 && <details><summary>Scan coverage and diagnostics ({dailyScanDiagnostics.length} matches)</summary><div className="stack" style={{ gap: 4 }}>{dailyScanDiagnostics.map((item: any, i: number) => <small key={i} className="muted">{item.fixture}: {item.error || (item.matchedEvents ? item.matchedEvents + " odds event(s), " + (item.markets || []).length + " market types" : "No bookmaker odds matched")}</small>)}</div></details>}
         </div>}
         {dateMatches.length > 0 && <div className="stack" style={{ gap: 7 }}>
