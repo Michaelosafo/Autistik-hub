@@ -34,6 +34,8 @@ export async function POST(req: Request) {
       case "oddsStatus": {
         const [oddsrelay, fivedollarfootball] = await Promise.allSettled([getGhanaOddsRelayStatus(), getFiveDollarFootballStatus()]);
         return json({
+          sportmonks: { active: superReady(), provider: "SportMonks", error: superReady() ? null : "SPORTMONKS_API_TOKEN is missing in Vercel Production." },
+          footballData: { active: sportReady(), provider: "football-data.org", error: sportReady() ? null : "FOOTBALL_DATA_TOKEN is missing in Vercel Production." },
           oddsrelay: oddsrelay.status === "fulfilled" ? oddsrelay.value : { active: false, error: String(oddsrelay.reason?.message || oddsrelay.reason) },
           fivedollarfootball: fivedollarfootball.status === "fulfilled" ? fivedollarfootball.value : { keyConfigured: !!process.env.FIVEDOLLARFOOTBALL_API_KEY, active: false, error: String(fivedollarfootball.reason?.message || fivedollarfootball.reason) }
         });
