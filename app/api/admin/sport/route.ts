@@ -2,6 +2,7 @@ import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
 import { getTheOddsApiStatus, getTheOddsApiMatchOdds } from "@/lib/the-odds-api";
+import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -33,11 +34,62 @@ export async function POST(req: Request) {
       }
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": {
-        const fixtures = await todayCompetitionMatches();
+        // Keep football-data.org as the source for historical team statistics,
+        // while restoring OddsPapi's broader subscribed-bookmaker fixture feed.
+        const [footballResult, oddsPapiResult] = await Promise.allSettled([
+          todayCompetitionMatches(),
+          getOddsPapiUpcomingFixtures()
+        ]);
+        const footballFixtures = footballResult.status === "fulfilled" && Array.isArray(footballResult.value)
+          ? footballResult.value : [];
+        const oddsPapiFixtures = oddsPapiResult.status === "fulfilled" && Array.isArray(oddsPapiResult.value)
+          ? oddsPapiResult.value : [];
+        const normalizeFixture = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
+          .replace(/[\\u0300-\\u036f]/g, "").replace(/\\b(football club|fc|afc|cf|sc|club)\\b/g, " ")
+          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+        const teamNames = oddsPapiFixtures.flatMap((f: any) => [
+          String(f?.home?.name || ""), String(f?.away?.name || "")
+        ]).filter(Boolean);
+        let teamIds: Record<string, number> = {};
+        if (teamNames.length) {
+          try { teamIds = await resolveTeamIds(teamNames); } catch { /* retain odds-only fixtures */ }
+        }
+        const merged = new Map<string, any>();
+        for (const fixture of footballFixtures) {
+          const key = normalizeFixture(fixture.home?.name) + "|" + normalizeFixture(fixture.away?.name);
+          merged.set(key, fixture);
+        }
+        let added = 0;
+        for (const fixture of oddsPapiFixtures) {
+          const homeName = String(fixture?.home?.name || "");
+          const awayName = String(fixture?.away?.name || "");
+          const key = normalizeFixture(homeName) + "|" + normalizeFixture(awayName);
+          if (!homeName || !awayName || merged.has(key)) continue;
+          const homeId = teamIds[normalizeFixture(homeName)] || 0;
+          const awayId = teamIds[normalizeFixture(awayName)] || 0;
+          merged.set(key, {
+            ...fixture,
+            home: { ...fixture.home, id: homeId },
+            away: { ...fixture.away, id: awayId }
+          });
+          added++;
+        }
+        const fixtures = [...merged.values()].sort((a: any, b: any) =>
+          Date.parse(a.date) - Date.parse(b.date)
+        );
         return json({
-          matches: Array.isArray(fixtures) ? fixtures : [],
-          fixtureSources: { footballData: Array.isArray(fixtures) ? fixtures.length : 0 },
-          note: "Fixtures come from the football API. The Odds API is called only when a match is selected."
+          matches: fixtures,
+          fixtureSources: {
+            footballData: footballFixtures.length,
+            oddsPapi: oddsPapiFixtures.length,
+            oddsPapiAdded: added,
+            merged: fixtures.length
+          },
+          fixtureDiagnostics: {
+            footballDataError: footballResult.status === "rejected" ? String(footballResult.reason?.message || footballResult.reason) : null,
+            oddsPapiError: oddsPapiResult.status === "rejected" ? String(oddsPapiResult.reason?.message || oddsPapiResult.reason) : null
+          },
+          note: "Fixtures are merged from football-data.org and OddsPapi. The Odds API supplies selected-match bookmaker prices."
         });
       }
       case "valueScan": {
