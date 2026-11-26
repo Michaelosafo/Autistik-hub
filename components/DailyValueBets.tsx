@@ -29,20 +29,57 @@ export default function DailyValueBets() {
     return data;
   }
 
-  function rankRows(rows:any[]):Pick[] {
-    const eligible=rows.filter((r:any)=>r.modelSupported&&Number.isFinite(Number(r.probability))&&Number(r.probability)>=55&&Number(r.ev)>0&&Number(r.edge)>0);
+  function randomBestRows(rows:any[], limit=25):Pick[] {
+    // Keep every genuinely model-supported positive-EV selection; do not impose an
+    // arbitrary minimum probability. Randomise the shortlist, but weight the draw
+    // toward stronger probabilities and larger positive expected value.
+    const eligible=rows.filter((r:any)=>
+      r.modelSupported &&
+      Number.isFinite(Number(r.probability)) &&
+      Number(r.probability)>0 &&
+      Number.isFinite(Number(r.ev)) &&
+      Number(r.ev)>0 &&
+      Number.isFinite(Number(r.odds)) &&
+      Number(r.odds)>1
+    );
     const best=new Map<string,any>();
     for(const r of eligible) {
       const key=[r.home,r.away,r.market,r.selection].join("|");
       const old=best.get(key);
       if(!old||Number(r.odds)>Number(old.odds))best.set(key,r);
     }
-    return [...best.values()].map((r:any)=>{
+    const pool=[...best.values()].map((r:any)=>{
       const probability=Math.max(0,Math.min(100,Number(r.probability)));
-      const edge=Math.max(0,Math.min(20,Number(r.edge)||0));
-      const ev=Math.max(0,Math.min(30,Number(r.ev)||0));
-      return {...r,autistikRank:0.55*probability+0.25*(edge/20*100)+0.20*(ev/30*100)};
-    }).sort((a:any,b:any)=>b.autistikRank-a.autistikRank||Number(b.ev)-Number(a.ev));
+      const ev=Math.max(0,Number(r.ev));
+      const edge=Math.max(0,Number(r.edge)||0);
+      const quality=0.60*(probability/100)+0.25*Math.min(ev,50)/50+0.15*Math.min(edge,20)/20;
+      return {...r,autistikRank:Math.round(quality*100)};
+    });
+    const selected: any[]=[];
+    const usedTeams=new Set<string>();
+    // Weighted random sampling without replacement. Higher-quality picks are
+    // more likely, while the final order remains shuffled rather than rank-sorted.
+    while(pool.length && selected.length<limit) {
+      const available=pool.filter((r:any)=>
+        !usedTeams.has(String(r.home).toLowerCase()) &&
+        !usedTeams.has(String(r.away).toLowerCase())
+      );
+      if(!available.length)break;
+      const weights=available.map((r:any)=>Math.max(0.01,
+        (Number(r.probability)/100) *
+        (1+Math.min(Number(r.ev),50)/50) *
+        (1+Math.min(Math.max(0,Number(r.edge)||0),20)/40)
+      ));
+      const total=weights.reduce((sum:number,w:number)=>sum+w,0);
+      let draw=Math.random()*total, chosen=available[available.length-1];
+      for(let i=0;i<available.length;i++){draw-=weights[i];if(draw<=0){chosen=available[i];break;}}
+      selected.push(chosen);
+      usedTeams.add(String(chosen.home).toLowerCase());
+      usedTeams.add(String(chosen.away).toLowerCase());
+      const index=pool.indexOf(chosen);
+      if(index>=0)pool.splice(index,1);
+    }
+    return selected;
   }
 
   async function runDailyScan(dayFixtures:Fixture[]) {
@@ -55,17 +92,17 @@ export default function DailyValueBets() {
         const data=await post("valueScan",{fixtures:batch});
         allRows=allRows.concat(Array.isArray(data.rows)?data.rows:[]);
         allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
-        const ranked=rankRows(allRows);
-        setPicks(ranked.filter((r:any)=>Number(r.probability)>=55));
+        const randomised=randomBestRows(allRows);
+        setPicks(randomised);
         setRedPicks([]);
         setDiagnostics([...allDiagnostics]);
         setScanned(Math.min(i+batch.length,dayFixtures.length));
         if(i+2<dayFixtures.length)await new Promise(resolve=>setTimeout(resolve,650));
       }
-      const ranked=rankRows(allRows);
-      setPicks(ranked.filter((r:any)=>Number(r.probability)>=55));
+      const randomised=randomBestRows(allRows);
+      setPicks(randomised);
       setRedPicks([]);
-      if(!ranked.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
+      if(!randomised.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
     finally {setBusy(false);setProgress("");}
   }
@@ -100,7 +137,7 @@ export default function DailyValueBets() {
     </div>
     <div className="notice">
       <b>Best value selections for {scanDate||"selected date"} · Ghana time</b>
-      <small className="muted" style={{display:"block"}}>Only Champions League, Europa League, Conference League and leading domestic-league fixtures are checked. Picks require at least 55% model probability and positive expected value, then rank by model probability, price edge and expected value. The AUTISTIK rank is a comparison score, not a guarantee or a calibrated chance of winning.</small>
+      <small className="muted" style={{display:"block"}}>All supported markets are considered. Qualifying positive-EV selections are weighted by model probability, expected value and price edge, then randomly shuffled into a shortlist of up to 25 picks. A team can appear only once in the shortlist.</small>
     </div>
     <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
       <small className="muted">{fixtures.length} fixtures found · {scanned} scanned · {picks.length} qualifying picks</small>
@@ -109,9 +146,9 @@ export default function DailyValueBets() {
     {progress&&<small className="muted">{progress}</small>}
     {error&&<div className="notice warn">{error}</div>}
     {picks.length>0&&<div className="stack" style={{gap:9}}>
-      <b>Top {picks.length} · highest conviction and value</b>
+      <b>Randomised best {picks.length} · weighted by value</b>
       {picks.map((r,i)=><div key={r.key||i} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:"4px solid var(--teal)"}}>
-        <div className="row" style={{justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>#{i+1} · {r.competition||"Football"}</b><b>{Math.round(r.autistikRank)}/100 rank</b></div>
+        <div className="row" style={{justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>#{i+1} · {r.competition||"Football"}</b><b>{Math.round(r.autistikRank)}/100 quality score</b></div>
         <b>{r.home} vs {r.away}</b>
         <div><b>{r.selection}</b> · {r.market}</div>
         <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13}}>
@@ -140,6 +177,6 @@ export default function DailyValueBets() {
       <small className="muted">Matches without supported odds or a usable model probability are excluded from the shortlist.</small>
       {diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.error||d.analysisError||((d.markets||[]).length?"Analysed · "+d.markets.join(", "):"No supported prices returned")}</small>)}
     </div></details>}
-    <small className="muted">Only model-supported positive-EV selections are listed. Odds can change; verify the current price before placing a bet. No pick is guaranteed.</small>
+    <small className="muted">Only model-supported positive-EV selections are eligible; the shortlist is randomised and each team appears at most once. Odds can change; verify the current price before placing a bet. No pick is guaranteed.</small>
   </section>;
 }
