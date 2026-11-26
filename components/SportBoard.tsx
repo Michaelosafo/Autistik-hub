@@ -147,7 +147,7 @@ export default function SportBoard() {
         setLeagueScanProgress("Scanning " + selectedLeague.name + " · " + (i + 1) + " of " + selectedLeagueFixtures.length + " · " + fixture.home.name + " vs " + fixture.away.name);
         const date = new Date(fixture.date).toISOString().slice(0, 10);
         try {
-          const analysis = await api("analyse", { home: fixture.home.id, away: fixture.away.id, matchDate: date, homeName: fixture.home.name, awayName: fixture.away.name });
+          const analysis = await api("analyse", { home: fixture.home.id, away: fixture.away.id, matchDate: date, homeName: fixture.home.name, awayName: fixture.away.name, fixtureSource: fixture.fixtureSource || fixture.provider });
           results.push({ fixture, analysis });
         } catch (error) {
           results.push({ fixture, error: error instanceof Error ? error.message : String(error) });
@@ -197,7 +197,7 @@ export default function SportBoard() {
     setBusy(true);
     setGhanaOdds(null); setOddsError("");
     try {
-      const result = await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name });
+      const result = await api("analyse", { home: h.id, away: a.id, matchDate: date, homeName: h.name, awayName: a.name, fixtureSource: f.fixtureSource || f.provider });
       setRes(result); setQuickPicksOpen(true); loadHist();
       void fetchGhanaOddsFor(h, a, date);
     }
