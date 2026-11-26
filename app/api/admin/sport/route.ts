@@ -1,8 +1,8 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
-import { getTheOddsApiStatus, getTheOddsApiMatchOdds } from "@/lib/the-odds-api";
-import { getOddsPapiUpcomingFixtures, getOddsPapiMatchOdds } from "@/lib/oddspapi";
+import { getGhanaOddsRelayStatus, getGhanaMatchOdds } from "@/lib/oddsrelay";
+import { getOddsPapiUpcomingFixtures } from "@/lib/oddspapi";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
       case "oddsStatus": {
-        return json({ theOddsApi: await getTheOddsApiStatus() });
+        return json({ oddsrelay: await getGhanaOddsRelayStatus() });
       }
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": {
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
             footballDataError: footballResult.status === "rejected" ? String(footballResult.reason?.message || footballResult.reason) : null,
             oddsPapiError: oddsPapiResult.status === "rejected" ? String(oddsPapiResult.reason?.message || oddsPapiResult.reason) : null
           },
-          note: "Fixtures are merged from football-data.org and OddsPapi. The Odds API supplies selected-match bookmaker prices."
+          note: "Fixtures are merged from football-data.org and OddsPapi. OddsRelay supplies Ghana bookmaker prices for value comparison."
         });
       }
       case "valueScan": {
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              withTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi odds lookup", 25000)
+              withTimeout(getGhanaMatchOdds(home, away, date), "OddsRelay odds lookup", 25000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
@@ -208,7 +208,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getTheOddsApiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined, String(b.competition || "")));
+        return json(await getGhanaMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
