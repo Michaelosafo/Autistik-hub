@@ -226,7 +226,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
   if (!bookmakerRows.length && oddsData?.odds && typeof oddsData.odds === "object") {
     bookmakerRows = [{ name: "Bet 365", slug: "bet365", odds: oddsData.odds }];
   }
-  const bookmakers = bookmakerRows.map((book: any) => {
+  const parseBookmakers = (rows: any[]) => rows.map((book: any) => {
     const markets: any[] = [];
     const odds = book?.odds || {};
     const oneXTwo = latest(odds["1x2"]);
@@ -282,6 +282,26 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       markets
     };
   }).filter((book: any) => book.markets.length);
+  let bookmakers = parseBookmakers(bookmakerRows);
+  // A multi-book Ultra response can contain bookmaker shells without prices.
+  // Retry the documented default Bet365 endpoint before declaring no odds.
+  if (!bookmakers.length && requestedBookmakers.length) {
+    try {
+      const defaultOdds = await api(baseOddsPath, 20_000);
+      const defaultRows: any[] = Array.isArray(defaultOdds?.bookmakers) ? defaultOdds.bookmakers : [];
+      if (defaultRows.length) {
+        oddsData = defaultOdds;
+        bookmakerRows = defaultRows;
+      } else if (defaultOdds?.odds && typeof defaultOdds.odds === "object") {
+        oddsData = defaultOdds;
+        bookmakerRows = [{ name: "Bet 365", slug: "bet365", odds: defaultOdds.odds }];
+      }
+      bookmakers = parseBookmakers(bookmakerRows);
+    } catch (error) {
+      oddsRequestError = (oddsRequestError ? oddsRequestError + " | " : "") +
+        "Bet365 fallback: " + (error instanceof Error ? error.message : String(error));
+    }
+  }
 
   const event = {
     id: String(fixture.id),
