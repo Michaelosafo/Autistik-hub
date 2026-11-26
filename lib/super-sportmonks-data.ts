@@ -100,10 +100,11 @@ function toLegacy(m: any) {
 }
 async function fixturesByDate(date: string) {
   const all: any[] = [];
-  for (let page = 1; page <= 5; page++) {
+  for (let page = 1; page <= 20; page++) {
     const body = await api("/fixtures/date/" + date + "?include=participants;league;state;scores.participant&per_page=50&page=" + page, 60_000);
-    all.push(...rows(body));
-    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || rows(body).length < 50) break;
+    const pageRows = rows(body);
+    all.push(...pageRows);
+    if (body?.pagination?.has_more === false || body?.meta?.pagination?.has_more === false || pageRows.length < 50) break;
   }
   return all;
 }
@@ -237,8 +238,21 @@ export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, le
 
 export async function matchesOnDate(date: string) {
   if (!validDate(date)) throw new Error("Choose a valid match date.");
+  if (!superReady()) throw new Error("SPORTMONKS_API_TOKEN is missing in Vercel Production.");
   const body = await fixturesByDate(date);
-  return body.map(fixture).filter((x: any) => x.home.id && x.away.id && x.status === "FINISHED" && x.score).sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date));
+  const matches = body.map(fixture)
+    .filter((x: any) => x.home.id && x.away.id && x.status === "FINISHED" && x.score)
+    .sort((a: any, b: any) => Date.parse(b.date) - Date.parse(a.date));
+  // Persist the complete normalized SportMonks date result in the existing
+  // database cache, in addition to the raw paginated API responses cached by api().
+  const importedAt = new Date().toISOString();
+  const { error } = await sb().from("sport_cache").upsert({
+    key: "sportmonks:completed-matches:" + date,
+    data: { provider: "SportMonks", date, importedAt, count: matches.length, matches },
+    at: importedAt
+  });
+  if (error) throw new Error("SportMonks matches were fetched but could not be saved to the database: " + error.message);
+  return matches;
 }
 export async function teamFixtureChoices(teamId: number) {
   const now = new Date();
