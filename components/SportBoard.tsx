@@ -167,7 +167,7 @@ export default function SportBoard() {
       const d = await api<{ matches: any[]; importedCount?: number; fixtureProvider?: string }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
       setDateMatchesImportedCount(Number(d.importedCount ?? d.matches?.length ?? 0));
-      if (!(d.matches || []).length) setDateMatchesError("SportMonks returned no completed fixtures with verified full-time scores for this date. The date search was still saved to the database cache.");
+      if (!(d.matches || []).length) setDateMatchesError("SportMonks returned no fixtures for this date. Try another date or check the SportMonks subscription coverage.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
