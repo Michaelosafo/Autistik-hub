@@ -1,8 +1,7 @@
 import { json } from "@/lib/ai";
 import { adminState } from "@/lib/admin";
 import { analyse, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, resolveTeamIds } from "@/lib/sport-football-data";
-import { getOddsPapiStatus, getOddsPapiUpcomingFixtures, getOddsPapiMatchOdds } from "@/lib/oddspapi";
-import { getGhanaOddsRelayStatus } from "@/lib/oddsrelay";
+import { getTheOddsApiStatus, getTheOddsApiMatchOdds } from "@/lib/the-odds-api";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,49 +29,15 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "ready": return json({ ready: sportReady() });
       case "oddsStatus": {
-        const [papi, relay] = await Promise.allSettled([getOddsPapiStatus(), getGhanaOddsRelayStatus()]);
-        return json({
-          oddspapi: papi.status === "fulfilled" ? papi.value : { keyConfigured: false, active: false, error: String(papi.reason?.message || papi.reason) },
-          oddsrelay: relay.status === "fulfilled" ? relay.value : { keyConfigured: false, active: false, error: String(relay.reason?.message || relay.reason) }
-        });
+        return json({ theOddsApi: await getTheOddsApiStatus() });
       }
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": {
-        const [footballDataMatches, oddsPapiResult] = await Promise.all([
-          todayCompetitionMatches(),
-          getOddsPapiUpcomingFixtures()
-            .then((fixtures: any[]) => ({ fixtures, error: null }))
-            .catch((error: any) => ({ fixtures: [], error: error instanceof Error ? error.message : String(error) }))
-        ]);
-        const fixtures = Array.isArray(footballDataMatches) ? [...footballDataMatches] : [];
-        const oddsList = Array.isArray(oddsPapiResult.fixtures) ? oddsPapiResult.fixtures : [];
-        let teamIds: Record<string, number> = {};
-        try {
-          teamIds = await resolveTeamIds(oddsList.flatMap((f: any) => [String(f?.home?.name || ""), String(f?.away?.name || "")]));
-        } catch { /* preserve OddsPapi fixtures as odds-only when team lookup is unavailable */ }
-        const normalize = (value: string) => String(value || "").toLowerCase().normalize("NFKD")
-          .replace(/[\u0300-\u036f]/g, "").replace(/\b(football club|fc|afc|cf|sc|club)\b/g, " ")
-          .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
-        const keys = new Set(fixtures.map((f: any) => normalize(f.home?.name) + "|" + normalize(f.away?.name) + "|" + String(f.date || "").slice(0, 16)));
-        for (const f of oddsList) {
-          const homeName = String(f?.home?.name || ""), awayName = String(f?.away?.name || "");
-          const date = String(f?.date || "");
-          const key = normalize(homeName) + "|" + normalize(awayName) + "|" + date.slice(0, 16);
-          if (!homeName || !awayName || !date || keys.has(key)) continue;
-          fixtures.push({
-            id: f.id, date, status: f.status || "SCHEDULED",
-            competition: f.competition || "Football (OddsPapi)",
-            home: { id: teamIds[normalize(homeName)] || 0, name: homeName, logo: "" },
-            away: { id: teamIds[normalize(awayName)] || 0, name: awayName, logo: "" },
-            score: null, oddsSource: "OddsPapi"
-          });
-          keys.add(key);
-        }
-        fixtures.sort((a: any, b: any) => Date.parse(a.date) - Date.parse(b.date));
+        const fixtures = await todayCompetitionMatches();
         return json({
-          matches: fixtures,
-          fixtureSources: { footballData: Array.isArray(footballDataMatches) ? footballDataMatches.length : 0, oddsPapiWithOdds: oddsList.length, merged: fixtures.length },
-          note: "OddsPapi adds upcoming fixtures with subscribed-bookmaker prices; fixtures without football-data team IDs can show odds-only until model stats are available.", fixtureDiagnostics: { oddsPapiError: oddsPapiResult.error, footballDataFixtures: Array.isArray(footballDataMatches) ? footballDataMatches.length : 0, oddsPapiFixtures: oddsList.length }
+          matches: Array.isArray(fixtures) ? fixtures : [],
+          fixtureSources: { footballData: Array.isArray(fixtures) ? fixtures.length : 0 },
+          note: "Fixtures come from the football API. The Odds API is called only when a match is selected."
         });
       }
       case "valueScan": {
@@ -89,7 +54,7 @@ export async function POST(req: Request) {
               homeId > 0 && awayId > 0 && homeId !== awayId
                 ? withTimeout(analyse(homeId, awayId, date), "SPORT model analysis", 25000)
                 : Promise.reject(new Error("Football-data team IDs unavailable; this fixture can be displayed as odds-only.")),
-              withTimeout(getOddsPapiMatchOdds(home, away, date), "OddsPapi odds lookup", 25000)
+              withTimeout(getTheOddsApiMatchOdds(home, away, date, String(f?.competition?.name || f?.competition || f?.league?.name || "")), "OddsPapi odds lookup", 25000)
             ]);
             const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
             if (oddsResult.status === "rejected") throw oddsResult.reason;
@@ -191,7 +156,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getOddsPapiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined));
+        return json(await getTheOddsApiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : undefined, String(b.competition || "")));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
