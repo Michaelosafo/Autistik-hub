@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { adminState } from "@/lib/admin";
-import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
+import { analyse, getSportMonksLeagueCatalogue, getSportMonksLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,13 +14,13 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
-      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
+      case "ready": return json({ ready: superReady(), provider: "SportMonks" });
+      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "SportMonks", statisticsProvider: "SportMonks", oddsProvider: "5DollarFootballAPI" });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
-      case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
+      case "todayMatches": { const result = await getSportMonksLeagueUpcomingFixtures("", ""); const matches = Array.isArray(result.fixtures) ? result.fixtures : []; return json({ matches, fixtureProvider: "SportMonks", windowDays: 30 }); }
+      case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue(), provider: "SportMonks" });
       case "leagueFixtures": {
-        const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
+        const result = await getSportMonksLeagueUpcomingFixtures(String(b.leagueCode || ""), String(b.leagueName || ""), Number(b.leagueId) || undefined);
         return json(result);
       }
       case "valueScan": {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
           // Keep the odds feed independent from team-history coverage. A missing
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
-            analyse(homeId, awayId, date),
+            analyse(homeId, awayId),
             getFiveDollarFootballMatchOdds(home, away, String(f.date))
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
         }
         return json({ rows, diagnostics: scanDiagnostics });
       }
-      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")) });
+      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")), fixtureProvider: "SportMonks" });
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
         if (!h || !a || h === a) return json({ error: "Pick two different teams." }, 400);
-        const r = await analyse(h, a, typeof b.matchDate === "string" ? b.matchDate : undefined);
+        const r = await analyse(h, a);
         const m = r.model;
         const pick = m.home >= m.away && m.home >= m.draw ? "Home" : m.away >= m.draw ? "Away" : "Draw";
         const predictionId = await savePrediction({ home: String(b.homeName || h), away: String(b.awayName || a), league: r.leagues.home.name, kickoff: r.actual?.date || (b.matchDate ? new Date(b.matchDate + "T12:00:00Z").toISOString() : null), xg_home: m.xg.home, xg_away: m.xg.away, p_home: m.home, p_draw: m.draw, p_away: m.away, p_btts: m.btts, p_o25: m.over["2.5"], pick, note: JSON.stringify({ matchDate: b.matchDate || null, historical: r.historical, actual: r.actual }) }).catch(() => null);

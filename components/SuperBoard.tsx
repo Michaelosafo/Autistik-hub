@@ -298,14 +298,14 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SUPER</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. SUPER uses football-data.org statistics to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. SUPER uses SportMonks statistics to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       <ValueBets endpoint="/api/admin/super" />
-      {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel Production, then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
-        <b>Today's matches · all subscribed leagues</b>
-        <small className="muted">Fixtures returned by football-data.org across its available competitions. Select any match to load its prediction and automatic 5DollarFootballAPI bookmaker comparison.</small>
+        <b>Upcoming matches · all subscribed leagues</b>
+        <small className="muted">Fixtures returned by SportMonks across its available competitions. Select any match to load its prediction and automatic 5DollarFootballAPI bookmaker comparison.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
