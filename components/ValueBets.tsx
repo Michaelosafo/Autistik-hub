@@ -130,16 +130,16 @@ export default function ValueBets({ endpoint }: Props) {
   function SelectionCard({row,index}:{row:any;index:number}) {
     const supported=!!row.modelSupported;
     const ev=Number(row.ev);
-    return <div key={row.key||index} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:supported&&ev>0?"4px solid var(--teal)":supported&&ev<0?"4px solid #d69b28":"4px solid var(--line)"}}>
-      <b>{index+1}. {row.home} vs {row.away}</b>
-      <div><b>{row.selection}</b> · {row.market}</div>
+    return <div key={row.key||index} className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",width:"100%",boxSizing:"border-box",alignItems:"start",gap:9,padding:12,minWidth:0,overflowWrap:"break-word",borderLeft:supported&&ev>0?"4px solid var(--teal)":supported&&ev<0?"4px solid #d69b28":"4px solid var(--line)"}}>
+      <b style={{display:"block",minWidth:0,overflowWrap:"break-word",wordBreak:"normal"}}>{index+1}. {row.home} vs {row.away}</b>
+      <div style={{minWidth:0,overflowWrap:"break-word"}}><b>{row.selection}</b> · {row.market}</div>
       {row.modelProvider&&<small className="muted">Model: {row.modelProvider}</small>}
-      <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13}}>
-        <span>Bookmaker <b>{Number(row.odds).toFixed(2)}</b> · {row.bookmaker}</span>
+      <div style={{display:"flex",minWidth:0,gap:12,flexWrap:"wrap",fontSize:13}}>
+        <span style={{minWidth:0,overflowWrap:"break-word"}}>Bookmaker <b>{Number(row.odds).toFixed(2)}</b> · {row.bookmaker}</span>
         <span>Fair odds <b>{supported?Number(row.fairOdds).toFixed(2):"—"}</b></span>
         <span>Model probability <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span>
       </div>
-      <b>{!supported?"ODDS ONLY · NOT MODELLED":ev>0?"OVERPRICED · +"+ev.toFixed(1)+"% EV":ev<0?"UNDERPRICED · "+ev.toFixed(1)+"% EV":"FAIR PRICE"}</b>
+      <b style={{minWidth:0,overflowWrap:"break-word"}}>{!supported?"ODDS ONLY · NOT MODELLED":ev>0?"OVERPRICED · +"+ev.toFixed(1)+"% EV":ev<0?"UNDERPRICED · "+ev.toFixed(1)+"% EV":"FAIR PRICE"}</b>
       {row.modelContext&&<details><summary>Autistik analysis · team form and goal data</summary><div className="stack" style={{fontSize:13,marginTop:8}}>
         <span>{row.home}: last form <b>{row.modelContext.homeForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.homeGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.homeGoalsAgainst??"—"}</b></span>
         <span>{row.away}: last form <b>{row.modelContext.awayForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.awayGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.awayGoalsAgainst??"—"}</b></span>
