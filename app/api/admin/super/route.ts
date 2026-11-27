@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       case "ready": return json({ ready: superReady(), provider: "SportMonks" });
       case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "SportMonks", statisticsProvider: "SportMonks", oddsProvider: "5DollarFootballAPI" });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "SportMonks" }); }
+      case "todayMatches": { const result = await getSportMonksLeagueUpcomingFixtures("", ""); const matches = Array.isArray(result.fixtures) ? result.fixtures : []; return json({ matches, fixtureProvider: "SportMonks", windowDays: 30 }); }
       case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue(), provider: "SportMonks" });
       case "leagueFixtures": {
         const result = await getSportMonksLeagueUpcomingFixtures(String(b.leagueCode || ""), String(b.leagueName || ""), Number(b.leagueId) || undefined);
