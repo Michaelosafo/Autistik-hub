@@ -20,7 +20,10 @@ export default function DailyValueBets() {
   const [todayDate,setTodayDate]=useState("");
   const [redPicks,setRedPicks]=useState<any[]>([]);
   const [scanned,setScanned]=useState(0);
+  const [clockNow,setClockNow]=useState(()=>Date.now());
   const started=useRef(false);
+
+  useEffect(()=>{const timer=window.setInterval(()=>setClockNow(Date.now()),30000);return()=>window.clearInterval(timer);},[]);
 
   async function post(action:string,body:any={}) {
     const response=await fetch("/api/admin/sport",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
@@ -100,16 +103,16 @@ export default function DailyValueBets() {
       const randomised=randomBestRows(allRows);
       setPicks(randomised);
       setRedPicks([]);
+      setDiagnostics(allDiagnostics);
       if(!randomised.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
     finally {setBusy(false);setProgress("");}
   }
 
   async function loadAndScan() {
-    setLoading(true);setError("");setPicks([]);setDiagnostics([]);setScanned(0);
+    setLoading(true);setError("");setScanned(0);
     try {
       const data=await post("dailyFixtures",{date:selectedDate||undefined});
-      const isPast=String(data.date||"")<String(data.today||"");
       const now=Date.now();
       const matches=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>{
         const status=String(f?.status||"").trim().toLowerCase();
@@ -125,11 +128,13 @@ export default function DailyValueBets() {
         setLoading(false);
         await runDailyScan(matches);
         setScanDate(String(data.date||""));
-        setDiagnostics([]);
       }
     } catch(e) {setError(e instanceof Error?e.message:String(e));}
     finally {setLoading(false);}
   }
+
+  const visiblePicks=picks.filter((r:any)=>Number.isFinite(Date.parse(r.date))&&Date.parse(r.date)>clockNow)
+    .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
 
   useEffect(()=>{if(!started.current){started.current=true;void loadAndScan();}},[]);
 
@@ -143,14 +148,14 @@ export default function DailyValueBets() {
       <small className="muted" style={{display:"block"}}>Only upcoming fixtures are scanned. Markets are limited to straight home/away wins, Over/Under totals and supported Asian handicaps. Positive-EV selections are weighted by model probability, expected value and price edge, then shuffled once into a shortlist of up to 25 picks. A team can appear only once.</small>
     </div>
     <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
-      <small className="muted">{fixtures.length} fixtures found · {scanned} scanned · {picks.length} qualifying picks</small>
+      <small className="muted">{fixtures.filter(f=>Date.parse(f.date)>clockNow).length} upcoming fixtures · {scanned} scanned · {visiblePicks.length} qualifying picks</small>
       {busy&&<small className="muted">Automatic scan running</small>}
     </div>
     {progress&&<small className="muted">{progress}</small>}
     {error&&<div className="notice warn">{error}</div>}
-    {picks.length>0&&<div className="stack" style={{gap:9}}>
-      <b>Randomised best {picks.length} · weighted by value</b>
-      {picks.map((r,i)=><div key={r.key||i} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:"4px solid var(--teal)"}}>
+    {visiblePicks.length>0&&<div className="stack" style={{gap:9}}>
+      <b>Upcoming value bets · earliest kick-off first ({visiblePicks.length})</b>
+      {visiblePicks.map((r,i)=><div key={r.key||i} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:"4px solid var(--teal)"}}>
         <div className="row" style={{justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>#{i+1} · {r.competition||"Football"}</b><b>{Math.round(r.autistikRank)}/100 quality score</b></div>
         <b>{r.home} vs {r.away}</b>
         <div><b>{r.selection}</b> · {r.market}</div>
@@ -165,6 +170,7 @@ export default function DailyValueBets() {
       </div>)}
     </div>}
     {busy&&<small className="muted">Scanning fixtures. The current shortlist stays in place until the new scan is complete.</small>}
+    {!busy&&picks.length>0&&!visiblePicks.length&&<small className="muted">All scanned fixtures have kicked off. Scan again for the next upcoming fixtures.</small>}
     {false&&redPicks.length>0&&<div className="stack" style={{gap:8}}>
       <b>🔴 Red / underpriced · Top {redPicks.length}</b>
       <small className="muted">Lower model-probability selections with positive estimated value. These are higher-risk options, not part of the high-conviction Top 25.</small>
