@@ -54,8 +54,6 @@ export default function ValueBets({ endpoint }: Props) {
       const data=await post("leagueFixtures",{leagueId:Number(league.id),season:Number(league.season),leagueCode,leagueName});
       setFixtureSource({...data.providers,fixtureProvider:data.fixtureProvider,statisticsProvider:data.statisticsProvider});
       const now=Date.now();
-      const accraDay=(value:string)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
-      const today=accraDay(new Date().toISOString());
       const upcoming=(Array.isArray(data.fixtures)?data.fixtures:[])
         .filter((f:any)=>f?.home?.name&&f?.away?.name&&f?.date&&Date.parse(f.date)>=now)
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
