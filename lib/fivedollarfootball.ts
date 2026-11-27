@@ -267,6 +267,19 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       }
     }
 
+    // Asian handicap: use the latest pre-match closing quote, falling back to opening.
+    // Only half-goal lines are modelled as decisive win/loss outcomes; integer/quarter lines
+    // are deliberately omitted because they require push/half-settlement EV handling.
+    const asian = latest(odds.asian_handicap);
+    if (asian && Number.isFinite(Number(asian.line)) && Math.abs(Number(asian.line) % 1) === 0.5) {
+      const line = Number(asian.line);
+      const outcomes = [
+        { name: "Home " + (line > 0 ? "+" : "") + line, price: validPrice(asian.home) },
+        { name: "Away " + (line > 0 ? "-" : "+") + Math.abs(line), price: validPrice(asian.away) }
+      ].filter((x: any) => x.price);
+      if (outcomes.length) markets.push({ key: "asian_handicap", line, outcomes });
+    }
+
     const btts = latest(odds.btts);
     if (btts) {
       const outcomes = [
