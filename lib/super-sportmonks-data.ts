@@ -310,6 +310,9 @@ export async function getSportMonksLeagueUpcomingFixtures(leagueCode: string, le
     if (Number.isInteger(leagueId) && Number(leagueId) > 0) {
       return Number(raw?.league_id ?? raw?.league?.id) === Number(leagueId);
     }
+    // An empty league name/code means the caller wants the full upcoming
+    // fixture slate, not zero competitions.
+    if (!wanted.length) return true;
     const competition = normalize(raw?.league?.name);
     return wanted.some((name) => competition === name || competition.includes(name) || name.includes(competition));
   }).map(fixture).filter((f: any) => {
