@@ -36,8 +36,17 @@ export default function ValueBets({ endpoint }: Props) {
     try {
       const [data,matchData]=await Promise.all([post("leagues"),post("todayMatches")]);
       const list=(Array.isArray(data.leagues)?data.leagues:[]).filter((league:any)=>TOP_COMPETITION.test(String(league.name||"")));
+      const now=Date.now();
+      const seen=new Set<string>();
       const upcoming=(Array.isArray(matchData.matches)?matchData.matches:[])
-        .filter((fixture:any)=>TOP_COMPETITION.test(String(fixture.competition||""))&&fixture?.home?.name&&fixture?.away?.name&&fixture?.date&&Date.parse(fixture.date)>=Date.now())
+        .filter((fixture:any)=>{
+          const kickoff=Date.parse(String(fixture?.date||""));
+          const status=String(fixture?.status||"").toUpperCase();
+          const key=String(fixture?.id||[fixture?.home?.name,fixture?.away?.name,fixture?.date].join("|"));
+          if(!fixture?.home?.name||!fixture?.away?.name||!Number.isFinite(kickoff)||kickoff<now||
+            (status && !["SCHEDULED","TIMED"].includes(status))||!TOP_COMPETITION.test(String(fixture.competition||""))||seen.has(key)) return false;
+          seen.add(key); return true;
+        })
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setLeagues(list);
       setFixtures(upcoming);
@@ -105,8 +114,17 @@ export default function ValueBets({ endpoint }: Props) {
   async function scanSuper() {
     setBusy(true);setError("");setProgress("");setSuperRows([]);setDiagnostics([]);let all:any[]=[];
     try {
-      for(let i=0;i<fixtures.length;i++) {
-        const f=fixtures[i];setProgress("Scanning "+(i+1)+" of "+fixtures.length+" · "+f.home.name+" vs "+f.away.name);
+      const now=Date.now();
+      const eligible=fixtures.filter((f:any)=>{
+        const kickoff=Date.parse(String(f?.date||""));
+        const status=String(f?.status||"").toUpperCase();
+        return Number.isFinite(kickoff)&&kickoff>=now&&f?.home?.name&&f?.away?.name&&
+          (!status||["SCHEDULED","TIMED"].includes(status));
+      });
+      const unique=[...new Map(eligible.map((f:any)=>[String(f.id||[f.home.name,f.away.name,f.date].join("|")),f])).values()];
+      if(!unique.length){setError("No eligible upcoming fixtures are available to scan. Refresh matches and check the football-data.org schedule.");return;}
+      for(let i=0;i<unique.length;i++) {
+        const f=unique[i];setProgress("Scanning "+(i+1)+" of "+unique.length+" · "+f.home.name+" vs "+f.away.name);
         const data=await post("valueScan",{fixtures:[f]});
         all=all.concat(Array.isArray(data.rows)?data.rows:[]);
         setSuperRows(sortRows(all));
