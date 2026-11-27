@@ -54,8 +54,13 @@ export async function POST(req: Request) {
         const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
         const requested = String(b.date || today).trim();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(requested) || Number.isNaN(Date.parse(requested + "T00:00:00Z"))) return json({ error: "Choose a valid date." }, 400);
-        const matches = await apiFootballMatchesOnDate(requested);
-        return json({ date: requested, today, matches, fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "5DollarFootballAPI", fixtureCount: matches.length, retrospective: requested < today });
+        // When the scanner opens on today, include the next seven calendar days.
+        // This lets the shortlist advance to tomorrow's first kickoff without a manual date change.
+        const rangeEnd = requested === today
+          ? new Date(Date.parse(requested + "T00:00:00Z") + 6 * 24 * 60 * 60_000).toISOString().slice(0, 10)
+          : undefined;
+        const matches = await apiFootballMatchesOnDate(requested, rangeEnd);
+        return json({ date: requested, today, rangeEnd: rangeEnd || requested, matches, fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "5DollarFootballAPI", fixtureCount: matches.length, retrospective: requested < today });
       }
       case "leagueFixtures": {
         const leagueId = Number(b.leagueId), season = Number(b.season);
