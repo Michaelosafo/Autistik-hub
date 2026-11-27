@@ -34,12 +34,14 @@ export default function ValueBets({ endpoint }: Props) {
   async function refreshFixtures() {
     setLoading(true);setError("");
     try {
-      const data=await post("leagues");
+      const [data,matchData]=await Promise.all([post("leagues"),post("todayMatches")]);
       const list=(Array.isArray(data.leagues)?data.leagues:[]).filter((league:any)=>TOP_COMPETITION.test(String(league.name||"")));
+      const upcoming=(Array.isArray(matchData.matches)?matchData.matches:[])
+        .filter((fixture:any)=>TOP_COMPETITION.test(String(fixture.competition||""))&&fixture?.home?.name&&fixture?.away?.name&&fixture?.date&&Date.parse(fixture.date)>=Date.now())
+        .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setLeagues(list);
-      if(!list.length)setError(endpoint==="/api/admin/super"
-        ? "API-Football returned no leagues. Check APIFOOTBALL_KEY and your subscription coverage."
-        : "No competitions are available from the selected provider.");
+      setFixtures(upcoming);
+      if(!list.length)setError("No competitions are available from football-data.org. Check FOOTBALL_DATA_TOKEN and your plan.");
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -151,7 +153,7 @@ export default function ValueBets({ endpoint }: Props) {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · football-data.org league scanner"}</b>
+      <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · SportMonks league scanner"}</b>
         <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition and scan its fixtures.":"Top competitions only · Champions League, Europa League and leading domestic leagues."}</small>
       </div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
@@ -165,7 +167,7 @@ export default function ValueBets({ endpoint }: Props) {
         <span>API-Football fixtures &amp; statistics: {feedStatus.apiFootball?.active?"Connected":"Not connected"}</span>
         <span>5DollarFootballAPI odds: {feedStatus.fiveDollarFootball?.active?"Connected · "+String(feedStatus.fiveDollarFootball.plan||"plan unknown"):"Not connected"}</span>
         <small>API-Football supplies fixtures and team statistics; 5DollarFootballAPI supplies bookmaker prices.</small>
-      </>:<span>5DollarFootballAPI odds: {feedStatus.active?"Connected · "+String(feedStatus.plan||"plan unknown"):"Not connected"}</span><small>football-data.org supplies fixtures and statistics; 5DollarFootballAPI supplies bookmaker prices.</small>}
+      </>:<><span>5DollarFootballAPI odds: {feedStatus.active?"Connected · "+String(feedStatus.plan||"plan unknown"):"Not connected"}</span><small>football-data.org supplies fixtures and statistics; 5DollarFootballAPI supplies bookmaker prices.</small></>}
       {feedStatus.error&&<small>{feedStatus.error}</small>}
     </div>}
     {error&&<div className="notice warn">{error}</div>}
