@@ -20,7 +20,6 @@ export async function POST(req: Request) {
       case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
       case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
       case "leagueFixtures": {
-        const leagueId = Number(b.leagueId);
         const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
         return json(result);
       }
