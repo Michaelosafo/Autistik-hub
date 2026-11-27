@@ -165,7 +165,7 @@ export async function POST(req: Request) {
                   }
                   const price = Number(outcome.price), implied = 100 / price, noVig = implied / overround * 100;
                   // A draw is not a straight-win selection.
-                  if (market.key === "h2h" && !modelName) continue;
+                  if (market.key === "h2h" && !["Home win (1)", "Away win (2)"].includes(modelName)) continue;
                   const probability = Number(pick?.p);
                   const supported = !!modelName && Number.isFinite(probability) && probability > 0;
                   const ev = supported ? (probability / 100) * price * 100 - 100 : null;
