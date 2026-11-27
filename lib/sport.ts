@@ -35,13 +35,20 @@ async function api(path: string, ttl = TTL_MS): Promise<any[]> {
   return out;
 }
 
-export async function matchesOnDate(inputDate: string) {
+export async function matchesOnDate(inputDate: string, inputEndDate?: string) {
   const raw = String(inputDate || "").trim();
   const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   const date = us ? us[3] + "-" + us[1].padStart(2, "0") + "-" + us[2].padStart(2, "0") : raw;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z"))) throw new Error("Invalid match date. Please choose a date again.");
+  const endDate = String(inputEndDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date + "T00:00:00Z")) ||
+    (endDate && (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < date || Number.isNaN(Date.parse(endDate + "T00:00:00Z"))))) {
+    throw new Error("Invalid match date. Please choose a date again.");
+  }
   if (!sportReady()) throw new Error("APIFOOTBALL_KEY is missing in Vercel Production.");
-  const rows = await api("/fixtures?date=" + encodeURIComponent(date) + "&timezone=Africa%2FAccra", 5 * 60_000);
+  const fixturePath = endDate
+    ? "/fixtures?from=" + encodeURIComponent(date) + "&to=" + encodeURIComponent(endDate) + "&timezone=Africa%2FAccra"
+    : "/fixtures?date=" + encodeURIComponent(date) + "&timezone=Africa%2FAccra";
+  const rows = await api(fixturePath, 5 * 60_000);
   const matches = rows.map((f: any) => ({
     id: Number(f.fixture?.id),
     date: f.fixture?.date,
@@ -55,8 +62,8 @@ export async function matchesOnDate(inputDate: string) {
   })).filter((f: any) => f.id > 0 && f.home.id > 0 && f.away.id > 0 && f.date);
   const importedAt = new Date().toISOString();
   const { error } = await sb().from("sport_cache").upsert({
-    key: "api-football:matches:" + date,
-    data: { provider: "API-Football", date, importedAt, count: matches.length, matches },
+    key: "api-football:matches:" + date + (endDate ? ".." + endDate : ""),
+    data: { provider: "API-Football", date, endDate: endDate || null, importedAt, count: matches.length, matches },
     at: importedAt
   });
   if (error) throw new Error("API-Football fixtures fetched but database cache failed: " + error.message);
