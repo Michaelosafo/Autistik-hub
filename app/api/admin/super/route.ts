@@ -35,7 +35,7 @@ export async function POST(req: Request) {
           // Keep the odds feed independent from team-history coverage. A missing
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
-            analyse(homeId, awayId, date),
+            analyse(homeId, awayId),
             getFiveDollarFootballMatchOdds(home, away, String(f.date))
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
@@ -138,7 +138,7 @@ export async function POST(req: Request) {
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
         if (!h || !a || h === a) return json({ error: "Pick two different teams." }, 400);
-        const r = await analyse(h, a, typeof b.matchDate === "string" ? b.matchDate : undefined);
+        const r = await analyse(h, a);
         const m = r.model;
         const pick = m.home >= m.away && m.home >= m.draw ? "Home" : m.away >= m.draw ? "Away" : "Draw";
         const predictionId = await savePrediction({ home: String(b.homeName || h), away: String(b.awayName || a), league: r.leagues.home.name, kickoff: r.actual?.date || (b.matchDate ? new Date(b.matchDate + "T12:00:00Z").toISOString() : null), xg_home: m.xg.home, xg_away: m.xg.away, p_home: m.home, p_draw: m.draw, p_away: m.away, p_btts: m.btts, p_o25: m.over["2.5"], pick, note: JSON.stringify({ matchDate: b.matchDate || null, historical: r.historical, actual: r.actual }) }).catch(() => null);
