@@ -41,7 +41,7 @@ export default function ValueBets({ endpoint }: Props) {
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setLeagues(list);
       setFixtures(upcoming);
-      if(!list.length)setError("SportMonks returned no subscribed top competitions. Check SPORTMONKS_API_TOKEN and your plan coverage.");
+      if(!list.length)setError("football-data.org returned no subscribed top competitions. Check FOOTBALL_DATA_TOKEN and your plan coverage.");
     } catch(e) { setError((e as Error).message); }
     finally { setLoading(false); }
   }
@@ -151,7 +151,7 @@ export default function ValueBets({ endpoint }: Props) {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · SportMonks league scanner"}</b>
+      <div><b>📈 {endpoint==="/api/admin/sport"?"SPORT · League scanner":"SUPER · football-data.org league scanner"}</b>
         <small className="muted" style={{display:"block"}}>{endpoint==="/api/admin/sport"?"Choose a competition and scan its fixtures.":"Top competitions only · Champions League, Europa League and leading domestic leagues."}</small>
       </div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
