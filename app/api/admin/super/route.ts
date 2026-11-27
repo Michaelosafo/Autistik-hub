@@ -1,5 +1,5 @@
 import { json } from "@/lib/ai";
-import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
+import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { adminState } from "@/lib/admin";
 import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
 
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   try {
     switch (b.action) {
       case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
-      case "oddsStatus": return json(await getOddsPapiStatus());
+      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
       case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
       case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
             analyse(homeId, awayId, date),
-            getOddsPapiMatchOdds(home, away, date)
+            getFiveDollarFootballMatchOdds(home, away, String(f.date))
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
           const odds = oddsResult.status === "fulfilled" ? oddsResult.value : null;
@@ -50,7 +50,8 @@ export async function POST(req: Request) {
             markets: [...new Set((odds?.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))],
             providers: odds?.diagnostics?.providers || null,
             analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null,
-            oddsError: oddsResult.status === "rejected" ? (oddsResult.reason instanceof Error ? oddsResult.reason.message : String(oddsResult.reason)) : null
+            oddsError: oddsResult.status === "rejected" ? (oddsResult.reason instanceof Error ? oddsResult.reason.message : String(oddsResult.reason)) : null,
+            oddsProvider: "5DollarFootballAPI"
           };
           if (!odds) {
             scanDiagnostics.push(diagnostic);
@@ -132,7 +133,7 @@ export async function POST(req: Request) {
       case "odds": {
         const home = String(b.homeName || "").trim(), away = String(b.awayName || "").trim();
         if (!home || !away || home.length > 100 || away.length > 100) return json({ error: "Choose both teams first." }, 400);
-        return json(await getOddsPapiMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString().slice(0,10)));
+        return json(await getFiveDollarFootballMatchOdds(home, away, typeof b.matchDate === "string" ? b.matchDate : new Date().toISOString()));
       }
       case "analyse": {
         const h = Number(b.home), a = Number(b.away);
