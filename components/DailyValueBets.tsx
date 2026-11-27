@@ -104,7 +104,7 @@ export default function DailyValueBets() {
       setPicks(randomised);
       setRedPicks([]);
       setDiagnostics(allDiagnostics);
-      if(!randomised.length)setError("The selected date was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
+      if(!randomised.length)setError("The upcoming fixture window was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
     } catch(e) { setError(e instanceof Error?e.message:String(e)); }
     finally {setBusy(false);setProgress("");}
   }
@@ -144,7 +144,7 @@ export default function DailyValueBets() {
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><input aria-label="Scan date" type="date" min={todayDate||undefined} value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/><button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>Scan selected date</button></div>
     </div>
     <div className="notice">
-      <b>Best value selections for {scanDate||"selected date"} · Ghana time</b>
+      <b>Upcoming value selections from {scanDate||"today"} · next 7 days · Ghana time</b>
       <small className="muted" style={{display:"block"}}>Only upcoming fixtures are scanned. Markets are limited to straight home/away wins, Over/Under totals and supported Asian handicaps. Positive-EV selections are weighted by model probability, expected value and price edge, then shuffled once into a shortlist of up to 25 picks. A team can appear only once.</small>
     </div>
     <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
@@ -166,7 +166,7 @@ export default function DailyValueBets() {
           <span>EV <b>+{Number(r.ev).toFixed(1)}%</b></span>
           <span>Edge <b>{Number(r.edge).toFixed(1)}pp</b></span>
         </div>
-        <small className="muted">Best available Ghana bookmaker price: {r.bookmaker} · kick-off {r.date?new Date(r.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"not supplied"}</small>
+        <small className="muted">Best available Ghana bookmaker price: {r.bookmaker} · kick-off {r.date?new Date(r.date).toLocaleString("en-GB",{timeZone:"Africa/Accra",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"not supplied"} Ghana time</small>
       </div>)}
     </div>}
     {busy&&<small className="muted">Scanning fixtures. The current shortlist stays in place until the new scan is complete.</small>}
