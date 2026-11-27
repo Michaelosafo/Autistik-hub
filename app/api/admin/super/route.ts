@@ -27,7 +27,14 @@ export async function POST(req: Request) {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
+        const now = Date.now();
+        const seenFixtures = new Set<string>();
         for (const f of fixtures) {
+          const kickoff = Date.parse(String(f?.date || ""));
+          const status = String(f?.status || "").toUpperCase();
+          const fixtureKey = String(f?.id || [f?.home?.name, f?.away?.name, f?.date].join("|"));
+          if (!Number.isFinite(kickoff) || kickoff < now || (status && !["SCHEDULED", "TIMED"].includes(status)) || seenFixtures.has(fixtureKey)) continue;
+          seenFixtures.add(fixtureKey);
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
           if (!homeId || !awayId || homeId === awayId || !home || !away || !f?.date) continue;
