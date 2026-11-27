@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { adminState } from "@/lib/admin";
-import { analyse, getSportMonksLeagueCatalogue, getSportMonksLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
+import { analyse, getSportMonksLeagueCatalogue, getSportMonksLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices } from "@/lib/super-sportmonks-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
