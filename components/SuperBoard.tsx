@@ -305,7 +305,7 @@ export default function SportBoard() {
 
       <section className="card stack">
         <b>Today's matches · all subscribed leagues</b>
-        <small className="muted">Fixtures returned by football-data.org across its available competitions. Select any match to load its prediction and automatic OddsPapi bookmaker comparison.</small>
+        <small className="muted">Fixtures returned by football-data.org across its available competitions. Select any match to load its prediction and automatic 5DollarFootballAPI bookmaker comparison.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh today's matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading today's fixtures…</small>}
@@ -356,13 +356,13 @@ export default function SportBoard() {
 
             )}
 
-      <section className="card stack">\n        <b>🇬🇭 Bookmaker odds · OddsPapi</b>
-        <small className="muted">All bookmaker markets returned by OddsPapi are displayed below, including 1X2, double chance, totals and BTTS where supplied. The value check below separately compares supported outcomes with the model.</small>
-        <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching OddsPapi bookmaker odds…" : "Fetch bookmaker odds"}</button>
+      <section className="card stack">\n        <b>🇬🇭 Bookmaker odds · 5DollarFootballAPI</b>
+        <small className="muted">All bookmaker markets returned by 5DollarFootballAPI are displayed below, including 1X2, double chance, totals and BTTS where supplied. The value check below separately compares supported outcomes with the model.</small>
+        <button type="button" className="btn primary" disabled={!home || !away || oddsBusy} onClick={loadGhanaOdds}>{oddsBusy ? "Fetching 5DollarFootballAPI bookmaker odds…" : "Fetch bookmaker odds"}</button>
         {oddsError && <div className="notice warn">{oddsError}</div>}
         {ghanaOdds && <>
           <small className="muted">Region: {ghanaOdds.region} · Feed processed: {ghanaOdds.processedAt ? new Date(ghanaOdds.processedAt).toLocaleString() : "not supplied"} · Events scanned: {ghanaOdds.count}{ghanaOdds.historical ? " · Historical odds snapshot" : " · Live odds"}</small>
-          {ghanaOdds.matched.length === 0 ? <div className="notice warn">OddsPapi returned no pre-match odds for this fixture. Availability depends on your subscription, bookmaker coverage and the markets offered for this match. No prices are estimated or invented.</div> :
+          {ghanaOdds.matched.length === 0 ? <div className="notice warn">5DollarFootballAPI returned no pre-match odds for this fixture. Availability depends on your subscription, bookmaker coverage and the markets offered for this match. No prices are estimated or invented.</div> :
             ghanaOdds.matched.map((event: any) => <div key={event.id} className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
               <b>{event.home_team} vs {event.away_team}</b>
               <small className="muted">{event.sport_title || "Football"} · Kick-off {new Date(event.commence_time).toLocaleString()}</small>
