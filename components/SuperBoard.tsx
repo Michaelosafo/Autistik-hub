@@ -301,7 +301,7 @@ export default function SportBoard() {
         <p className="muted">Pick the home team and the away team. SUPER uses SportMonks statistics to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       <ValueBets endpoint="/api/admin/super" />
-      {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel Production, then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
         <b>Upcoming matches · all subscribed leagues</b>
