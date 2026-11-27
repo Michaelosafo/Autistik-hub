@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getOddsPapiMatchOdds, getOddsPapiStatus } from "@/lib/oddspapi";
 import { adminState } from "@/lib/admin";
-import { analyse, getSportMonksLeagueCatalogue, getSportMonksLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/super-sportmonks-data";
+import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,14 +14,14 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: superReady() });
+      case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
       case "oddsStatus": return json(await getOddsPapiStatus());
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "SportMonks" }); }
-      case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue(), provider: "SportMonks" });
+      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
+      case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
       case "leagueFixtures": {
         const leagueId = Number(b.leagueId);
-        const result = await getSportMonksLeagueUpcomingFixtures(String(b.leagueCode || ""), String(b.leagueName || ""), Number.isInteger(leagueId) && leagueId > 0 ? leagueId : undefined);
+        const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
         return json(result);
       }
       case "valueScan": {
