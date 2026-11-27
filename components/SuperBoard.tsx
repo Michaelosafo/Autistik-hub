@@ -118,7 +118,7 @@ export default function SportBoard() {
     try {
       const d = await api<{ matches: any[] }>("dateMatches", { date: matchDate });
       setDateMatches(d.matches || []);
-      if (!(d.matches || []).length) setDateMatchesError("SportMonks returned no fixtures for this date.");
+      if (!(d.matches || []).length) setDateMatchesError("football-data.org returned no fixtures for this date.");
     } catch (e) { setDateMatchesError((e as Error).message); }
     finally { setDateMatchesBusy(false); }
   }
@@ -298,18 +298,18 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SUPER</div>
         <h1>⚽ Super board</h1>
-        <p className="muted">Pick the home team and the away team. SUPER uses SportMonks statistics to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
+        <p className="muted">Pick the home team and the away team. SUPER uses football-data.org statistics to compare recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       <ValueBets endpoint="/api/admin/super" />
-      {ready === false && <div className="notice warn">Add <code>SPORTMONKS_API_TOKEN</code> in Vercel Production, then redeploy.</div>}
+      {ready === false && <div className="notice warn">Add <code>FOOTBALL_DATA_TOKEN</code> in Vercel Production, then redeploy.</div>}
 
       <section className="card stack">
         <b>Upcoming matches · all subscribed leagues</b>
-        <small className="muted">Fixtures returned by SportMonks across its available competitions. Select any match to load its prediction and automatic 5DollarFootballAPI bookmaker comparison.</small>
+        <small className="muted">Fixtures returned by football-data.org across its available competitions. Select any match to load its prediction and automatic 5DollarFootballAPI bookmaker comparison.</small>
         <button type="button" className="btn small ghost" onClick={loadTodayMatches} disabled={todayBusy}>{todayBusy ? "Refreshing today's fixtures…" : "Refresh upcoming matches"}</button>
         {todayError && <div className="notice warn">{todayError}</div>}
         {todayBusy && todayMatches.length === 0 && <small className="muted">Loading upcoming fixtures…</small>}
-        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No upcoming fixtures returned by SportMonks in the next 30 days. Check SPORTMONKS_API_TOKEN and your competition coverage.</small>}
+        {!todayBusy && !todayError && todayMatches.length === 0 && <small className="muted">No upcoming fixtures returned by football-data.org in the next 30 days. Check FOOTBALL_DATA_TOKEN and your competition coverage.</small>}
         <div className="stack" style={{ gap: 0, marginTop: 8 }}>
           {todayMatches.map((f: any) => <button key={f.id} type="button" onClick={() => chooseFixture(f)} disabled={busy}
             style={{ display: "grid", gridTemplateColumns: "58px minmax(0,1fr) 36px", alignItems: "center", gap: 10, width: "100%", padding: "12px 8px", textAlign: "left", border: 0, borderBottom: "1px solid var(--line)", background: "transparent", color: "inherit", cursor: "pointer" }}>
