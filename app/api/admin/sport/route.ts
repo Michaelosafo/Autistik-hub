@@ -83,6 +83,15 @@ export async function POST(req: Request) {
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
           const fixtureId = Number(f?.id);
           if (!home || !away || !Number.isInteger(fixtureId) || fixtureId <= 0 || !f?.date) return;
+          const kickoff = Date.parse(String(f.date));
+          const status = String(f?.status || "").trim().toUpperCase();
+          const upcomingStatus = !status || ["NS", "TBD", "SCHEDULED", "TIMED", "NOT STARTED", "TIME TO BE DEFINED"].includes(status);
+          // Enforce pre-match eligibility on the server too: stale clients or cached
+          // fixtures must never generate a value bet after kickoff.
+          if (!Number.isFinite(kickoff) || kickoff <= Date.now() || !upcomingStatus) {
+            diagnostics.push({ fixture: home + " vs " + away, error: "Skipped: fixture has started, finished, or is not scheduled." });
+            return;
+          }
           try {
             const date = new Date(String(f.date)).toISOString().slice(0, 10);
             const [analysis, odds] = await Promise.all([
@@ -115,6 +124,8 @@ export async function POST(req: Request) {
               const ghanaBook = ghanaBookmaker(book.title || book.key);
               if (!ghanaBook) continue;
               for (const market of (book.markets || [])) {
+                // SPORT only publishes straight home/away wins, totals and supported Asian handicap markets.
+                if (!["h2h", "totals", "asian_handicap"].includes(String(market.key))) continue;
                 if (!Array.isArray(market.outcomes)) continue;
                 const valid = market.outcomes.filter((o: any) => Number(o.price) > 1 && Number.isFinite(Number(o.price)));
                 if (valid.length < 2) continue;
@@ -129,6 +140,15 @@ export async function POST(req: Request) {
                   else if (market.key === "totals") {
                     const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
                     if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
+                  } else if (market.key === "asian_handicap") {
+                    const m = label.match(/^(home|away)\s+([+-]\d+(?:\.5)?)$/i);
+                    if (m && Math.abs(Number(m[2]) % 1) === 0.5) {
+                      const side = m[1].toLowerCase() === "home" ? "Home" : "Away";
+                      const handicap = Number(m[2]);
+                      modelName = handicap < 0
+                        ? side + " " + handicap + " handicap (win by " + (Math.abs(handicap) + 0.5) + "+)"
+                        : side + " +" + handicap + " handicap (lose by " + (handicap - 0.5) + " at most)";
+                    }
                   }
                   let pick = markets.find((x: any) => norm(x.name) === norm(modelName));
                   if (market.key === "totals") {
@@ -144,8 +164,10 @@ export async function POST(req: Request) {
                     if (probability > 0) pick = { name: modelName, p: probability };
                   }
                   const price = Number(outcome.price), implied = 100 / price, noVig = implied / overround * 100;
+                  // A draw is not a straight-win selection.
+                  if (market.key === "h2h" && !modelName) continue;
                   const probability = Number(pick?.p);
-                  const supported = Number.isFinite(probability) && probability > 0;
+                  const supported = !!modelName && Number.isFinite(probability) && probability > 0;
                   const ev = supported ? (probability / 100) * price * 100 - 100 : null;
                   mapped.push({
                     key: String(fixtureId)+market.key+label+String(book.key),
