@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { adminState } from "@/lib/admin";
-import { analyse, getSportMonksLeagueCatalogue, getSportMonksLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, superReady, teamFixtureChoices } from "@/lib/super-sportmonks-data";
+import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,13 +14,13 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: superReady(), provider: "SportMonks" });
-      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "SportMonks", statisticsProvider: "SportMonks", oddsProvider: "5DollarFootballAPI" });
+      case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
+      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "football-data.org", statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const result = await getSportMonksLeagueUpcomingFixtures("", ""); const matches = Array.isArray(result.fixtures) ? result.fixtures : []; return json({ matches, fixtureProvider: "SportMonks", windowDays: 30 }); }
-      case "leagues": return json({ leagues: await getSportMonksLeagueCatalogue(), provider: "SportMonks" });
+      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
+      case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
       case "leagueFixtures": {
-        const result = await getSportMonksLeagueUpcomingFixtures(String(b.leagueCode || ""), String(b.leagueName || ""), Number(b.leagueId) || undefined);
+        const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
         return json(result);
       }
       case "valueScan": {
@@ -124,7 +124,7 @@ export async function POST(req: Request) {
         }
         return json({ rows, diagnostics: scanDiagnostics });
       }
-      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")), fixtureProvider: "SportMonks" });
+      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")), fixtureProvider: "football-data.org" });
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
