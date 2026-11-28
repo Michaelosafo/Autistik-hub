@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { adminState } from "@/lib/admin";
-import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
+import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches, saveSuperSnapshot, settleSuperSnapshots, getSuperOddsPerformance } from "@/lib/sport-football-data";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -23,8 +23,13 @@ export async function POST(req: Request) {
         const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
         return json(result);
       }
+      case "superPerformance": {
+        const settled = await settleSuperSnapshots(8);
+        return json({ settled, performance: await getSuperOddsPerformance() });
+      }
       case "valueScan": {
         const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
+        const settled = await settleSuperSnapshots(4).catch(() => ({ settled: 0 }));
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
         const now = Date.now();
@@ -107,7 +112,7 @@ export async function POST(req: Request) {
                 const noVig = implied / overround * 100;
                 const marketTitle = market.title || (market.key === "h2h" ? "Straight win" : market.key === "totals" ? "Goals · Over/Under" : market.key === "asian_handicap" ? "Asian handicap" : String(market.key).replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
                 if (!modelPick || !(Number(modelPick.p) > 0)) {
-                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false, modelError: diagnostic.analysisError || "No usable Autistik probability for this selection." });
+                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, openingOdds: outcome.openingPrice ?? null, closingOdds: outcome.closingPrice ?? null, oddsMovementPct: outcome.movementPct ?? null, oddsMovement: outcome.movement ?? "unavailable", bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false, modelError: diagnostic.analysisError || "No usable Autistik probability for this selection." });
                   continue;
                 }
                 const probability = Number(modelPick.p);
@@ -126,7 +131,7 @@ export async function POST(req: Request) {
                   expectedGoals: analysis?.model?.xg || null,
                   verdict: analysis?.verdict || []
                 };
-                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, modelProvider: "Autistik Poisson · football-data.org stats", modelContext, priceAssessment: ev > 0 ? "UNDERPRICED · VALUE" : ev < 0 ? "OVERPRICED · AVOID" : "FAIR PRICE" });
+                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, openingOdds: outcome.openingPrice ?? null, closingOdds: outcome.closingPrice ?? null, oddsMovementPct: outcome.movementPct ?? null, oddsMovement: outcome.movement ?? "unavailable", bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, modelProvider: "Autistik Poisson · football-data.org stats", modelContext, priceAssessment: ev > 0 ? "UNDERPRICED · VALUE" : ev < 0 ? "OVERPRICED · AVOID" : "FAIR PRICE" });
               }
             }
           }
@@ -136,10 +141,26 @@ export async function POST(req: Request) {
             const old = bestBySelection.get(k);
             if (!old || row.odds > old.odds) bestBySelection.set(k,row);
           }
-          rows.push(...bestBySelection.values());
+          const fixtureRows = [...bestBySelection.values()];
+          rows.push(...fixtureRows);
+          if (analysis && fixtureRows.length) {
+            await saveSuperSnapshot({
+              homeId, awayId, home, away,
+              league: String(f?.competition?.name || "Football"),
+              kickoff: String(f.date), analysis,
+              selections: fixtureRows.map((r: any) => ({
+                market: r.market, selection: r.selection, odds: r.odds,
+                bookmaker: r.bookmaker, probability: r.probability,
+                fairOdds: r.fairOdds, implied: r.implied, ev: r.ev,
+                openingOdds: r.openingOdds, closingOdds: r.closingOdds,
+                oddsMovementPct: r.oddsMovementPct, oddsMovement: r.oddsMovement
+              }))
+            }).catch((error: any) => { diagnostic.historySaveError = error instanceof Error ? error.message : String(error); });
+          }
           scanDiagnostics.push(diagnostic);
         }
-        return json({ rows, diagnostics: scanDiagnostics });
+        const performance = await getSuperOddsPerformance().catch(() => []);
+        return json({ rows, diagnostics: scanDiagnostics, settled, performance });
       }
       case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")), fixtureProvider: "football-data.org" });
       case "teamFixtures": {
