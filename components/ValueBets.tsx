@@ -386,11 +386,14 @@ export default function ValueBets({ endpoint }: Props) {
         {multiCounterGroups.map((group:any,i:number)=><CounterMatchCard key={"counter-"+group.key} group={group} index={i}/> )}
         {primaryValueRows.map((r:any,i:number)=><SelectionCard key={"value-"+(r.key||i)} row={r} index={i+multiCounterGroups.length}/>)}
         {!superValueRows.length&&<small className="muted">No positive-EV selections with a supported model probability yet.</small>}
-        <b>Overpriced odds · avoid ({superOverpricedRows.length})</b>
-        <small className="muted">The bookmaker's price is shorter than Autistik's fair price. These are negative-EV selections, not recommended value bets.</small>
-        {superOverpricedRows.length?superOverpricedRows.slice(0,15).map((r:any,i:number)=><SelectionCard key={"overpriced-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No overpriced model-supported selections in this scan.</small>}
-        <b>Highest estimated chance ({superProbabilityRows.length})</b>
-        {superProbabilityRows.slice(0,10).map((r:any,i:number)=><SelectionCard key={"chance-"+(r.key||i)} row={r} index={i}/>)}
+        <details><summary>Other overpriced selections · avoid ({superOverpricedRows.length})</summary>
+          <small className="muted">Negative-EV selections are kept here for reference, so they do not repeat the same matches in the main value list.</small>
+          {superOverpricedRows.length?superOverpricedRows.map((r:any,i:number)=><SelectionCard key={"overpriced-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No overpriced model-supported selections in this scan.</small>}
+        </details>
+        <details><summary>Highest estimated chances · all selections ({superProbabilityRows.length})</summary>
+          <small className="muted">Expanded only when you want to compare every model-supported outcome.</small>
+          {superProbabilityRows.map((r:any,i:number)=><SelectionCard key={"chance-"+(r.key||i)} row={r} index={i}/>)}
+        </details>
         <details><summary>All bookmaker selections and model coverage ({superRows.length})</summary>{sortRows(superRows).map((r:any,i:number)=><SelectionCard key={"all-"+(r.key||i)} row={r} index={i}/>)}</details>
       </div>}
       {diagnostics.length>0&&<details><summary>Scan diagnostics ({diagnostics.length})</summary><div className="stack" style={{gap:8,marginTop:8}}>{diagnostics.map((d:any,i:number)=><div key={i} className="notice" style={{fontSize:12,overflowWrap:"anywhere"}}><b>{d.fixture}</b><span>Odds provider: {d.oddsProvider||"5DollarFootballAPI"} · events checked: {d.oddsEvents??d.eventsReturned??0} · matched events: {d.matchedEvents??d.matched??0}</span><span>Bookmakers: {(d.bookmakers||[]).join(", ")||"None returned"} · markets: {(d.markets||[]).join(", ")||"None returned"}</span>{d.oddsError&&<span style={{color:"var(--danger, #b42318)"}}>Odds error: {d.oddsError}</span>}{d.analysisError&&<span style={{color:"var(--danger, #b42318)"}}>Model error: {d.analysisError}</span>}{d.feedExamples?.length>0&&<span>Provider fixture examples: {d.feedExamples.join(" · ")}</span>}{d.providers&&<span>Provider diagnostics: {JSON.stringify(d.providers)}</span>}</div>)}</div></details>}
