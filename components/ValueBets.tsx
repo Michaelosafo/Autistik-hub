@@ -53,7 +53,8 @@ export default function ValueBets({ endpoint }: Props) {
       setLeagues(list);
       setFixtures(upcoming);
       if(!list.length)setError("football-data.org returned no subscribed top competitions. Check FOOTBALL_DATA_TOKEN and your plan coverage.");
-    } catch(e) { setError((e as Error).message); }
+      return upcoming.slice(0,20);
+    } catch(e) { setError((e as Error).message); return []; }
     finally { setLoading(false); }
   }
   async function openLeague(league:any) {
@@ -119,11 +120,11 @@ export default function ValueBets({ endpoint }: Props) {
     } catch(e) { setError((e as Error).message); }
     finally { setProgress("");setBusy(false); }
   }
-  async function scanSuper() {
+  async function scanSuper(sourceFixtures:any[]=fixtures) {
     setBusy(true);setError("");setProgress("");setSuperRows([]);setDiagnostics([]);let all:any[]=[];
     try {
       const now=Date.now();
-      const eligible=fixtures.filter((f:any)=>{
+      const eligible=sourceFixtures.filter((f:any)=>{
         const kickoff=Date.parse(String(f?.date||""));
         const status=String(f?.status||"").toUpperCase();
         return Number.isFinite(kickoff)&&kickoff>=now&&f?.home?.name&&f?.away?.name&&
@@ -142,7 +143,24 @@ export default function ValueBets({ endpoint }: Props) {
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
   }
-  useEffect(()=>{if(endpoint!=="/api/admin/sport"&&!started.current){started.current=true;void refreshFixtures();}},[endpoint]);
+  useEffect(()=>{
+    if(endpoint==="/api/admin/sport"||started.current)return;
+    started.current=true;
+    let active=true;
+    const refreshAndScan=async()=>{
+      const fresh=await refreshFixtures();
+      if(!active)return;
+      if(fresh.length) await scanSuper(fresh);
+      else { setSuperRows([]); setDiagnostics([]); }
+    };
+    void refreshAndScan();
+    // Refresh the live fixture/odds board every four hours in the app.
+    // This is client-side polling, not a system cron or server scheduler.
+    const interval=window.setInterval(()=>{void refreshAndScan();},4*60*60*1000);
+    const onVisible=()=>{if(document.visibilityState==="visible")void refreshAndScan();};
+    document.addEventListener("visibilitychange",onVisible);
+    return ()=>{active=false;window.clearInterval(interval);document.removeEventListener("visibilitychange",onVisible);};
+  },[endpoint]);
   if(endpoint==="/api/admin/sport") return <DailyValueBets />;
 
   const countries=Object.entries(leagues.reduce((acc:any,league:any)=>{
