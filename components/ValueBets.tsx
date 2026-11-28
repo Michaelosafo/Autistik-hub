@@ -207,7 +207,45 @@ export default function ValueBets({ endpoint }: Props) {
   const superValueRows=superSupported.filter((r:any)=>Number(r.ev)>0).sort((a:any,b:any)=>Number(b.ev)-Number(a.ev));
   const superOverpricedRows=superSupported.filter((r:any)=>Number(r.ev)<0).sort((a:any,b:any)=>Number(a.ev)-Number(b.ev));
   const superProbabilityRows=[...superSupported].sort((a:any,b:any)=>Number(b.probability)-Number(a.probability));
+  // Build one counter-market group per fixture. Multiple bookmaker/market
+  // rows can point to the same model counter-selection, so retain the
+  // strongest disagreement for each distinct counter outcome.
+  const counterGroups=new Map<string,{home:string;away:string;date:string;items:any[]}>();
+  for(const row of superValueRows) {
+    const analysis=row.counterMarketAnalysis;
+    if(!analysis||analysis.direction!=="bookmaker_longer"||!analysis.counterSelection||
+      !(Number(analysis.counterProbability)>0)||!Number.isFinite(Number(analysis.gapPoints))) continue;
+    const fixtureKey=[row.home,row.away,String(row.date||"").slice(0,16)].join("|");
+    const group=counterGroups.get(fixtureKey)||{home:String(row.home||""),away:String(row.away||""),date:String(row.date||""),items:[]};
+    const item={selection:String(analysis.counterSelection),probability:Number(analysis.counterProbability),
+      fairOdds:Number(analysis.counterFairOdds),gapPoints:Number(analysis.gapPoints),
+      sourceSelection:String(row.selection||""),bookmaker:String(row.bookmaker||"Bookmaker"),
+      bookmakerOdds:Number(row.odds),market:String(row.market||"")};
+    const previous=group.items.find((x:any)=>x.selection===item.selection);
+    if(!previous)group.items.push(item);
+    else if(item.gapPoints>previous.gapPoints)group.items[group.items.indexOf(previous)]=item;
+    counterGroups.set(fixtureKey,group);
+  }
+  const multiCounterGroups=[...counterGroups.entries()]
+    .map(([key,group])=>({key,...group,items:group.items.sort((a:any,b:any)=>b.gapPoints-a.gapPoints)}))
+    .filter((group:any)=>group.items.length>1);
+  const groupedCounterFixtureKeys=new Set(multiCounterGroups.map((group:any)=>group.key));
+  const primaryValueRows=superValueRows.filter((row:any)=>!groupedCounterFixtureKeys.has([row.home,row.away,String(row.date||"").slice(0,16)].join("|")));
   const oddsBand=(odds:number)=>odds<1.5?"1.01–1.49":odds<2?"1.50–1.99":odds<2.5?"2.00–2.49":odds<3.5?"2.50–3.49":"3.50+";
+
+  function CounterMatchCard({group,index}:{group:any;index:number}) {
+    return <div className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:10,padding:13,minWidth:0,overflowWrap:"break-word",borderLeft:"4px solid var(--warning, #d69b28)"}}>
+      <b>{index+1}. {group.home} vs {group.away}</b>
+      <small className="muted">Multiple bookmaker disagreements detected · {group.items.length} distinct counter-outcomes</small>
+      {group.items.map((item:any,i:number)=><div key={item.selection} className="notice stack" style={{fontSize:13}}>
+        <b>{i+1}{i===0?"st":i===1?"nd":i===2?"rd":"th"} counter-outcome: {item.selection}</b>
+        <span>Disagreement: <b>{item.gapPoints.toFixed(1)} percentage points</b></span>
+        <span>Autistik estimated chance: <b>{item.probability.toFixed(1)}%</b> · fair odds: <b>{Number.isFinite(item.fairOdds)?item.fairOdds.toFixed(2):"—"}</b></span>
+        <small className="muted">Signal from {item.sourceSelection} · {item.market} · {item.bookmaker} (odds {Number.isFinite(item.bookmakerOdds)?item.bookmakerOdds.toFixed(2):"—"})</small>
+      </div>)}
+      <small className="muted">Ranked by largest bookmaker-versus-Autistik probability disagreement. These are alternative outcomes to review, not guaranteed picks.</small>
+    </div>;
+  }
 
   function SelectionCard({row,index}:{row:any;index:number}) {
     const supported=!!row.modelSupported;
@@ -345,7 +383,9 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack">
         <b>Best underpriced odds · positive expected value ({superValueRows.length})</b>
         <small className="muted">These are the prices where Autistik estimates a higher chance than the bookmaker's odds imply. Highest estimated EV first.</small>
-        {superValueRows.length?superValueRows.map((r:any,i:number)=><SelectionCard key={"value-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No positive-EV selections with a supported model probability yet.</small>}
+        {multiCounterGroups.map((group:any,i:number)=><CounterMatchCard key={"counter-"+group.key} group={group} index={i}/> )}
+        {primaryValueRows.map((r:any,i:number)=><SelectionCard key={"value-"+(r.key||i)} row={r} index={i+multiCounterGroups.length}/>)}
+        {!superValueRows.length&&<small className="muted">No positive-EV selections with a supported model probability yet.</small>}
         <b>Overpriced odds · avoid ({superOverpricedRows.length})</b>
         <small className="muted">The bookmaker's price is shorter than Autistik's fair price. These are negative-EV selections, not recommended value bets.</small>
         {superOverpricedRows.length?superOverpricedRows.slice(0,15).map((r:any,i:number)=><SelectionCard key={"overpriced-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No overpriced model-supported selections in this scan.</small>}
