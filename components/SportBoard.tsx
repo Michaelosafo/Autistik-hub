@@ -594,8 +594,9 @@ export default function SportBoard() {
                     <small>Counter-model chance: <b>{Number.isFinite(row.counterProbability) ? row.counterProbability.toFixed(1) + "%" : "—"}</b> · Fair odds: <b>{Number.isFinite(row.counterFairOdds) ? row.counterFairOdds.toFixed(2) : "—"}</b></small>
                     <small>Disagreement: <b>{row.gapPoints.toFixed(1)} percentage points</b> · Compared bookmaker pick: {row.selection} at {Number(row.odds).toFixed(2)} ({row.bookmaker})</small>
                   </div>
-                )) : {dailyScanBusy ? <small className="muted">Scanning bookmaker odds and team statistics. Counter-picks will appear here as each match finishes analysis ({dailyScanProgress || "scan in progress"}).</small> : <small className="muted">No priced, model-supported counter-selections matched this disagreement range for the selected date. Check Odds-feed diagnostics to see which fixtures returned bookmaker prices.</small>}}
-          
+                )) : dailyScanBusy ? <small className="muted">Scanning bookmaker odds and team statistics. Counter-picks will appear here as each match finishes analysis ({dailyScanProgress || "scan in progress"}).</small> : <small className="muted">No priced, model-supported counter-selections matched this disagreement range for the selected date. Check Odds-feed diagnostics to see which fixtures returned bookmaker prices.</small>}
+              </section>
+
               <section className="stack" style={{ gap: 7 }}>
                 <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
                   <b>🤖 AUTISTIK AI shortlist · Top 25</b><small className="muted">{topPicks.length} selections</small>
