@@ -121,7 +121,8 @@ export default function ValueBets({ endpoint }: Props) {
     finally { setProgress("");setBusy(false); }
   }
   async function scanSuper(sourceFixtures:any[]=fixtures) {
-    setBusy(true);setError("");setProgress("");setSuperRows([]);setDiagnostics([]);setSuperPerformance([]); 
+    setBusy(true);setError("");setProgress("");setSuperRows([]);setDiagnostics([]);setSuperPerformance([]);
+    let all:any[]=[];
     try {
       const now=Date.now();
       const eligible=sourceFixtures.filter((f:any)=>{
@@ -132,15 +133,20 @@ export default function ValueBets({ endpoint }: Props) {
       });
       const unique=[...new Map(eligible.map((f:any)=>[String(f.id||[f.home.name,f.away.name,f.date].join("|")),f])).values()].slice(0,20);
       if(!unique.length){setError("No eligible upcoming fixtures are available to scan. Refresh matches and check the football-data.org schedule.");return;}
-      setProgress("Scanning "+unique.length+" upcoming fixtures and matching bookmaker odds…");
-      // Keep one server request for the entire scan. This lets the odds adapter
-      // reuse its provider-fixture cache across matches and stay under API limits.
-      const data=await post("valueScan",{fixtures:unique});
-      const rows=Array.isArray(data.rows)?data.rows:[];
-      setSuperRows(sortRows(rows));
-      setDiagnostics(Array.isArray(data.diagnostics)?data.diagnostics:[]);
-      if(Array.isArray(data.performance))setSuperPerformance(data.performance);
-      if(!rows.length)setError("The fixtures were checked, but no supported bookmaker selections were returned. Open Scan diagnostics for the exact provider response.");
+      // Keep each fixture in its own short request. The previous single
+      // 20-fixture server request could exceed the production function window.
+      // Sequential calls also make per-fixture failures visible in diagnostics.
+      for(let i=0;i<unique.length;i++) {
+        const f=unique[i];
+        setProgress("Scanning "+(i+1)+" of "+unique.length+" · "+f.home.name+" vs "+f.away.name);
+        const data=await post("valueScan",{fixtures:[f]});
+        all=all.concat(Array.isArray(data.rows)?data.rows:[]);
+        setSuperRows(sortRows(all));
+        setDiagnostics(prev=>prev.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]));
+        if(Array.isArray(data.performance))setSuperPerformance(data.performance);
+        if(i+1<unique.length) await new Promise(resolve=>setTimeout(resolve,1700));
+      }
+      if(!all.length)setError("The fixtures were checked, but no supported bookmaker selections were returned. Open Scan diagnostics to see whether the odds feed, fixture matching, or market parsing failed.");
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
   }
