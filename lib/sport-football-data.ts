@@ -132,22 +132,23 @@ export async function searchTeams(q: string) {
 type Match = any;
 
 /** Today's fixtures across every competition code enabled in this football-data feed (UTC). */
-export async function todayCompetitionMatches() {
-  // Use one account-level date-range request rather than firing one request per
-  // competition. The old 12-request Promise.all regularly hit the free API's
-  // rate limit and silently dropped tomorrow's fixtures.
+export async function todayCompetitionMatches(selectedDate?: string) {
+  // One account-level date-range request for the chosen Ghana calendar day.
   const now = new Date();
   const dayInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
     timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
   }).format(d);
-  const today = dayInAccra(now);
-  const tomorrow = dayInAccra(new Date(now.getTime() + 24 * 60 * 60_000));
-  const data = await api("/matches?dateFrom=" + today + "&dateTo=" + tomorrow + "&limit=500", 60_000);
+  const day = selectedDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(selectedDate) ? selectedDate : dayInAccra(now);
+  const next = new Date(day + "T00:00:00Z");
+  next.setUTCDate(next.getUTCDate() + 1);
+  const dateTo = next.toISOString().slice(0, 10);
+  const data = await api("/matches?dateFrom=" + day + "&dateTo=" + dateTo + "&limit=500", 60_000);
   const matches = Array.isArray(data?.matches) ? data.matches : [];
   const unique = new Map<number, Match>();
   for (const m of matches) {
     if (m?.id && m.homeTeam?.id && m.awayTeam?.id && m.utcDate &&
       ["SCHEDULED", "TIMED"].includes(m.status) &&
+      dayInAccra(new Date(m.utcDate)) === day &&
       Date.parse(m.utcDate) >= now.getTime()) unique.set(Number(m.id), m);
   }
   return [...unique.values()]
