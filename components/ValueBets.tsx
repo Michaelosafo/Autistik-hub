@@ -345,7 +345,7 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack">
         <b>Best underpriced odds · positive expected value ({superValueRows.length})</b>
         <small className="muted">These are the prices where Autistik estimates a higher chance than the bookmaker's odds imply. Highest estimated EV first.</small>
-        {superValueRows.length?superValueRows.slice(0,15).map((r:any,i:number)=><SelectionCard key={"value-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No positive-EV selections with a supported model probability yet.</small>}
+        {superValueRows.length?superValueRows.map((r:any,i:number)=><SelectionCard key={"value-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No positive-EV selections with a supported model probability yet.</small>}
         <b>Overpriced odds · avoid ({superOverpricedRows.length})</b>
         <small className="muted">The bookmaker's price is shorter than Autistik's fair price. These are negative-EV selections, not recommended value bets.</small>
         {superOverpricedRows.length?superOverpricedRows.slice(0,15).map((r:any,i:number)=><SelectionCard key={"overpriced-"+(r.key||i)} row={r} index={i}/>):<small className="muted">No overpriced model-supported selections in this scan.</small>}
