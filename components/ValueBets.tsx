@@ -212,7 +212,7 @@ export default function ValueBets({ endpoint }: Props) {
   // rows can point to the same model counter-selection, so retain the
   // strongest disagreement for each distinct counter outcome.
   const counterGroups=new Map<string,{home:string;away:string;date:string;items:any[]}>();
-  for(const row of superValueRows) {
+  for(const row of superSupported) {
     const analysis=row.counterMarketAnalysis;
     if(!analysis||analysis.direction!=="bookmaker_longer"||!analysis.counterSelection||
       !(Number(analysis.counterProbability)>0)||!Number.isFinite(Number(analysis.gapPoints))) continue;
@@ -229,7 +229,6 @@ export default function ValueBets({ endpoint }: Props) {
   }
   const multiCounterGroups=[...counterGroups.entries()]
     .map(([key,group])=>({key,...group,items:group.items.sort((a:any,b:any)=>b.gapPoints-a.gapPoints)}))
-    .filter((group:any)=>group.items.length>1)
     .map((group:any)=>({...group,maxGap:Number(group.items[0]?.gapPoints||0)}));
   const disagreementSections=[
     {key:"under20",title:"Disagreement below 20%",description:"Smaller price disagreements · under 20 percentage points",min:0,max:20},
