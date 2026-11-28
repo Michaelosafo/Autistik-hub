@@ -44,11 +44,10 @@ export async function POST(req: Request) {
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
           if (!homeId || !awayId || homeId === awayId || !home || !away || !f?.date) continue;
-          const date = new Date(String(f.date)).toISOString().slice(0, 10);
           // Keep the odds feed independent from team-history coverage. A missing
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
-            analyse(homeId, awayId, date),
+            analyse(homeId, awayId),
             getFiveDollarFootballMatchOdds(home, away, String(f.date))
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
