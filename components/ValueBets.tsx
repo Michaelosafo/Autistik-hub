@@ -402,6 +402,18 @@ export default function ValueBets({ endpoint }: Props) {
     {loading&&<small className="muted">Loading competition and fixture list…</small>}
     {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.fixtureProvider||"Provider not reported"} · statistics: API-Football · prices: 5DollarFootballAPI</small>}
     {progress&&<small className="muted">{progress}</small>}
+    {endpoint==="/api/admin/super"&&<div className="card stack" style={{padding:12,border:"2px solid var(--teal)"}}>
+      <b>⚽ Today's matches</b>
+      <small className="muted">football-data.org · Ghana time</small>
+      <span>Choose another date to load its fixtures and scan available bookmaker odds against SUPER's team analysis.</span>
+      <label className="stack" style={{gap:4}}><b>Choose match date</b>
+        <input type="date" value={superScanDate} disabled={busy||loading} onChange={e=>{if(e.target.value)void scanSuperDate(e.target.value);}} />
+      </label>
+      <button className="btn primary" type="button" disabled={busy||loading} onClick={()=>void scanSuperDate(superScanDate)}>{loading||busy?"Scanning…":"Refresh matches"}</button>
+      <small className="muted">{fixtures.length} matches loaded{fixtures.length?" · "+fixtures.length+" fixtures queued for scan":""}</small>
+      {(loading||busy)&&<small className="muted">{progress||"Loading selected date fixtures from football-data.org…"}</small>}
+      <small className="muted">Selecting a date automatically loads that date's fixtures, then scans team statistics and available bookmaker odds for value, fair odds, expected value and disagreement ranges.</small>
+    </div>}
 
     <div className="row" style={{gap:8,flexWrap:"wrap"}}>
       <button className={activeSession==="scanner"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("scanner")}>Open scanner</button>
@@ -419,17 +431,7 @@ export default function ValueBets({ endpoint }: Props) {
       {top25Rows.length?top25Rows.map((row:any,i:number)=><SelectionCard key={"top25-"+(row.key||i)} row={row} index={i}/>):<small className="muted">No eligible scanned selections yet. Run the {endpoint==="/api/admin/super"?"SUPER":"SPORT"} scanner first; the Top 25 will be built from its results.</small>}
     </div>}
     {activeSession==="scanner"&&<>
-    {endpoint==="/api/admin/super"&&activeSession==="scanner"&&<div className="card stack" style={{padding:12,border:"2px solid var(--teal)"}}>
-      <div className="stack" style={{gap:3}}>
-        <b>SUPER · Choose match date</b>
-        <small className="muted">Selected date: <b>{new Date(superScanDate+"T12:00:00").toLocaleDateString("en-GH",{timeZone:"Africa/Accra",dateStyle:"full"})}</b> · Ghana time</small>
-      </div>
-      <label className="stack" style={{gap:4}}><b>Scan fixtures for date</b>
-        <input type="date" value={superScanDate} min={ghanaDate(new Date())} disabled={busy||loading} onChange={e=>{if(e.target.value)void scanSuperDate(e.target.value);}} />
-      </label>
-      {(loading||busy)&&<small className="muted">{progress||"Loading selected date fixtures from football-data.org…"}</small>}
-      <small className="muted">Selecting a date automatically loads its subscribed top-competition fixtures, then scans team statistics and available bookmaker odds for value, fair odds, expected value and all disagreement ranges.</small>
-    </div>}
+
 
     {endpoint==="/api/admin/sport" && <>
       <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} top competitions · {countries.length} countries</small></div>
