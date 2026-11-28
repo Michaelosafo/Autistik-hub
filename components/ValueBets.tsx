@@ -98,6 +98,24 @@ export default function ValueBets({ endpoint }: Props) {
     catch(e) { setFeedStatus({error:(e as Error).message}); }
     finally { setCheckingFeed(false); }
   }
+  async function scanSuperDate(date:string) {
+    setSuperScanDate(date);setLoading(true);setError("");setProgress("");setSuperRows([]);setDiagnostics([]);
+    try {
+      const data=await post("todayMatches",{date});
+      const now=Date.now();
+      const chosen=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>{
+        const kickoff=Date.parse(String(f?.date||""));
+        const status=String(f?.status||"").toUpperCase();
+        return f?.home?.name&&f?.away?.name&&Number.isFinite(kickoff)&&kickoff>=now&&
+          ghanaDate(new Date(kickoff))===date&&
+          (!status||["SCHEDULED","TIMED"].includes(status))&&TOP_COMPETITION.test(String(f.competition||""));
+      }).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+      setFixtures(chosen);
+      if(!chosen.length)setError("No upcoming SUPER fixtures from subscribed top competitions were returned for "+date+".");
+      else {setLoading(false);await scanSuper(chosen,date,true);}
+    } catch(e) {setError((e as Error).message);}
+    finally {setLoading(false);}
+  }
   async function refreshSuperPerformance() {
     setPerformanceLoading(true);
     try { const data=await post("superPerformance"); setSuperPerformance(Array.isArray(data.performance)?data.performance:[]); }
@@ -401,6 +419,18 @@ export default function ValueBets({ endpoint }: Props) {
       {top25Rows.length?top25Rows.map((row:any,i:number)=><SelectionCard key={"top25-"+(row.key||i)} row={row} index={i}/>):<small className="muted">No eligible scanned selections yet. Run the {endpoint==="/api/admin/super"?"SUPER":"SPORT"} scanner first; the Top 25 will be built from its results.</small>}
     </div>}
     {activeSession==="scanner"&&<>
+    {endpoint==="/api/admin/super"&&activeSession==="scanner"&&<div className="card stack" style={{padding:12,border:"2px solid var(--teal)"}}>
+      <div className="stack" style={{gap:3}}>
+        <b>SUPER · Choose match date</b>
+        <small className="muted">Selected date: <b>{new Date(superScanDate+"T12:00:00").toLocaleDateString("en-GH",{timeZone:"Africa/Accra",dateStyle:"full"})}</b> · Ghana time</small>
+      </div>
+      <label className="stack" style={{gap:4}}><b>Scan fixtures for date</b>
+        <input type="date" value={superScanDate} min={ghanaDate(new Date())} disabled={busy||loading} onChange={e=>{if(e.target.value)void scanSuperDate(e.target.value);}} />
+      </label>
+      {(loading||busy)&&<small className="muted">{progress||"Loading selected date fixtures from football-data.org…"}</small>}
+      <small className="muted">Selecting a date automatically loads its subscribed top-competition fixtures, then scans team statistics and available bookmaker odds for value, fair odds, expected value and all disagreement ranges.</small>
+    </div>}
+
     {endpoint==="/api/admin/sport" && <>
       <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} top competitions · {countries.length} countries</small></div>
       <input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search country or league (e.g. Europa League)…" />
@@ -444,32 +474,7 @@ export default function ValueBets({ endpoint }: Props) {
         </div>;
       })()}
     </>}
-    {endpoint==="/api/admin/super"&&<>
-      <div className="card stack" style={{padding:12}}>
-        <b>SUPER · Scan by match date</b>
-        <small className="muted">Choose a Ghana-time date to load its upcoming fixtures from football-data.org and calculate bookmaker value, model probabilities, expected value and disagreement information.</small>
-        <label className="stack" style={{gap:4}}><b>Choose match date</b><input type="date" value={superScanDate} min={ghanaDate(new Date())} onChange={e=>setSuperScanDate(e.target.value)} /></label>
-        <button className="btn primary" type="button" disabled={busy||loading||!superScanDate} onClick={async()=>{
-          setLoading(true);setError("");setSuperRows([]);setDiagnostics([]);
-          try{
-            const data=await post("todayMatches");
-            const now=Date.now();
-            const chosen=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>{
-              const kickoff=Date.parse(String(f?.date||""));
-              const status=String(f?.status||"").toUpperCase();
-              return f?.home?.name&&f?.away?.name&&Number.isFinite(kickoff)&&kickoff>=now&&
-                ghanaDate(new Date(kickoff))===superScanDate&&
-                (!status||["SCHEDULED","TIMED"].includes(status))&&TOP_COMPETITION.test(String(f.competition||""));
-            }).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
-            setFixtures(chosen);
-            if(!chosen.length){setError("No upcoming fixtures from SUPER subscribed top competitions were returned for "+superScanDate+".");}
-            else{setLoading(false);await scanSuper(chosen,superScanDate,true);}
-          }catch(e){setError((e as Error).message);}
-          finally{setLoading(false);}
-        }}>{loading?"Loading fixtures…":busy?"Scanning…":"Load date and scan matches"}</button>
-        <small className="muted">{fixtures.length} fixtures currently loaded in the board.</small>
-      </div>
-      <small className="muted">{fixtures.length} upcoming fixtures loaded.</small>
+    {endpoint==="/api/admin/super"&&<small className="muted">{fixtures.length} upcoming fixtures loaded.</small>}
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanSuper()}>{busy?"Scanning…":"Scan all fixtures"}</button>
         <button className="btn" type="button" disabled={performanceLoading} onClick={()=>void refreshSuperPerformance()}>{performanceLoading?"Checking results…":"Refresh tracked results"}</button>
