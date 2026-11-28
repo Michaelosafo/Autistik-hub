@@ -1,5 +1,6 @@
 /* Layout: dark ink rail + bright canvas; each of the 4 groups owns one saturated colour (coral, teal, violet, sunflower); illustrated people and the rainbow infinity carry the warmth. */
 :root{
+  --font-body:Arial; --font-display:Arial; --font-mono:"Courier New";
   --bg:#F4F5FA; --surface:#FFFFFF; --surface-2:#ECEEF6; --ink:#141830; --muted:#5A6079; --line:#DCDFEA;
   --rail:#141830; --rail-2:#1F2445; --rail-ink:#C6CBE3; --rail-hi:#FFFFFF;
   --coral:#D9472F; --coral-soft:#FDE7E2; --teal:#0B857A; --teal-soft:#D6F2EE;
