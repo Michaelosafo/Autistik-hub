@@ -139,6 +139,9 @@ export default function ValueBets({ endpoint }: Props) {
         setSuperRows(sortRows(all));
         setDiagnostics(prev=>prev.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]));
         if(Array.isArray(data.performance))setSuperPerformance(data.performance);
+        // Keep the odds provider below its 40-requests/minute cap even when
+        // every fixture requires a fresh bookmaker-price request.
+        if(i+1<unique.length) await new Promise(resolve=>setTimeout(resolve,1700));
       }
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
