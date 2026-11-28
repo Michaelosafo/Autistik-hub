@@ -22,6 +22,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [superPerformance,setSuperPerformance]=useState<any[]>([]);
   const [selectedDisagreementBand,setSelectedDisagreementBand]=useState("all");
+  const [activeSession,setActiveSession]=useState<"scanner"|"top25">("scanner");
   const [performanceLoading,setPerformanceLoading]=useState(false);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [fixtureSource,setFixtureSource]=useState<any>(null);
@@ -208,6 +209,37 @@ export default function ValueBets({ endpoint }: Props) {
   const superValueRows=superSupported.filter((r:any)=>Number(r.ev)>0).sort((a:any,b:any)=>Number(b.ev)-Number(a.ev));
   const superOverpricedRows=superSupported.filter((r:any)=>Number(r.ev)<0).sort((a:any,b:any)=>Number(a.ev)-Number(b.ev));
   const superProbabilityRows=[...superSupported].sort((a:any,b:any)=>Number(b.probability)-Number(a.probability));
+  const sportScannedRows=Object.values(results).flatMap((saved:any)=>Array.isArray(saved?.rows)?saved.rows:[]);
+  const top25SourceRows=endpoint==="/api/admin/super"?superRows:sportScannedRows;
+  function buildTop25(rows:any[]) {
+    const eligible=rows.filter((r:any)=>{
+      if(!r?.modelSupported||!Number.isFinite(Number(r.probability))||!r.home||!r.away) return false;
+      const market=String(r.market||"").toLowerCase();
+      const selection=String(r.selection||"").toLowerCase();
+      if(/draw|double chance|both teams|btts|yes\/no|correct score|corners|cards/.test(market+" "+selection)) return false;
+      return /straight win|h2h|moneyline|asian handicap|over\/under|goals|totals/.test(market);
+    });
+    // Compare probability, expected value and odds edge by their relative ranks.
+    const rankMap=new Map<string,number>();
+    const metrics=[(r:any)=>Number(r.probability),(r:any)=>Number.isFinite(Number(r.ev))?Number(r.ev):-Infinity,(r:any)=>Number.isFinite(Number(r.edge))?Number(r.edge):-Infinity];
+    for(const metric of metrics) [...eligible].sort((a:any,b:any)=>metric(b)-metric(a)).forEach((r:any,i:number)=>rankMap.set(String(r.key||[r.home,r.away,r.selection,r.bookmaker].join("|")),(rankMap.get(String(r.key||[r.home,r.away,r.selection,r.bookmaker].join("|")))||0)+i));
+    const ranked=[...eligible].sort((a:any,b:any)=>{
+      const ak=String(a.key||[a.home,a.away,a.selection,a.bookmaker].join("|"));
+      const bk=String(b.key||[b.home,b.away,b.selection,b.bookmaker].join("|"));
+      return (rankMap.get(ak)||0)-(rankMap.get(bk)||0)||Number(b.probability)-Number(a.probability)||Number(b.ev)-Number(a.ev);
+    });
+    const usedTeams=new Set<string>(),usedSelections=new Set<string>(),picked:any[]=[];
+    for(const row of ranked){
+      const home=String(row.home).trim().toLowerCase(),away=String(row.away).trim().toLowerCase();
+      const selectionKey=[home,away,String(row.selection).toLowerCase(),String(row.market).toLowerCase()].join("|");
+      if(!home||!away||usedTeams.has(home)||usedTeams.has(away)||usedSelections.has(selectionKey))continue;
+      picked.push(row);usedTeams.add(home);usedTeams.add(away);usedSelections.add(selectionKey);
+      if(picked.length===25)break;
+    }
+    return picked;
+  }
+  const top25Rows=buildTop25(top25SourceRows);
+
   // Build one counter-market group per fixture. Multiple bookmaker/market
   // rows can point to the same model counter-selection, so retain the
   // strongest disagreement for each distinct counter outcome.
@@ -340,6 +372,16 @@ export default function ValueBets({ endpoint }: Props) {
     {fixtureSource&&endpoint==="/api/admin/sport"&&<small className="muted">Fixture feed: {fixtureSource.fixtureProvider||"Provider not reported"} · statistics: API-Football · prices: 5DollarFootballAPI</small>}
     {progress&&<small className="muted">{progress}</small>}
 
+    <div className="row" style={{gap:8,flexWrap:"wrap"}}>
+      <button className={activeSession==="scanner"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("scanner")}>Open scanner</button>
+      <button className={activeSession==="top25"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("top25")}>AI Top 25 · {top25Rows.length}</button>
+    </div>
+    {activeSession==="top25"&&<div className="card stack" style={{padding:14}}>
+      <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><b>{endpoint==="/api/admin/super"?"SUPER":"SPORT"} · AI Top 25</b><button className="btn small" type="button" onClick={()=>setActiveSession("scanner")}>Back to scanner</button></div>
+      <small className="muted">Top recommendations from the data already scanned in this section. Ranked by relative model probability, expected value and odds edge. Each match's two teams can appear only once in this Top 25. Draws, double chance and BTTS are excluded. No fixed probability or edge cutoff is applied.</small>
+      {top25Rows.length?top25Rows.map((row:any,i:number)=><SelectionCard key={"top25-"+(row.key||i)} row={row} index={i}/>):<small className="muted">No eligible scanned selections yet. Run the {endpoint==="/api/admin/super"?"SUPER":"SPORT"} scanner first; the Top 25 will be built from its results.</small>}
+    </div>}
+    {activeSession==="scanner"&&<>
     {endpoint==="/api/admin/sport" && <>
       <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}><b>Choose country, then league</b><small className="muted">{leagues.length} top competitions · {countries.length} countries</small></div>
       <input className="input" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search country or league (e.g. Europa League)…" />
@@ -424,6 +466,7 @@ export default function ValueBets({ endpoint }: Props) {
         <details><summary>All bookmaker selections and model coverage ({superRows.length})</summary>{sortRows(superRows).map((r:any,i:number)=><SelectionCard key={"all-"+(r.key||i)} row={r} index={i}/>)}</details>
       </div>}
       {diagnostics.length>0&&<details><summary>Scan diagnostics ({diagnostics.length})</summary><div className="stack" style={{gap:8,marginTop:8}}>{diagnostics.map((d:any,i:number)=><div key={i} className="notice" style={{fontSize:12,overflowWrap:"anywhere"}}><b>{d.fixture}</b><span>Odds provider: {d.oddsProvider||"5DollarFootballAPI"} · events checked: {d.oddsEvents??d.eventsReturned??0} · matched events: {d.matchedEvents??d.matched??0}</span><span>Bookmakers: {(d.bookmakers||[]).join(", ")||"None returned"} · markets: {(d.markets||[]).join(", ")||"None returned"}</span>{d.oddsError&&<span style={{color:"var(--danger, #b42318)"}}>Odds error: {d.oddsError}</span>}{d.analysisError&&<span style={{color:"var(--danger, #b42318)"}}>Model error: {d.analysisError}</span>}{d.feedExamples?.length>0&&<span>Provider fixture examples: {d.feedExamples.join(" · ")}</span>}{d.providers&&<span>Provider diagnostics: {JSON.stringify(d.providers)}</span>}</div>)}</div></details>}
+    </>}
     </>}
     <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from API-Football recent form and season statistics.":"SUPER uses football-data.org fixtures and pre-match team history with 5DollarFootball bookmaker prices. Positive EV means the offered odds are generous versus Autistik's fair odds; negative EV means the price is too short. Odds imply a break-even probability of 100 ÷ decimal odds, before bookmaker margin. Probabilities are estimates, not guarantees."}</small>
   </section>;
