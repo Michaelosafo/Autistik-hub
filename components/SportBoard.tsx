@@ -591,15 +591,16 @@ export default function SportBoard() {
                 </label>
                 <small className="muted">For each fixture, SPORT shows only the counter-selection with the largest model-versus-bookmaker probability gap. The range is measured in percentage points, not a guaranteed chance of winning.</small>
                 {visibleCounterRows.length ? visibleCounterRows.map((row: any, index: number) => (
-                  <div key={"sport-counter-" + (row.key || index)} className="sb-top-r hi" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", width: "100%", minWidth: 0, boxSizing: "border-box", alignItems: "start", gap: 9, padding: 12, overflowWrap: "break-word", wordBreak: "normal", borderLeft: "4px solid var(--coral)" }}>
-                    <b style={{ display: "block", minWidth: 0, fontSize: 15, lineHeight: 1.4, overflowWrap: "anywhere" }}>#{index + 1} · {row.home} vs {row.away}</b>
-                    <small className="muted" style={{ display: "block", minWidth: 0, lineHeight: 1.5, overflowWrap: "anywhere" }}>{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
-                    <div className="notice stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", minWidth: 0, gap: 5, padding: "9px 11px", fontSize: 13, overflowWrap: "anywhere", borderLeft: "3px solid var(--warning, #d69b28)" }}>
-                      <b style={{ overflowWrap: "anywhere" }}>Highest counter-selection: {row.counterSelection}</b>
-                      <span>Counter-model chance: <b>{Number.isFinite(row.counterProbability) ? row.counterProbability.toFixed(1) + "%" : "—"}</b></span>
-                      <span>Fair odds: <b>{Number.isFinite(row.counterFairOdds) ? row.counterFairOdds.toFixed(2) : "—"}</b></span>
-                      <span>Disagreement: <b>{Number(row.gapPoints).toFixed(1)} percentage points</b></span>
-                      <small className="muted" style={{ overflowWrap: "anywhere" }}>Compared bookmaker pick: {row.selection} · {row.market || "Market"} · {Number(row.odds).toFixed(2)} ({row.bookmaker || "Bookmaker"})</small>
+                  <div key={"sport-counter-" + (row.key || index)} className="stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", width: "100%", minWidth: 0, boxSizing: "border-box", gap: 7, overflowWrap: "anywhere" }}>
+                    <div className="stack" style={{ gap: 2, padding: "2px 2px 5px", minWidth: 0 }}>
+                      <b style={{ fontSize: 15, overflowWrap: "anywhere" }}>{row.home} vs {row.away}</b>
+                      <small className="muted">{row.date ? new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" }) + " Ghana time" : "Kickoff time unavailable"}</small>
+                    </div>
+                    <div className="notice stack" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr)", minWidth: 0, gap: 4, padding: "9px 11px", fontSize: 13, overflowWrap: "anywhere", borderLeft: "3px solid var(--warning, #d69b28)" }}>
+                      <b style={{ overflowWrap: "anywhere" }}>Possible counter-outcome: {row.counterSelection}</b>
+                      <span>Counter-outcome rank: <b>1</b> · disagreement: <b>{Number(row.gapPoints).toFixed(1)} percentage points</b></span>
+                      <span>Autistik estimated chance of {row.counterSelection}: <b>{Number.isFinite(row.counterProbability) ? row.counterProbability.toFixed(1) + "%" : "—"}</b> · fair odds: <b>{Number.isFinite(row.counterFairOdds) ? row.counterFairOdds.toFixed(2) : "—"}</b></span>
+                      <small className="muted" style={{ overflowWrap: "anywhere" }}>Signal from {row.selection} · {row.market || "Market"} · {row.bookmaker || "Bookmaker"} (odds {Number.isFinite(Number(row.odds)) ? Number(row.odds).toFixed(2) : "—"})</small>
                     </div>
                   </div>
                 )) : dailyScanBusy ? <small className="muted">Scanning bookmaker odds and team statistics. Counter-picks will appear here as each match finishes analysis ({dailyScanProgress || "scan in progress"}).</small> : <small className="muted">No priced, model-supported counter-selections matched this disagreement range for the selected date. Check Odds-feed diagnostics to see which fixtures returned bookmaker prices.</small>}
