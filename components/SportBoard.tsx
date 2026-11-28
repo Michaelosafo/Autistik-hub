@@ -463,22 +463,21 @@ export default function SportBoard() {
 
       <section className="card stack">
         <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <b>⚽ Today's matches</b>
-          <small className="muted">API-Football · Ghana time</small>
+          <b>⚽ Match date scanner</b>
+          <small className="muted">API-Football statistics · 5DollarFootball odds · Ghana time</small>
         </div>
-        <small className="muted">Today's fixtures load automatically whenever you open the board. Choose another date to view its matches. Tap any match to run the team analysis and compare available bookmaker odds against AUTISTIK's API-Football analysis.</small>
+        <small className="muted">Choose one date and press Scan selected date. AUTISTIK loads that date's fixtures, compares available bookmaker odds with API-Football team analysis, and fills the value list and all four disagreement ranges from the same scan.</small>
         <label className="stack" style={{ gap: 4 }}>
           <b>Choose match date</b>
           <input type="date" value={matchDate} onChange={(e) => {
             const nextDate = e.target.value;
             setMatchDate(nextDate); setDateMatches([]); setDateMatchesImportedCount(0);
-            setDateMatchesError(""); setRes(null); setQuickPicksOpen(false);
-            void searchMatchesByDate(nextDate);
+            setDateMatchesError(""); setDailyValueRows([]); setDailyScanDiagnostics([]); setDailyScanError(""); setRes(null); setQuickPicksOpen(false);
           }} />
         </label>
         <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy} onClick={() => void searchMatchesByDate(matchDate)}>
-            {dateMatchesBusy ? "Loading matches…" : "Refresh matches"}
+          <button type="button" className="btn primary" disabled={!matchDate || dateMatchesBusy || dailyScanBusy} onClick={() => void searchMatchesByDate(matchDate)}>
+            {dateMatchesBusy || dailyScanBusy ? "Scanning selected date…" : "Scan selected date"}
           </button>
           <small className="muted">{dateMatches.length} matches · {dateMatchesImportedCount} saved to database</small>
         </div>
