@@ -51,9 +51,13 @@ export default function ValueBets({ endpoint }: Props) {
         })
         .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setLeagues(list);
-      setFixtures(upcoming);
+      // SUPER is a same-day board in Ghana time: keep every eligible
+      // upcoming fixture from the subscribed top competitions, not just 20.
+      const todayAccra=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+      const todayOnly=upcoming.filter((fixture:any)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(fixture.date))===todayAccra);
+      setFixtures(todayOnly);
       if(!list.length)setError("football-data.org returned no subscribed top competitions. Check FOOTBALL_DATA_TOKEN and your plan coverage.");
-      return upcoming.slice(0,20);
+      return todayOnly;
     } catch(e) { setError((e as Error).message); return []; }
     finally { setLoading(false); }
   }
@@ -121,32 +125,37 @@ export default function ValueBets({ endpoint }: Props) {
     finally { setProgress("");setBusy(false); }
   }
   async function scanSuper(sourceFixtures:any[]=fixtures) {
-    setBusy(true);setError("");setProgress("");setSuperRows([]);setDiagnostics([]);setSuperPerformance([]);
-    let all:any[]=[];
+    setBusy(true);setError("");setProgress("");
+    // Preserve the visible board while refreshing so it never flashes empty.
+    let all:any[]=[...superRows.filter((row:any)=>Date.parse(String(row?.date||""))>Date.now())];
     try {
       const now=Date.now();
+      const todayAccra=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
       const eligible=sourceFixtures.filter((f:any)=>{
         const kickoff=Date.parse(String(f?.date||""));
         const status=String(f?.status||"").toUpperCase();
-        return Number.isFinite(kickoff)&&kickoff>=now&&f?.home?.name&&f?.away?.name&&
+        const matchDay=Number.isFinite(kickoff)?new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(kickoff)):"";
+        return Number.isFinite(kickoff)&&kickoff>=now&&matchDay===todayAccra&&f?.home?.name&&f?.away?.name&&
           (!status||["SCHEDULED","TIMED"].includes(status));
       });
-      const unique=[...new Map(eligible.map((f:any)=>[String(f.id||[f.home.name,f.away.name,f.date].join("|")),f])).values()].slice(0,20);
-      if(!unique.length){setError("No eligible upcoming fixtures are available to scan. Refresh matches and check the football-data.org schedule.");return;}
-      // Keep each fixture in its own short request. The previous single
-      // 20-fixture server request could exceed the production function window.
-      // Sequential calls also make per-fixture failures visible in diagnostics.
-      for(let i=0;i<unique.length;i++) {
-        const f=unique[i];
-        setProgress("Scanning "+(i+1)+" of "+unique.length+" · "+f.home.name+" vs "+f.away.name);
-        const data=await post("valueScan",{fixtures:[f]});
-        all=all.concat(Array.isArray(data.rows)?data.rows:[]);
-        setSuperRows(sortRows(all));
-        setDiagnostics(prev=>prev.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]));
+      const unique=[...new Map(eligible.map((f:any)=>[String(f.id||[f.home.name,f.away.name,f.date].join("|")),f])).values()];
+      if(!unique.length){if(!all.length)setError("No upcoming top-competition fixtures remain for today in Ghana time.");return;}
+      // Small two-fixture server batches stay comfortably inside Vercel's
+      // request window while sharing the odds-provider fixture catalogue cache.
+      for(let i=0;i<unique.length;i+=2) {
+        const batch=unique.slice(i,i+2);
+        setProgress("Analysing today's matches · "+Math.min(i+batch.length,unique.length)+" of "+unique.length+" fixtures");
+        const data=await post("valueScan",{fixtures:batch});
+        const incoming=Array.isArray(data.rows)?data.rows:[];
+        const merged=new Map<string,any>();
+        for(const row of [...all,...incoming]) merged.set(String(row.key||[row.home,row.away,row.selection,row.bookmaker].join("|")),row);
+        all=sortRows([...merged.values()]);
+        setSuperRows(all);
+        if(Array.isArray(data.diagnostics)&&data.diagnostics.length)setDiagnostics(prev=>[...prev,...data.diagnostics]);
         if(Array.isArray(data.performance))setSuperPerformance(data.performance);
-        if(i+1<unique.length) await new Promise(resolve=>setTimeout(resolve,1700));
+        if(i+2<unique.length) await new Promise(resolve=>setTimeout(resolve,900));
       }
-      if(!all.length)setError("The fixtures were checked, but no supported bookmaker selections were returned. Open Scan diagnostics to see whether the odds feed, fixture matching, or market parsing failed.");
+      if(!all.length)setError("Today's fixtures were checked, but no supported bookmaker selections were returned. Open Scan diagnostics for provider details.");
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
   }
@@ -164,9 +173,9 @@ export default function ValueBets({ endpoint }: Props) {
     // Refresh the live fixture/odds board every four hours in the app.
     // This is client-side polling, not a system cron or server scheduler.
     const interval=window.setInterval(()=>{void refreshAndScan();},4*60*60*1000);
-    const onVisible=()=>{if(document.visibilityState==="visible")void refreshAndScan();};
-    document.addEventListener("visibilitychange",onVisible);
-    return ()=>{active=false;window.clearInterval(interval);document.removeEventListener("visibilitychange",onVisible);};
+    // Do not rescan on every tab focus: that used to clear/rebuild the board
+    // repeatedly and made the results appear to blink or disappear.
+    return ()=>{active=false;window.clearInterval(interval);};
   },[endpoint]);
   useEffect(()=>{
     // Hide a fixture as soon as its scheduled kickoff time is reached,
