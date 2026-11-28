@@ -463,16 +463,20 @@ export default function SportBoard() {
 
       <section className="card stack">
         <div className="row" style={{ alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <b>⚽ Match date scanner</b>
+          <div className="stack" style={{ gap: 3 }}>
+            <b>⚽ Match date scanner</b>
+            <small className="muted">Scanning date: <b>{matchDate ? new Date(matchDate + "T12:00:00").toLocaleDateString("en-GH", { timeZone: "Africa/Accra", dateStyle: "full" }) : "Choose a date"}</b></small>
+          </div>
           <small className="muted">API-Football statistics · 5DollarFootball odds · Ghana time</small>
         </div>
-        <small className="muted">Choose one date and press Scan selected date. AUTISTIK loads that date's fixtures, compares available bookmaker odds with API-Football team analysis, and fills the value list and all four disagreement ranges from the same scan.</small>
+        <small className="muted">Choose any date below. As soon as you select it, AUTISTIK loads that date's fixtures and scans available bookmaker odds against API-Football team analysis, filling the value list and all four disagreement ranges.</small>
         <label className="stack" style={{ gap: 4 }}>
           <b>Choose match date</b>
           <input type="date" value={matchDate} onChange={(e) => {
             const nextDate = e.target.value;
             setMatchDate(nextDate); setDateMatches([]); setDateMatchesImportedCount(0);
             setDateMatchesError(""); setDailyValueRows([]); setDailyScanDiagnostics([]); setDailyScanError(""); setRes(null); setQuickPicksOpen(false);
+            if (nextDate) void searchMatchesByDate(nextDate);
           }} />
         </label>
         <div className="row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
