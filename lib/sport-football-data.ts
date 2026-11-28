@@ -391,6 +391,121 @@ export async function saveOdds(id: number, selections: unknown, highestChance: u
   const { error } = await sb().from("sport_predictions").update({ note: JSON.stringify({ ...prior, bookmakerComparison: safeSelections, highestChance }) }).eq("id", id);
   if (error) throw new Error(error.message);
 }
+export async function saveSuperSnapshot(input: {
+  homeId: number; awayId: number; home: string; away: string; league: string;
+  kickoff: string; analysis: any; selections: any[];
+}) {
+  const kickoff = new Date(input.kickoff).toISOString();
+  const m = input.analysis?.model;
+  const note = {
+    source: "SUPER",
+    fixtureHomeId: input.homeId,
+    fixtureAwayId: input.awayId,
+    matchDate: kickoff.slice(0, 10),
+    snapshotAt: new Date().toISOString(),
+    selections: input.selections.slice(0, 100),
+  };
+  const payload: any = {
+    home: input.home, away: input.away, league: input.league, kickoff,
+    xg_home: m?.xg?.home ?? null, xg_away: m?.xg?.away ?? null,
+    p_home: m?.home ?? null, p_draw: m?.draw ?? null, p_away: m?.away ?? null,
+    p_btts: m?.btts ?? null, p_o25: m?.over?.["2.5"] ?? null,
+    pick: "SUPER odds + Autistik model snapshot",
+    note: JSON.stringify(note),
+  };
+  const { data: existing, error: lookupError } = await sb().from("sport_predictions")
+    .select("id").eq("home", input.home).eq("away", input.away).eq("kickoff", kickoff).maybeSingle();
+  if (lookupError) throw new Error(lookupError.message);
+  if (existing?.id) {
+    const { error } = await sb().from("sport_predictions").update(payload).eq("id", existing.id);
+    if (error) throw new Error(error.message);
+    return existing.id;
+  }
+  const { data, error } = await sb().from("sport_predictions").insert(payload).select("id").single();
+  if (error) throw new Error(error.message);
+  return data?.id ?? null;
+}
+
+function settleSelection(selection: any, home: string, away: string, homeGoals: number, awayGoals: number) {
+  const market = String(selection.market || "").toLowerCase();
+  const label = String(selection.selection || "");
+  if (market.includes("straight win")) {
+    if (label.toLowerCase() === home.toLowerCase()) return homeGoals > awayGoals ? "WIN" : homeGoals === awayGoals ? "PUSH" : "LOSS";
+    if (label.toLowerCase() === away.toLowerCase()) return awayGoals > homeGoals ? "WIN" : homeGoals === awayGoals ? "PUSH" : "LOSS";
+  }
+  const total = homeGoals + awayGoals;
+  const totals = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
+  if (totals) {
+    const line = Number(totals[2]);
+    const value = totals[1].toLowerCase() === "over" ? total - line : line - total;
+    return value > 0 ? "WIN" : value < 0 ? "LOSS" : "PUSH";
+  }
+  const handicap = label.match(/^(home|away)\s+([+-]\d+(?:\.5)?)$/i);
+  if (handicap) {
+    const sideHome = handicap[1].toLowerCase() === "home";
+    const line = Number(handicap[2]);
+    const adjusted = sideHome ? homeGoals + line - awayGoals : awayGoals + line - homeGoals;
+    return adjusted > 0 ? "WIN" : adjusted < 0 ? "LOSS" : "PUSH";
+  }
+  return "UNSETTLED";
+}
+
+export async function settleSuperSnapshots(limit = 10) {
+  const { data, error } = await sb().from("sport_predictions").select("id,home,away,kickoff,note,result")
+    .is("result", null).lt("kickoff", new Date().toISOString()).order("kickoff", { ascending: true }).limit(limit);
+  if (error) throw new Error(error.message);
+  let settled = 0;
+  for (const row of data || []) {
+    let note: any = {};
+    try { note = row.note ? JSON.parse(row.note) : {}; } catch { continue; }
+    if (note.source !== "SUPER" || !Number(note.fixtureHomeId) || !Number(note.fixtureAwayId)) continue;
+    const date = String(note.matchDate || String(row.kickoff).slice(0, 10));
+    const analysis = await analyse(Number(note.fixtureHomeId), Number(note.fixtureAwayId), date).catch(() => null);
+    const actual = analysis?.actual;
+    if (!actual || !Number.isFinite(Number(actual.homeGoals)) || !Number.isFinite(Number(actual.awayGoals))) continue;
+    const settledSelections = (Array.isArray(note.selections) ? note.selections : []).map((selection: any) => ({
+      ...selection,
+      outcome: settleSelection(selection, row.home, row.away, Number(actual.homeGoals), Number(actual.awayGoals)),
+    }));
+    const wins = settledSelections.filter((x: any) => x.outcome === "WIN").length;
+    const losses = settledSelections.filter((x: any) => x.outcome === "LOSS").length;
+    const pushes = settledSelections.filter((x: any) => x.outcome === "PUSH").length;
+    const updatedNote = { ...note, settledAt: new Date().toISOString(), actual, settledSelections };
+    const { error: updateError } = await sb().from("sport_predictions").update({
+      result: "W:" + wins + " L:" + losses + " P:" + pushes,
+      note: JSON.stringify(updatedNote),
+    }).eq("id", row.id);
+    if (updateError) throw new Error(updateError.message);
+    settled++;
+  }
+  return { settled };
+}
+
+export async function getSuperOddsPerformance() {
+  const { data, error } = await sb().from("sport_predictions").select("note").not("result", "is", null).order("id", { ascending: false }).limit(500);
+  if (error) throw new Error(error.message);
+  const bands: Record<string, { wins: number; losses: number; pushes: number }> = {};
+  for (const row of data || []) {
+    let note: any = {};
+    try { note = row.note ? JSON.parse(row.note) : {}; } catch { continue; }
+    if (note.source !== "SUPER") continue;
+    for (const item of note.settledSelections || []) {
+      const odds = Number(item.odds);
+      if (!Number.isFinite(odds) || odds <= 1) continue;
+      const band = odds < 1.5 ? "1.01–1.49" : odds < 2 ? "1.50–1.99" : odds < 2.5 ? "2.00–2.49" : odds < 3.5 ? "2.50–3.49" : "3.50+";
+      bands[band] ||= { wins: 0, losses: 0, pushes: 0 };
+      if (item.outcome === "WIN") bands[band].wins++;
+      else if (item.outcome === "LOSS") bands[band].losses++;
+      else if (item.outcome === "PUSH") bands[band].pushes++;
+    }
+  }
+  return Object.entries(bands).map(([oddsBand, counts]) => ({
+    oddsBand, ...counts,
+    settled: counts.wins + counts.losses + counts.pushes,
+    winRate: counts.wins + counts.losses ? +(counts.wins / (counts.wins + counts.losses) * 100).toFixed(1) : null,
+  })).sort((a, b) => a.oddsBand.localeCompare(b.oddsBand));
+}
+
 export async function history() {
   const { data } = await sb().from("sport_predictions").select("*").order("id", { ascending: false }).limit(30);
   return data || [];
