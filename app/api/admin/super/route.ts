@@ -167,6 +167,9 @@ export async function POST(req: Request) {
             }).catch((error: any) => { diagnostic.historySaveError = error instanceof Error ? error.message : String(error); });
           }
           scanDiagnostics.push(diagnostic);
+          // One fixture's odds request at a time; pace within this single
+          // server invocation so the provider catalogue cache is shared.
+          if (seenFixtures.size < fixtures.length) await new Promise(resolve => setTimeout(resolve, 1600));
         }
         const performance = await getSuperOddsPerformance().catch(() => []);
         return json({ rows, diagnostics: scanDiagnostics, settled, performance });
