@@ -452,7 +452,7 @@ function settleSelection(selection: any, home: string, away: string, homeGoals: 
 
 export async function settleSuperSnapshots(limit = 10) {
   const { data, error } = await sb().from("sport_predictions").select("id,home,away,kickoff,note,result")
-    .is("result", null).lt("kickoff", new Date().toISOString()).order("kickoff", { ascending: true }).limit(limit);
+    .is("result", null).lt("kickoff", new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString()).order("kickoff", { ascending: true }).limit(limit);
   if (error) throw new Error(error.message);
   let settled = 0;
   for (const row of data || []) {
@@ -493,14 +493,14 @@ export async function getSuperOddsPerformance() {
       const odds = Number(item.odds);
       if (!Number.isFinite(odds) || odds <= 1) continue;
       const band = odds < 1.5 ? "1.01–1.49" : odds < 2 ? "1.50–1.99" : odds < 2.5 ? "2.00–2.49" : odds < 3.5 ? "2.50–3.49" : "3.50+";
-      bands[band] ||= { wins: 0, losses: 0, pushes: 0 };
-      if (item.outcome === "WIN") bands[band].wins++;
-      else if (item.outcome === "LOSS") bands[band].losses++;
-      else if (item.outcome === "PUSH") bands[band].pushes++;
+      bands[group] ||= { wins: 0, losses: 0, pushes: 0 };
+      if (item.outcome === "WIN") bands[group].wins++;
+      else if (item.outcome === "LOSS") bands[group].losses++;
+      else if (item.outcome === "PUSH") bands[group].pushes++;
     }
   }
-  return Object.entries(bands).map(([oddsBand, counts]) => ({
-    oddsBand, ...counts,
+  return Object.entries(bands).map(([group, counts]) => ({
+    group, ...counts,
     settled: counts.wins + counts.losses + counts.pushes,
     winRate: counts.wins + counts.losses ? +(counts.wins / (counts.wins + counts.losses) * 100).toFixed(1) : null,
   })).sort((a, b) => a.oddsBand.localeCompare(b.oddsBand));
