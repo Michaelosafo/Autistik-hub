@@ -107,7 +107,7 @@ export async function POST(req: Request) {
                   }
                 }
                 let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
-                if (market.key === "h2h" && modelName === "Draw (X)") continue;
+                
                 if (!["h2h", "totals", "asian_handicap"].includes(market.key)) continue;
                 const price = Number(outcome.price);
                 const implied = 100 / price;
@@ -127,6 +127,12 @@ export async function POST(req: Request) {
                 if (market.key === "h2h") {
                   if (modelName === "Home win (1)") counterName = "Away win (2)";
                   else if (modelName === "Away win (2)") counterName = "Home win (1)";
+                  else if (modelName === "Draw (X)") {
+                    const homeCounter = modelMarkets.find((x: any) => norm(String(x.name)) === norm("Home win (1)"));
+                    const awayCounter = modelMarkets.find((x: any) => norm(String(x.name)) === norm("Away win (2)"));
+                    const bestCounter = [homeCounter, awayCounter].filter((x: any) => x && Number(x.p) > 0).sort((x: any, y: any) => Number(y.p) - Number(x.p))[0];
+                    if (bestCounter) counterName = String(bestCounter.name);
+                  }
                 } else if (market.key === "totals") {
                   const totalMatch = modelName.match(/^(Over|Under) (\d+(?:\.\d+)?) goals$/i);
                   if (totalMatch) counterName = (totalMatch[1].toLowerCase() === "over" ? "Under " : "Over ") + totalMatch[2] + " goals";
