@@ -162,15 +162,16 @@ export default function SportBoard() {
     setLeagueScanResults([]); setTodayError("");
     const rows: any[] = [], diagnostics: any[] = [];
     try {
-      for (let i = 0; i < fixtures.length; i += 2) {
-        const batch = fixtures.slice(i, i + 2);
+      // Send up to 10 fixtures per request to reduce network round-trips without
+      // exceeding the server route's 20-fixture limit or creating oversized requests.
+      for (let i = 0; i < fixtures.length; i += 10) {
+        const batch = fixtures.slice(i, i + 10);
         setLeagueScanProgress("Scanning " + league.name + " · " + Math.min(i + batch.length, fixtures.length) + " of " + fixtures.length + " matches");
         const result = await api<{ rows: any[]; diagnostics: any[] }>("valueScan", { fixtures: batch });
         rows.push(...(Array.isArray(result.rows) ? result.rows : []));
         diagnostics.push(...(Array.isArray(result.diagnostics) ? result.diagnostics : []));
         setLeagueValueRows([...rows].sort((a: any, b: any) => Number(b.ev || 0) - Number(a.ev || 0)));
         setLeagueValueDiagnostics([...diagnostics]);
-        if (i + 2 < fixtures.length) await new Promise(resolve => setTimeout(resolve, 400));
       }
       if (!rows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))) {
         setTodayError("No supported Ghana bookmaker prices with matching AUTISTIK probabilities were found in this competition.");
@@ -193,16 +194,16 @@ export default function SportBoard() {
     const allRows: any[] = [];
     const allDiagnostics: any[] = [];
     try {
-      // Keep batches small so a busy match day does not overwhelm provider limits.
-      for (let i = 0; i < fixtures.length; i += 2) {
-        const batch = fixtures.slice(i, i + 2);
+      // Larger bounded batches reduce hundreds of sequential browser requests.
+      // The API route accepts up to 20 fixtures; use 10 to keep request duration manageable.
+      for (let i = 0; i < fixtures.length; i += 10) {
+        const batch = fixtures.slice(i, i + 10);
         setDailyScanProgress("Comparing odds · " + Math.min(i + batch.length, fixtures.length) + " of " + fixtures.length + " matches");
         const result = await api<{ rows: any[]; diagnostics: any[] }>("valueScan", { fixtures: batch });
         allRows.push(...(Array.isArray(result.rows) ? result.rows : []));
         allDiagnostics.push(...(Array.isArray(result.diagnostics) ? result.diagnostics : []));
         setDailyValueRows([...allRows].sort((a: any, b: any) => Math.abs(Number(b.ev) || 0) - Math.abs(Number(a.ev) || 0)));
         setDailyScanDiagnostics([...allDiagnostics]);
-        if (i + 2 < fixtures.length) await new Promise(resolve => setTimeout(resolve, 500));
       }
       if (!allRows.some((row: any) => row.modelSupported && Number.isFinite(Number(row.ev)))) {
         setDailyScanError("No qualifying prices were found yet. Open Odds-feed diagnostics below to see which bookmakers the provider returned, the detected plan, and any odds or model-matching errors.");
