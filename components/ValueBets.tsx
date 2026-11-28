@@ -214,7 +214,7 @@ export default function ValueBets({ endpoint }: Props) {
   const counterGroups=new Map<string,{home:string;away:string;date:string;items:any[]}>();
   for(const row of superSupported) {
     const analysis=row.counterMarketAnalysis;
-    if(!analysis||analysis.direction!=="bookmaker_longer"||!analysis.counterSelection||
+    if(!analysis||!analysis.counterSelection||
       !(Number(analysis.counterProbability)>0)||!Number.isFinite(Number(analysis.gapPoints))) continue;
     const fixtureKey=[row.home,row.away,String(row.date||"").slice(0,16)].join("|");
     const group=counterGroups.get(fixtureKey)||{home:String(row.home||""),away:String(row.away||""),date:String(row.date||""),items:[]};
@@ -245,9 +245,9 @@ export default function ValueBets({ endpoint }: Props) {
       <b>{index+1}. {group.maxGap.toFixed(1)} percentage points · {group.home} vs {group.away}</b>
       <small className="muted">Ranked from highest to lowest disagreement · {group.items.length} distinct counter-outcomes</small>
       {group.items.map((item:any,i:number)=><div key={item.selection} className="notice stack" style={{fontSize:13}}>
-        <b>{i+1}{i===0?"st":i===1?"nd":i===2?"rd":"th"} counter-outcome: {item.selection}</b>
-        <span>Disagreement: <b>{item.gapPoints.toFixed(1)} percentage points</b></span>
-        <span>Autistik estimated chance: <b>{item.probability.toFixed(1)}%</b> · fair odds: <b>{Number.isFinite(item.fairOdds)?item.fairOdds.toFixed(2):"—"}</b></span>
+        <b>Possible counter-outcome: {item.selection}</b>
+        <span>Counter-outcome rank: <b>{i+1}</b> · disagreement: <b>{item.gapPoints.toFixed(1)} percentage points</b></span>
+        <span>Autistik estimated chance of {item.selection}: <b>{item.probability.toFixed(1)}%</b> · fair odds: <b>{Number.isFinite(item.fairOdds)?item.fairOdds.toFixed(2):"—"}</b></span>
         <small className="muted">Signal from {item.sourceSelection} · {item.market} · {item.bookmaker} (odds {Number.isFinite(item.bookmakerOdds)?item.bookmakerOdds.toFixed(2):"—"})</small>
       </div>)}
       <small className="muted">Ranked by largest bookmaker-versus-Autistik probability disagreement. These are alternative outcomes to review, not guaranteed picks.</small>
