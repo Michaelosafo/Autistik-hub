@@ -28,7 +28,7 @@ export async function POST(req: Request) {
         return json({ settled, performance: await getSuperOddsPerformance() });
       }
       case "valueScan": {
-        const fixtures = Array.isArray(b.fixtures) ? b.fixtures.slice(0, 20) : [];
+        const fixtures = Array.isArray(b.fixtures) ? b.fixtures : [];
         const settled = await settleSuperSnapshots(4).catch(() => ({ settled: 0 }));
         const rows: any[] = [];
         const scanDiagnostics: any[] = [];
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
           };
           if (!odds) {
             scanDiagnostics.push(diagnostic);
+            if (seenFixtures.size < fixtures.length) await new Promise(resolve => setTimeout(resolve, 4000));
             continue;
           }
           if (!odds.matched?.length) {
@@ -196,6 +197,9 @@ export async function POST(req: Request) {
             }).catch((error: any) => { diagnostic.historySaveError = error instanceof Error ? error.message : String(error); });
           }
           scanDiagnostics.push(diagnostic);
+          // Share the provider fixture catalogue within this small batch and
+          // stay below the odds API's 40-requests/minute rate limit.
+          if (seenFixtures.size < fixtures.length) await new Promise(resolve => setTimeout(resolve, 4000));
         }
         const performance = await getSuperOddsPerformance().catch(() => []);
         return json({ rows, diagnostics: scanDiagnostics, settled, performance });
