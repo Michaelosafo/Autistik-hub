@@ -287,6 +287,10 @@ export default function ValueBets({ endpoint }: Props) {
 
   function CounterMatchCard({group,index}:{group:any;index:number}) {
     return <div className="stack" style={{gap:7,minWidth:0}}>
+      <div className="stack" style={{gap:2,padding:"2px 2px 5px"}}>
+        <b style={{fontSize:15}}>{group.home} vs {group.away}</b>
+        {group.date&&<small className="muted">{new Date(group.date).toLocaleString()}</small>}
+      </div>
       {group.items.map((item:any,i:number)=><div key={item.selection} className="notice stack" style={{fontSize:13,gap:4,padding:"9px 11px",borderLeft:"3px solid var(--warning, #d69b28)"}}>
         <b>Possible counter-outcome: {item.selection}</b>
         <span>Counter-outcome rank: <b>{i+1}</b> · disagreement: <b>{item.gapPoints.toFixed(1)} percentage points</b></span>
