@@ -117,8 +117,10 @@ async function apiEnvelope(path: string): Promise<any> {
  */
 export async function getFiveDollarFootballUpcomingFixtures() {
   const now = Date.now();
-  const start = Math.floor(now / 1000);
-  const end = Math.floor((now + 48 * 60 * 60_000) / 1000);
+  // Stable hourly boundaries let all fixtures in one scan reuse the same
+  // provider catalogue instead of making a paginated search for every match.
+  const start = Math.floor(now / (60 * 60_000)) * 60 * 60;
+  const end = start + 48 * 60 * 60;
   const windows = [
     { from: start, to: start + 24 * 60 * 60 },
     { from: start + 24 * 60 * 60, to: end }
@@ -144,7 +146,7 @@ export async function getFiveDollarFootballUpcomingFixtures() {
       const rows = Array.isArray(body?.data) ? body.data : [];
       const pagination = body?.pagination || {};
       Object.defineProperty(rows, "__pagination", { value: pagination, enumerable: false });
-      fixtureBoardCache.set(cacheKey, { expiresAt: Date.now() + 45_000, value: rows });
+      fixtureBoardCache.set(cacheKey, { expiresAt: Date.now() + 5 * 60_000, value: rows });
       for (const fixture of rows) all.set(String(fixture.id), fixture);
       pagesFetched++;
       if (!pagination.has_more || rows.length === 0) break;
@@ -165,6 +167,37 @@ export async function getFiveDollarFootballUpcomingFixtures() {
   };
 }
 
+function teamMatchScore(left: string, right: string) {
+  const generic = new Set(["fc","cf","afc","sc","club","football","calcio","1913","1900","1899","1886","1892","1893","1905","1907","1910","1920"]);
+  const tokens = (value: string) => cleanName(value).split(" ").filter((token) => token && !generic.has(token) && !/^\\d{4}$/.test(token));
+  const a = tokens(left), b = tokens(right);
+  if (!a.length || !b.length) return 0;
+  return a.filter((token) => b.includes(token)).length / Math.max(a.length, b.length);
+}
+
+async function findProviderFixture(home: string, away: string, target: number) {
+  const catalogue = await getFiveDollarFootballUpcomingFixtures();
+  const candidates = catalogue.fixtures.map((fixture: any) => {
+    const time = Date.parse(fixture.date);
+    const homeScore = teamMatchScore(home, fixture.home.name);
+    const awayScore = teamMatchScore(away, fixture.away.name);
+    return { fixture, time, score: (homeScore + awayScore) / 2, homeScore, awayScore };
+  }).filter((item: any) => Number.isFinite(item.time) &&
+    Math.abs(item.time - target) <= 6 * 60 * 60_000 &&
+    item.homeScore >= 0.5 && item.awayScore >= 0.5
+  ).sort((a: any, b: any) => (b.score - a.score) ||
+    (Math.abs(a.time-target) - Math.abs(b.time-target)));
+  const best = candidates[0], runnerUp = candidates[1];
+  if (!best) return null;
+  if (runnerUp && best.score - runnerUp.score < 0.15 &&
+      Math.abs(best.time-target) - Math.abs(runnerUp.time-target) < 60_000) return null;
+  return {
+    id: best.fixture.providerFixtureId,
+    kickoff_utc: best.fixture.date,
+    teams: { home: { name: best.fixture.home.name }, away: { name: best.fixture.away.name } }
+  };
+}
+
 export async function getFiveDollarFootballMatchOdds(home: string, away: string, kickoff?: string, providerFixtureId?: number) {
   if (!home || !away) throw new Error("Both team names are required for 5DollarFootballAPI odds lookup.");
   const target = kickoff && Number.isFinite(Date.parse(kickoff)) ? Date.parse(kickoff) : Date.now();
@@ -180,25 +213,34 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       teams: { home: { name: home }, away: { name: away } }
     };
   } else {
-    // Provider fixture windows are capped at 24 hours; paginate to find the exact event.
-    const startTime = Math.floor((target - 12 * 60 * 60_000) / 1000);
-    const endTime = Math.floor((target + 12 * 60 * 60_000) / 1000);
-    const h = cleanName(home), a = cleanName(away);
-    let found: any[] = [];
-    for (let page = 1; page <= 20; page++) {
-      const query = "?start_time=" + startTime + "&end_time=" + endTime + "&status=all&per_page=100&page=" + page;
+    // Match against the shared provider catalogue first; do not search 20 pages
+    // independently for every football-data.org fixture.
+    try {
+      fixture = await findProviderFixture(home, away, target);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/\\b429\\b|rate limit/i.test(message)) throw error;
+    }
+    // One narrow fallback page only if the catalogue cannot identify a safe match.
+    if (!fixture) {
+      const startTime = Math.floor((target - 12 * 60 * 60_000) / 1000);
+      const endTime = Math.floor((target + 12 * 60 * 60_000) / 1000);
+      const query = "?start_time=" + startTime + "&end_time=" + endTime + "&status=all&per_page=100&page=1";
       const body = await apiEnvelope("/fixtures" + query);
       const list = Array.isArray(body?.data) ? body.data : [];
       eventsReturned += list.length;
-      found.push(...list.filter((item: any) =>
-        cleanName(item?.teams?.home?.name || "") === h &&
-        cleanName(item?.teams?.away?.name || "") === a
-      ));
-      if (!body?.pagination?.has_more || list.length === 0) break;
+      const candidates = list.map((item: any) => ({
+        item,
+        homeScore: teamMatchScore(home, item?.teams?.home?.name || ""),
+        awayScore: teamMatchScore(away, item?.teams?.away?.name || "")
+      })).filter((item: any) => item.homeScore >= 0.5 && item.awayScore >= 0.5);
+      candidates.sort((a: any, b: any) =>
+        (b.homeScore+b.awayScore)-(a.homeScore+a.awayScore));
+      if (candidates.length && (!candidates[1] ||
+        (candidates[0].homeScore+candidates[0].awayScore)-
+        (candidates[1].homeScore+candidates[1].awayScore)>=0.15)) fixture=candidates[0].item;
     }
-    found.sort((x: any, y: any) => Math.abs(Date.parse(x.kickoff_utc || "") - target) - Math.abs(Date.parse(y.kickoff_utc || "") - target));
-    fixture = found[0] || null;
-    if (!fixture) throw new Error("5DollarFootballAPI searched " + eventsReturned + " fixtures across paginated results but did not find " + home + " vs " + away + ".");
+    if (!fixture) throw new Error("5DollarFootballAPI could not safely match " + home + " vs " + away + " near " + new Date(target).toISOString() + ".");
   }
   const status = await getFiveDollarFootballStatus();
   const baseOddsPath = "/fixtures/" + encodeURIComponent(String(fixture.id)) + "/odds";
