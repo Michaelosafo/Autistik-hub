@@ -186,27 +186,33 @@ export default function ValueBets({ endpoint }: Props) {
   const superValueRows=superSupported.filter((r:any)=>Number(r.ev)>0).sort((a:any,b:any)=>Number(b.ev)-Number(a.ev));
   const superOverpricedRows=superSupported.filter((r:any)=>Number(r.ev)<0).sort((a:any,b:any)=>Number(a.ev)-Number(b.ev));
   const superProbabilityRows=[...superSupported].sort((a:any,b:any)=>Number(b.probability)-Number(a.probability));
+  const oddsBand=(odds:number)=>odds<1.5?"1.01–1.49":odds<2?"1.50–1.99":odds<2.5?"2.00–2.49":odds<3.5?"2.50–3.49":"3.50+";
 
   function SelectionCard({row,index}:{row:any;index:number}) {
     const supported=!!row.modelSupported;
     const ev=Number(row.ev);
+    const historyGroup=String(row.market||"Other")+" · "+String(row.bookmaker||"Bookmaker")+" · "+oddsBand(Number(row.odds));
+    const historical=superPerformance.find((p:any)=>p.group===historyGroup);
+    const breakEven=Number(row.odds)>1?100/Number(row.odds):null;
     return <div key={row.key||index} className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",width:"100%",boxSizing:"border-box",alignItems:"start",gap:9,padding:12,minWidth:0,overflowWrap:"break-word",borderLeft:supported&&ev>0?"4px solid var(--teal)":supported&&ev<0?"4px solid #d69b28":"4px solid var(--line)"}}>
       <b style={{display:"block",minWidth:0,overflowWrap:"break-word",wordBreak:"normal"}}>{index+1}. {row.home} vs {row.away}</b>
       <div style={{minWidth:0,overflowWrap:"break-word"}}><b>{row.selection}</b> · {row.market}</div>
       {row.modelProvider&&<small className="muted">Model: {row.modelProvider}</small>}
       <div style={{display:"flex",minWidth:0,gap:12,flexWrap:"wrap",fontSize:13}}>
         <span style={{minWidth:0,overflowWrap:"break-word"}}>Bookmaker <b>{Number(row.odds).toFixed(2)}</b> · {row.bookmaker}</span>
-        <span>Fair odds <b>{supported?Number(row.fairOdds).toFixed(2):"—"}</b></span>
-        <span>Model probability <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span><span>Opening odds <b>{row.openingOdds?Number(row.openingOdds).toFixed(2):"—"}</b></span><span>Latest odds <b>{row.closingOdds?Number(row.closingOdds).toFixed(2):Number(row.odds).toFixed(2)}</b></span>
+        <span>Autistik fair odds <b>{supported?Number(row.fairOdds).toFixed(2):"—"}</b></span>
+        <span>Autistik estimated chance <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span><span>Opening odds <b>{row.openingOdds?Number(row.openingOdds).toFixed(2):"—"}</b></span><span>Latest odds <b>{row.closingOdds?Number(row.closingOdds).toFixed(2):Number(row.odds).toFixed(2)}</b></span>
       </div>
-      <b style={{minWidth:0,overflowWrap:"break-word",color:!supported?"var(--muted)":ev>0?"var(--success, #16834a)":ev<0?"var(--danger, #b42318)":"inherit"}}>{!supported?"MODEL UNAVAILABLE · NOT A VALUE PICK":ev>0?"UNDERPRICED BY BOOKMAKER · VALUE +"+ev.toFixed(1)+"% EV":ev<0?"OVERPRICED BY BOOKMAKER · AVOID ("+ev.toFixed(1)+"% EV)":"FAIR PRICE"}</b>
+      <b style={{minWidth:0,overflowWrap:"break-word",color:!supported?"var(--muted)":ev>0?"var(--success, #16834a)":ev<0?"var(--danger, #b42318)":"inherit"}}>{!supported?"MODEL UNAVAILABLE · NOT A VALUE PICK":ev>0?"BOOKMAKER ODDS OVERPRICED VS AUTISTIK · VALUE +"+ev.toFixed(1)+"% EV":ev<0?"BOOKMAKER ODDS UNDERPRICED VS AUTISTIK · AVOID ("+Math.abs(ev).toFixed(1)+"% NEGATIVE EV)":"FAIR PRICE · MATCHES AUTISTIK"}</b>
+      {supported&&<small className="muted">At bookmaker odds <b>{Number(row.odds).toFixed(2)}</b>, the break-even chance is <b>{breakEven?.toFixed(1)}%</b>; Autistik estimates <b>{Number(row.probability).toFixed(1)}%</b>. Autistik's fair price is <b>{Number(row.fairOdds).toFixed(2)}</b>.</small>}
+      {supported&&<small className="muted">{historical?("Historical results for "+historyGroup+": "+historical.winRate+"% wins · "+historical.wins+" wins / "+historical.losses+" losses / "+historical.pushes+" pushes ("+historical.settled+" settled samples)."):"Historical result for this bookmaker and odds range: no settled samples yet. SUPER will show the actual win rate as tracked matches finish."}</small>}
       {supported&&<b style={{fontSize:13,color:Number(row.probability)>=65?"var(--success, #16834a)":Number(row.probability)<40?"var(--danger, #b42318)":"inherit"}}>{Number(row.probability)>=75?"HIGH CHANCE · MODEL EXPECTS THIS OUTCOME":Number(row.probability)>=60?"LIKELY · MODEL FAVOURS THIS OUTCOME":Number(row.probability)>=45?"UNCERTAIN · CLOSE PROBABILITY":"LOW CHANCE · MODEL DOES NOT FAVOUR THIS OUTCOME"} ({Number(row.probability).toFixed(1)}%)</b>}
       {supported&&Number(row.oddsMovementPct)>=3&&Number(row.probability)>=60&&<small className="muted">SIGNAL CONFLICT: Autistik gives this outcome a strong probability, but the bookmaker price has drifted. Review before treating it as a pick.</small>}
       {supported&&Number(row.oddsMovementPct)>=3&&Number(row.probability)<45&&<small className="muted">CAUTION ALIGNMENT: Autistik probability is low and the bookmaker price has drifted longer.</small>}
       {supported&&<small className="muted">Market implied {Number(row.implied).toFixed(1)}% · no-vig {Number(row.noVig).toFixed(1)}% · model edge {Number(row.edge).toFixed(1)} percentage points</small>}{row.oddsMovementPct!==null&&row.oddsMovementPct!==undefined&&<small className="muted">{Number(row.oddsMovementPct)>0?"Market drift: odds lengthened by ":Number(row.oddsMovementPct)<0?"Market shortening: odds shortened by ":"Odds unchanged: "}<b>{Math.abs(Number(row.oddsMovementPct)).toFixed(1)}%</b> from opening price. {Number(row.oddsMovementPct)>=3?"Warning: price drift may indicate reduced market confidence.":Number(row.oddsMovementPct)<=-3?"Market price has shortened, indicating increased market support.":"No material opening-to-latest movement."}</small>}
       {Array.isArray(row.bookmakerQuotes)&&row.bookmakerQuotes.length>1&&<details><summary>Compare all bookmaker quotes ({row.bookmakerQuotes.length})</summary><div className="stack" style={{fontSize:13,marginTop:8}}>{row.bookmakerQuotes.map((q:any,i:number)=><small key={i}>{q.bookmaker}: <b>{Number(q.odds).toFixed(2)}</b> {q.openingOdds?"(open "+Number(q.openingOdds).toFixed(2)+")":""} {q.oddsMovementPct!==null&&q.oddsMovementPct!==undefined?"· "+(q.oddsMovementPct>0?"+":"")+q.oddsMovementPct+"%":""}</small>)}</div></details>}
       {!supported&&row.modelError&&<small className="muted">Why no model: {row.modelError}</small>}
-      {row.modelContext&&<details><summary>Autistik analysis · team form and goal data</summary><div className="stack" style={{fontSize:13,marginTop:8}}>
+      {row.modelContext&&<details><summary>View / hide Autistik analysis · team form and goal data</summary><div className="stack" style={{fontSize:13,marginTop:8}}>
         <span>{row.home}: last form <b>{row.modelContext.homeForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.homeGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.homeGoalsAgainst??"—"}</b></span>
         <span>{row.away}: last form <b>{row.modelContext.awayForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.awayGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.awayGoalsAgainst??"—"}</b></span>
         {row.modelContext.homeMatches!=null&&<span>Sample: home team <b>{row.modelContext.homeMatches}</b> matches · away team <b>{row.modelContext.awayMatches}</b> matches</span>}
