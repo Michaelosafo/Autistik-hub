@@ -143,12 +143,12 @@ export default function ValueBets({ endpoint }: Props) {
           (!status||["SCHEDULED","TIMED"].includes(status));
       });
       const unique=[...new Map(eligible.map((f:any)=>[String(f.id||[f.home.name,f.away.name,f.date].join("|")),f])).values()];
-      if(!unique.length){if(!all.length)setError("No upcoming top-competition fixtures remain for today in Ghana time.");return;}
+      if(!unique.length){if(!all.length)setError("No upcoming top-competition fixtures remain for "+scanDate+" in Ghana time.");return;}
       // Small two-fixture server batches stay comfortably inside Vercel's
       // request window while sharing the odds-provider fixture catalogue cache.
       for(let i=0;i<unique.length;i+=2) {
         const batch=unique.slice(i,i+2);
-        setProgress("Analysing today's matches · "+Math.min(i+batch.length,unique.length)+" of "+unique.length+" fixtures");
+        setProgress("Analysing "+scanDate+" matches · "+Math.min(i+batch.length,unique.length)+" of "+unique.length+" fixtures");
         const data=await post("valueScan",{fixtures:batch});
         const incoming=Array.isArray(data.rows)?data.rows:[];
         const merged=new Map<string,any>();
@@ -158,14 +158,14 @@ export default function ValueBets({ endpoint }: Props) {
         // successful earlier picks even when a later odds request is empty.
         setSuperRows(prev=>{
           const current=new Map<string,any>();
-          for(const row of [...prev,...incoming]) current.set(String(row.key||[row.home,row.away,row.selection,row.bookmaker].join("|")),row);
+          for(const row of [...(replaceResults?prev.filter((item:any)=>ghanaDate(new Date(item.date))!==scanDate):prev),...incoming]) current.set(String(row.key||[row.home,row.away,row.selection,row.bookmaker].join("|")),row);
           return sortRows([...current.values()]);
         });
         if(Array.isArray(data.diagnostics)&&data.diagnostics.length)setDiagnostics(prev=>[...prev,...data.diagnostics].slice(-200));
         if(Array.isArray(data.performance))setSuperPerformance(data.performance);
         if(i+2<unique.length) await new Promise(resolve=>setTimeout(resolve,900));
       }
-      if(!all.length)setError("Today's fixtures were checked, but no supported bookmaker selections were returned. Open Scan diagnostics for provider details.");
+      if(!all.length)setError("Fixtures for "+scanDate+" were checked, but no supported bookmaker selections were returned. Open Scan diagnostics for provider details.");
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
   }
