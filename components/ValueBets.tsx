@@ -157,10 +157,13 @@ export default function ValueBets({ endpoint }: Props) {
         <span>Fair odds <b>{supported?Number(row.fairOdds).toFixed(2):"—"}</b></span>
         <span>Model probability <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span>
       </div>
-      <b style={{minWidth:0,overflowWrap:"break-word"}}>{!supported?"ODDS ONLY · NOT MODELLED":ev>0?"OVERPRICED · +"+ev.toFixed(1)+"% EV":ev<0?"UNDERPRICED · "+ev.toFixed(1)+"% EV":"FAIR PRICE"}</b>
+      <b style={{minWidth:0,overflowWrap:"break-word",color:!supported?"var(--muted)":ev>0?"var(--success, #16834a)":ev<0?"var(--danger, #b42318)":"inherit"}}>{!supported?"MODEL UNAVAILABLE · NOT A VALUE PICK":ev>0?"UNDERPRICED BY BOOKMAKER · VALUE +"+ev.toFixed(1)+"% EV":ev<0?"OVERPRICED BY BOOKMAKER · AVOID ("+ev.toFixed(1)+"% EV)":"FAIR PRICE"}</b>
+      {supported&&<small className="muted">Market implied {Number(row.implied).toFixed(1)}% · no-vig {Number(row.noVig).toFixed(1)}% · model edge {Number(row.edge).toFixed(1)} percentage points</small>}
+      {!supported&&row.modelError&&<small className="muted">Why no model: {row.modelError}</small>}
       {row.modelContext&&<details><summary>Autistik analysis · team form and goal data</summary><div className="stack" style={{fontSize:13,marginTop:8}}>
         <span>{row.home}: last form <b>{row.modelContext.homeForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.homeGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.homeGoalsAgainst??"—"}</b></span>
         <span>{row.away}: last form <b>{row.modelContext.awayForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.awayGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.awayGoalsAgainst??"—"}</b></span>
+        {row.modelContext.homeMatches!=null&&<span>Sample: home team <b>{row.modelContext.homeMatches}</b> matches · away team <b>{row.modelContext.awayMatches}</b> matches</span>}
         {row.modelContext.expectedGoals&&<span>Expected goals: home <b>{row.modelContext.expectedGoals.home}</b> · away <b>{row.modelContext.expectedGoals.away}</b></span>}
         {(row.modelContext.verdict||[]).map((v:string,i:number)=><small key={i}>{v}</small>)}
       </div></details>}
@@ -240,6 +243,6 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack"><b>Ranked selections</b>{sortRows(superRows).map((r:any,i:number)=><SelectionCard key={r.key||i} row={r} index={i}/>)}</div>}
       {diagnostics.length>0&&<details><summary>Scan diagnostics ({diagnostics.length})</summary><div className="stack" style={{gap:8,marginTop:8}}>{diagnostics.map((d:any,i:number)=><div key={i} className="notice" style={{fontSize:12,overflowWrap:"anywhere"}}><b>{d.fixture}</b><span>Odds provider: {d.oddsProvider||"5DollarFootballAPI"} · events checked: {d.oddsEvents??d.eventsReturned??0} · matched events: {d.matchedEvents??d.matched??0}</span><span>Bookmakers: {(d.bookmakers||[]).join(", ")||"None returned"} · markets: {(d.markets||[]).join(", ")||"None returned"}</span>{d.oddsError&&<span style={{color:"var(--danger, #b42318)"}}>Odds error: {d.oddsError}</span>}{d.analysisError&&<span style={{color:"var(--danger, #b42318)"}}>Model error: {d.analysisError}</span>}{d.feedExamples?.length>0&&<span>Provider fixture examples: {d.feedExamples.join(" · ")}</span>}{d.providers&&<span>Provider diagnostics: {JSON.stringify(d.providers)}</span>}</div>)}</div></details>}
     </>}
-    <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from API-Football recent form and season statistics. A selection is called value only when its model probability is available and expected value is positive.":"SUPER uses its own fixtures, model and odds providers."}</small>
+    <small className="muted">{endpoint==="/api/admin/sport"?"Model probabilities are calculated from API-Football recent form and season statistics.":"SUPER uses football-data.org fixtures and pre-match team history with 5DollarFootball bookmaker prices. Positive EV means the offered odds are generous versus Autistik's fair odds; negative EV means the price is too short. Odds imply a break-even probability of 100 ÷ decimal odds, before bookmaker margin. Probabilities are estimates, not guarantees."}</small>
   </section>;
 }
