@@ -243,8 +243,8 @@ export default function ValueBets({ endpoint }: Props) {
 
   function CounterMatchCard({group,index}:{group:any;index:number}) {
     return <div className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:10,padding:13,minWidth:0,overflowWrap:"break-word",borderLeft:"4px solid var(--warning, #d69b28)"}}>
-      <b>{index+1}. {group.home} vs {group.away}</b>
-      <small className="muted">Multiple bookmaker disagreements detected · {group.items.length} distinct counter-outcomes</small>
+      <b>{index+1}. {group.maxGap.toFixed(1)} percentage points · {group.home} vs {group.away}</b>
+      <small className="muted">Ranked from highest to lowest disagreement · {group.items.length} distinct counter-outcomes</small>
       {group.items.map((item:any,i:number)=><div key={item.selection} className="notice stack" style={{fontSize:13}}>
         <b>{i+1}{i===0?"st":i===1?"nd":i===2?"rd":"th"} counter-outcome: {item.selection}</b>
         <span>Disagreement: <b>{item.gapPoints.toFixed(1)} percentage points</b></span>
