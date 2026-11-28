@@ -20,6 +20,8 @@ export default function ValueBets({ endpoint }: Props) {
   const [results,setResults]=useState<Record<string,LeagueResult>>({});
   const [superRows,setSuperRows]=useState<any[]>([]);
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
+  const [superPerformance,setSuperPerformance]=useState<any[]>([]);
+  const [performanceLoading,setPerformanceLoading]=useState(false);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [fixtureSource,setFixtureSource]=useState<any>(null);
   const [checkingFeed,setCheckingFeed]=useState(false);
@@ -87,6 +89,12 @@ export default function ValueBets({ endpoint }: Props) {
     catch(e) { setFeedStatus({error:(e as Error).message}); }
     finally { setCheckingFeed(false); }
   }
+  async function refreshSuperPerformance() {
+    setPerformanceLoading(true);
+    try { const data=await post("superPerformance"); setSuperPerformance(Array.isArray(data.performance)?data.performance:[]); }
+    catch(e) { setError((e as Error).message); }
+    finally { setPerformanceLoading(false); }
+  }
   const fixtureKey=(f:any)=>String(f?.id || [f?.home?.name,f?.away?.name,f?.date].join("|"));
   const sortRows=(items:any[])=>[...items].sort((a:any,b:any)=>
     (Number(b.modelSupported)-Number(a.modelSupported)) ||
@@ -129,6 +137,7 @@ export default function ValueBets({ endpoint }: Props) {
         all=all.concat(Array.isArray(data.rows)?data.rows:[]);
         setSuperRows(sortRows(all));
         setDiagnostics(prev=>prev.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]));
+        if(Array.isArray(data.performance))setSuperPerformance(data.performance);
       }
     } catch(e) { setError((e as Error).message); }
     finally {setProgress("");setBusy(false);}
@@ -159,10 +168,10 @@ export default function ValueBets({ endpoint }: Props) {
       <div style={{display:"flex",minWidth:0,gap:12,flexWrap:"wrap",fontSize:13}}>
         <span style={{minWidth:0,overflowWrap:"break-word"}}>Bookmaker <b>{Number(row.odds).toFixed(2)}</b> · {row.bookmaker}</span>
         <span>Fair odds <b>{supported?Number(row.fairOdds).toFixed(2):"—"}</b></span>
-        <span>Model probability <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span>
+        <span>Model probability <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span><span>Opening odds <b>{row.openingOdds?Number(row.openingOdds).toFixed(2):"—"}</b></span><span>Latest odds <b>{row.closingOdds?Number(row.closingOdds).toFixed(2):Number(row.odds).toFixed(2)}</b></span>
       </div>
       <b style={{minWidth:0,overflowWrap:"break-word",color:!supported?"var(--muted)":ev>0?"var(--success, #16834a)":ev<0?"var(--danger, #b42318)":"inherit"}}>{!supported?"MODEL UNAVAILABLE · NOT A VALUE PICK":ev>0?"UNDERPRICED BY BOOKMAKER · VALUE +"+ev.toFixed(1)+"% EV":ev<0?"OVERPRICED BY BOOKMAKER · AVOID ("+ev.toFixed(1)+"% EV)":"FAIR PRICE"}</b>
-      {supported&&<small className="muted">Market implied {Number(row.implied).toFixed(1)}% · no-vig {Number(row.noVig).toFixed(1)}% · model edge {Number(row.edge).toFixed(1)} percentage points</small>}
+      {supported&&<small className="muted">Market implied {Number(row.implied).toFixed(1)}% · no-vig {Number(row.noVig).toFixed(1)}% · model edge {Number(row.edge).toFixed(1)} percentage points</small>}{row.oddsMovementPct!==null&&row.oddsMovementPct!==undefined&&<small className="muted">{Number(row.oddsMovementPct)>0?"Market drift: odds lengthened by ":Number(row.oddsMovementPct)<0?"Market shortening: odds shortened by ":"Odds unchanged: "}<b>{Math.abs(Number(row.oddsMovementPct)).toFixed(1)}%</b> from opening price. {Number(row.oddsMovementPct)>=3?"Warning: price drift may indicate reduced market confidence.":Number(row.oddsMovementPct)<=-3?"Market price has shortened, indicating increased market support.":"No material opening-to-latest movement."}</small>}
       {!supported&&row.modelError&&<small className="muted">Why no model: {row.modelError}</small>}
       {row.modelContext&&<details><summary>Autistik analysis · team form and goal data</summary><div className="stack" style={{fontSize:13,marginTop:8}}>
         <span>{row.home}: last form <b>{row.modelContext.homeForm||"Not available"}</b> · goals scored/game <b>{row.modelContext.homeGoalsFor??"—"}</b> · conceded/game <b>{row.modelContext.homeGoalsAgainst??"—"}</b></span>
@@ -243,7 +252,12 @@ export default function ValueBets({ endpoint }: Props) {
     </>}
     {endpoint==="/api/admin/super"&&<>
       <small className="muted">{fixtures.length} upcoming fixtures loaded.</small>
-      <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanSuper()}>{busy?"Scanning…":"Scan all fixtures"}</button>
+      <div className="row" style={{gap:8,flexWrap:"wrap"}}>
+        <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanSuper()}>{busy?"Scanning…":"Scan all fixtures"}</button>
+        <button className="btn" type="button" disabled={performanceLoading} onClick={()=>void refreshSuperPerformance()}>{performanceLoading?"Checking results…":"Refresh tracked results"}</button>
+      </div>
+      <small className="muted">Opening-to-latest price movement is shown per bookmaker. A rising price is a market-drift warning, not proof of insider information. SUPER records each scan and checks completed match outcomes so its own odds-band record builds over time.</small>
+      {superPerformance.length>0&&<div className="notice stack"><b>SUPER historical results by bookmaker odds band</b>{superPerformance.map((p:any)=><small key={p.oddsBand}>{p.oddsBand}: <b>{p.winRate===null?"—":p.winRate+"% wins"}</b> · {p.wins} wins / {p.losses} losses / {p.pushes} pushes · {p.settled} settled outcomes</small>)}</div>}
       {superRows.length>0&&<div className="stack">
         <b>Best underpriced odds · positive expected value ({superValueRows.length})</b>
         <small className="muted">These are the prices where Autistik estimates a higher chance than the bookmaker's odds imply. Highest estimated EV first.</small>
