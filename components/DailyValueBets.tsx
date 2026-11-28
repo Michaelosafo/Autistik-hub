@@ -47,6 +47,7 @@ export default function DailyValueBets() {
   const [todayDate, setTodayDate] = useState("");
   const [scanned, setScanned] = useState(0);
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const [activeSession, setActiveSession] = useState<"scanner"|"top25"|"expectedValue">("scanner");
   const started = useRef(false);
 
   useEffect(() => {
@@ -179,84 +180,69 @@ export default function DailyValueBets() {
     }
   }, []);
 
+  const allRows = visibleMatches.flatMap(item => item.markets);
+  const positiveRows = allRows.filter(row => Number(row.ev) > 0).sort((a,b) => Number(b.ev)-Number(a.ev));
+  const top25: any[] = [];
+  const usedTeams = new Set<string>();
+  for (const row of [...allRows].sort((a,b) => ratingFor(b)-ratingFor(a) || Number(b.ev)-Number(a.ev))) {
+    const home=String(row.home||"").toLowerCase(), away=String(row.away||"").toLowerCase();
+    if (!home || !away || usedTeams.has(home) || usedTeams.has(away)) continue;
+    top25.push(row); usedTeams.add(home); usedTeams.add(away);
+    if (top25.length===25) break;
+  }
+  const shownRows = activeSession==="top25" ? top25 : activeSession==="expectedValue" ? positiveRows : allRows;
+  const renderRow = (row:any,index:number) => {
+    const ev=Number(row.ev), chance=Number(row.probability), odds=Number(row.odds), fair=Number(row.fairOdds);
+    const positive=ev>0;
+    return <div key={String(row.key||row.home+row.away+row.selection+index)} className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:8,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:positive?"4px solid var(--teal)":"4px solid #d69b28"}}>
+      <b>{index+1}. {row.home} vs {row.away}</b>
+      <b>{row.selection} · {row.market}</b>
+      <small className="muted">{row.competition||"Football"} · {new Date(row.date).toLocaleString("en-GB",{timeZone:"Africa/Accra",dateStyle:"medium",timeStyle:"short"})} Ghana time</small>
+      <div className="row" style={{gap:12,flexWrap:"wrap",fontSize:13}}>
+        <span>Bookmaker odds <b>{odds.toFixed(2)}</b> · {row.bookmaker}</span>
+        <span>Autistik fair odds <b>{fair.toFixed(2)}</b></span>
+        <span>Model chance <b>{chance.toFixed(1)}%</b></span>
+        <span>Break-even chance <b>{(100/odds).toFixed(1)}%</b></span>
+      </div>
+      <b style={{color:positive?"var(--success, #16834a)":"var(--danger, #b42318)"}}>{positive?"POSITIVE EXPECTED VALUE · +"+ev.toFixed(1)+"% EV":"NEGATIVE EXPECTED VALUE · AVOID ("+ev.toFixed(1)+"% EV)"}</b>
+      <div className="notice stack" style={{fontSize:13,gap:4}}>
+        <b>Autistik outcome estimate</b>
+        <span>Estimated chance: <b>{chance.toFixed(1)}%</b> · chance it does not land: <b>{(100-chance).toFixed(1)}%</b></span>
+        <span>Odds edge: <b>{Number(row.edge||0).toFixed(1)} percentage points</b></span>
+        <span>{odds>fair?"Bookmaker price is above Autistik fair odds.":odds<fair?"Bookmaker price is below Autistik fair odds.":"Bookmaker price matches Autistik fair odds."}</span>
+      </div>
+    </div>;
+  };
   return (
-    <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
-        <div>
-          <b>📈 AUTISTIK · Daily Value Scanner</b>
-          <small className="muted" style={{ display: "block" }}>All available fixtures · API-Football match data and statistics · 5DollarFootball bookmaker odds</small>
-        </div>
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <input aria-label="Scan date" type="date" min={todayDate || undefined} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} disabled={loading || busy} />
-          <button className="btn small" type="button" onClick={() => void loadAndScan()} disabled={loading || busy}>Scan selected date</button>
-        </div>
+    <section className="card stack" style={{border:"2px solid var(--teal)",padding:14}}>
+      <div className="stack" style={{gap:4}}>
+        <b>⚽ SPORT · Football value scanner</b>
+        <small className="muted">API-Football fixtures and statistics · 5DollarFootball bookmaker odds · Ghana time</small>
+        <small className="muted">Full selected-day scan, ranked by model probability, expected value and odds edge.</small>
       </div>
-      <div className="notice">
-        <b>Full-day match ratings · {scanDate || "selected date"} · Ghana time</b>
-        <small className="muted" style={{ display: "block" }}>
-          Every upcoming fixture returned for the selected date is analysed. No Top 25/Top 10 cap, no top-league-only filter and no one-team-only restriction. Each match shows its strongest model-supported market, probability, fair odds, bookmaker odds, expected value, odds edge and a 0–100 rating. A positive rating is not a guarantee.
-        </small>
+      <div className="card stack" style={{padding:12}}>
+        <b>Choose match date</b>
+        <input aria-label="Scan date" type="date" value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/>
+        <button className="btn primary" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>{loading||busy?"Scanning…":"Refresh matches"}</button>
+        <b>{scanDate?new Date(scanDate+"T12:00:00").toLocaleDateString("en-GB",{timeZone:"Africa/Accra",dateStyle:"full"}):"Selected date"} · Ghana time</b>
+        <small className="muted">{fixtures.length} fixtures · {scanned} scanned · {ratedCount} rated · {valueCount} positive-EV matches</small>
+        {(loading||busy)&&<small className="muted">{progress||"Loading fixtures and comparing bookmaker odds…"}</small>}
+        {error&&<div className="notice warn">{error}</div>}
       </div>
-      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <small className="muted">{fixtures.length} fixtures loaded · {scanned} scanned · {ratedCount} rated · {valueCount} positive-EV matches</small>
-        {busy && <small className="muted">Full-day scan running</small>}
+      <div className="row" style={{gap:8,flexWrap:"wrap"}}>
+        <button className={activeSession==="scanner"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("scanner")}>Open scanner</button>
+        <button className={activeSession==="top25"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("top25")}>AI Top 25 · {top25.length}</button>
+        <button className={activeSession==="expectedValue"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("expectedValue")}>Expected Value · {positiveRows.length}</button>
       </div>
-      {progress && <small className="muted">{progress}</small>}
-      {error && <div className="notice warn">{error}</div>}
-      {visibleMatches.length > 0 && (
-        <div className="stack" style={{ gap: 9 }}>
-          <b>All match ratings · strongest first ({visibleMatches.length})</b>
-          {visibleMatches.map((item, index) => {
-            const fixture = item.fixture;
-            const row = item.best;
-            const ev = row ? Number(row.ev) : null;
-            const positive = ev != null && ev > 0;
-            return (
-              <details key={String(fixture.id)} className={"sb-top-r " + (positive ? "hi" : "mid")} style={{ minWidth: 0, overflowWrap: "anywhere", borderLeft: "4px solid " + (positive ? "var(--teal)" : "var(--sun)"), borderRadius: 10, padding: 12 }}>
-                <summary style={{ cursor: "pointer", display: "grid", gap: 7, listStylePosition: "inside" }}>
-                  <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <b>#{index + 1} · {fixture.competition || fixture.league?.name || "Football"}</b>
-                    <b>{item.rating == null ? "Rating unavailable" : "AI rating " + item.rating + "/100"}</b>
-                  </div>
-                  <b>{fixture.home.name} vs {fixture.away.name}</b>
-                  <small className="muted">{new Date(fixture.date).toLocaleString("en-GB", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time · Tap to open match analysis</small>
-                  {row && <span><b style={{ color: positive ? "var(--teal)" : "var(--sun)" }}>{positive ? "POSITIVE VALUE" : "NO POSITIVE VALUE"}</b> · {row.selection} ({row.market})</span>}
-                </summary>
-                <div className="stack" style={{ gap: 9, marginTop: 12 }}>
-                  {row ? <div className="notice stack" style={{ gap: 6 }}>
-                    <b>Top-rated selection</b><b>{row.selection} · {row.market}</b>
-                    <span>Model chance <b>{Number(row.probability).toFixed(1)}%</b> · Odds <b>{Number(row.odds).toFixed(2)}</b></span>
-                    <span>Fair odds <b>{Number(row.fairOdds).toFixed(2)}</b> · Expected value <b>{ev! >= 0 ? "+" : ""}{ev!.toFixed(1)}%</b> · Edge <b>{Number(row.edge).toFixed(1)} points</b></span>
-                    <small className="muted">Best available price: {row.bookmaker}</small>
-                  </div> : <small className="muted">No usable model-supported bookmaker price. {item.diagnostic?.analysisError || item.diagnostic?.oddsError || "See scan coverage diagnostics."}</small>}
-                  <b>All available model-supported markets ({item.markets.length})</b>
-                  {item.markets.length ? item.markets.map((market: any, marketIndex: number) => (
-                    <div key={String(market.key || market.selection + "|" + market.market + "|" + market.bookmaker + "|" + marketIndex)} className="notice stack" style={{ gap: 4, padding: 10 }}>
-                      <b>#{marketIndex + 1} · {market.selection} — {market.market}</b>
-                      <span>Model chance <b>{Number(market.probability).toFixed(1)}%</b> · Odds <b>{Number(market.odds).toFixed(2)}</b> · Fair odds <b>{Number(market.fairOdds).toFixed(2)}</b></span>
-                      <span>Expected value <b>{Number(market.ev) >= 0 ? "+" : ""}{Number(market.ev).toFixed(1)}%</b> · Edge <b>{Number(market.edge).toFixed(1)} points</b></span>
-                      <small className="muted">Bookmaker: {market.bookmaker}</small>
-                    </div>
-                  )) : <small className="muted">No additional supported selections returned for this match.</small>}
-                </div>
-              </details>
-            );
-          })}
-        </div>
-      )}
-      {busy && <small className="muted">The scanner continues through every fixture returned for this date. Matches are not discarded because another match uses the same team.</small>}
-      {diagnostics.length > 0 && (
-        <details>
-          <summary>Scan coverage and diagnostics · {diagnostics.length} fixtures checked</summary>
-          <div className="stack" style={{ gap: 7 }}>
-            <small className="muted">Fixtures remain visible even when odds or statistics are unavailable; those matches are marked as unrated rather than silently removed.</small>
-            {diagnostics.map((d: any, i: number) => (
-              <small key={i} className="muted">{d.fixture}: {d.analysisError || d.oddsError || ((d.markets || []).length ? "Analysed · " + d.markets.join(", ") : "No supported bookmaker prices returned")}</small>
-            ))}
-          </div>
-        </details>
-      )}
-      <small className="muted">SPORT uses the configured API-Football key for fixtures and statistics, plus 5DollarFootballAPI for bookmaker odds. Prices can change; verify the current odds before staking. No prediction is guaranteed.</small>
+      <div className="stack" style={{gap:8}}>
+        <b>{activeSession==="scanner"?"Best selections · highest rated first":activeSession==="top25"?"SPORT · AI Top 25":"SPORT · Positive Expected Value"} ({shownRows.length})</b>
+        {shownRows.length?shownRows.map(renderRow):<small className="muted">No eligible selections in the current scan. Run the SPORT scanner first and check scan diagnostics.</small>}
+        {activeSession!=="scanner"&&<button className="btn small" type="button" onClick={()=>setActiveSession("scanner")}>Back to scanner</button>}
+      </div>
+      {diagnostics.length>0&&<details><summary>Scan coverage and diagnostics · {diagnostics.length} fixtures checked</summary>
+        <div className="stack" style={{gap:7}}>{diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.analysisError||d.oddsError||((d.markets||[]).length?"Analysed · "+d.markets.join(", "):"No supported bookmaker prices returned")}</small>)}</div>
+      </details>}
+      <small className="muted">Positive expected value is an estimate, not a guarantee. Verify current bookmaker prices before staking.</small>
     </section>
   );
 }
