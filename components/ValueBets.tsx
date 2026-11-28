@@ -161,6 +161,16 @@ export default function ValueBets({ endpoint }: Props) {
     document.addEventListener("visibilitychange",onVisible);
     return ()=>{active=false;window.clearInterval(interval);document.removeEventListener("visibilitychange",onVisible);};
   },[endpoint]);
+  useEffect(()=>{
+    // Hide a fixture as soon as its scheduled kickoff time is reached,
+    // even between the four-hour feed refreshes.
+    const timer=window.setInterval(()=>{
+      const now=Date.now();
+      setFixtures(prev=>prev.filter((f:any)=>Date.parse(String(f?.date||""))>now));
+      setSuperRows(prev=>prev.filter((row:any)=>Date.parse(String(row?.date||""))>now));
+    },30_000);
+    return ()=>window.clearInterval(timer);
+  },[]);
   if(endpoint==="/api/admin/sport") return <DailyValueBets />;
 
   const countries=Object.entries(leagues.reduce((acc:any,league:any)=>{
