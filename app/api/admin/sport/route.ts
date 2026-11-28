@@ -103,7 +103,12 @@ export async function POST(req: Request) {
                         : side + " +" + handicap + " handicap (lose by " + (handicap - 0.5) + " at most)";
                     }
                   }
-                } else if (market.key !== "h2h") {
+                } else if (market.key === "btts") {
+                  if (norm(label) === "yes") modelName = "Both teams score: Yes";
+                  else if (norm(label) === "no") modelName = "Both teams score: No";
+                } else {
+                  // Only evaluate markets with an explicit SPORT model mapping.
+                  // Never treat an unknown bookmaker market as a supported value bet.
                   continue;
                 }
                 let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
