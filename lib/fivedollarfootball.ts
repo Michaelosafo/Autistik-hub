@@ -169,7 +169,7 @@ export async function getFiveDollarFootballUpcomingFixtures() {
 
 function teamMatchScore(left: string, right: string) {
   const generic = new Set(["fc","cf","afc","sc","club","football","calcio","1913","1900","1899","1886","1892","1893","1905","1907","1910","1920"]);
-  const tokens = (value: string) => cleanName(value).split(" ").filter((token) => token && !generic.has(token) && !/^\\d{4}$/.test(token));
+  const tokens = (value: string) => cleanName(value).split(" ").filter((token) => token && !generic.has(token) && !/^\d{4}$/.test(token));
   const a = tokens(left), b = tokens(right);
   if (!a.length || !b.length) return 0;
   return a.filter((token) => b.includes(token)).length / Math.max(a.length, b.length);
@@ -219,7 +219,7 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       fixture = await findProviderFixture(home, away, target);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (/\\b429\\b|rate limit/i.test(message)) throw error;
+      if (/\b429\b|rate limit/i.test(message)) throw error;
     }
     // One narrow fallback page only if the catalogue cannot identify a safe match.
     if (!fixture) {
