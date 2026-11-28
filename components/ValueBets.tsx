@@ -274,11 +274,13 @@ export default function ValueBets({ endpoint }: Props) {
     {key:"40plus",title:"Disagreement 40% and above",description:"Largest price disagreements · 40 percentage points or more",min:40,max:Infinity}
   ].map((section:any)=>({
     ...section,
-    // Filter each counter-outcome, not just the fixture's highest disagreement.
-    // A 42-point counter must not pull 20-point alternatives into the 40+ band.
+    // Show only the single strongest counter-outcome per fixture.
+    // Choose the highest disagreement first, then place that one selection
+    // into its matching disagreement band. Never show weaker alternatives.
     groups:multiCounterGroups.map((group:any)=>{
-      const items=group.items.filter((item:any)=>item.gapPoints>=section.min&&item.gapPoints<section.max);
-      return items.length?{...group,items,maxGap:Number(items[0]?.gapPoints||0)}:null;
+      const best=group.items[0];
+      if(!best||best.gapPoints<section.min||best.gapPoints>=section.max)return null;
+      return {...group,items:[best],maxGap:Number(best.gapPoints||0)};
     }).filter(Boolean).sort((a:any,b:any)=>b.maxGap-a.maxGap)
   }));
   const groupedCounterFixtureKeys=new Set(multiCounterGroups.map((group:any)=>group.key));
