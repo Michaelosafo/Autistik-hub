@@ -150,8 +150,14 @@ export default function ValueBets({ endpoint }: Props) {
         const merged=new Map<string,any>();
         for(const row of [...all,...incoming]) merged.set(String(row.key||[row.home,row.away,row.selection,row.bookmaker].join("|")),row);
         all=sortRows([...merged.values()]);
-        setSuperRows(all);
-        if(Array.isArray(data.diagnostics)&&data.diagnostics.length)setDiagnostics(prev=>[...prev,...data.diagnostics]);
+        // Merge into the latest React state too, so four-hour refreshes keep
+        // successful earlier picks even when a later odds request is empty.
+        setSuperRows(prev=>{
+          const current=new Map<string,any>();
+          for(const row of [...prev,...incoming]) current.set(String(row.key||[row.home,row.away,row.selection,row.bookmaker].join("|")),row);
+          return sortRows([...current.values()]);
+        });
+        if(Array.isArray(data.diagnostics)&&data.diagnostics.length)setDiagnostics(prev=>[...prev,...data.diagnostics].slice(-200));
         if(Array.isArray(data.performance))setSuperPerformance(data.performance);
         if(i+2<unique.length) await new Promise(resolve=>setTimeout(resolve,900));
       }
