@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
       case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "football-data.org", statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
+      case "todayMatches": { const matches = await todayCompetitionMatches(typeof b.date === "string" ? b.date : undefined); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
       case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
       case "leagueFixtures": {
         const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
