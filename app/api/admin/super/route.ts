@@ -161,7 +161,8 @@ export async function POST(req: Request) {
                 bookmaker: r.bookmaker, probability: r.probability,
                 fairOdds: r.fairOdds, implied: r.implied, ev: r.ev,
                 openingOdds: r.openingOdds, closingOdds: r.closingOdds,
-                oddsMovementPct: r.oddsMovementPct, oddsMovement: r.oddsMovement
+                oddsMovementPct: r.oddsMovementPct, oddsMovement: r.oddsMovement,
+                bookmakerQuotes: r.bookmakerQuotes
               }))
             }).catch((error: any) => { diagnostic.historySaveError = error instanceof Error ? error.message : String(error); });
           }
