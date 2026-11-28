@@ -113,7 +113,6 @@ export async function POST(req: Request) {
                   continue;
                 }
                 let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
-                if (market.key === "h2h" && modelName === "Draw (X)") continue;
                 const price = Number(outcome.price);
                 const implied = 100 / price;
                 const noVig = implied / overround * 100;
@@ -126,7 +125,45 @@ export async function POST(req: Request) {
                 const fairOdds = 100 / probability;
                 const ev = (probability / 100) * price * 100 - 100;
                 const edge = probability - noVig;
-                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true });
+                // Use SPORT's own analysis model probabilities to calculate the
+                // opposite selection; do not alter the SPORT stats or odds feeds.
+                let counterName = "";
+                if (market.key === "h2h") {
+                  if (modelName === "Home win (1)") counterName = "Away win (2)";
+                  else if (modelName === "Away win (2)") counterName = "Home win (1)";
+                  else if (modelName === "Draw (X)") {
+                    const alternatives = modelMarkets.filter((x: any) =>
+                      ["Home win (1)", "Away win (2)"].includes(String(x.name)) && Number(x.p) > 0
+                    ).sort((x: any, y: any) => Number(y.p) - Number(x.p));
+                    if (alternatives[0]) counterName = String(alternatives[0].name);
+                  }
+                } else if (market.key === "totals") {
+                  const totalMatch = modelName.match(/^(Over|Under) (\\d+(?:\\.\\d+)?) goals$/i);
+                  if (totalMatch) counterName = (totalMatch[1].toLowerCase() === "over" ? "Under " : "Over ") + totalMatch[2] + " goals";
+                } else if (market.key === "asian_handicap") {
+                  const handicapMatch = modelName.match(/^(Home|Away) ([+-]\\d+(?:\\.5)?) handicap/);
+                  if (handicapMatch) {
+                    const side = handicapMatch[1] === "Home" ? "Away" : "Home";
+                    const line = -Number(handicapMatch[2]);
+                    const exactCounter = modelMarkets.find((x: any) =>
+                      norm(String(x.name)).startsWith(norm(side + " " + (line > 0 ? "+" : "") + line + " handicap"))
+                    );
+                    if (exactCounter) counterName = String(exactCounter.name);
+                  }
+                }
+                const counterPick = counterName
+                  ? modelMarkets.find((x: any) => norm(String(x.name)) === norm(counterName))
+                  : null;
+                const counterMarketAnalysis = {
+                  direction: price > fairOdds ? "bookmaker_longer" : price < fairOdds ? "bookmaker_shorter" : "aligned",
+                  gapPoints: Math.abs(probability - implied),
+                  autistikProbability: probability,
+                  bookmakerImpliedProbability: implied,
+                  counterSelection: counterName || null,
+                  counterProbability: counterPick ? Number(counterPick.p) : null,
+                  counterFairOdds: counterPick && Number(counterPick.p) > 0 ? +(100 / Number(counterPick.p)).toFixed(2) : null
+                };
+                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, counterMarketAnalysis });
               }
             }
           }
