@@ -607,6 +607,7 @@ export default function SportBoard() {
                   </div>
                 )) : dailyScanBusy ? <small className="muted">Scanning bookmaker odds and team statistics. Counter-picks will appear here as each match finishes analysis ({dailyScanProgress || "scan in progress"}).</small> : <small className="muted">No priced, model-supported counter-selections matched this disagreement range for the selected date. Check Odds-feed diagnostics to see which fixtures returned bookmaker prices.</small>}
               </section>
+              </section>
 
               <section className="stack" style={{ gap: 7 }}>
                 <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
