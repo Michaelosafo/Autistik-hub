@@ -462,7 +462,7 @@ export default function ValueBets({ endpoint }: Props) {
             <option value="30to40">30% to below 40%</option>
             <option value="40plus">Above 40%</option>
           </select>
-          <small className="muted">Choose one range to show only matches in that disagreement band. Each match stays grouped with all its counter-outcomes.</small>
+          <small className="muted">Each match appears once, using only its single highest-disagreement counter-outcome. A match appears in a range only when that strongest disagreement falls inside the selected range.</small>
         </div>
         {disagreementSections.filter((section:any)=>selectedDisagreementBand==="all"||section.key===selectedDisagreementBand).map((section:any)=><section key={section.key} className="stack">
           <b>{section.title} ({section.groups.length})</b>
