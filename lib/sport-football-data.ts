@@ -490,21 +490,25 @@ export async function getSuperOddsPerformance() {
     try { note = row.note ? JSON.parse(row.note) : {}; } catch { continue; }
     if (note.source !== "SUPER") continue;
     for (const item of note.settledSelections || []) {
-      const odds = Number(item.odds);
-      if (!Number.isFinite(odds) || odds <= 1) continue;
-      const band = odds < 1.5 ? "1.01–1.49" : odds < 2 ? "1.50–1.99" : odds < 2.5 ? "2.00–2.49" : odds < 3.5 ? "2.50–3.49" : "3.50+";
-      const group = String(item.market || "Other") + " · " + band;
-      bands[group] ||= { wins: 0, losses: 0, pushes: 0 };
-      if (item.outcome === "WIN") bands[group].wins++;
-      else if (item.outcome === "LOSS") bands[group].losses++;
-      else if (item.outcome === "PUSH") bands[group].pushes++;
+      const quotes = Array.isArray(item.bookmakerQuotes) && item.bookmakerQuotes.length
+        ? item.bookmakerQuotes : [{ bookmaker: item.bookmaker, odds: item.odds }];
+      for (const quote of quotes) {
+        const odds = Number(quote.odds);
+        if (!Number.isFinite(odds) || odds <= 1) continue;
+        const band = odds < 1.5 ? "1.01–1.49" : odds < 2 ? "1.50–1.99" : odds < 2.5 ? "2.00–2.49" : odds < 3.5 ? "2.50–3.49" : "3.50+";
+        const group = String(item.market || "Other") + " · " + String(quote.bookmaker || "Bookmaker") + " · " + band;
+        bands[group] ||= { wins: 0, losses: 0, pushes: 0 };
+        if (item.outcome === "WIN") bands[group].wins++;
+        else if (item.outcome === "LOSS") bands[group].losses++;
+        else if (item.outcome === "PUSH") bands[group].pushes++;
+      }
     }
   }
   return Object.entries(bands).map(([group, counts]) => ({
     group, ...counts,
     settled: counts.wins + counts.losses + counts.pushes,
     winRate: counts.wins + counts.losses ? +(counts.wins / (counts.wins + counts.losses) * 100).toFixed(1) : null,
-  })).sort((a, b) => a.oddsBand.localeCompare(b.oddsBand));
+  })).sort((a, b) => a.group.localeCompare(b.group));
 }
 
 export async function history() {
