@@ -387,13 +387,11 @@ export default function SportBoard() {
     String(league.name || "").toLowerCase().includes(leagueSearch.toLowerCase()) ||
     String(league.country || "").toLowerCase().includes(leagueSearch.toLowerCase())
   );
-  const groupedLeagues: Record<string, any[]> = {};
-  filteredLeagues.forEach((league: any) => {
+  const leaguesByCountry = Object.entries(filteredLeagues.reduce((acc: any, league: any) => {
     const country = String(league.country || "International");
-    if (!groupedLeagues[country]) groupedLeagues[country] = [];
-    groupedLeagues[country].push(league);
-  });
-  const leaguesByCountry = Object.entries(groupedLeagues).sort((a, b) => a[0].localeCompare(b[0]));
+    (acc[country] ||= []).push(league);
+    return acc;
+  }, {} as Record<string, any[]>)).sort((a: any, b: any) => a[0].localeCompare(b[0]));
 
   return (
     <div className="sb stack">
