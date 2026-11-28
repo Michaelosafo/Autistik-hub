@@ -76,6 +76,20 @@ function validPrice(value: any) {
   return Number.isFinite(n) && n > 1 ? n : null;
 }
 
+function priceHistory(stage: any, key: string) {
+  const opening = validPrice(stage?.opening?.[key]);
+  const closing = validPrice(stage?.closing?.[key]);
+  const current = closing ?? opening;
+  const movementPct = opening && closing ? +((closing - opening) / opening * 100).toFixed(2) : null;
+  return {
+    price: current,
+    openingPrice: opening,
+    closingPrice: closing,
+    movementPct,
+    movement: movementPct === null ? "unavailable" : movementPct >= 3 ? "drifted" : movementPct <= -3 ? "shortened" : "stable"
+  };
+}
+
 const fixtureBoardCache = new Map<string, { expiresAt: number; value: any[] }>();
 
 async function apiEnvelope(path: string): Promise<any> {
@@ -232,9 +246,9 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
     const oneXTwo = latest(odds["1x2"]);
     if (oneXTwo) {
       const outcomes = [
-        { name: String(fixture.teams.home.name), price: validPrice(oneXTwo.home) },
-        { name: "Draw", price: validPrice(oneXTwo.draw) },
-        { name: String(fixture.teams.away.name), price: validPrice(oneXTwo.away) }
+        { name: String(fixture.teams.home.name), ...priceHistory(odds["1x2"], "home") },
+        { name: "Draw", ...priceHistory(odds["1x2"], "draw") },
+        { name: String(fixture.teams.away.name), ...priceHistory(odds["1x2"], "away") }
       ].filter((x: any) => x.price);
       if (outcomes.length >= 2) markets.push({ key: "h2h", outcomes });
     }
@@ -247,8 +261,8 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       const lineValue = Number(line.line);
       if (!Number.isFinite(lineValue)) continue;
       const outcomes = [
-        { name: "Over " + lineValue, price: validPrice(stage.over) },
-        { name: "Under " + lineValue, price: validPrice(stage.under) }
+        { name: "Over " + lineValue, ...priceHistory(line, "over") },
+        { name: "Under " + lineValue, ...priceHistory(line, "under") }
       ].filter((x: any) => x.price);
       if (outcomes.length) {
         markets.push({ key: "totals", outcomes });
@@ -260,8 +274,8 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
       const lineValue = Number(mainGoalLine.line);
       if (!seenGoalLines.has(String(lineValue))) {
         const outcomes = [
-          { name: "Over " + lineValue, price: validPrice(mainGoalLine.over) },
-          { name: "Under " + lineValue, price: validPrice(mainGoalLine.under) }
+          { name: "Over " + lineValue, ...priceHistory(odds.goal_line || odds.goalline, "over") },
+          { name: "Under " + lineValue, ...priceHistory(odds.goal_line || odds.goalline, "under") }
         ].filter((x: any) => x.price);
         if (outcomes.length) markets.push({ key: "totals", outcomes });
       }
@@ -274,8 +288,8 @@ export async function getFiveDollarFootballMatchOdds(home: string, away: string,
     if (asian && Number.isFinite(Number(asian.line)) && Math.abs(Number(asian.line) % 1) === 0.5) {
       const line = Number(asian.line);
       const outcomes = [
-        { name: "Home " + (line > 0 ? "+" : "") + line, price: validPrice(asian.home) },
-        { name: "Away " + (line > 0 ? "-" : "+") + Math.abs(line), price: validPrice(asian.away) }
+        { name: "Home " + (line > 0 ? "+" : "") + line, ...priceHistory(odds.asian_handicap, "home") },
+        { name: "Away " + (line > 0 ? "-" : "+") + Math.abs(line), ...priceHistory(odds.asian_handicap, "away") }
       ].filter((x: any) => x.price);
       if (outcomes.length) markets.push({ key: "asian_handicap", line, outcomes });
     }
