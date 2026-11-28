@@ -261,7 +261,7 @@ export default function ValueBets({ endpoint }: Props) {
         <button className="btn" type="button" disabled={performanceLoading} onClick={()=>void refreshSuperPerformance()}>{performanceLoading?"Checking results…":"Refresh tracked results"}</button>
       </div>
       <small className="muted">Opening-to-latest price movement is shown per bookmaker. A rising price is a market-drift warning, not proof of insider information. SUPER records each scan and checks completed match outcomes so its own odds-band record builds over time.</small>
-      {superPerformance.length>0&&<div className="notice stack"><b>SUPER historical results by bookmaker odds band</b>{superPerformance.map((p:any)=><small key={p.group}>{p.group}: <b>{p.winRate===null?"—":p.winRate+"% wins"}</b> · {p.wins} wins / {p.losses} losses / {p.pushes} pushes · {p.settled} settled outcomes</small>)}</div>}
+      {superPerformance.length>0&&<div className="notice stack"><b>SUPER historical results by bookmaker odds band</b>{superPerformance.map((p:any)=><small key={p.group}>{p.group}: <b>{p.winRate===null?"—":p.winRate+"% wins"}</b> · {p.wins} wins / {p.losses} losses / {p.pushes} pushes · {p.settled} settled outcomes</small>)}</div>}{superPerformance.length===0&&<small className="muted">No settled SUPER odds-history samples yet. Each scan is now archived; after fixtures finish, refresh tracked results to see actual win rates by market, bookmaker and odds range.</small>}
       {superRows.length>0&&<div className="stack">
         <b>Best underpriced odds · positive expected value ({superValueRows.length})</b>
         <small className="muted">These are the prices where Autistik estimates a higher chance than the bookmaker's odds imply. Highest estimated EV first.</small>
