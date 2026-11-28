@@ -22,6 +22,8 @@ export default function ValueBets({ endpoint }: Props) {
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [superPerformance,setSuperPerformance]=useState<any[]>([]);
   const [selectedDisagreementBand,setSelectedDisagreementBand]=useState("all");
+  const ghanaDate=(value:Date)=>new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(value);
+  const [superScanDate,setSuperScanDate]=useState(ghanaDate(new Date()));
   const [activeSession,setActiveSession]=useState<"scanner"|"top25"|"expectedValue">("scanner");
   const [performanceLoading,setPerformanceLoading]=useState(false);
   const [feedStatus,setFeedStatus]=useState<any>(null);
@@ -126,18 +128,18 @@ export default function ValueBets({ endpoint }: Props) {
     } catch(e) { setError((e as Error).message); }
     finally { setProgress("");setBusy(false); }
   }
-  async function scanSuper(sourceFixtures:any[]=fixtures) {
+  async function scanSuper(sourceFixtures:any[]=fixtures, scanDate:string=ghanaDate(new Date()), replaceResults=false) {
     setBusy(true);setError("");setProgress("");
     // Preserve the visible board while refreshing so it never flashes empty.
-    let all:any[]=[...superRows.filter((row:any)=>Date.parse(String(row?.date||""))>Date.now())];
+    let all:any[]=replaceResults?[]:[...superRows.filter((row:any)=>Date.parse(String(row?.date||""))>Date.now() && ghanaDate(new Date(row.date))===scanDate)];
+    if(replaceResults){setSuperRows([]);setDiagnostics([]);}
     try {
       const now=Date.now();
-      const todayAccra=new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
       const eligible=sourceFixtures.filter((f:any)=>{
         const kickoff=Date.parse(String(f?.date||""));
         const status=String(f?.status||"").toUpperCase();
         const matchDay=Number.isFinite(kickoff)?new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(kickoff)):"";
-        return Number.isFinite(kickoff)&&kickoff>=now&&matchDay===todayAccra&&f?.home?.name&&f?.away?.name&&
+        return Number.isFinite(kickoff)&&kickoff>=now&&matchDay===scanDate&&f?.home?.name&&f?.away?.name&&
           (!status||["SCHEDULED","TIMED"].includes(status));
       });
       const unique=[...new Map(eligible.map((f:any)=>[String(f.id||[f.home.name,f.away.name,f.date].join("|")),f])).values()];
@@ -443,6 +445,30 @@ export default function ValueBets({ endpoint }: Props) {
       })()}
     </>}
     {endpoint==="/api/admin/super"&&<>
+      <div className="card stack" style={{padding:12}}>
+        <b>SUPER · Scan by match date</b>
+        <small className="muted">Choose a Ghana-time date to load its upcoming fixtures from football-data.org and calculate bookmaker value, model probabilities, expected value and disagreement information.</small>
+        <label className="stack" style={{gap:4}}><b>Choose match date</b><input type="date" value={superScanDate} min={ghanaDate(new Date())} onChange={e=>setSuperScanDate(e.target.value)} /></label>
+        <button className="btn primary" type="button" disabled={busy||loading||!superScanDate} onClick={async()=>{
+          setLoading(true);setError("");setSuperRows([]);setDiagnostics([]);
+          try{
+            const data=await post("todayMatches");
+            const now=Date.now();
+            const chosen=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>{
+              const kickoff=Date.parse(String(f?.date||""));
+              const status=String(f?.status||"").toUpperCase();
+              return f?.home?.name&&f?.away?.name&&Number.isFinite(kickoff)&&kickoff>=now&&
+                ghanaDate(new Date(kickoff))===superScanDate&&
+                (!status||["SCHEDULED","TIMED"].includes(status))&&TOP_COMPETITION.test(String(f.competition||""));
+            }).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+            setFixtures(chosen);
+            if(!chosen.length){setError("No upcoming fixtures from SUPER subscribed top competitions were returned for "+superScanDate+".");}
+            else{setLoading(false);await scanSuper(chosen,superScanDate,true);}
+          }catch(e){setError((e as Error).message);}
+          finally{setLoading(false);}
+        }}>{loading?"Loading fixtures…":busy?"Scanning…":"Load date and scan matches"}</button>
+        <small className="muted">{fixtures.length} fixtures currently loaded in the board.</small>
+      </div>
       <small className="muted">{fixtures.length} upcoming fixtures loaded.</small>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button className="btn primary" type="button" disabled={busy||!fixtures.length} onClick={()=>void scanSuper()}>{busy?"Scanning…":"Scan all fixtures"}</button>
