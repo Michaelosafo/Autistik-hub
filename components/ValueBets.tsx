@@ -22,7 +22,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [superPerformance,setSuperPerformance]=useState<any[]>([]);
   const [selectedDisagreementBand,setSelectedDisagreementBand]=useState("all");
-  const [activeSession,setActiveSession]=useState<"scanner"|"top25">("scanner");
+  const [activeSession,setActiveSession]=useState<"scanner"|"top25"|"expectedValue">("scanner");
   const [performanceLoading,setPerformanceLoading]=useState(false);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [fixtureSource,setFixtureSource]=useState<any>(null);
@@ -239,6 +239,11 @@ export default function ValueBets({ endpoint }: Props) {
     return picked;
   }
   const top25Rows=buildTop25(top25SourceRows);
+  // Dedicated positive expected-value board, using only this section's own scan data.
+  const expectedValueRows=top25SourceRows
+    .filter((row:any)=>row?.modelSupported&&Number.isFinite(Number(row.probability))&&Number(row.ev)>0&&Number(row.odds)>1)
+    .sort((a:any,b:any)=>Number(b.ev)-Number(a.ev));
+
 
   // Build one counter-market group per fixture. Multiple bookmaker/market
   // rows can point to the same model counter-selection, so retain the
@@ -375,7 +380,13 @@ export default function ValueBets({ endpoint }: Props) {
     <div className="row" style={{gap:8,flexWrap:"wrap"}}>
       <button className={activeSession==="scanner"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("scanner")}>Open scanner</button>
       <button className={activeSession==="top25"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("top25")}>AI Top 25 · {top25Rows.length}</button>
+      <button className={activeSession==="expectedValue"?"btn primary":"btn"} type="button" onClick={()=>setActiveSession("expectedValue")}>Expected Value · {expectedValueRows.length}</button>
     </div>
+    {activeSession==="expectedValue"&&<div className="card stack" style={{padding:14}}>
+      <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><b>{endpoint==="/api/admin/super"?"SUPER":"SPORT"} · Positive Expected Value</b><button className="btn small" type="button" onClick={()=>setActiveSession("scanner")}>Back to scanner</button></div>
+      <small className="muted">All model-supported selections with positive expected value from this section's own completed scans, ranked from highest to lowest EV. This is a price-versus-model calculation, not a guarantee of profit. Scan fixtures or leagues first to populate this session.</small>
+      {expectedValueRows.length?expectedValueRows.map((row:any,i:number)=><SelectionCard key={"expected-value-"+(row.key||i)} row={row} index={i}/>):<small className="muted">No positive expected-value selections in the current scan data. Run the {endpoint==="/api/admin/super"?"SUPER":"SPORT"} scanner first.</small>}
+    </div>}
     {activeSession==="top25"&&<div className="card stack" style={{padding:14}}>
       <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}><b>{endpoint==="/api/admin/super"?"SUPER":"SPORT"} · AI Top 25</b><button className="btn small" type="button" onClick={()=>setActiveSession("scanner")}>Back to scanner</button></div>
       <small className="muted">Top recommendations from the data already scanned in this section. Ranked by relative model probability, expected value and odds edge. Each match's two teams can appear only once in this Top 25. Draws, double chance and BTTS are excluded. No fixed probability or edge cutoff is applied.</small>
