@@ -3,7 +3,6 @@ import BotFab from "@/components/BotFab";
 import { Suspense } from "react";
 import { NavTrail } from "@/components/BackButton";
 import type { Metadata, Viewport } from "next";
-import { JetBrains_Mono, Manrope, Space_Grotesk } from "next/font/google";
 import Shell from "@/components/Shell";
 import LiveDock from "@/components/rooms/LiveDock";
 import GameDock from "@/components/GameDock";
@@ -14,32 +13,6 @@ import AppBanner from "@/components/AppBanner";
 import { cookies, headers } from "next/headers";
 import { APP_COOKIE, APP_CSS, APP_MONEY } from "@/lib/android-app";
 import { supabaseServer, currentUser } from "@/lib/supabase/server";
-
-/* Self-hosted by next/font (metric-adjusted fallback, no layout shift, no Google CSS request).
-   Space Grotesk: geometric display face with a crypto/app voice that stays readable at large sizes.
-   Manrope: screen UI face with a large x-height, warmer than Inter, so body copy still feels human.
-   JetBrains Mono: addresses, codes, and tabular prices. */
-const fontBody = Manrope({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-body",
-  weight: ["400", "500", "600", "700", "800"],
-  adjustFontFallback: true,
-});
-const fontDisplay = Space_Grotesk({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-display",
-  weight: ["500", "600", "700"],
-  adjustFontFallback: true,
-});
-const fontMono = JetBrains_Mono({
-  subsets: ["latin"],
-  display: "swap",
-  variable: "--font-mono",
-  weight: ["400", "500", "600"],
-  adjustFontFallback: true,
-});
 
 export const metadata: Metadata = {
   title: "AUTISTIK Hub",
@@ -67,7 +40,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     me = { id: user.id, avatar_url: (data as any)?.avatar_url ?? null, alias: data?.alias ?? "Member", color: /^#[0-9a-f]{6}$/i.test(data?.color || "") ? data!.color : "#6141D4", is_admin: owner === true, mfa: !!user.factors?.some((f) => f.status === "verified") };
   }
   return (
-    <html lang="en" className={`${fontBody.variable} ${fontDisplay.variable} ${fontMono.variable}`} suppressHydrationWarning {...(appNoMoney ? { "data-app": "android" } : {})}>
+    <html lang="en"  suppressHydrationWarning {...(appNoMoney ? { "data-app": "android" } : {})}>
       <head>
         {/* Applies saved comfort settings before the page paints, so there's no flash of bright colours or motion. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: `try{var d=document.documentElement,l=localStorage;if(l.getItem("calm")==="1")d.dataset.calm="on";if(l.getItem("big")==="1")d.dataset.size="large";d.dataset.theme=l.getItem("theme3")==="dark"?"dark":"light"}catch(e){}addEventListener("beforeinstallprompt",function(e){e.preventDefault();window.__bip=e;dispatchEvent(new Event("bip"))})` }} />
