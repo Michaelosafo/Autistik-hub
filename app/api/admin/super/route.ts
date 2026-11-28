@@ -141,7 +141,15 @@ export async function POST(req: Request) {
             const old = bestBySelection.get(k);
             if (!old || row.odds > old.odds) bestBySelection.set(k,row);
           }
-          const fixtureRows = [...bestBySelection.values()];
+          const fixtureRows = [...bestBySelection.values()].map((row: any) => ({
+            ...row,
+            bookmakerQuotes: mapped.filter((quote: any) => quote.market === row.market && quote.selection === row.selection)
+              .map((quote: any) => ({
+                bookmaker: quote.bookmaker, odds: quote.odds,
+                openingOdds: quote.openingOdds, oddsMovementPct: quote.oddsMovementPct,
+                oddsMovement: quote.oddsMovement
+              })).sort((a: any, b: any) => Number(b.odds) - Number(a.odds))
+          }));
           rows.push(...fixtureRows);
           if (analysis && fixtureRows.length) {
             await saveSuperSnapshot({
