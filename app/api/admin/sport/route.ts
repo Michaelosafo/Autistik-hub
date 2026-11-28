@@ -1,7 +1,7 @@
 import { json } from "@/lib/ai";
 import { getFiveDollarFootballMatchOdds, getFiveDollarFootballStatus } from "@/lib/fivedollarfootball";
 import { adminState } from "@/lib/admin";
-import { analyse, getLeagueCatalogue, getLeagueUpcomingFixtures, history, matchesOnDate, upcomingMatches, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices, todayCompetitionMatches } from "@/lib/sport-football-data";
+import { analyse, leagueCatalogue, leagueUpcomingFixtures, history, matchesOnDate, saveOdds, savePrediction, searchTeams, setResult, sportReady, teamFixtureChoices } from "@/lib/sport";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -14,24 +14,19 @@ export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}));
   try {
     switch (b.action) {
-      case "ready": return json({ ready: sportReady(), provider: "football-data.org" });
-      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "football-data.org", statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
+      case "ready": return json({ ready: sportReady(), provider: "API-Football" });
+      case "oddsStatus": return json({ ...await getFiveDollarFootballStatus(), fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "5DollarFootballAPI" });
       case "search": return json({ teams: await searchTeams(String(b.q || "")) });
-      case "todayMatches": { const matches = await todayCompetitionMatches(); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "football-data.org" }); }
-      case "leagues": return json({ leagues: await getLeagueCatalogue(), provider: "football-data.org" });
+      case "todayMatches": { const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); const matches = await matchesOnDate(today); return json({ matches: Array.isArray(matches) ? matches : [], fixtureProvider: "API-Football" }); }
+      case "leagues": return json({ leagues: await leagueCatalogue(), provider: "API-Football" });
       case "dailyFixtures": {
         const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
         const requested = String(b.date || today).trim();
-        if (requested !== today) {
-          const dayMatches = await upcomingMatches(14);
-          const matches = dayMatches.filter((f: any) => f.date.slice(0, 10) === requested);
-          return json({ date: requested, today, matches, fixtureProvider: "football-data.org", statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
-        }
-        const matches = await upcomingMatches(7);
-        return json({ date: requested, today, matches, fixtureProvider: "football-data.org", statisticsProvider: "football-data.org", oddsProvider: "5DollarFootballAPI" });
+        const matches = await matchesOnDate(requested);
+        return json({ date: requested, today, matches, fixtureProvider: "API-Football", statisticsProvider: "API-Football", oddsProvider: "5DollarFootballAPI" });
       }
       case "leagueFixtures": {
-        const result = await getLeagueUpcomingFixtures(String(b.leagueCode || ""));
+        const result = await leagueUpcomingFixtures(Number(b.leagueId), Number(b.season));
         return json(result);
       }
       case "valueScan": {
@@ -44,7 +39,7 @@ export async function POST(req: Request) {
           const kickoff = Date.parse(String(f?.date || ""));
           const status = String(f?.status || "").toUpperCase();
           const fixtureKey = String(f?.id || [f?.home?.name, f?.away?.name, f?.date].join("|"));
-          if (!Number.isFinite(kickoff) || kickoff < now || (status && !["SCHEDULED", "TIMED"].includes(status)) || seenFixtures.has(fixtureKey)) continue;
+          if (!Number.isFinite(kickoff) || kickoff < now || (status && !["SCHEDULED", "TIMED", "NS", "TBD", "NOT STARTED", "TIME TO BE DEFINED", "SCHEDULED"].includes(status)) || seenFixtures.has(fixtureKey)) continue;
           seenFixtures.add(fixtureKey);
           const homeId = Number(f?.home?.id), awayId = Number(f?.away?.id);
           const home = String(f?.home?.name || ""), away = String(f?.away?.name || "");
@@ -53,7 +48,7 @@ export async function POST(req: Request) {
           // Keep the odds feed independent from team-history coverage. A missing
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
-            analyse(homeId, awayId),
+            analyse(homeId, awayId, date),
             getFiveDollarFootballMatchOdds(home, away, String(f.date))
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
@@ -176,9 +171,9 @@ export async function POST(req: Request) {
           rows.push(...bestBySelection.values());
           scanDiagnostics.push(diagnostic);
         }
-        return json({ rows, diagnostics: scanDiagnostics, providers: { fixtures: "football-data.org", statistics: "football-data.org", odds: "5DollarFootballAPI" } });
+        return json({ rows, diagnostics: scanDiagnostics, providers: { fixtures: "API-Football", statistics: "API-Football", odds: "5DollarFootballAPI" } });
       }
-      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")), fixtureProvider: "football-data.org" });
+      case "dateMatches": return json({ matches: await matchesOnDate(String(b.date || "")), fixtureProvider: "API-Football" });
       case "teamFixtures": {
         const teamId = Number(b.teamId);
         if (!Number.isInteger(teamId) || teamId <= 0) return json({ error: "Choose a valid team." }, 400);
