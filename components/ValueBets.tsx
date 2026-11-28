@@ -249,16 +249,13 @@ export default function ValueBets({ endpoint }: Props) {
   const oddsBand=(odds:number)=>odds<1.5?"1.01–1.49":odds<2?"1.50–1.99":odds<2.5?"2.00–2.49":odds<3.5?"2.50–3.49":"3.50+";
 
   function CounterMatchCard({group,index}:{group:any;index:number}) {
-    return <div className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",gap:10,padding:13,minWidth:0,overflowWrap:"break-word",borderLeft:"4px solid var(--warning, #d69b28)"}}>
-      <b>{index+1}. {group.maxGap.toFixed(1)} percentage points · {group.home} vs {group.away}</b>
-      <small className="muted">Ranked from highest to lowest disagreement · {group.items.length} distinct counter-outcomes</small>
-      {group.items.map((item:any,i:number)=><div key={item.selection} className="notice stack" style={{fontSize:13}}>
+    return <div className="stack" style={{gap:7,minWidth:0}}>
+      {group.items.map((item:any,i:number)=><div key={item.selection} className="notice stack" style={{fontSize:13,gap:4,padding:"9px 11px",borderLeft:"3px solid var(--warning, #d69b28)"}}>
         <b>Possible counter-outcome: {item.selection}</b>
         <span>Counter-outcome rank: <b>{i+1}</b> · disagreement: <b>{item.gapPoints.toFixed(1)} percentage points</b></span>
         <span>Autistik estimated chance of {item.selection}: <b>{item.probability.toFixed(1)}%</b> · fair odds: <b>{Number.isFinite(item.fairOdds)?item.fairOdds.toFixed(2):"—"}</b></span>
         <small className="muted">Signal from {item.sourceSelection} · {item.market} · {item.bookmaker} (odds {Number.isFinite(item.bookmakerOdds)?item.bookmakerOdds.toFixed(2):"—"})</small>
       </div>)}
-      <small className="muted">Ranked by largest bookmaker-versus-Autistik probability disagreement. These are alternative outcomes to review, not guaranteed picks.</small>
     </div>;
   }
 
