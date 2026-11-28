@@ -123,7 +123,7 @@ export default function DailyValueBets() {
       }).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
       setSelectedDate(String(data.date||""));setTodayDate(String(data.today||""));
       setFixtures(matches);
-      if(!matches.length)setError("API-Football returned no fixtures for the selected date.");
+      if(!matches.length)setError("SportMonks returned no upcoming fixtures for the selected date.");
       else {
         setLoading(false);
         await runDailyScan(matches);
@@ -140,12 +140,12 @@ export default function DailyValueBets() {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>Top competitions only · API-Football statistics · 5DollarFootballAPI odds</small></div>
+      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>Top competitions only · SportMonks fixtures, statistics and pre-match odds</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><input aria-label="Scan date" type="date" min={todayDate||undefined} value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/><button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>Scan selected date</button></div>
     </div>
     <div className="notice">
       <b>Upcoming value selections from {scanDate||"today"} · next 7 days · Ghana time</b>
-      <small className="muted" style={{display:"block"}}>Only upcoming fixtures are scanned. Markets are limited to straight home/away wins, Over/Under totals and supported Asian handicaps. Positive-EV selections are weighted by model probability, expected value and price edge, then shuffled once into a shortlist of up to 25 picks. A team can appear only once.</small>
+      <small className="muted" style={{display:"block"}}>Only upcoming fixtures are scanned. Markets are limited to straight home/away wins, Over/Under totals and supported Asian handicaps. Draws, double chance and BTTS are excluded. Positive-EV selections are weighted by model probability, expected value and price edge, then shuffled once into a shortlist of up to 25 picks. A team can appear only once.</small>
     </div>
     <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
       <small className="muted">{fixtures.filter(f=>Date.parse(f.date)>clockNow).length} upcoming fixtures · {scanned} scanned · {visiblePicks.length} qualifying picks</small>
