@@ -140,7 +140,7 @@ export default function DailyValueBets() {
 
   return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
     <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>Top competitions only · football-data.org fixtures, statistics and pre-match odds</small></div>
+      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>Top competitions only · football-data.org fixtures & statistics · 5DollarFootball multi-bookmaker odds</small></div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}><input aria-label="Scan date" type="date" min={todayDate||undefined} value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/><button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>Scan selected date</button></div>
     </div>
     <div className="notice">
