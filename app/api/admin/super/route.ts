@@ -126,10 +126,10 @@ export async function POST(req: Request) {
                   if (modelName === "Home win (1)") counterName = "Away win (2)";
                   else if (modelName === "Away win (2)") counterName = "Home win (1)";
                 } else if (market.key === "totals") {
-                  const totalMatch = modelName.match(/^(Over|Under) (\\d+(?:\\.\\d+)?) goals$/i);
+                  const totalMatch = modelName.match(/^(Over|Under) (\d+(?:\.\d+)?) goals$/i);
                   if (totalMatch) counterName = (totalMatch[1].toLowerCase() === "over" ? "Under " : "Over ") + totalMatch[2] + " goals";
                 } else if (market.key === "asian_handicap") {
-                  const handicapMatch = modelName.match(/^(Home|Away) ([+-]\\d+(?:\\.5)?) handicap/);
+                  const handicapMatch = modelName.match(/^(Home|Away) ([+-]\d+(?:\.5)?) handicap/);
                   if (handicapMatch) {
                     const side = handicapMatch[1] === "Home" ? "Away" : "Home";
                     const line = -Number(handicapMatch[2]);
