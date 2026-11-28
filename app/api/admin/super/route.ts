@@ -61,6 +61,7 @@ export async function POST(req: Request) {
             bookmakers: odds?.availableBookmakers || [],
             markets: [...new Set((odds?.matched || []).flatMap((e: any) => (e.bookmakers || []).flatMap((bk: any) => (bk.markets || []).map((m: any) => m.key))))],
             providers: odds?.diagnostics?.providers || null,
+            oddsDiagnostics: odds?.diagnostics || null,
             analysisError: analysisResult.status === "rejected" ? (analysisResult.reason instanceof Error ? analysisResult.reason.message : String(analysisResult.reason)) : null,
             oddsError: oddsResult.status === "rejected" ? (oddsResult.reason instanceof Error ? oddsResult.reason.message : String(oddsResult.reason)) : null,
             oddsProvider: "5DollarFootballAPI"
@@ -195,9 +196,6 @@ export async function POST(req: Request) {
             }).catch((error: any) => { diagnostic.historySaveError = error instanceof Error ? error.message : String(error); });
           }
           scanDiagnostics.push(diagnostic);
-          // One fixture's odds request at a time; pace within this single
-          // server invocation so the provider catalogue cache is shared.
-          if (seenFixtures.size < fixtures.length) await new Promise(resolve => setTimeout(resolve, 1600));
         }
         const performance = await getSuperOddsPerformance().catch(() => []);
         return json({ rows, diagnostics: scanDiagnostics, settled, performance });
