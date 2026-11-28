@@ -457,7 +457,8 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
     const marketKey = norm(marketName).replace(/\s/g, "");
     let key = "sportmonks_" + String(odd?.market_id ?? market?.id ?? "other");
     let title = marketName || "Other market";
-    if (/double.?chance/.test(marketKey)) { key = "double_chance"; title = "Double chance"; }
+    if (/asian.?handicap|handicap/.test(marketKey)) { key = "asian_handicap"; title = "Asian handicap"; }
+    else if (/double.?chance/.test(marketKey)) { key = "double_chance"; title = "Double chance"; }
     else if (/bothteamstoscore|btts/.test(marketKey)) { key = "btts"; title = "Both teams to score"; }
     else if (/over.?under|totalgoals|goalsoverunder|total.*goals/.test(marketKey)) { key = "totals"; title = "Goals · Over/Under"; }
     else if (/fulltimeresult|matchresult|1x2|winner/.test(marketKey)) { key = "h2h"; title = "1X2 · Match result"; }
@@ -483,9 +484,17 @@ export async function getSuperMatchOdds(fixtureId: number, home: string, away: s
     } else if (key === "totals") {
       const n = norm(rawLabel);
       const side = /under/.test(n) ? "Under" : /over/.test(n) ? "Over" : "";
-      const foundLine = rawLabel.match(/\d+(?:\.\d+)?/) || (line != null ? [String(line)] : null);
+      const foundLine = rawLabel.match(/\\d+(?:\\.\\d+)?/) || (line != null ? [String(line)] : null);
       if (side && foundLine) label = side + " " + foundLine[0];
       else if (!side && line != null) label = rawLabel + " " + String(line);
+    } else if (key === "asian_handicap") {
+      const n = norm(rawLabel);
+      const side = /^(home|1)\\b/.test(n) ? "Home" : /^(away|2)\\b/.test(n) ? "Away" : "";
+      const rawLine = rawLabel.match(/[+-]\\s*\\d+(?:\\.\\d+)?/) || (line != null ? [String(line)] : null);
+      if (side && rawLine) {
+        const handicap = Number(String(rawLine[0]).replace(/\\s/g, ""));
+        if (Number.isFinite(handicap)) label = side + " " + (handicap > 0 ? "+" : "") + handicap;
+      }
     }
     if (!label) label = rawLabel || String(odd?.id || "Selection");
     if (!books.has(bookId)) books.set(bookId, { key: "sportmonks:" + bookId, title: bookTitle, markets: new Map() });
