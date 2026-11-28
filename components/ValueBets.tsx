@@ -21,6 +21,7 @@ export default function ValueBets({ endpoint }: Props) {
   const [superRows,setSuperRows]=useState<any[]>([]);
   const [diagnostics,setDiagnostics]=useState<any[]>([]);
   const [superPerformance,setSuperPerformance]=useState<any[]>([]);
+  const [selectedDisagreementBand,setSelectedDisagreementBand]=useState("all");
   const [performanceLoading,setPerformanceLoading]=useState(false);
   const [feedStatus,setFeedStatus]=useState<any>(null);
   const [fixtureSource,setFixtureSource]=useState<any>(null);
@@ -390,7 +391,18 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack">
         <b>Best underpriced odds · positive expected value ({superValueRows.length})</b>
         <small className="muted">These are the prices where Autistik estimates a higher chance than the bookmaker's odds imply. Highest estimated EV first.</small>
-        {disagreementSections.map((section:any)=><section key={section.key} className="stack">
+        <div className="notice stack" style={{gap:8,padding:12}}>
+          <label htmlFor="super-disagreement-filter" style={{fontWeight:700}}>Choose disagreement range</label>
+          <select id="super-disagreement-filter" value={selectedDisagreementBand} onChange={(event)=>setSelectedDisagreementBand(event.target.value)} style={{width:"100%",minHeight:48,padding:"10px 12px",borderRadius:10,border:"1px solid var(--border, #cbd5e1)",background:"var(--card, #fff)",color:"inherit",fontSize:15}}>
+            <option value="all">All disagreement ranges</option>
+            <option value="under20">Below 20%</option>
+            <option value="20to30">20% to below 30%</option>
+            <option value="30to40">30% to below 40%</option>
+            <option value="40plus">Above 40%</option>
+          </select>
+          <small className="muted">Choose one range to show only matches in that disagreement band. Each match stays grouped with all its counter-outcomes.</small>
+        </div>
+        {disagreementSections.filter((section:any)=>selectedDisagreementBand==="all"||section.key===selectedDisagreementBand).map((section:any)=><section key={section.key} className="stack">
           <b>{section.title} ({section.groups.length})</b>
           <small className="muted">{section.description}</small>
           {section.groups.map((group:any,i:number)=><CounterMatchCard key={"counter-"+group.key} group={group} index={i}/>)}
