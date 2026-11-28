@@ -2,190 +2,256 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Fixture = { id:number; date:string; status:string; competition?:string; league?:{name?:string}; home:{id:number;name:string}; away:{id:number;name:string} };
-const TOP_COMPETITION = /(?:champions league|europa league|conference league|premier league|la liga|serie a|bundesliga|ligue 1|eredivisie|primeira liga)/i;
+type Fixture = {
+  id: number;
+  date: string;
+  status: string;
+  competition?: string;
+  league?: { name?: string; country?: string };
+  home: { id: number; name: string; logo?: string };
+  away: { id: number; name: string; logo?: string };
+};
 
-type Pick = { key:string; home:string; away:string; competition:string; selection:string; market:string; probability:number; fairOdds:number; odds:number; bookmaker:string; ev:number; edge:number; date:string; autistikRank:number };
+type RatedMatch = {
+  fixture: Fixture;
+  best: any | null;
+  rating: number | null;
+  diagnostic: any | null;
+};
+
+const normStatus = (value: any) => String(value || "").trim().toLowerCase();
+const isUpcoming = (fixture: Fixture, now: number) => {
+  const status = normStatus(fixture.status);
+  const scheduled = !status || ["not started", "time to be defined", "scheduled", "timed", "ns", "tbd"].includes(status);
+  return scheduled && Number.isFinite(Date.parse(fixture.date)) && Date.parse(fixture.date) > now;
+};
+
+function ratingFor(row: any) {
+  const probability = Math.max(0, Math.min(100, Number(row.probability) || 0));
+  const ev = Math.max(0, Math.min(100, Number(row.ev) || 0));
+  const edge = Math.max(0, Math.min(40, Number(row.edge) || 0));
+  return Math.round(probability * 0.60 + ev * 0.25 + (edge / 40) * 15);
+}
 
 export default function DailyValueBets() {
-  const [fixtures,setFixtures]=useState<Fixture[]>([]);
-  const [picks,setPicks]=useState<Pick[]>([]);
-  const [diagnostics,setDiagnostics]=useState<any[]>([]);
-  const [loading,setLoading]=useState(true);
-  const [busy,setBusy]=useState(false);
-  const [progress,setProgress]=useState("");
-  const [error,setError]=useState("");
-  const [scanDate,setScanDate]=useState("");
-  const [selectedDate,setSelectedDate]=useState("");
-  const [todayDate,setTodayDate]=useState("");
-  const [redPicks,setRedPicks]=useState<any[]>([]);
-  const [scanned,setScanned]=useState(0);
-  const [clockNow,setClockNow]=useState(()=>Date.now());
-  const started=useRef(false);
+  const [fixtures, setFixtures] = useState<Fixture[]>([]);
+  const [ratedMatches, setRatedMatches] = useState<RatedMatch[]>([]);
+  const [diagnostics, setDiagnostics] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState("");
+  const [error, setError] = useState("");
+  const [scanDate, setScanDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [todayDate, setTodayDate] = useState("");
+  const [scanned, setScanned] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const started = useRef(false);
 
-  useEffect(()=>{const timer=window.setInterval(()=>setClockNow(Date.now()),30000);return()=>window.clearInterval(timer);},[]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
-  async function post(action:string,body:any={}) {
-    const response=await fetch("/api/admin/sport",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,...body})});
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok||data.error)throw new Error(data.error||"Request failed (HTTP "+response.status+").");
+  async function post(action: string, body: any = {}) {
+    const response = await fetch("/api/admin/sport", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, ...body })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.error) throw new Error(data.error || "Request failed (HTTP " + response.status + ").");
     return data;
   }
 
-  function randomBestRows(rows:any[], limit=25):Pick[] {
-    // Keep every genuinely model-supported positive-EV selection; do not impose an
-    // arbitrary minimum probability. Randomise the shortlist, but weight the draw
-    // toward stronger probabilities and larger positive expected value.
-    const eligible=rows.filter((r:any)=>
-      r.modelSupported &&
-      Number.isFinite(Number(r.probability)) &&
-      Number(r.probability)>0 &&
-      Number.isFinite(Number(r.ev)) &&
-      Number(r.ev)>0 &&
-      Number.isFinite(Number(r.odds)) &&
-      Number(r.odds)>1
-    );
-    const best=new Map<string,any>();
-    for(const r of eligible) {
-      const key=[r.home,r.away,r.market,r.selection].join("|");
-      const old=best.get(key);
-      if(!old||Number(r.odds)>Number(old.odds))best.set(key,r);
-    }
-    const pool=[...best.values()].map((r:any)=>{
-      const probability=Math.max(0,Math.min(100,Number(r.probability)));
-      const ev=Math.max(0,Number(r.ev));
-      const edge=Math.max(0,Number(r.edge)||0);
-      const quality=0.60*(probability/100)+0.25*Math.min(ev,50)/50+0.15*Math.min(edge,20)/20;
-      return {...r,autistikRank:Math.round(quality*100)};
-    });
-    const selected: any[]=[];
-    const usedTeams=new Set<string>();
-    // Weighted random sampling without replacement. Higher-quality picks are
-    // more likely, while the final order remains shuffled rather than rank-sorted.
-    while(pool.length && selected.length<limit) {
-      const available=pool.filter((r:any)=>
-        !usedTeams.has(String(r.home).toLowerCase()) &&
-        !usedTeams.has(String(r.away).toLowerCase())
-      );
-      if(!available.length)break;
-      const weights=available.map((r:any)=>Math.max(0.01,
-        (Number(r.probability)/100) *
-        (1+Math.min(Number(r.ev),50)/50) *
-        (1+Math.min(Math.max(0,Number(r.edge)||0),20)/40)
-      ));
-      const total=weights.reduce((sum:number,w:number)=>sum+w,0);
-      let draw=Math.random()*total, chosen=available[available.length-1];
-      for(let i=0;i<available.length;i++){draw-=weights[i];if(draw<=0){chosen=available[i];break;}}
-      selected.push(chosen);
-      usedTeams.add(String(chosen.home).toLowerCase());
-      usedTeams.add(String(chosen.away).toLowerCase());
-      const index=pool.indexOf(chosen);
-      if(index>=0)pool.splice(index,1);
-    }
-    return selected;
-  }
-
-  async function runDailyScan(dayFixtures:Fixture[]) {
-    setBusy(true);setError("");setRedPicks([]);setScanned(0);
-    let allRows:any[]=[];let allDiagnostics:any[]=[];
+  async function runDailyScan(dayFixtures: Fixture[]) {
+    setBusy(true);
+    setError("");
+    setScanned(0);
+    let allRows: any[] = [];
+    let allDiagnostics: any[] = [];
     try {
-      for(let i=0;i<dayFixtures.length;i+=2) {
-        const batch=dayFixtures.slice(i,i+2);
-        setProgress("Scanning every league · "+Math.min(i+batch.length,dayFixtures.length)+" / "+dayFixtures.length+" fixtures");
-        const data=await post("valueScan",{fixtures:batch});
-        allRows=allRows.concat(Array.isArray(data.rows)?data.rows:[]);
-        allDiagnostics=allDiagnostics.concat(Array.isArray(data.diagnostics)?data.diagnostics:[]);
-        // Keep the current shortlist stable while batches are loading. Re-shuffling
-        // on every response caused cards to jump/blink as their React keys changed.
-        setScanned(Math.min(i+batch.length,dayFixtures.length));
-        if(i+2<dayFixtures.length)await new Promise(resolve=>setTimeout(resolve,650));
+      // Keep requests small for the paid fixture/statistics API, but continue
+      // through the complete selected-day fixture list without a Top-N cap.
+      for (let i = 0; i < dayFixtures.length; i += 2) {
+        const batch = dayFixtures.slice(i, i + 2);
+        setProgress("Analysing all selected-day matches · " + Math.min(i + batch.length, dayFixtures.length) + " / " + dayFixtures.length);
+        const data = await post("valueScan", { fixtures: batch });
+        allRows = allRows.concat(Array.isArray(data.rows) ? data.rows : []);
+        allDiagnostics = allDiagnostics.concat(Array.isArray(data.diagnostics) ? data.diagnostics : []);
+        setScanned(Math.min(i + batch.length, dayFixtures.length));
+        if (i + 2 < dayFixtures.length) await new Promise(resolve => setTimeout(resolve, 350));
       }
-      const randomised=randomBestRows(allRows);
-      setPicks(randomised);
-      setRedPicks([]);
+
+      const makeKey = (home: string, away: string, date: string) =>
+        [home.trim().toLowerCase(), away.trim().toLowerCase(), String(date || "").slice(0, 16)].join("|");
+      const rowsByFixture = new Map<string, any[]>();
+      for (const row of allRows) {
+        const key = makeKey(row.home, row.away, row.date);
+        const list = rowsByFixture.get(key) || [];
+        list.push(row);
+        rowsByFixture.set(key, list);
+      }
+      const diagnosticsByFixture = new Map<string, any>();
+      for (const diagnostic of allDiagnostics) {
+        diagnosticsByFixture.set(String(diagnostic.fixture || "").trim().toLowerCase(), diagnostic);
+      }
+
+      const results: RatedMatch[] = dayFixtures.map(fixture => {
+        const key = makeKey(fixture.home.name, fixture.away.name, fixture.date);
+        const candidates = (rowsByFixture.get(key) || []).filter((row: any) =>
+          row.modelSupported &&
+          Number.isFinite(Number(row.probability)) &&
+          Number(row.probability) > 0 &&
+          Number.isFinite(Number(row.odds)) &&
+          Number(row.odds) > 1
+        ).map((row: any) => ({ ...row, rating: ratingFor(row) }));
+        candidates.sort((a: any, b: any) =>
+          b.rating - a.rating || Number(b.ev || 0) - Number(a.ev || 0)
+        );
+        const diagnostic = diagnosticsByFixture.get((fixture.home.name + " vs " + fixture.away.name).trim().toLowerCase()) || null;
+        const best = candidates[0] || null;
+        return { fixture, best, rating: best ? best.rating : null, diagnostic };
+      });
+
+      // Every fixture returned for the selected day is retained, including
+      // matches without a usable price/model rating; no team or match cap.
+      results.sort((a, b) => {
+        if (a.rating == null && b.rating != null) return 1;
+        if (b.rating == null && a.rating != null) return -1;
+        return (b.rating ?? -1) - (a.rating ?? -1) || Date.parse(a.fixture.date) - Date.parse(b.fixture.date);
+      });
+      setRatedMatches(results);
       setDiagnostics(allDiagnostics);
-      if(!randomised.length)setError("The upcoming fixture window was scanned, but no model-supported positive-value selections qualified. Check scan coverage below.");
-    } catch(e) { setError(e instanceof Error?e.message:String(e)); }
-    finally {setBusy(false);setProgress("");}
+      if (!results.some(item => item.best)) {
+        setError("All selected-day fixtures were checked, but no match returned both a supported model probability and usable bookmaker odds. See scan diagnostics for each fixture.");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+      setProgress("");
+    }
   }
 
   async function loadAndScan() {
-    setLoading(true);setError("");setScanned(0);
+    setLoading(true);
+    setError("");
+    setScanned(0);
     try {
-      const data=await post("dailyFixtures",{date:selectedDate||undefined});
-      const now=Date.now();
-      const matches=(Array.isArray(data.matches)?data.matches:[]).filter((f:any)=>{
-        const status=String(f?.status||"").trim().toLowerCase();
-        const notStarted=!status||["not started","time to be defined","scheduled","timed","ns","tbd"].includes(status);
-        return f?.id&&f?.home?.name&&f?.away?.name&&f?.date&&
-          Number.isFinite(Date.parse(f.date))&&Date.parse(f.date)>now&&notStarted&&
-          TOP_COMPETITION.test(String(f.competition||f.league?.name||""));
-      }).sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
-      setSelectedDate(String(data.date||""));setTodayDate(String(data.today||""));
+      const data = await post("dailyFixtures", { date: selectedDate || undefined });
+      const requestedDate = String(data.date || selectedDate || "");
+      const matches = (Array.isArray(data.matches) ? data.matches : [])
+        .filter((fixture: Fixture) => {
+          if (!fixture?.id || !fixture?.home?.id || !fixture?.away?.id || !fixture?.home?.name || !fixture?.away?.name || !fixture?.date) return false;
+          if (requestedDate && String(fixture.date).slice(0, 10) !== requestedDate) return false;
+          return isUpcoming(fixture, Date.now());
+        })
+        .sort((a: Fixture, b: Fixture) => Date.parse(a.date) - Date.parse(b.date));
+      setSelectedDate(requestedDate);
+      setTodayDate(String(data.today || ""));
+      setScanDate(requestedDate);
       setFixtures(matches);
-      if(!matches.length)setError("football-data.org returned no upcoming fixtures for the selected date.");
-      else {
+      setRatedMatches([]);
+      setDiagnostics([]);
+      if (!matches.length) {
+        setError("API-Football returned no upcoming fixtures for the selected Ghana-time date.");
+      } else {
         setLoading(false);
         await runDailyScan(matches);
-        setScanDate(String(data.date||""));
       }
-    } catch(e) {setError(e instanceof Error?e.message:String(e));}
-    finally {setLoading(false);}
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const visiblePicks=picks.filter((r:any)=>Number.isFinite(Date.parse(r.date))&&Date.parse(r.date)>clockNow)
-    .sort((a:any,b:any)=>Date.parse(a.date)-Date.parse(b.date));
+  const visibleMatches = ratedMatches.filter(item => isUpcoming(item.fixture, clockNow));
+  const ratedCount = visibleMatches.filter(item => item.best).length;
+  const valueCount = visibleMatches.filter(item => item.best && Number(item.best.ev) > 0).length;
 
-  useEffect(()=>{if(!started.current){started.current=true;void loadAndScan();}},[]);
+  useEffect(() => {
+    if (!started.current) {
+      started.current = true;
+      void loadAndScan();
+    }
+  }, []);
 
-  return <section className="card stack" style={{border:"2px solid var(--teal)"}}>
-    <div className="row" style={{justifyContent:"space-between",alignItems:"center",flexWrap:"wrap"}}>
-      <div><b>📈 AUTISTIK · Daily Value Scanner</b><small className="muted" style={{display:"block"}}>Top competitions only · football-data.org fixtures & statistics · 5DollarFootball multi-bookmaker odds</small></div>
-      <div className="row" style={{gap:8,flexWrap:"wrap"}}><input aria-label="Scan date" type="date" min={todayDate||undefined} value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} disabled={loading||busy}/><button className="btn small" type="button" onClick={()=>void loadAndScan()} disabled={loading||busy}>Scan selected date</button></div>
-    </div>
-    <div className="notice">
-      <b>Upcoming value selections from {scanDate||"today"} · next 7 days · Ghana time</b>
-      <small className="muted" style={{display:"block"}}>Only upcoming fixtures are scanned. Markets are limited to straight home/away wins, Over/Under totals and supported Asian handicaps. Draws, double chance and BTTS are excluded. Positive-EV selections are weighted by model probability, expected value and price edge, then shuffled once into a shortlist of up to 25 picks. A team can appear only once.</small>
-    </div>
-    <div className="row" style={{justifyContent:"space-between",flexWrap:"wrap"}}>
-      <small className="muted">{fixtures.filter(f=>Date.parse(f.date)>clockNow).length} upcoming fixtures · {scanned} scanned · {visiblePicks.length} qualifying picks</small>
-      {busy&&<small className="muted">Automatic scan running</small>}
-    </div>
-    {progress&&<small className="muted">{progress}</small>}
-    {error&&<div className="notice warn">{error}</div>}
-    {visiblePicks.length>0&&<div className="stack" style={{gap:9}}>
-      <b>Upcoming value bets · earliest kick-off first ({visiblePicks.length})</b>
-      {visiblePicks.map((r,i)=><div key={r.key||i} className="sb-top-r hi" style={{display:"grid",gap:7,padding:12,minWidth:0,overflowWrap:"anywhere",borderLeft:"4px solid var(--teal)"}}>
-        <div className="row" style={{justifyContent:"space-between",gap:8,flexWrap:"wrap"}}><b>#{i+1} · {r.competition||"Football"}</b><b>{Math.round(r.autistikRank)}/100 quality score</b></div>
-        <b>{r.home} vs {r.away}</b>
-        <div><b>{r.selection}</b> · {r.market}</div>
-        <div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:13}}>
-          <span>Model <b>{Number(r.probability).toFixed(1)}%</b></span>
-          <span>Odds <b>{Number(r.odds).toFixed(2)}</b></span>
-          <span>Fair <b>{Number(r.fairOdds).toFixed(2)}</b></span>
-          <span>EV <b>+{Number(r.ev).toFixed(1)}%</b></span>
-          <span>Edge <b>{Number(r.edge).toFixed(1)}pp</b></span>
+  return (
+    <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
+        <div>
+          <b>📈 AUTISTIK · Daily Value Scanner</b>
+          <small className="muted" style={{ display: "block" }}>All available fixtures · API-Football match data and statistics · 5DollarFootball bookmaker odds</small>
         </div>
-        <small className="muted">Best available Ghana bookmaker price: {r.bookmaker} · kick-off {r.date?new Date(r.date).toLocaleString("en-GB",{timeZone:"Africa/Accra",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"not supplied"} Ghana time</small>
-      </div>)}
-    </div>}
-    {busy&&<small className="muted">Scanning fixtures. The current shortlist stays in place until the new scan is complete.</small>}
-    {!busy&&picks.length>0&&!visiblePicks.length&&<small className="muted">All scanned fixtures have kicked off. Scan again for the next upcoming fixtures.</small>}
-    {false&&redPicks.length>0&&<div className="stack" style={{gap:8}}>
-      <b>🔴 Red / underpriced · Top {redPicks.length}</b>
-      <small className="muted">Lower model-probability selections with positive estimated value. These are higher-risk options, not part of the high-conviction Top 25.</small>
-      {redPicks.map((r:any,i:number)=><div key={"red-"+(r.key||i)} className="sb-top-r" style={{display:"grid",gap:6,padding:11,borderLeft:"4px solid var(--danger)",overflowWrap:"anywhere"}}>
-        <b>#{i+1} · {r.competition||"Football"} · {r.home} vs {r.away}</b>
-        <div><b>{r.selection}</b> · {r.market}</div>
-        <small>Model {Number(r.probability).toFixed(1)}% · Odds {Number(r.odds).toFixed(2)} · Fair {Number(r.fairOdds).toFixed(2)} · EV +{Number(r.ev).toFixed(1)}% · Edge {Number(r.edge).toFixed(1)}pp</small>
-        <small className="muted">{r.bookmaker}</small>
-      </div>)}
-    </div>}
-
-    {diagnostics.length>0&&<details><summary>Scan coverage and diagnostics · {diagnostics.length} fixtures checked</summary><div className="stack" style={{gap:7}}>
-      <small className="muted">Matches without supported odds or a usable model probability are excluded from the shortlist.</small>
-      {diagnostics.map((d:any,i:number)=><small key={i} className="muted">{d.fixture}: {d.error||d.analysisError||((d.markets||[]).length?"Analysed · "+d.markets.join(", "):"No supported prices returned")}</small>)}
-    </div></details>}
-    <small className="muted">Only model-supported positive-EV selections are eligible; the shortlist is randomised and each team appears at most once. Odds can change; verify the current price before placing a bet. No pick is guaranteed.</small>
-  </section>;
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          <input aria-label="Scan date" type="date" min={todayDate || undefined} value={selectedDate} onChange={e => setSelectedDate(e.target.value)} disabled={loading || busy} />
+          <button className="btn small" type="button" onClick={() => void loadAndScan()} disabled={loading || busy}>Scan selected date</button>
+        </div>
+      </div>
+      <div className="notice">
+        <b>Full-day match ratings · {scanDate || "selected date"} · Ghana time</b>
+        <small className="muted" style={{ display: "block" }}>
+          Every upcoming fixture returned for the selected date is analysed. No Top 25/Top 10 cap, no top-league-only filter and no one-team-only restriction. Each match shows its strongest model-supported market, probability, fair odds, bookmaker odds, expected value, odds edge and a 0–100 rating. A positive rating is not a guarantee.
+        </small>
+      </div>
+      <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <small className="muted">{fixtures.length} fixtures loaded · {scanned} scanned · {ratedCount} rated · {valueCount} positive-EV matches</small>
+        {busy && <small className="muted">Full-day scan running</small>}
+      </div>
+      {progress && <small className="muted">{progress}</small>}
+      {error && <div className="notice warn">{error}</div>}
+      {visibleMatches.length > 0 && (
+        <div className="stack" style={{ gap: 9 }}>
+          <b>All match ratings · strongest first ({visibleMatches.length})</b>
+          {visibleMatches.map((item, index) => {
+            const fixture = item.fixture;
+            const row = item.best;
+            const ev = row ? Number(row.ev) : null;
+            const positive = ev != null && ev > 0;
+            return (
+              <div key={String(fixture.id)} className={"sb-top-r " + (positive ? "hi" : "mid")} style={{ display: "grid", gap: 7, padding: 12, minWidth: 0, overflowWrap: "anywhere", borderLeft: "4px solid " + (positive ? "var(--teal)" : "var(--sun)") }}>
+                <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <b>#{index + 1} · {fixture.competition || fixture.league?.name || "Football"}</b>
+                  <b>{item.rating == null ? "Rating unavailable" : "AI rating " + item.rating + "/100"}</b>
+                </div>
+                <b>{fixture.home.name} vs {fixture.away.name}</b>
+                <small className="muted">{new Date(fixture.date).toLocaleString("en-GB", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
+                {row ? (
+                  <>
+                    <b style={{ color: positive ? "var(--teal)" : "var(--sun)" }}>{positive ? "POSITIVE VALUE" : "NO POSITIVE VALUE AT CURRENT PRICE"}</b>
+                    <div><b>{row.selection}</b> · {row.market}</div>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13 }}>
+                      <span>Model chance <b>{Number(row.probability).toFixed(1)}%</b></span>
+                      <span>Bookmaker odds <b>{Number(row.odds).toFixed(2)}</b></span>
+                      <span>Fair odds <b>{Number(row.fairOdds).toFixed(2)}</b></span>
+                      <span>Expected value <b>{ev! >= 0 ? "+" : ""}{ev!.toFixed(1)}%</b></span>
+                      <span>Odds edge <b>{Number(row.edge).toFixed(1)} points</b></span>
+                    </div>
+                    <small className="muted">Best available price: {row.bookmaker}</small>
+                  </>
+                ) : (
+                  <small className="muted">No usable model-supported bookmaker price was returned for this match. {item.diagnostic?.analysisError || item.diagnostic?.oddsError || "Check the scan coverage diagnostics below."}</small>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {busy && <small className="muted">The scanner continues through every fixture returned for this date. Matches are not discarded because another match uses the same team.</small>}
+      {diagnostics.length > 0 && (
+        <details>
+          <summary>Scan coverage and diagnostics · {diagnostics.length} fixtures checked</summary>
+          <div className="stack" style={{ gap: 7 }}>
+            <small className="muted">Fixtures remain visible even when odds or statistics are unavailable; those matches are marked as unrated rather than silently removed.</small>
+            {diagnostics.map((d: any, i: number) => (
+              <small key={i} className="muted">{d.fixture}: {d.analysisError || d.oddsError || ((d.markets || []).length ? "Analysed · " + d.markets.join(", ") : "No supported bookmaker prices returned")}</small>
+            ))}
+          </div>
+        </details>
+      )}
+      <small className="muted">SPORT uses the configured API-Football key for fixtures and statistics, plus 5DollarFootballAPI for bookmaker odds. Prices can change; verify the current odds before staking. No prediction is guaranteed.</small>
+    </section>
+  );
 }
