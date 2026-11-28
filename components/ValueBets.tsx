@@ -194,6 +194,15 @@ export default function ValueBets({ endpoint }: Props) {
     const historyGroup=String(row.market||"Other")+" · "+String(row.bookmaker||"Bookmaker")+" · "+oddsBand(Number(row.odds));
     const historical=superPerformance.find((p:any)=>p.group===historyGroup);
     const breakEven=Number(row.odds)>1?100/Number(row.odds):null;
+    const winChance=supported?Math.max(0,Math.min(100,Number(row.probability))):null;
+    const loseChance=supported?100-winChance:null;
+    const isStraightWin=/straight win/i.test(String(row.market||""));
+    const outcomeNoun=isStraightWin?"chance "+String(row.selection||"this team")+" wins":"chance "+String(row.selection||"this selection")+" lands";
+    const priceVerdict=supported&&Number(row.odds)>Number(row.fairOdds)
+      ?"The bookmaker is offering a bigger price than Autistik's fair odds. This outcome is priced generously."
+      :supported&&Number(row.odds)<Number(row.fairOdds)
+      ?"The bookmaker is offering a shorter price than Autistik's fair odds. This outcome is priced too short."
+      :"The bookmaker price is equal to Autistik's fair odds.";
     return <div key={row.key||index} className="sb-top-r hi" style={{display:"grid",gridTemplateColumns:"minmax(0,1fr)",width:"100%",boxSizing:"border-box",alignItems:"start",gap:9,padding:12,minWidth:0,overflowWrap:"break-word",borderLeft:supported&&ev>0?"4px solid var(--teal)":supported&&ev<0?"4px solid #d69b28":"4px solid var(--line)"}}>
       <b style={{display:"block",minWidth:0,overflowWrap:"break-word",wordBreak:"normal"}}>{index+1}. {row.home} vs {row.away}</b>
       <div style={{minWidth:0,overflowWrap:"break-word"}}><b>{row.selection}</b> · {row.market}</div>
@@ -204,7 +213,15 @@ export default function ValueBets({ endpoint }: Props) {
         <span>Autistik estimated chance <b>{supported?Number(row.probability).toFixed(1)+"%":"—"}</b></span><span>Opening odds <b>{row.openingOdds?Number(row.openingOdds).toFixed(2):"—"}</b></span><span>Latest odds <b>{row.closingOdds?Number(row.closingOdds).toFixed(2):Number(row.odds).toFixed(2)}</b></span>
       </div>
       <b style={{minWidth:0,overflowWrap:"break-word",color:!supported?"var(--muted)":ev>0?"var(--success, #16834a)":ev<0?"var(--danger, #b42318)":"inherit"}}>{!supported?"MODEL UNAVAILABLE · NOT A VALUE PICK":ev>0?"BOOKMAKER ODDS OVERPRICED VS AUTISTIK · VALUE +"+ev.toFixed(1)+"% EV":ev<0?"BOOKMAKER ODDS UNDERPRICED VS AUTISTIK · AVOID ("+Math.abs(ev).toFixed(1)+"% NEGATIVE EV)":"FAIR PRICE · MATCHES AUTISTIK"}</b>
-      {supported&&<small className="muted">At bookmaker odds <b>{Number(row.odds).toFixed(2)}</b>, the break-even chance is <b>{breakEven?.toFixed(1)}%</b>; Autistik estimates <b>{Number(row.probability).toFixed(1)}%</b>. Autistik's fair price is <b>{Number(row.fairOdds).toFixed(2)}</b>.</small>}
+      {supported&&<div className="notice stack" style={{fontSize:13}}>
+        <b>Autistik outcome estimate</b>
+        <span>{outcomeNoun}: <b style={{color:"var(--success, #16834a)"}}>{winChance!.toFixed(1)}%</b></span>
+        <span>{isStraightWin?"Chance this team does not win (draw or opponent wins)":"Chance this selection loses"}: <b style={{color:"var(--danger, #b42318)"}}>{loseChance!.toFixed(1)}%</b></span>
+        <span>Autistik fair odds: <b>{Number(row.fairOdds).toFixed(2)}</b> · bookmaker odds: <b>{Number(row.odds).toFixed(2)}</b></span>
+        <span>Bookmaker break-even chance: <b>{breakEven?.toFixed(1)}%</b></span>
+        <span>{priceVerdict}</span>
+        <b>{Number(row.odds)>Number(row.fairOdds)?"VALUE SIGNAL: bookmaker price is above Autistik fair odds.":Number(row.odds)<Number(row.fairOdds)?"AVOID SIGNAL: bookmaker price is below Autistik fair odds.":"FAIR PRICE: bookmaker and Autistik prices match."}</b>
+      </div>}
       {supported&&<small className="muted">{historical?("Historical results for "+historyGroup+": "+historical.winRate+"% wins · "+historical.wins+" wins / "+historical.losses+" losses / "+historical.pushes+" pushes ("+historical.settled+" settled samples)."):"Historical result for this bookmaker and odds range: no settled samples yet. SUPER will show the actual win rate as tracked matches finish."}</small>}
       {supported&&<b style={{fontSize:13,color:Number(row.probability)>=65?"var(--success, #16834a)":Number(row.probability)<40?"var(--danger, #b42318)":"inherit"}}>{Number(row.probability)>=75?"HIGH CHANCE · MODEL EXPECTS THIS OUTCOME":Number(row.probability)>=60?"LIKELY · MODEL FAVOURS THIS OUTCOME":Number(row.probability)>=45?"UNCERTAIN · CLOSE PROBABILITY":"LOW CHANCE · MODEL DOES NOT FAVOUR THIS OUTCOME"} ({Number(row.probability).toFixed(1)}%)</b>}
       {supported&&Number(row.oddsMovementPct)>=3&&Number(row.probability)>=60&&<small className="muted">SIGNAL CONFLICT: Autistik gives this outcome a strong probability, but the bookmaker price has drifted. Review before treating it as a pick.</small>}
