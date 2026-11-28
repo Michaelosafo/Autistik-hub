@@ -452,10 +452,11 @@ function settleSelection(selection: any, home: string, away: string, homeGoals: 
 
 export async function settleSuperSnapshots(limit = 10) {
   const { data, error } = await sb().from("sport_predictions").select("id,home,away,kickoff,note,result")
-    .is("result", null).lt("kickoff", new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString()).order("kickoff", { ascending: true }).limit(limit);
+    .is("result", null).lt("kickoff", new Date(new Date().setUTCHours(0, 0, 0, 0)).toISOString()).order("kickoff", { ascending: true }).limit(100);
   if (error) throw new Error(error.message);
   let settled = 0;
   for (const row of data || []) {
+    if (settled >= limit) break;
     let note: any = {};
     try { note = row.note ? JSON.parse(row.note) : {}; } catch { continue; }
     if (note.source !== "SUPER" || !Number(note.fixtureHomeId) || !Number(note.fixtureAwayId)) continue;
