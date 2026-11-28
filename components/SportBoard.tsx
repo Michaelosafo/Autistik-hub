@@ -1,3 +1,4 @@
+import Link from "next/link";
 "use client";
 import { useEffect, useRef, useState } from "react";
 
@@ -427,6 +428,7 @@ export default function SportBoard() {
       <header>
         <div className="dz-kick">OWNER · SPORT</div>
         <h1>⚽ Sport board</h1>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 8 }}><Link href="/admin/sport/value-bets" className="btn small">📈 Daily Value Bets analysis →</Link></div>
         <p className="muted">Pick the home team and the away team. The board compares recent results, goals and form, then predicts the match. These are probabilities, not certainties.</p>
       </header>
       {m && <section className="card stack" style={{ border: "2px solid var(--teal)" }}>
