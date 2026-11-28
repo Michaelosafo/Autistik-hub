@@ -42,7 +42,7 @@ export async function POST(req: Request) {
           // Keep the odds feed independent from team-history coverage. A missing
           // stats sample must not hide genuine bookmaker prices for this fixture.
           const [analysisResult, oddsResult] = await Promise.allSettled([
-            analyse(homeId, awayId),
+            analyse(homeId, awayId, String(f.date).slice(0, 10)),
             getFiveDollarFootballMatchOdds(home, away, String(f.date))
           ]);
           const analysis = analysisResult.status === "fulfilled" ? analysisResult.value : null;
@@ -84,39 +84,49 @@ export async function POST(req: Request) {
                   if (["1", "home", "home win"].includes(norm(label)) || norm(label) === norm(home)) modelName = "Home win (1)";
                   else if (["2", "away", "away win"].includes(norm(label)) || norm(label) === norm(away)) modelName = "Away win (2)";
                   else if (["x", "draw", "the draw", "tie"].includes(norm(label))) modelName = "Draw (X)";
-                } else if (market.key === "double_chance") {
-                  const pick = norm(label).replace(/\s/g, "");
-                  if (["1x", "homedraw", "homeordraw"].includes(pick)) modelName = "Home or draw (1X)";
-                  else if (["x2", "drawaway", "draworaway"].includes(pick)) modelName = "Away or draw (X2)";
-                  else if (["12", "homeaway", "homeoraway"].includes(pick)) modelName = "Home or away (12)";
-                } else if (market.key === "btts") {
-                  modelName = /^yes$/i.test(label) ? "Both teams score: Yes" : /^no$/i.test(label) ? "Both teams score: No" : "";
                 } else if (market.key === "totals") {
                   const m = label.match(/^(over|under)\s+(\d+(?:\.\d+)?)$/i);
                   if (m) modelName = (m[1].toLowerCase() === "over" ? "Over " : "Under ") + m[2] + " goals";
+                } else if (market.key === "asian_handicap") {
+                  const m = label.match(/^(home|away)\s+([+-]\d+(?:\.5)?)$/i);
+                  if (m) {
+                    const side = m[1].toLowerCase() === "home" ? "Home" : "Away";
+                    const handicap = Number(m[2]);
+                    if (Math.abs(handicap % 1) === 0.5) {
+                      modelName = handicap < 0
+                        ? side + " " + handicap + " handicap (win by " + (Math.abs(handicap) + 0.5) + "+)"
+                        : side + " +" + handicap + " handicap (lose by " + (handicap - 0.5) + " at most)";
+                    }
+                  }
                 }
                 let modelPick = modelMarkets.find((x: any) => norm(String(x.name)) === norm(modelName));
-                if (analysis?.model && market.key === "double_chance") {
-                  const p = analysis.model;
-                  const pick = norm(label).replace(/\s/g, "");
-                  const probability = ["1x", "homedraw", "homeordraw"].includes(pick) ? Number(p.home) + Number(p.draw)
-                    : ["x2", "drawaway", "draworaway"].includes(pick) ? Number(p.away) + Number(p.draw)
-                    : ["12", "homeaway", "homeoraway"].includes(pick) ? Number(p.home) + Number(p.away) : 0;
-                  if (probability > 0) modelPick = { name: modelName, p: probability };
-                }
+                if (market.key === "h2h" && modelName === "Draw (X)") continue;
+                if (!["h2h", "totals", "asian_handicap"].includes(market.key)) continue;
                 const price = Number(outcome.price);
                 const implied = 100 / price;
                 const noVig = implied / overround * 100;
-                const marketTitle = market.title || (market.key === "h2h" ? "1X2 · Match result" : market.key === "double_chance" ? "Double chance" : market.key === "btts" ? "Both teams to score" : market.key === "totals" ? "Goals · Over/Under" : String(market.key).replace(/^sportmonks_/, "Market ").replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
+                const marketTitle = market.title || (market.key === "h2h" ? "Straight win" : market.key === "totals" ? "Goals · Over/Under" : market.key === "asian_handicap" ? "Asian handicap" : String(market.key).replace(/[_-]+/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase()));
                 if (!modelPick || !(Number(modelPick.p) > 0)) {
-                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false });
+                  mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability: null, fairOdds: null, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge: null, ev: null, value: false, modelSupported: false, modelError: diagnostic.analysisError || "No usable Autistik probability for this selection." });
                   continue;
                 }
                 const probability = Number(modelPick.p);
                 const fairOdds = 100 / probability;
                 const ev = (probability / 100) * price * 100 - 100;
                 const edge = probability - noVig;
-                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true });
+                const modelContext = {
+                  homeForm: analysis?.teams?.home?.season?.form || "",
+                  awayForm: analysis?.teams?.away?.season?.form || "",
+                  homeGoalsFor: analysis?.teams?.home?.season?.goalsFor?.total ?? null,
+                  homeGoalsAgainst: analysis?.teams?.home?.season?.goalsAgainst?.total ?? null,
+                  awayGoalsFor: analysis?.teams?.away?.season?.goalsFor?.total ?? null,
+                  awayGoalsAgainst: analysis?.teams?.away?.season?.goalsAgainst?.total ?? null,
+                  homeMatches: analysis?.teams?.home?.season?.played?.total ?? null,
+                  awayMatches: analysis?.teams?.away?.season?.played?.total ?? null,
+                  expectedGoals: analysis?.model?.xg || null,
+                  verdict: analysis?.verdict || []
+                };
+                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, modelProvider: "Autistik Poisson · football-data.org stats", modelContext, priceAssessment: ev > 0 ? "UNDERPRICED · VALUE" : ev < 0 ? "OVERPRICED · AVOID" : "FAIR PRICE" });
               }
             }
           }
