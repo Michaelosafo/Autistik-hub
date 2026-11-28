@@ -126,6 +126,7 @@ export default function SportBoard() {
   const [dailyScanBusy, setDailyScanBusy] = useState(false);
   const [dailyScanProgress, setDailyScanProgress] = useState("");
   const [dailyScanError, setDailyScanError] = useState("");
+  const [selectedSportDisagreementBand, setSelectedSportDisagreementBand] = useState("all");
   async function loadTodayMatches() {
     setTodayBusy(true); setTodayError("");
     try {
@@ -524,6 +525,29 @@ export default function SportBoard() {
             usedTeams.add(homeKey); usedTeams.add(awayKey);
             if (topPicks.length >= 25) break;
           }
+          // SPORT counter-market board: keep only the strongest disagreement per fixture,
+          // then place that single counter-selection into its selected percentage band.
+          const counterByFixture = new Map<string, any>();
+          for (const row of eligible) {
+            const analysis = row.counterMarketAnalysis;
+            const gap = Number(analysis?.gapPoints);
+            if (!analysis?.counterSelection || !Number.isFinite(gap) || gap <= 0) continue;
+            const fixtureKey = [row.home, row.away, String(row.date || "").slice(0, 16)].join("|");
+            const candidate = { ...row, gapPoints: gap, counterSelection: String(analysis.counterSelection),
+              counterProbability: Number(analysis.counterProbability), counterFairOdds: Number(analysis.counterFairOdds) };
+            const previous = counterByFixture.get(fixtureKey);
+            if (!previous || candidate.gapPoints > previous.gapPoints) counterByFixture.set(fixtureKey, candidate);
+          }
+          const strongestCounterRows = [...counterByFixture.values()].sort((a: any, b: any) => b.gapPoints - a.gapPoints);
+          const disagreementBands: Record<string, (row: any) => boolean> = {
+            under20: (row: any) => row.gapPoints < 20,
+            "20to30": (row: any) => row.gapPoints >= 20 && row.gapPoints < 30,
+            "30to40": (row: any) => row.gapPoints >= 30 && row.gapPoints < 40,
+            "40plus": (row: any) => row.gapPoints >= 40,
+          };
+          const visibleCounterRows = selectedSportDisagreementBand === "all"
+            ? strongestCounterRows
+            : strongestCounterRows.filter(disagreementBands[selectedSportDisagreementBand] || (() => true));
           const renderRows = (rows: any[]) => rows.map((row: any, index: number) => {
             const positive = Number(row.ev) > 0;
             return (
@@ -549,6 +573,32 @@ export default function SportBoard() {
                 </div>
                 <small className="muted">Ranked by model win probability, expected value and odds edge. One selection per team. Fewer than 25 appear when fewer distinct teams have usable, model-supported odds.</small>
                 {topPicks.length ? renderRows(topPicks) : <small className="muted">No model-supported bookmaker prices are available for this date yet.</small>}
+              </section>
+              <section className="stack" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
+                <div className="row" style={{ justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <b>⚖️ Highest disagreement · one counter-pick per match</b>
+                  <small className="muted">{visibleCounterRows.length} matches</small>
+                </div>
+                <label className="stack" style={{ gap: 4, maxWidth: 340 }}>
+                  <b>Filter disagreement range</b>
+                  <select value={selectedSportDisagreementBand} onChange={(e) => setSelectedSportDisagreementBand(e.target.value)}>
+                    <option value="all">All disagreement ranges</option>
+                    <option value="under20">Below 20% · watch small</option>
+                    <option value="20to30">20%–29.9%</option>
+                    <option value="30to40">30%–39.9%</option>
+                    <option value="40plus">40% and above</option>
+                  </select>
+                </label>
+                <small className="muted">For each fixture, SPORT shows only the counter-selection with the largest model-versus-bookmaker probability gap. The range is measured in percentage points, not a guaranteed chance of winning.</small>
+                {visibleCounterRows.length ? visibleCounterRows.map((row: any, index: number) => (
+                  <div key={"sport-counter-" + (row.key || index)} className="sb-top-r" style={{ display: "grid", gap: 5, borderLeft: "4px solid var(--coral)" }}>
+                    <b>#{index + 1} · {row.home} vs {row.away}</b>
+                    <small className="muted">{row.competition || "Football"} · {new Date(row.date).toLocaleString("en-GH", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
+                    <span>Highest counter-selection: <b>{row.counterSelection}</b></span>
+                    <small>Counter-model chance: <b>{Number.isFinite(row.counterProbability) ? row.counterProbability.toFixed(1) + "%" : "—"}</b> · Fair odds: <b>{Number.isFinite(row.counterFairOdds) ? row.counterFairOdds.toFixed(2) : "—"}</b></small>
+                    <small>Disagreement: <b>{row.gapPoints.toFixed(1)} percentage points</b> · Compared bookmaker pick: {row.selection} at {Number(row.odds).toFixed(2)} ({row.bookmaker})</small>
+                  </div>
+                )) : <small className="muted">No counter-selections fall within this disagreement range for the selected date.</small>}
               </section>
             </div>
           );
