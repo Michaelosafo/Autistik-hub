@@ -228,7 +228,14 @@ export default function ValueBets({ endpoint }: Props) {
   }
   const multiCounterGroups=[...counterGroups.entries()]
     .map(([key,group])=>({key,...group,items:group.items.sort((a:any,b:any)=>b.gapPoints-a.gapPoints)}))
-    .filter((group:any)=>group.items.length>1);
+    .filter((group:any)=>group.items.length>1)
+    .map((group:any)=>({...group,maxGap:Number(group.items[0]?.gapPoints||0)}));
+  const disagreementSections=[
+    {key:"under20",title:"Disagreement below 20%",description:"Smaller price disagreements · under 20 percentage points",min:0,max:20},
+    {key:"20to30",title:"Disagreement 20%–29.9%",description:"Moderate price disagreements · 20 to under 30 percentage points",min:20,max:30},
+    {key:"30to40",title:"Disagreement 30%–39.9%",description:"Strong price disagreements · 30 to under 40 percentage points",min:30,max:40},
+    {key:"40plus",title:"Disagreement 40% and above",description:"Largest price disagreements · 40 percentage points or more",min:40,max:Infinity}
+  ].map((section:any)=>({...section,groups:multiCounterGroups.filter((group:any)=>group.maxGap>=section.min&&group.maxGap<section.max).sort((a:any,b:any)=>b.maxGap-a.maxGap)}));
   const groupedCounterFixtureKeys=new Set(multiCounterGroups.map((group:any)=>group.key));
   const primaryValueRows=superValueRows.filter((row:any)=>!groupedCounterFixtureKeys.has([row.home,row.away,String(row.date||"").slice(0,16)].join("|")));
   const oddsBand=(odds:number)=>odds<1.5?"1.01–1.49":odds<2?"1.50–1.99":odds<2.5?"2.00–2.49":odds<3.5?"2.50–3.49":"3.50+";
@@ -383,7 +390,12 @@ export default function ValueBets({ endpoint }: Props) {
       {superRows.length>0&&<div className="stack">
         <b>Best underpriced odds · positive expected value ({superValueRows.length})</b>
         <small className="muted">These are the prices where Autistik estimates a higher chance than the bookmaker's odds imply. Highest estimated EV first.</small>
-        {multiCounterGroups.map((group:any,i:number)=><CounterMatchCard key={"counter-"+group.key} group={group} index={i}/> )}
+        {disagreementSections.map((section:any)=><section key={section.key} className="stack">
+          <b>{section.title} ({section.groups.length})</b>
+          <small className="muted">{section.description}</small>
+          {section.groups.map((group:any,i:number)=><CounterMatchCard key={"counter-"+group.key} group={group} index={i}/>)}
+          {!section.groups.length&&<small className="muted">No matches in this disagreement range.</small>}
+        </section>)}
         {primaryValueRows.map((r:any,i:number)=><SelectionCard key={"value-"+(r.key||i)} row={r} index={i+multiCounterGroups.length}/>)}
         {!superValueRows.length&&<small className="muted">No positive-EV selections with a supported model probability yet.</small>}
         <details><summary>Other overpriced selections · avoid ({superOverpricedRows.length})</summary>
