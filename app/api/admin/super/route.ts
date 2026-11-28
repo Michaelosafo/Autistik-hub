@@ -119,6 +119,34 @@ export async function POST(req: Request) {
                 const fairOdds = 100 / probability;
                 const ev = (probability / 100) * price * 100 - 100;
                 const edge = probability - noVig;
+                // Keep the original Autistik probability and EV untouched.
+                // Add a separate bookmaker-vs-fair-price disagreement reading.
+                let counterName = "";
+                if (market.key === "h2h") {
+                  if (modelName === "Home win (1)") counterName = "Away win (2)";
+                  else if (modelName === "Away win (2)") counterName = "Home win (1)";
+                } else if (market.key === "totals") {
+                  const totalMatch = modelName.match(/^(Over|Under) (\\d+(?:\\.\\d+)?) goals$/i);
+                  if (totalMatch) counterName = (totalMatch[1].toLowerCase() === "over" ? "Under " : "Over ") + totalMatch[2] + " goals";
+                } else if (market.key === "asian_handicap") {
+                  const handicapMatch = modelName.match(/^(Home|Away) ([+-]\\d+(?:\\.5)?) handicap/);
+                  if (handicapMatch) {
+                    const side = handicapMatch[1] === "Home" ? "Away" : "Home";
+                    const line = -Number(handicapMatch[2]);
+                    const exactCounter = modelMarkets.find((x: any) => String(x.name).startsWith(side + " " + (line > 0 ? "+" : "") + line + " handicap"));
+                    if (exactCounter) counterName = String(exactCounter.name);
+                  }
+                }
+                const counterPick = counterName ? modelMarkets.find((x: any) => norm(String(x.name)) === norm(counterName)) : null;
+                const counterMarketAnalysis = {
+                  direction: price > fairOdds ? "bookmaker_longer" : price < fairOdds ? "bookmaker_shorter" : "aligned",
+                  gapPoints: Math.abs(probability - implied),
+                  autistikProbability: probability,
+                  bookmakerImpliedProbability: implied,
+                  counterSelection: counterName || null,
+                  counterProbability: counterPick ? Number(counterPick.p) : null,
+                  counterFairOdds: counterPick && Number(counterPick.p) > 0 ? +(100 / Number(counterPick.p)).toFixed(2) : null
+                };
                 const modelContext = {
                   homeForm: analysis?.teams?.home?.season?.form || "",
                   awayForm: analysis?.teams?.away?.season?.form || "",
@@ -131,7 +159,7 @@ export async function POST(req: Request) {
                   expectedGoals: analysis?.model?.xg || null,
                   verdict: analysis?.verdict || []
                 };
-                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, openingOdds: outcome.openingPrice ?? null, closingOdds: outcome.closingPrice ?? null, oddsMovementPct: outcome.movementPct ?? null, oddsMovement: outcome.movement ?? "unavailable", bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, modelProvider: "Autistik Poisson · football-data.org stats", modelContext, priceAssessment: ev > 0 ? "UNDERPRICED · VALUE" : ev < 0 ? "OVERPRICED · AVOID" : "FAIR PRICE" });
+                mapped.push({ key: String(f.id)+market.key+label+String(book.key), date: f.date, home, away, selection: label, market: marketTitle, probability, fairOdds, odds: price, openingOdds: outcome.openingPrice ?? null, closingOdds: outcome.closingPrice ?? null, oddsMovementPct: outcome.movementPct ?? null, oddsMovement: outcome.movement ?? "unavailable", bookmaker: book.title || book.key || "Bookmaker", implied, noVig, edge, ev, value: ev > 0, modelSupported: true, modelProvider: "Autistik Poisson · football-data.org stats", modelContext, counterMarketAnalysis, priceAssessment: ev > 0 ? "UNDERPRICED · VALUE" : ev < 0 ? "OVERPRICED · AVOID" : "FAIR PRICE" });
               }
             }
           }
