@@ -15,6 +15,7 @@ type Fixture = {
 type RatedMatch = {
   fixture: Fixture;
   best: any | null;
+  markets: any[];
   rating: number | null;
   diagnostic: any | null;
 };
@@ -111,7 +112,7 @@ export default function DailyValueBets() {
         );
         const diagnostic = diagnosticsByFixture.get((fixture.home.name + " vs " + fixture.away.name).trim().toLowerCase()) || null;
         const best = candidates[0] || null;
-        return { fixture, best, rating: best ? best.rating : null, diagnostic };
+        return { fixture, best, markets: candidates, rating: best ? best.rating : null, diagnostic };
       });
 
       // Every fixture returned for the selected day is retained, including
@@ -211,30 +212,34 @@ export default function DailyValueBets() {
             const ev = row ? Number(row.ev) : null;
             const positive = ev != null && ev > 0;
             return (
-              <div key={String(fixture.id)} className={"sb-top-r " + (positive ? "hi" : "mid")} style={{ display: "grid", gap: 7, padding: 12, minWidth: 0, overflowWrap: "anywhere", borderLeft: "4px solid " + (positive ? "var(--teal)" : "var(--sun)") }}>
-                <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                  <b>#{index + 1} · {fixture.competition || fixture.league?.name || "Football"}</b>
-                  <b>{item.rating == null ? "Rating unavailable" : "AI rating " + item.rating + "/100"}</b>
-                </div>
-                <b>{fixture.home.name} vs {fixture.away.name}</b>
-                <small className="muted">{new Date(fixture.date).toLocaleString("en-GB", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time</small>
-                {row ? (
-                  <>
-                    <b style={{ color: positive ? "var(--teal)" : "var(--sun)" }}>{positive ? "POSITIVE VALUE" : "NO POSITIVE VALUE AT CURRENT PRICE"}</b>
-                    <div><b>{row.selection}</b> · {row.market}</div>
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 13 }}>
-                      <span>Model chance <b>{Number(row.probability).toFixed(1)}%</b></span>
-                      <span>Bookmaker odds <b>{Number(row.odds).toFixed(2)}</b></span>
-                      <span>Fair odds <b>{Number(row.fairOdds).toFixed(2)}</b></span>
-                      <span>Expected value <b>{ev! >= 0 ? "+" : ""}{ev!.toFixed(1)}%</b></span>
-                      <span>Odds edge <b>{Number(row.edge).toFixed(1)} points</b></span>
-                    </div>
+              <details key={String(fixture.id)} className={"sb-top-r " + (positive ? "hi" : "mid")} style={{ minWidth: 0, overflowWrap: "anywhere", borderLeft: "4px solid " + (positive ? "var(--teal)" : "var(--sun)"), borderRadius: 10, padding: 12 }}>
+                <summary style={{ cursor: "pointer", display: "grid", gap: 7, listStylePosition: "inside" }}>
+                  <div className="row" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <b>#{index + 1} · {fixture.competition || fixture.league?.name || "Football"}</b>
+                    <b>{item.rating == null ? "Rating unavailable" : "AI rating " + item.rating + "/100"}</b>
+                  </div>
+                  <b>{fixture.home.name} vs {fixture.away.name}</b>
+                  <small className="muted">{new Date(fixture.date).toLocaleString("en-GB", { timeZone: "Africa/Accra", dateStyle: "medium", timeStyle: "short" })} Ghana time · Tap to open match analysis</small>
+                  {row && <span><b style={{ color: positive ? "var(--teal)" : "var(--sun)" }}>{positive ? "POSITIVE VALUE" : "NO POSITIVE VALUE"}</b> · {row.selection} ({row.market})</span>}
+                </summary>
+                <div className="stack" style={{ gap: 9, marginTop: 12 }}>
+                  {row ? <div className="notice stack" style={{ gap: 6 }}>
+                    <b>Top-rated selection</b><b>{row.selection} · {row.market}</b>
+                    <span>Model chance <b>{Number(row.probability).toFixed(1)}%</b> · Odds <b>{Number(row.odds).toFixed(2)}</b></span>
+                    <span>Fair odds <b>{Number(row.fairOdds).toFixed(2)}</b> · Expected value <b>{ev! >= 0 ? "+" : ""}{ev!.toFixed(1)}%</b> · Edge <b>{Number(row.edge).toFixed(1)} points</b></span>
                     <small className="muted">Best available price: {row.bookmaker}</small>
-                  </>
-                ) : (
-                  <small className="muted">No usable model-supported bookmaker price was returned for this match. {item.diagnostic?.analysisError || item.diagnostic?.oddsError || "Check the scan coverage diagnostics below."}</small>
-                )}
-              </div>
+                  </div> : <small className="muted">No usable model-supported bookmaker price. {item.diagnostic?.analysisError || item.diagnostic?.oddsError || "See scan coverage diagnostics."}</small>}
+                  <b>All available model-supported markets ({item.markets.length})</b>
+                  {item.markets.length ? item.markets.map((market: any, marketIndex: number) => (
+                    <div key={String(market.key || market.selection + "|" + market.market + "|" + market.bookmaker + "|" + marketIndex)} className="notice stack" style={{ gap: 4, padding: 10 }}>
+                      <b>#{marketIndex + 1} · {market.selection} — {market.market}</b>
+                      <span>Model chance <b>{Number(market.probability).toFixed(1)}%</b> · Odds <b>{Number(market.odds).toFixed(2)}</b> · Fair odds <b>{Number(market.fairOdds).toFixed(2)}</b></span>
+                      <span>Expected value <b>{Number(market.ev) >= 0 ? "+" : ""}{Number(market.ev).toFixed(1)}%</b> · Edge <b>{Number(market.edge).toFixed(1)} points</b></span>
+                      <small className="muted">Bookmaker: {market.bookmaker}</small>
+                    </div>
+                  )) : <small className="muted">No additional supported selections returned for this match.</small>}
+                </div>
+              </details>
             );
           })}
         </div>
