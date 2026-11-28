@@ -96,6 +96,28 @@ export async function getLeagueUpcomingFixtures(code: string) {
 }
 
 
+/** Upcoming fixtures across all competitions enabled on the football-data.org account. */
+export async function upcomingMatches(days = 7) {
+  const now = new Date();
+  const dateInAccra = (d: Date) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Accra", year: "numeric", month: "2-digit", day: "2-digit"
+  }).format(d);
+  const from = dateInAccra(now);
+  const to = dateInAccra(new Date(now.getTime() + Math.max(1, Math.min(14, days)) * 86400_000));
+  const data = await api("/matches?dateFrom=" + from + "&dateTo=" + to + "&limit=500", 3 * 60_000);
+  return (Array.isArray(data?.matches) ? data.matches : [])
+    .filter((m: any) => m?.id && m.homeTeam?.id && m.awayTeam?.id && m.utcDate &&
+      ["SCHEDULED", "TIMED"].includes(String(m.status)) && Date.parse(m.utcDate) > Date.now())
+    .sort((a: any, b: any) => Date.parse(a.utcDate) - Date.parse(b.utcDate))
+    .map((m: any) => ({
+      id: Number(m.id), date: String(m.utcDate), status: String(m.status),
+      competition: String(m.competition?.name || "Football"),
+      home: { id: Number(m.homeTeam.id), name: String(m.homeTeam.name), logo: String(m.homeTeam.crest || "") },
+      away: { id: Number(m.awayTeam.id), name: String(m.awayTeam.name), logo: String(m.awayTeam.crest || "") },
+    }));
+}
+
+
 export async function searchTeams(q: string) {
   const query = q.trim().toLocaleLowerCase();
   if (query.length < 3) return [];
